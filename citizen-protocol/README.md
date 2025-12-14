@@ -15,8 +15,8 @@ citizen-protocol/
 │   ├── ledger/               # Namespace-aware ledger validation
 │   ├── network/              # Authenticated gossip transport primitives
 │   ├── node/                 # Validator / observer node binary
-│   ├── simulation/           # 50–100 validator stress-test harness
-│   ├── storage/              # Persistence traits + in-memory backend
+│   ├── simulation/           # 50–100 validator stress-test harness + golden reports
+│   ├── storage/              # Persistence traits + RocksDB + in-memory backends
 │   └── types/                # Shared protocol data structures
 └── docs/
     ├── CITIZEN_MANIFESTO.md  # Positioning + civic mission statement
@@ -99,14 +99,15 @@ The harness covers the RFC scenarios: normal operation, partial outages, quorum 
 ## Contributing
 
 1. Fork & branch from `main`.
-2. Run `cargo fmt` + `cargo clippy -- -D warnings` before submitting PRs.
+2. Run `cargo fmt` + `cargo clippy -- -D warnings` from the `citizen-protocol/` workspace root (the monorepo parent only hosts the workspace as a subdirectory).
 3. Add targeted tests or simulation cases that cover new logic.
 4. Document governance or namespace changes under `docs/` and the changelog (pending).
 
 ## Next Steps
 
-- Replace the in-memory storage and mock gossip layers with production-grade back ends (e.g., RocksDB for persistence and libp2p or QUIC-based transports for authenticated gossip).
-- Expand the simulation harness reports with latency percentiles, message counters, and golden outputs that ship with each release candidate.
+- Harden the QUIC/libp2p authenticated gossip transport with peer admission policies and rotating keys.
+- Benchmark the RocksDB storage adapter under concurrent writer load and tune compaction policies.
+- Expand simulation fixtures to export CI-published golden reports for each tagged release.
 
 ## License
 

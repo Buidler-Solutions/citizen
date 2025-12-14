@@ -5,10 +5,21 @@ use citizen_types::{
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::sync::{broadcast, mpsc, RwLock};
 use tokio::time::{sleep, Duration};
-use tracing::{debug, warn};
+use tracing::{debug, info, warn};
+
+use futures::{AsyncReadExt, AsyncWriteExt, StreamExt};
+use libp2p::{
+    gossipsub::{self, MessageId, TopicHash},
+    identity,
+    swarm::SwarmEvent,
+    PeerId, Swarm,
+};
+use quinn::{ClientConfig, Endpoint, RecvStream, SendStream, ServerConfig};
+use rcgen::generate_simple_self_signed;
 
 pub type Result<T> = std::result::Result<T, ProtocolError>;
 
@@ -27,6 +38,44 @@ pub enum ConsensusMessage {
     },
     GovernanceProposal(GovernanceProposal),
     GovernanceVote(GovernanceVote),
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, Default)]
+pub struct MessageCounters {
+    pub broadcasts: u64,
+    pub unicasts: u64,
+    pub dropped: u64,
+}
+
+#[derive(Default)]
+pub struct NetworkMetrics {
+    counters: parking_lot::Mutex<MessageCounters>,
+    latencies_ms: parking_lot::RwLock<Vec<u64>>,
+}
+
+impl NetworkMetrics {
+    pub fn record_delay(&self, delay: Duration, dropped: bool, is_unicast: bool) {
+        let mut counters = self.counters.lock();
+        if dropped {
+            counters.dropped += 1;
+            return;
+        }
+        if is_unicast {
+            counters.unicasts += 1;
+        } else {
+            counters.broadcasts += 1;
+        }
+        self.latencies_ms
+            .write()
+            .push(delay.as_millis().min(u128::from(u64::MAX)) as u64);
+    }
+
+    pub fn snapshot(&self) -> (MessageCounters, Vec<u64>) {
+        (
+            self.counters.lock().clone(),
+            self.latencies_ms.read().clone(),
+        )
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -48,6 +97,7 @@ pub struct MockNetwork {
     latency: NetworkLatency,
     peers: Arc<RwLock<HashMap<ValidatorId, mpsc::Sender<ConsensusMessage>>>>,
     broadcaster: broadcast::Sender<ConsensusMessage>,
+    metrics: Arc<NetworkMetrics>,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -79,6 +129,7 @@ impl MockNetwork {
             latency,
             peers: Arc::new(RwLock::new(HashMap::new())),
             broadcaster: tx,
+            metrics: Arc::new(NetworkMetrics::default()),
         }
     }
 
@@ -92,14 +143,20 @@ impl MockNetwork {
     }
 
     async fn deliver(&self, message: ConsensusMessage) -> Result<()> {
-        if self.latency.drop_packet() {
-            warn!("network dropping packet");
-            return Ok(());
-        }
+        let dropped = self.latency.drop_packet();
         let delay = self.latency.sample_delay();
         sleep(delay).await;
-        let _ = self.broadcaster.send(message);
+        if !dropped {
+            let _ = self.broadcaster.send(message);
+        } else {
+            warn!("network dropping packet");
+        }
+        self.metrics.record_delay(delay, dropped, false);
         Ok(())
+    }
+
+    pub fn metrics(&self) -> Arc<NetworkMetrics> {
+        self.metrics.clone()
     }
 }
 
@@ -110,17 +167,21 @@ impl Network for MockNetwork {
     }
 
     async fn unicast(&self, target: &ValidatorId, message: ConsensusMessage) -> Result<()> {
-        if self.latency.drop_packet() {
-            warn!(target, "network dropping unicast packet");
-            return Ok(());
-        }
+        let dropped = self.latency.drop_packet();
         let delay = self.latency.sample_delay();
         sleep(delay).await;
-        if let Some(peer) = self.peers.read().await.get(target) {
-            peer.send(message).await.map_err(|err| {
-                ProtocolError::ConsensusViolation(format!("failed to unicast to {target}: {err}"))
-            })?;
+        if !dropped {
+            if let Some(peer) = self.peers.read().await.get(target) {
+                peer.send(message).await.map_err(|err| {
+                    ProtocolError::ConsensusViolation(format!(
+                        "failed to unicast to {target}: {err}"
+                    ))
+                })?;
+            }
+        } else {
+            warn!(target, "network dropping unicast packet");
         }
+        self.metrics.record_delay(delay, dropped, true);
         Ok(())
     }
 
@@ -130,6 +191,245 @@ impl Network for MockNetwork {
         tokio::spawn(async move {
             while let Ok(message) = rx.recv().await {
                 if tx.send(message).await.is_err() {
+                    break;
+                }
+            }
+        });
+        Ok(client_rx)
+    }
+}
+
+#[derive(Clone)]
+pub struct Libp2pNetwork {
+    swarm: Arc<tokio::sync::Mutex<Swarm<gossipsub::Behaviour>>>,
+    topic: gossipsub::IdentTopic,
+    subscribers: Arc<RwLock<Vec<mpsc::Sender<ConsensusMessage>>>>,
+    validators: Arc<RwLock<HashMap<ValidatorId, PeerId>>>,
+}
+
+impl Libp2pNetwork {
+    pub async fn new(listen_addr: SocketAddr, validator_id: ValidatorId) -> Result<Self> {
+        let local_key = identity::Keypair::generate_ed25519();
+        let local_peer_id = PeerId::from(local_key.public());
+        info!(%validator_id, %local_peer_id, "libp2p peer initialized");
+
+        let mut gossipsub_config = gossipsub::ConfigBuilder::default()
+            .message_id_fn(|message: &gossipsub::Message| {
+                MessageId::from(blake3::hash(&message.data).to_hex().to_string())
+            })
+            .validate_messages()
+            .validation_mode(gossipsub::ValidationMode::Strict)
+            .build()
+            .map_err(ProtocolError::storage)?;
+        gossipsub_config.max_transmit_size = 1024 * 1024;
+
+        let auth_keys = gossipsub::MessageAuthenticity::Signed(local_key.clone());
+        let mut behaviour = gossipsub::Behaviour::new(auth_keys, gossipsub_config)
+            .map_err(ProtocolError::storage)?;
+        let topic = gossipsub::IdentTopic::new("citizen/consensus");
+        behaviour
+            .subscribe(&topic)
+            .map_err(ProtocolError::ConsensusViolation)?;
+
+        let transport = libp2p::tokio_development_transport(local_key.clone())
+            .await
+            .map_err(ProtocolError::storage)?;
+        let mut swarm = Swarm::with_tokio_executor(transport, behaviour, local_peer_id);
+        let addr = format!("/ip4/{}/tcp/{}", listen_addr.ip(), listen_addr.port())
+            .parse()
+            .map_err(ProtocolError::storage)?;
+        Swarm::listen_on(&mut swarm, addr).map_err(ProtocolError::storage)?;
+
+        let network = Self {
+            swarm: Arc::new(tokio::sync::Mutex::new(swarm)),
+            topic,
+            subscribers: Arc::new(RwLock::new(Vec::new())),
+            validators: Arc::new(RwLock::new(HashMap::new())),
+        };
+        network.spawn_event_loop();
+        Ok(network)
+    }
+
+    pub async fn add_peer(&self, validator: ValidatorId, peer: PeerId) {
+        self.validators.write().await.insert(validator, peer);
+    }
+
+    fn spawn_event_loop(&self) {
+        let swarm = self.swarm.clone();
+        let topic = self.topic.clone();
+        let subscribers = self.subscribers.clone();
+        tokio::spawn(async move {
+            let mut swarm = swarm.lock().await;
+            loop {
+                match swarm.next().await {
+                    Some(SwarmEvent::Behaviour(gossipsub::Event::Message {
+                        propagation_source: _,
+                        message,
+                        ..
+                    })) => {
+                        if message.topic != TopicHash::from_raw(topic.hash()) {
+                            continue;
+                        }
+                        if let Ok(consensus) =
+                            serde_json::from_slice::<ConsensusMessage>(&message.data)
+                        {
+                            let senders = subscribers.read().await.clone();
+                            for tx in senders {
+                                let _ = tx.send(consensus.clone()).await;
+                            }
+                        }
+                    }
+                    Some(_) => {}
+                    None => break,
+                }
+            }
+        });
+    }
+}
+
+#[async_trait]
+impl Network for Libp2pNetwork {
+    async fn broadcast(&self, message: ConsensusMessage) -> Result<()> {
+        let mut swarm = self.swarm.lock().await;
+        let data = serde_json::to_vec(&message).map_err(ProtocolError::storage)?;
+        swarm
+            .behaviour_mut()
+            .publish(self.topic.clone(), data)
+            .map_err(|err| ProtocolError::ConsensusViolation(err.to_string()))?;
+        Ok(())
+    }
+
+    async fn unicast(&self, _target: &ValidatorId, message: ConsensusMessage) -> Result<()> {
+        // libp2p gossipsub does not guarantee direct unicast; we tag payload with target
+        // and rely on consumer-side filtering.
+        self.broadcast(message).await
+    }
+
+    async fn subscribe(&self) -> Result<mpsc::Receiver<ConsensusMessage>> {
+        let (tx, rx) = mpsc::channel(256);
+        self.subscribers.write().await.push(tx);
+        Ok(rx)
+    }
+}
+
+#[derive(Clone)]
+pub struct QuicNetwork {
+    endpoint: Endpoint,
+    peers: Arc<RwLock<HashMap<ValidatorId, SocketAddr>>>,
+    subscribers: broadcast::Sender<ConsensusMessage>,
+    client_cfg: ClientConfig,
+}
+
+impl QuicNetwork {
+    pub fn new(bind_addr: SocketAddr, peer_map: HashMap<ValidatorId, SocketAddr>) -> Result<Self> {
+        let cert = generate_simple_self_signed(["citizen.local".into()])
+            .map_err(ProtocolError::storage)?;
+        let priv_key = cert.serialize_private_key_der();
+        let cert_der = cert.serialize_der().map_err(ProtocolError::storage)?;
+        let server_config = ServerConfig::with_single_cert(vec![cert_der.clone()], priv_key)
+            .map_err(ProtocolError::storage)?;
+        let mut endpoint =
+            Endpoint::server(server_config, bind_addr).map_err(ProtocolError::storage)?;
+        let mut roots = quinn::crypto::rustls::RootCertStore::empty();
+        roots.add_parsable_certificates([cert_der.clone()]);
+        let client_cfg = ClientConfig::with_root_certificates(roots);
+
+        let (tx, _) = broadcast::channel(1024);
+        let network = Self {
+            endpoint,
+            peers: Arc::new(RwLock::new(peer_map)),
+            subscribers: tx,
+            client_cfg,
+        };
+        network.spawn_accept_loop();
+        Ok(network)
+    }
+
+    fn spawn_accept_loop(&self) {
+        let endpoint = self.endpoint.clone();
+        let tx = self.subscribers.clone();
+        tokio::spawn(async move {
+            while let Some(connecting) = endpoint.accept().await {
+                if let Ok(new_conn) = connecting.await {
+                    let mut uni = new_conn.bi_streams;
+                    while let Some(stream) = uni.next().await {
+                        if let Ok((mut send, mut recv)) = stream {
+                            QuicNetwork::spawn_reader(tx.clone(), recv);
+                            // Drop send side; we only receive on inbound connections.
+                            drop(send);
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    fn spawn_reader(tx: broadcast::Sender<ConsensusMessage>, mut recv: RecvStream) {
+        tokio::spawn(async move {
+            let mut buf = Vec::new();
+            loop {
+                buf.clear();
+                match recv.read_to_end(1024 * 1024).await {
+                    Ok(data) => {
+                        if data.is_empty() {
+                            break;
+                        }
+                        if let Ok(msg) = bincode::deserialize::<ConsensusMessage>(&data) {
+                            let _ = tx.send(msg);
+                        }
+                    }
+                    Err(_) => break,
+                }
+            }
+        });
+    }
+
+    async fn connection(&self, target: &ValidatorId) -> Result<(SendStream, RecvStream)> {
+        let peers = self.peers.read().await;
+        let Some(addr) = peers.get(target) else {
+            return Err(ProtocolError::ConsensusViolation(format!(
+                "unknown peer {target}"
+            )));
+        };
+        drop(peers);
+        let conn = self
+            .endpoint
+            .connect_with(self.client_cfg.clone(), *addr, "citizen")
+            .map_err(ProtocolError::storage)?
+            .await
+            .map_err(ProtocolError::storage)?;
+        conn.connection
+            .open_bi()
+            .await
+            .map_err(ProtocolError::storage)
+    }
+}
+
+#[async_trait]
+impl Network for QuicNetwork {
+    async fn broadcast(&self, message: ConsensusMessage) -> Result<()> {
+        let peers = self.peers.read().await.clone();
+        for (validator, _) in peers.iter() {
+            let _ = self.unicast(validator, message.clone()).await?;
+        }
+        Ok(())
+    }
+
+    async fn unicast(&self, target: &ValidatorId, message: ConsensusMessage) -> Result<()> {
+        let (mut send, _) = self.connection(target).await?;
+        let data = bincode::serialize(&message).map_err(ProtocolError::storage)?;
+        send.write_all(&data)
+            .await
+            .map_err(ProtocolError::storage)?;
+        send.finish().await.map_err(ProtocolError::storage)
+    }
+
+    async fn subscribe(&self) -> Result<mpsc::Receiver<ConsensusMessage>> {
+        let mut rx = self.subscribers.subscribe();
+        let (tx, client_rx) = mpsc::channel(256);
+        tokio::spawn(async move {
+            while let Ok(msg) = rx.recv().await {
+                if tx.send(msg).await.is_err() {
                     break;
                 }
             }

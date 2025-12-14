@@ -27,4 +27,20 @@ async fn main() {
         .expect("simulation run");
     println!("Simulation finished after {}s", report.duration_secs);
     println!("Final heights: {:#?}", report.final_heights);
+    println!(
+        "Latency percentiles (ms): p50={}, p90={}, p99={} ({} samples)",
+        report.latency_ms.p50,
+        report.latency_ms.p90,
+        report.latency_ms.p99,
+        report.latency_ms.samples
+    );
+    println!(
+        "Messages: broadcasts={}, unicasts={}, dropped={}",
+        report.message_counters.broadcasts,
+        report.message_counters.unicasts,
+        report.message_counters.dropped
+    );
+    if let Some(path) = report.golden_artifact.as_ref() {
+        println!("Golden report written to {}", path.display());
+    }
 }

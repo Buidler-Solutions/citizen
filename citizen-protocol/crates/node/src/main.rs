@@ -11,8 +11,8 @@ use citizen_api::ApiServer;
 use citizen_consensus::ConsensusEngine;
 use citizen_crypto::{verifying_key_to_string, KeyRegistry, ValidatorKeypair};
 use citizen_ledger::Ledger;
-use citizen_network::{MockNetwork, NetworkLatency};
-use citizen_storage::MemoryStorage;
+use citizen_network::{MockNetwork, Network, NetworkLatency, QuicNetwork};
+use citizen_storage::RocksDbStorage;
 use citizen_types::{
     ConsensusConfig, NamespaceRuleset, ProtocolError, ValidatorId, ValidatorMetadata,
     ValidatorSetSnapshot,
@@ -40,19 +40,40 @@ async fn main() -> anyhow::Result<()> {
     let verifying_key_hex = verifying_key_to_string(keypair.verifying_key());
     tracing::info!("verifying_key" = %verifying_key_hex, "note" = "share this key for validator admission");
 
-    let storage = Arc::new(MemoryStorage::new());
+    let storage_path = config
+        .data_dir
+        .clone()
+        .unwrap_or_else(|| PathBuf::from("data"));
+    let storage = Arc::new(RocksDbStorage::open(storage_path)?);
     let key_registry = KeyRegistry::new();
     let ledger = Arc::new(Ledger::new(storage.clone(), key_registry));
     ledger.bootstrap_namespaces(config.namespaces.clone());
 
     let snapshot = config.build_validator_set(&verifying_key_hex);
 
-    let network = Arc::new(MockNetwork::new(NetworkLatency {
-        min_ms: 20,
-        max_ms: 80,
-        jitter_ms: 20,
-        packet_loss: 0.0,
-    }));
+    let network = if !config.peers.is_empty() {
+        let peers = config
+            .peers
+            .iter()
+            .filter_map(|p| {
+                p.address
+                    .parse()
+                    .ok()
+                    .map(|addr| (p.validator_id.clone(), addr))
+            })
+            .collect();
+        Arc::new(NodeNetwork::Quic(QuicNetwork::new(
+            config.bind_addr.unwrap_or(default_bind()),
+            peers,
+        )?))
+    } else {
+        Arc::new(NodeNetwork::Mock(MockNetwork::new(NetworkLatency {
+            min_ms: 20,
+            max_ms: 80,
+            jitter_ms: 20,
+            packet_loss: 0.0,
+        })))
+    };
 
     let consensus = Arc::new(ConsensusEngine::new(
         config.validator_id.clone(),
@@ -106,9 +127,15 @@ struct NodeConfig {
     #[serde(default = "default_api_port")]
     api_port: u16,
     #[serde(default)]
+    data_dir: Option<PathBuf>,
+    #[serde(default)]
+    bind_addr: Option<SocketAddr>,
+    #[serde(default)]
     namespaces: Vec<NamespaceRuleset>,
     #[serde(default)]
     validators: Vec<ConfigValidator>,
+    #[serde(default)]
+    peers: Vec<PeerConfig>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -117,6 +144,12 @@ struct ConfigValidator {
     public_key: String,
     #[serde(default)]
     anchors: Vec<String>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+struct PeerConfig {
+    validator_id: ValidatorId,
+    address: String,
 }
 
 impl NodeConfig {
@@ -175,8 +208,11 @@ impl Default for NodeConfig {
             block_time_millis: default_block_time(),
             signing_key_hex: None,
             api_port: default_api_port(),
+            data_dir: Some(PathBuf::from("data")),
+            bind_addr: Some(default_bind()),
             namespaces: Vec::new(),
             validators: Vec::new(),
+            peers: Vec::new(),
         }
     }
 }
@@ -191,4 +227,46 @@ fn default_block_time() -> u64 {
 
 fn default_api_port() -> u16 {
     8080
+}
+
+fn default_bind() -> SocketAddr {
+    SocketAddr::from((Ipv4Addr::LOCALHOST, 9000))
+}
+
+enum NodeNetwork {
+    Mock(MockNetwork),
+    Quic(QuicNetwork),
+}
+
+#[async_trait::async_trait]
+impl Network for NodeNetwork {
+    async fn broadcast(
+        &self,
+        message: citizen_types::ConsensusMessage,
+    ) -> Result<(), ProtocolError> {
+        match self {
+            NodeNetwork::Mock(inner) => inner.broadcast(message).await,
+            NodeNetwork::Quic(inner) => inner.broadcast(message).await,
+        }
+    }
+
+    async fn unicast(
+        &self,
+        target: &ValidatorId,
+        message: citizen_types::ConsensusMessage,
+    ) -> Result<(), ProtocolError> {
+        match self {
+            NodeNetwork::Mock(inner) => inner.unicast(target, message).await,
+            NodeNetwork::Quic(inner) => inner.unicast(target, message).await,
+        }
+    }
+
+    async fn subscribe(
+        &self,
+    ) -> Result<tokio::sync::mpsc::Receiver<citizen_types::ConsensusMessage>, ProtocolError> {
+        match self {
+            NodeNetwork::Mock(inner) => inner.subscribe().await,
+            NodeNetwork::Quic(inner) => inner.subscribe().await,
+        }
+    }
 }

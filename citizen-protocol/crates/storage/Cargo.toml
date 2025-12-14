@@ -11,3 +11,5 @@ serde_json = { workspace = true }
 parking_lot = { workspace = true }
 thiserror = { workspace = true }
 anyhow = { workspace = true }
+rocksdb = "0.21"
+bincode = "1.3"

@@ -6,7 +6,7 @@ use chrono::Utc;
 use citizen_consensus::ConsensusEngine;
 use citizen_crypto::{verifying_key_to_string, KeyRegistry, ValidatorKeypair};
 use citizen_ledger::Ledger;
-use citizen_network::{MockNetwork, NetworkLatency};
+use citizen_network::{MessageCounters, MockNetwork, NetworkLatency};
 use citizen_storage::MemoryStorage;
 use citizen_types::{
     ConsensusConfig, NetworkModel, ProtocolError, SimulationConfig, SimulationScenario,
@@ -32,9 +32,21 @@ struct SimNode {
     ledger: Arc<Ledger<MemoryStorage>>,
 }
 
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct SimulationReport {
     pub final_heights: BTreeMap<String, u64>,
     pub duration_secs: u64,
+    pub message_counters: MessageCounters,
+    pub latency_ms: LatencySummary,
+    pub golden_artifact: Option<std::path::PathBuf>,
+}
+
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+pub struct LatencySummary {
+    pub p50: u64,
+    pub p90: u64,
+    pub p99: u64,
+    pub samples: usize,
 }
 
 impl SimulationHarness {
@@ -176,10 +188,18 @@ impl SimulationHarness {
             heights.insert(node.id.clone(), height);
         }
 
-        Ok(SimulationReport {
+        let (counters, latencies) = self.network.metrics().snapshot();
+        let latency_ms = percentile_summary(latencies);
+
+        let report = SimulationReport {
             final_heights: heights,
             duration_secs: duration.as_secs(),
-        })
+            message_counters: counters,
+            latency_ms,
+            golden_artifact: None,
+        };
+
+        Ok(persist_golden(report)?)
     }
 }
 
@@ -220,4 +240,56 @@ fn build_validator_set(count: usize) -> (Vec<(String, ValidatorKeypair)>, Valida
 
 fn quorum_count(total: usize, quorum_bps: u32) -> usize {
     ((total * quorum_bps as usize) + 9_999) / 10_000
+}
+
+fn percentile_summary(samples: Vec<u64>) -> LatencySummary {
+    if samples.is_empty() {
+        return LatencySummary {
+            p50: 0,
+            p90: 0,
+            p99: 0,
+            samples: 0,
+        };
+    }
+    let mut sorted = samples;
+    sorted.sort_unstable();
+    let len = sorted.len();
+    let percentile = |pct: f64| -> u64 {
+        let idx = ((pct * len as f64).ceil() as usize).saturate_to(len.saturating_sub(1));
+        sorted.get(idx).copied().unwrap_or(0)
+    };
+    LatencySummary {
+        p50: percentile(0.50),
+        p90: percentile(0.90),
+        p99: percentile(0.99),
+        samples: len,
+    }
+}
+
+trait SaturatingIndex {
+    fn saturate_to(self, max: usize) -> usize;
+}
+
+impl SaturatingIndex for usize {
+    fn saturate_to(self, max: usize) -> usize {
+        if self > max {
+            max
+        } else {
+            self
+        }
+    }
+}
+
+fn persist_golden(mut report: SimulationReport) -> Result<SimulationReport> {
+    let dir = std::path::PathBuf::from("reports/golden");
+    std::fs::create_dir_all(&dir).map_err(ProtocolError::storage)?;
+    let filename = format!(
+        "report-{}.json",
+        chrono::Utc::now().format("%Y%m%dT%H%M%SZ")
+    );
+    let path = dir.join(filename);
+    let json = serde_json::to_vec_pretty(&report).map_err(ProtocolError::storage)?;
+    std::fs::write(&path, json).map_err(ProtocolError::storage)?;
+    report.golden_artifact = Some(path);
+    Ok(report)
 }
