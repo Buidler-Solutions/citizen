@@ -1,13 +1,14 @@
 use citizen_types::{
     Block, BlockHeight, GovernanceProposal, LedgerEntry, NamespaceDescriptor, NamespaceId,
-    ProtocolError, ValidatorId, ValidatorMetadata, ValidatorSetSnapshot,
+    ProtocolError, ValidatorId, ValidatorSetSnapshot,
 };
 use parking_lot::RwLock;
 use std::collections::{BTreeMap, BTreeSet};
+use std::env;
+use std::str::FromStr;
 use std::sync::Arc;
-use std::time::Duration;
 
-use rocksdb::{ColumnFamilyDescriptor, Options, WriteBatch, DB};
+use rocksdb::{ColumnFamilyDescriptor, DBCompactionStyle, Options, WriteBatch, DB};
 
 pub type Result<T> = std::result::Result<T, ProtocolError>;
 
@@ -26,11 +27,11 @@ pub trait LedgerStorage: Send + Sync {
 }
 
 fn serialize<T: serde::Serialize>(value: &T) -> Result<Vec<u8>> {
-    bincode::serialize(value).map_err(ProtocolError::storage)
+    serde_json::to_vec(value).map_err(ProtocolError::storage)
 }
 
 fn deserialize<T: for<'de> serde::Deserialize<'de>>(bytes: &[u8]) -> Result<T> {
-    bincode::deserialize(bytes).map_err(ProtocolError::storage)
+    serde_json::from_slice(bytes).map_err(ProtocolError::storage)
 }
 
 #[derive(Clone, Default)]
@@ -160,16 +161,78 @@ const CF_NAMESPACES: &str = "namespaces";
 const CF_VALIDATORS: &str = "validators";
 const CF_GOVERNANCE: &str = "governance";
 
+fn parse_env<T>(key: &str) -> Option<T>
+where
+    T: FromStr,
+{
+    match env::var(key) {
+        Ok(value) => match value.parse::<T>() {
+            Ok(parsed) => Some(parsed),
+            Err(_) => {
+                eprintln!("RocksDB: ignoring invalid value for {}={}", key, value);
+                None
+            }
+        },
+        Err(_) => None,
+    }
+}
+
+fn apply_env_overrides(opts: &mut Options) {
+    if let Ok(style_raw) = env::var("ROCKSDB_COMPACTION_STYLE") {
+        let style = style_raw.to_ascii_lowercase();
+        let compaction = match style.as_str() {
+            "level" => Some(DBCompactionStyle::Level),
+            "universal" => Some(DBCompactionStyle::Universal),
+            "fifo" => Some(DBCompactionStyle::Fifo),
+            _ => {
+                eprintln!(
+                    "RocksDB: unknown compaction style '{}'; expected level|universal|fifo",
+                    style_raw
+                );
+                None
+            }
+        };
+        if let Some(style) = compaction {
+            opts.set_compaction_style(style);
+        }
+    }
+
+    if let Some(write_mb) = parse_env::<u64>("ROCKSDB_WRITE_BUFFER_MB") {
+        let bytes = write_mb.saturating_mul(1024 * 1024);
+        opts.set_write_buffer_size(bytes as usize);
+    }
+
+    if let Some(memtables) = parse_env::<u32>("ROCKSDB_MAX_WRITE_BUFFER_NUMBER") {
+        opts.set_max_write_buffer_number(memtables as i32);
+    }
+
+    if let Some(target_mb) = parse_env::<u64>("ROCKSDB_TARGET_FILE_SIZE_MB") {
+        let bytes = target_mb.saturating_mul(1024 * 1024);
+        opts.set_target_file_size_base(bytes);
+    }
+
+    if let Some(min_merge) = parse_env::<u32>("ROCKSDB_MIN_WRITE_BUFFER_NUMBER_TO_MERGE") {
+        opts.set_min_write_buffer_number_to_merge(min_merge as i32);
+    }
+
+    if let Ok(enabled) = env::var("ROCKSDB_ENABLE_STATISTICS") {
+        if matches!(enabled.to_ascii_lowercase().as_str(), "1" | "true" | "yes") {
+            opts.enable_statistics();
+        }
+    }
+}
+
 impl RocksDbStorage {
     pub fn open(path: impl AsRef<std::path::Path>) -> Result<Self> {
         let mut opts = Options::default();
         opts.create_if_missing(true);
+        opts.create_missing_column_families(true);
         opts.set_max_open_files(128);
         opts.set_keep_log_file_num(10);
         opts.set_max_manifest_file_size(16 * 1024 * 1024);
-        opts.set_info_log_level(rocksdb::LogLevel::Info);
-        opts.set_ratelimiter_with_auto_tuned(32 * 1024 * 1024, Duration::from_secs(1))
-            .map_err(ProtocolError::storage)?;
+        opts.set_log_level(rocksdb::LogLevel::Info);
+        opts.set_ratelimiter(32 * 1024 * 1024, 1_000_000, 10);
+        apply_env_overrides(&mut opts);
 
         let cf_descriptors = vec![
             ColumnFamilyDescriptor::new(CF_BLOCKS, Options::default()),
@@ -226,10 +289,7 @@ impl RocksDbStorage {
             .db
             .cf_handle(cf)
             .ok_or_else(|| ProtocolError::storage("missing column family"))?;
-        let iter = self
-            .db
-            .prefix_iterator_cf(cf_handle, prefix)
-            .map_err(ProtocolError::storage)?;
+        let iter = self.db.prefix_iterator_cf(cf_handle, prefix);
         let mut out = Vec::new();
         for item in iter {
             let (_, value) = item.map_err(ProtocolError::storage)?;
@@ -292,10 +352,7 @@ impl LedgerStorage for RocksDbStorage {
             .db
             .cf_handle(CF_NAMESPACES)
             .ok_or_else(|| ProtocolError::storage("missing column family"))?;
-        let iter = self
-            .db
-            .iterator_cf(cf, rocksdb::IteratorMode::Start)
-            .map_err(ProtocolError::storage)?;
+        let iter = self.db.iterator_cf(cf, rocksdb::IteratorMode::Start);
         let mut out = Vec::new();
         for item in iter {
             let (_, value) = item.map_err(ProtocolError::storage)?;
@@ -337,10 +394,7 @@ impl LedgerStorage for RocksDbStorage {
             .db
             .cf_handle(CF_GOVERNANCE)
             .ok_or_else(|| ProtocolError::storage("missing column family"))?;
-        let iter = self
-            .db
-            .iterator_cf(cf, rocksdb::IteratorMode::Start)
-            .map_err(ProtocolError::storage)?;
+        let iter = self.db.iterator_cf(cf, rocksdb::IteratorMode::Start);
         let mut out = Vec::new();
         for item in iter {
             let (_, value) = item.map_err(ProtocolError::storage)?;

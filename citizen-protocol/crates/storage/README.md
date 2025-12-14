@@ -23,105 +23,32 @@ headers available.
   brew install rocksdb snappy lz4 zstd
   ```
 
-## 2. Add the benchmark harness
+## 2. Benchmark harness
 
-1. Create a new Criterion benchmark target in `crates/storage/benches/` called
-   `rocksdb_adapter.rs`:
-
-   ```rust
-   use std::sync::Arc;
-   use std::time::Duration;
-
-   use citizen_types::{LedgerEntry, NamespaceId};
-   use criterion::{criterion_group, criterion_main, BatchSize, Criterion, SamplingMode};
-   use rand::{rngs::StdRng, Rng, SeedableRng};
-
-   use storage::RocksDbStorage;
-
-   fn rand_entry(rng: &mut StdRng, namespace: &NamespaceId) -> LedgerEntry {
-       let bytes: Vec<u8> = (0..256).map(|_| rng.gen()).collect();
-       LedgerEntry {
-           namespace: namespace.clone(),
-           entry_id: format!("entry-{}", rng.gen::<u64>()),
-           payload: bytes,
-       }
-   }
-
-   fn bench_write_then_read(c: &mut Criterion) {
-       let tmpdir = tempfile::tempdir().unwrap();
-       let store = RocksDbStorage::open(tmpdir.path()).unwrap();
-       let namespace = NamespaceId::from("bench-namespace");
-       let mut rng = StdRng::seed_from_u64(42);
-
-       let mut group = c.benchmark_group("rocksdb_write_read");
-       group.sampling_mode(SamplingMode::Flat);
-       group.measurement_time(Duration::from_secs(20));
-
-       group.bench_function("write_batch_1k", |b| {
-           b.iter_batched(
-               || {
-                   (0..1000)
-                       .map(|_| rand_entry(&mut rng, &namespace))
-                       .collect::<Vec<_>>()
-               },
-               |entries| {
-                   for entry in entries {
-                       store.store_entry(entry).unwrap();
-                   }
-               },
-               BatchSize::SmallInput,
-           );
-       });
-
-       group.bench_function("read_latest", |b| {
-           b.iter(|| {
-               let _ = store.namespace_entries(&namespace).unwrap();
-           });
-       });
-
-       group.finish();
-   }
-
-   criterion_group!(benches, bench_write_then_read);
-   criterion_main!(benches);
-   ```
-
-   This harness writes batches of 1,000 entries and measures both write and read
-   performance. Adjust `measurement_time` and payload size to match your
-   workloads.
-
-2. Add Criterion and rand to `crates/storage/Cargo.toml` under `[dev-dependencies]`:
-
-   ```toml
-   [dev-dependencies]
-   criterion = { version = "0.5", default-features = false, features = ["cargo_bench_support"] }
-   rand = { version = "0.8", features = ["std", "std_rng"] }
-   tempfile = "3"
-   ```
-
-3. Tell Cargo about the benchmark target by appending to `crates/storage/Cargo.toml`:
-
-   ```toml
-   [[bench]]
-   name = "rocksdb_adapter"
-   harness = false
-   ```
+The repository already ships with `crates/storage/benches/rocksdb_adapter.rs`.
+It seeds a fresh RocksDB instance, writes 1,000-entry batches, pre-populates a
+read namespace, and then benchmarks both write throughput and read latency. If
+you need to tune the workload (payload size, batch count, sample size, etc.),
+edit this file directly—Criterion configuration for each phase is set near the
+top of the benchmark.
 
 ## 3. Optional: tweak RocksDB defaults
 
-`RocksDbStorage::open` in `crates/storage/src/lib.rs` currently sets a few
-baseline options. You can experiment with compaction and write-buffer tuning by
-adding options before opening the database, for example:
+`RocksDbStorage::open` in `crates/storage/src/lib.rs` now reads a handful of
+environment variables so you can experiment without patching code:
 
-```rust
-opts.set_compaction_style(rocksdb::DBCompactionStyle::Universal);
-opts.set_write_buffer_size(64 * 1024 * 1024); // 64 MiB
-opts.set_max_write_buffer_number(4);
-opts.set_target_file_size_base(64 * 1024 * 1024);
-```
+| Variable | Example | Effect |
+|----------|---------|--------|
+| `ROCKSDB_COMPACTION_STYLE` | `universal` | Sets compaction to `level`, `universal`, or `fifo`. |
+| `ROCKSDB_WRITE_BUFFER_MB` | `64` | Write buffer size in MiB. |
+| `ROCKSDB_MAX_WRITE_BUFFER_NUMBER` | `4` | Number of memtables before flush. |
+| `ROCKSDB_MIN_WRITE_BUFFER_NUMBER_TO_MERGE` | `2` | Memtables merged on flush. |
+| `ROCKSDB_TARGET_FILE_SIZE_MB` | `64` | SST file target size in MiB. |
+| `ROCKSDB_ENABLE_STATISTICS` | `true` | Enables RocksDB statistics collection. |
 
-Document any changes you keep in this file or in `crates/storage/README.md` so
-team members know the defaults you picked.
+Set whichever variables you need before running the benchmark. Invalid values
+are ignored with a warning so you can iterate quickly. Document any important
+tuning choices in this README so the rest of the team can reproduce them.
 
 ## 4. Run the benchmarks
 
@@ -129,10 +56,10 @@ From the repository root:
 
 ```bash
 # Run only the storage benchmarks
-cargo bench -p storage --bench rocksdb_adapter
+cargo bench -p citizen-storage --bench rocksdb_adapter
 
 # To see Criterion reports, open the HTML output in your browser
-open target/criterion/rocksdb_write_read/report/index.html  # macOS
+open target/criterion/rocksdb_write_read/report/index.html   # macOS
 xdg-open target/criterion/rocksdb_write_read/report/index.html  # Linux
 ```
 
@@ -141,9 +68,10 @@ reports under `target/criterion/`.
 
 ## 5. Explore compaction settings
 
-Re-run the benchmark after changing RocksDB options to compare performance. You
-can use environment variables or simple CLI flags (e.g., `WRITE_BUFFER_MB=64
-cargo bench ...`) to record multiple runs. Keep notes on:
+Re-run the benchmark after changing RocksDB options to compare performance. Use
+the environment variables listed above (e.g.,
+`ROCKSDB_WRITE_BUFFER_MB=64 cargo bench ...`) to record multiple runs. Keep
+notes on:
 
 - Write throughput (ops/sec) and p95 latency
 - Read throughput and latency
@@ -152,18 +80,16 @@ cargo bench ...`) to record multiple runs. Keep notes on:
 
 ## 6. Automating comparisons
 
-For repeatable runs, script the benchmark with a small helper such as:
+For repeatable runs, use the helper script:
 
 ```bash
-#!/usr/bin/env bash
-set -euo pipefail
-cfg="$1"  # e.g., level-default or universal-64mb
-export ROCKSDB_WRITE_BUFFER_MB=64
-cargo bench -p storage --bench rocksdb_adapter -- --sample-size 15
-cp -r target/criterion "benchmark-results/${cfg}"
+./scripts/run_rocksdb_bench.sh universal-64mb -- --sample-size 20
 ```
 
-Each run is preserved under `benchmark-results/` so you can diff Criterion JSON
+Set any tuning environment variables in front of the command (for example,
+`ROCKSDB_COMPACTION_STYLE=universal`). The script wipes `target/criterion`, runs
+the benchmark, and copies the Criterion output plus a metadata note into
+`benchmark-results/<config-name>`. Each run is preserved so you can diff Criterion JSON
 reports or HTML outputs.
 
 ## 7. Cleaning up
