@@ -103,6 +103,11 @@ The harness covers the RFC scenarios: normal operation, partial outages, quorum 
 3. Add targeted tests or simulation cases that cover new logic.
 4. Document governance or namespace changes under `docs/` and the changelog (pending).
 
+## Next Steps
+
+- Replace the in-memory storage and mock gossip layers with production-grade back ends (e.g., RocksDB for persistence and libp2p or QUIC-based transports for authenticated gossip).
+- Expand the simulation harness reports with latency percentiles, message counters, and golden outputs that ship with each release candidate.
+
 ## License
 
 Licensed under [Apache License 2.0](LICENSE).
