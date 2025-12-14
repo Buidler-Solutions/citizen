@@ -1,0 +1,22 @@
+name = "copper"
+description = "Citizen public testnet with 50 curated validators"
+block_time_millis = 1000
+quorum_bps = 8000
+
+[namespaces]
+identity = "identity.citizen"
+land = "registry.land"
+audit = "audit.procurement"
+governance = "governance.vote"
+
+[[validators]]
+validator_id = "validator-000"
+public_key = "..."
+anchors = ["University of Example"]
+
+[[validators]]
+validator_id = "validator-001"
+public_key = "..."
+anchors = ["Auditor General"]
+
+# Add remaining validators here.

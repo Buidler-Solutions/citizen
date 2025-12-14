@@ -1,0 +1,6 @@
+validator_id = "validator.local"
+block_time_millis = 1000
+quorum_bps = 8000
+api_port = 8080
+
+# Add partner validators by appending [[validators]] tables with verifying keys.

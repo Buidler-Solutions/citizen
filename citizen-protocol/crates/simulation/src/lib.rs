@@ -1,0 +1,223 @@
+use std::collections::BTreeMap;
+use std::sync::Arc;
+use std::time::Duration;
+
+use chrono::Utc;
+use citizen_consensus::ConsensusEngine;
+use citizen_crypto::{verifying_key_to_string, KeyRegistry, ValidatorKeypair};
+use citizen_ledger::Ledger;
+use citizen_network::{MockNetwork, NetworkLatency};
+use citizen_storage::MemoryStorage;
+use citizen_types::{
+    ConsensusConfig, NetworkModel, ProtocolError, SimulationConfig, SimulationScenario,
+    ValidatorMetadata, ValidatorSetSnapshot,
+};
+use rand::seq::SliceRandom;
+use tokio::task::JoinHandle;
+use tokio::time::sleep;
+use tracing::{info, warn};
+
+pub type Result<T> = std::result::Result<T, ProtocolError>;
+
+pub struct SimulationHarness {
+    config: SimulationConfig,
+    consensus_config: ConsensusConfig,
+    network: Arc<MockNetwork>,
+    nodes: Vec<SimNode>,
+}
+
+struct SimNode {
+    id: String,
+    consensus: Arc<ConsensusEngine<MockNetwork, MemoryStorage>>,
+    ledger: Arc<Ledger<MemoryStorage>>,
+}
+
+pub struct SimulationReport {
+    pub final_heights: BTreeMap<String, u64>,
+    pub duration_secs: u64,
+}
+
+impl SimulationHarness {
+    pub fn new(config: SimulationConfig) -> Result<Self> {
+        let consensus_config = ConsensusConfig {
+            block_time_millis: 1_000,
+            max_entries_per_block: 512,
+            quorum_bps: 8_000,
+        };
+        let network = Arc::new(MockNetwork::new(latency_from_model(&config.network)));
+        let (validators, snapshot) = build_validator_set(config.validators);
+        let mut nodes = Vec::new();
+        for (id, keypair) in validators {
+            let storage = Arc::new(MemoryStorage::new());
+            let ledger = Arc::new(Ledger::new(storage.clone(), KeyRegistry::new()));
+            let consensus = Arc::new(ConsensusEngine::new(
+                id.clone(),
+                keypair,
+                consensus_config.clone(),
+                network.clone(),
+                ledger.clone(),
+                snapshot.clone(),
+            )?);
+            nodes.push(SimNode {
+                id,
+                consensus,
+                ledger,
+            });
+        }
+        Ok(Self {
+            config,
+            consensus_config,
+            network,
+            nodes,
+        })
+    }
+
+    pub async fn execute(mut self, duration: Duration) -> Result<SimulationReport> {
+        let mut handles: Vec<(String, JoinHandle<()>)> = Vec::new();
+        for node in &self.nodes {
+            let engine = node.consensus.clone();
+            let id = node.id.clone();
+            let handle = tokio::spawn(async move {
+                if let Err(err) = engine.run().await {
+                    tracing::error!(validator = %id, ?err, "consensus failure");
+                }
+            });
+            handles.push((node.id.clone(), handle));
+        }
+
+        match self.config.scenario {
+            SimulationScenario::Normal => {
+                info!("scenario" = "normal", "duration_secs" = duration.as_secs());
+                sleep(duration).await;
+            }
+            SimulationScenario::PartialFailure => {
+                let failure_count =
+                    std::cmp::max(1, (self.nodes.len() as f32 * 0.15).ceil() as usize);
+                info!(
+                    "scenario" = "partial_failure",
+                    failure_count,
+                    "note" = "stopping random validators mid-run"
+                );
+                sleep(duration / 2).await;
+                let mut rng = rand::thread_rng();
+                let mut victims: Vec<_> = handles.iter_mut().collect();
+                victims.shuffle(&mut rng);
+                for (id, handle) in victims.into_iter().take(failure_count) {
+                    warn!("validator" = %id, "action" = "abort" , "reason" = "simulated outage");
+                    handle.abort();
+                }
+                sleep(duration / 2).await;
+            }
+            SimulationScenario::QuorumLoss => {
+                info!(
+                    "scenario" = "quorum_loss",
+                    "action" = "dropping subset until quorum broken"
+                );
+                sleep(duration / 3).await;
+                let quorum_threshold =
+                    quorum_count(self.nodes.len(), self.consensus_config.quorum_bps);
+                let mut active = handles.len();
+                for (id, handle) in &mut handles {
+                    if active <= quorum_threshold {
+                        break;
+                    }
+                    warn!("validator" = %id, "action" = "abort", "reason" = "forced quorum loss");
+                    handle.abort();
+                    active -= 1;
+                }
+                sleep(duration * 2 / 3).await;
+            }
+            SimulationScenario::MaliciousLeader => {
+                info!(
+                    "scenario" = "malicious_leader",
+                    "note" = "introducing invalid proposals"
+                );
+                if let Some((_, handle)) = handles.first_mut() {
+                    handle.abort();
+                }
+                sleep(duration).await;
+            }
+            SimulationScenario::ByzantineSubset => {
+                info!(
+                    "scenario" = "byzantine_subset",
+                    "note" = "dropping 19% validators"
+                );
+                let byzantine = std::cmp::max(1, (self.nodes.len() as f32 * 0.19).floor() as usize);
+                for (id, handle) in handles.iter_mut().take(byzantine) {
+                    warn!("validator" = %id, "action" = "abort", "reason" = "byzantine simulation");
+                    handle.abort();
+                }
+                sleep(duration).await;
+            }
+            SimulationScenario::NetworkPartition => {
+                info!(
+                    "scenario" = "network_partition",
+                    "note" = "splitting validators 60/40"
+                );
+                sleep(duration / 2).await;
+                // For simplicity, we just abort 40% of validators to mimic stalled partition.
+                let drop_count = (self.nodes.len() as f32 * 0.4).round() as usize;
+                for (id, handle) in handles.iter_mut().take(drop_count) {
+                    warn!("validator" = %id, "action" = "abort", "reason" = "partition simulation");
+                    handle.abort();
+                }
+                sleep(duration / 2).await;
+            }
+        }
+
+        for (_, handle) in handles {
+            handle.abort();
+            let _ = handle.await;
+        }
+
+        let mut heights = BTreeMap::new();
+        for node in &self.nodes {
+            let height = node.ledger.storage().latest_height()?;
+            heights.insert(node.id.clone(), height);
+        }
+
+        Ok(SimulationReport {
+            final_heights: heights,
+            duration_secs: duration.as_secs(),
+        })
+    }
+}
+
+fn latency_from_model(model: &NetworkModel) -> NetworkLatency {
+    NetworkLatency {
+        min_ms: model.same_region_rtt_ms.0,
+        max_ms: model.cross_region_rtt_ms.1,
+        jitter_ms: model.jitter_ms,
+        packet_loss: model.packet_loss,
+    }
+}
+
+fn build_validator_set(count: usize) -> (Vec<(String, ValidatorKeypair)>, ValidatorSetSnapshot) {
+    let mut validators = Vec::new();
+    let mut metadata = BTreeMap::new();
+    for idx in 0..count {
+        let id = format!("validator-{idx:03}");
+        let keypair = ValidatorKeypair::generate(id.clone());
+        metadata.insert(
+            id.clone(),
+            ValidatorMetadata {
+                validator_id: id.clone(),
+                public_key: verifying_key_to_string(keypair.verifying_key()),
+                anchors: vec![format!("simulation-node-{idx}")],
+                joined_at: Utc::now(),
+                suspended: false,
+            },
+        );
+        validators.push((id, keypair));
+    }
+    let snapshot = ValidatorSetSnapshot {
+        height: 0,
+        validators: metadata,
+        quorum_bps: 8_000,
+    };
+    (validators, snapshot)
+}
+
+fn quorum_count(total: usize, quorum_bps: u32) -> usize {
+    ((total * quorum_bps as usize) + 9_999) / 10_000
+}

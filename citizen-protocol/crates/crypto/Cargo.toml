@@ -1,0 +1,15 @@
+[package]
+name = "citizen-crypto"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+
+[dependencies]
+citizen-types = { path = "../types" }
+serde = { workspace = true }
+rand = { workspace = true }
+sha2 = { workspace = true }
+ed25519-dalek = { workspace = true }
+thiserror = { workspace = true }
+parking_lot = { workspace = true }
+hex = { workspace = true }

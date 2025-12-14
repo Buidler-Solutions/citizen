@@ -1,0 +1,24 @@
+[package]
+name = "citizen-consensus"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+
+[dependencies]
+citizen-types = { path = "../types" }
+citizen-crypto = { path = "../crypto" }
+citizen-ledger = { path = "../ledger" }
+citizen-governance = { path = "../governance" }
+citizen-network = { path = "../network" }
+citizen-storage = { path = "../storage" }
+async-trait = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+parking_lot = { workspace = true }
+rand = { workspace = true }
+chrono = { workspace = true }
+blake3 = { workspace = true }
+hex = { workspace = true }

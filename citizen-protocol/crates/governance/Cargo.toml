@@ -1,0 +1,15 @@
+[package]
+name = "citizen-governance"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+
+[dependencies]
+citizen-types = { path = "../types" }
+citizen-crypto = { path = "../crypto" }
+citizen-storage = { path = "../storage" }
+serde = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+parking_lot = { workspace = true }
+chrono = { workspace = true }

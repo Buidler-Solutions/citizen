@@ -1,0 +1,108 @@
+# Citizen Protocol
+
+Citizen is a governance-first decentralized public ledger designed for public truth, records, and accountability instead of speculative finance. This repository contains the Rust implementation of the **CITIZEN** protocol, including the validator node, consensus engine, networking layer, governance system, storage adapters, simulation harness, and supporting documentation.
+
+## Repository Layout
+
+```text
+citizen-protocol/
+├── Cargo.toml                # Workspace manifest
+├── crates/
+│   ├── api/                  # HTTP API service (read-only + control)
+│   ├── consensus/            # ≥80% quorum BFT consensus engine
+│   ├── crypto/               # Signature aggregation, hashing utilities
+│   ├── governance/           # Governance proposal + voting logic
+│   ├── ledger/               # Namespace-aware ledger validation
+│   ├── network/              # Authenticated gossip transport primitives
+│   ├── node/                 # Validator / observer node binary
+│   ├── simulation/           # 50–100 validator stress-test harness
+│   ├── storage/              # Persistence traits + in-memory backend
+│   └── types/                # Shared protocol data structures
+└── docs/
+    ├── CITIZEN_MANIFESTO.md  # Positioning + civic mission statement
+    └── GOVERNANCE_CHARTER_V1.md
+```
+
+## Getting Started
+
+1. Install the Rust toolchain (`rustup` with stable compiler).
+2. Clone this repository and run the workspace build:
+
+   ```bash
+   cargo check
+   ```
+
+3. Launch a single local validator node (non-production mock network):
+
+   ```bash
+   cargo run -p citizen-node -- node.toml
+   ```
+
+   The node exposes a read-only HTTP API on `http://127.0.0.1:8080` (configurable).
+
+## Simulation Harness
+
+The `citizen-simulation` crate runs deterministic stress scenarios for validator sets between 50 and 100 participants. Example CLI entry point (add inside your own binary or `cargo run -p citizen-simulation` harness):
+
+```rust
+use citizen_types::{SimulationConfig, SimulationScenario, NetworkModel};
+use citizen_simulation::SimulationHarness;
+use std::time::Duration;
+
+#[tokio::main]
+async fn main() {
+    let config = SimulationConfig {
+        validators: 75,
+        scenario: SimulationScenario::PartialFailure,
+        network: NetworkModel {
+            same_region_rtt_ms: (20, 50),
+            cross_region_rtt_ms: (80, 180),
+            jitter_ms: 20,
+            packet_loss: 0.01,
+        },
+    };
+
+    let harness = SimulationHarness::new(config).expect("simulation init");
+    let report = harness
+        .execute(Duration::from_secs(15))
+        .await
+        .expect("simulation run");
+    println!("Final heights: {:?}", report.final_heights);
+}
+```
+
+The harness covers the RFC scenarios: normal operation, partial outages, quorum loss, malicious leaders, byzantine subsets, and partitions.
+
+## Testnet Outline
+
+- Bootstrap 50 validator identities across partner institutions; preload their verifying keys into a genesis `ValidatorSetSnapshot`.
+- Publish a testnet manifest (`testnets/copper.toml`) capturing namespace definitions, bootstrapping peers, and governance parameters.
+- Run the simulation harness with matching validator count before testnet launch; share the report publicly.
+- Roll out staged activations: observers connect first, then validators join in cohorts of five with governance-confirmed admission blocks.
+- Require on-chain governance proposals for every validator addition or parameter change during testnet.
+
+## GitHub Organization Blueprint
+
+- **Organization name:** `citizen-protocol`
+- **Repositories:**
+  - `citizen-protocol` – this workspace
+  - `citizen-specs` – protocol specification + AGENTS.md history
+  - `citizen-grants` – grant proposals, community funding rounds
+- **Teams:**
+  - `core-governance` (write access to governance + specs)
+  - `protocol-engineering` (workspace maintainers)
+  - `simulation-lab` (testnet + harness maintainers)
+- **Default branch protections:**
+  - Linear history, required reviews from `protocol-engineering`
+  - Mandatory status checks: `cargo fmt`, `cargo clippy -- -D warnings`, `cargo test`, `cargo nextest` (when added)
+
+## Contributing
+
+1. Fork & branch from `main`.
+2. Run `cargo fmt` + `cargo clippy -- -D warnings` before submitting PRs.
+3. Add targeted tests or simulation cases that cover new logic.
+4. Document governance or namespace changes under `docs/` and the changelog (pending).
+
+## License
+
+Licensed under [Apache License 2.0](LICENSE).
