@@ -1,17 +1,25 @@
 use async_trait::async_trait;
 use citizen_types::{
-    Block, BlockHeader, GovernanceProposal, GovernanceVote, LedgerEntry, ProtocolError, ValidatorId,
+    Block, BlockHeader, GovernanceProposal, GovernanceVote, LedgerEntry, ProtocolError,
+    ValidatorId, ValidatorSetSnapshot,
 };
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
+use std::time::{Duration as StdDuration, Instant};
 use tokio::sync::{broadcast, mpsc, RwLock};
 use tokio::time::{sleep, Duration};
-use tracing::{debug, info, warn};
+#[cfg(feature = "libp2p")]
+use tracing::info;
+use tracing::warn;
 
-use futures::{AsyncReadExt, AsyncWriteExt, StreamExt};
+#[cfg(feature = "libp2p")]
+use blake3;
+#[cfg(feature = "libp2p")]
+use futures::StreamExt;
+#[cfg(feature = "libp2p")]
 use libp2p::{
     gossipsub::{self, MessageId, TopicHash},
     identity,
@@ -20,8 +28,91 @@ use libp2p::{
 };
 use quinn::{ClientConfig, Endpoint, RecvStream, SendStream, ServerConfig};
 use rcgen::generate_simple_self_signed;
+use rustls::{Certificate, PrivateKey, RootCertStore};
 
 pub type Result<T> = std::result::Result<T, ProtocolError>;
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct PeerHandshake {
+    pub validator_id: ValidatorId,
+    pub public_key: String,
+    pub key_epoch: u64,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+struct WireMessage {
+    handshake: PeerHandshake,
+    message: ConsensusMessage,
+}
+
+#[derive(Clone)]
+pub struct AdmissionControl {
+    allowed: Arc<RwLock<HashMap<ValidatorId, String>>>,
+    rotation_interval: StdDuration,
+    current_epoch: Arc<RwLock<u64>>,
+    last_rotation: Arc<RwLock<Instant>>,
+}
+
+impl AdmissionControl {
+    pub fn from_snapshot(snapshot: ValidatorSetSnapshot, rotation_interval: StdDuration) -> Self {
+        let allowed = snapshot
+            .validators
+            .iter()
+            .map(|(id, meta)| (id.clone(), meta.public_key.clone()))
+            .collect();
+        Self::new_with_allowlist(allowed, rotation_interval)
+    }
+
+    pub fn new_with_allowlist(
+        allowed: HashMap<ValidatorId, String>,
+        rotation_interval: StdDuration,
+    ) -> Self {
+        Self {
+            allowed: Arc::new(RwLock::new(allowed)),
+            rotation_interval,
+            current_epoch: Arc::new(RwLock::new(0)),
+            last_rotation: Arc::new(RwLock::new(Instant::now())),
+        }
+    }
+
+    pub async fn update_snapshot(&self, snapshot: ValidatorSetSnapshot) {
+        let mut allowed = self.allowed.write().await;
+        allowed.clear();
+        allowed.extend(
+            snapshot
+                .validators
+                .iter()
+                .map(|(id, meta)| (id.clone(), meta.public_key.clone())),
+        );
+    }
+
+    pub async fn allows(&self, handshake: &PeerHandshake) -> bool {
+        let allowed = self.allowed.read().await;
+        let Some(expected_key) = allowed.get(&handshake.validator_id) else {
+            return false;
+        };
+        if expected_key != &handshake.public_key {
+            return false;
+        }
+
+        let epoch = self.current_epoch.read().await;
+        handshake.key_epoch >= *epoch
+    }
+
+    pub async fn maybe_rotate(&self) -> u64 {
+        let mut epoch = self.current_epoch.write().await;
+        let mut last_rotation = self.last_rotation.write().await;
+        if last_rotation.elapsed() >= self.rotation_interval {
+            *epoch += 1;
+            *last_rotation = Instant::now();
+        }
+        *epoch
+    }
+
+    pub async fn current_epoch(&self) -> u64 {
+        *self.current_epoch.read().await
+    }
+}
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum ConsensusMessage {
@@ -199,6 +290,7 @@ impl Network for MockNetwork {
     }
 }
 
+#[cfg(feature = "libp2p")]
 #[derive(Clone)]
 pub struct Libp2pNetwork {
     swarm: Arc<tokio::sync::Mutex<Swarm<gossipsub::Behaviour>>>,
@@ -207,6 +299,7 @@ pub struct Libp2pNetwork {
     validators: Arc<RwLock<HashMap<ValidatorId, PeerId>>>,
 }
 
+#[cfg(feature = "libp2p")]
 impl Libp2pNetwork {
     pub async fn new(listen_addr: SocketAddr, validator_id: ValidatorId) -> Result<Self> {
         let local_key = identity::Keypair::generate_ed25519();
@@ -258,6 +351,7 @@ impl Libp2pNetwork {
         let swarm = self.swarm.clone();
         let topic = self.topic.clone();
         let subscribers = self.subscribers.clone();
+        let validators = self.validators.clone();
         tokio::spawn(async move {
             let mut swarm = swarm.lock().await;
             loop {
@@ -269,6 +363,13 @@ impl Libp2pNetwork {
                     })) => {
                         if message.topic != TopicHash::from_raw(topic.hash()) {
                             continue;
+                        }
+                        let allowed_peers = validators.read().await;
+                        if let Some(source) = message.source {
+                            if !allowed_peers.values().any(|peer| peer == &source) {
+                                warn!(?source, "libp2p message rejected by admission policy");
+                                continue;
+                            }
                         }
                         if let Ok(consensus) =
                             serde_json::from_slice::<ConsensusMessage>(&message.data)
@@ -287,6 +388,7 @@ impl Libp2pNetwork {
     }
 }
 
+#[cfg(feature = "libp2p")]
 #[async_trait]
 impl Network for Libp2pNetwork {
     async fn broadcast(&self, message: ConsensusMessage) -> Result<()> {
@@ -318,20 +420,30 @@ pub struct QuicNetwork {
     peers: Arc<RwLock<HashMap<ValidatorId, SocketAddr>>>,
     subscribers: broadcast::Sender<ConsensusMessage>,
     client_cfg: ClientConfig,
+    admission: Arc<AdmissionControl>,
+    local_validator_id: ValidatorId,
+    local_public_key: String,
 }
 
 impl QuicNetwork {
-    pub fn new(bind_addr: SocketAddr, peer_map: HashMap<ValidatorId, SocketAddr>) -> Result<Self> {
+    pub fn new(
+        bind_addr: SocketAddr,
+        peer_map: HashMap<ValidatorId, SocketAddr>,
+        admission: Arc<AdmissionControl>,
+        local_validator_id: ValidatorId,
+        local_public_key: String,
+    ) -> Result<Self> {
         let cert = generate_simple_self_signed(["citizen.local".into()])
             .map_err(ProtocolError::storage)?;
-        let priv_key = cert.serialize_private_key_der();
-        let cert_der = cert.serialize_der().map_err(ProtocolError::storage)?;
+        let priv_key = PrivateKey(cert.serialize_private_key_der());
+        let cert_bytes = cert.serialize_der().map_err(ProtocolError::storage)?;
+        let cert_der = Certificate(cert_bytes.clone());
         let server_config = ServerConfig::with_single_cert(vec![cert_der.clone()], priv_key)
             .map_err(ProtocolError::storage)?;
-        let mut endpoint =
+        let endpoint =
             Endpoint::server(server_config, bind_addr).map_err(ProtocolError::storage)?;
-        let mut roots = quinn::crypto::rustls::RootCertStore::empty();
-        roots.add_parsable_certificates([cert_der.clone()]);
+        let mut roots = RootCertStore::empty();
+        let _ = roots.add_parsable_certificates(&[cert_bytes]);
         let client_cfg = ClientConfig::with_root_certificates(roots);
 
         let (tx, _) = broadcast::channel(1024);
@@ -340,23 +452,38 @@ impl QuicNetwork {
             peers: Arc::new(RwLock::new(peer_map)),
             subscribers: tx,
             client_cfg,
+            admission,
+            local_validator_id,
+            local_public_key,
         };
         network.spawn_accept_loop();
         Ok(network)
     }
 
+    pub async fn update_validator_snapshot(&self, snapshot: ValidatorSetSnapshot) {
+        self.admission.update_snapshot(snapshot).await;
+    }
+
+    pub async fn update_peers(&self, peer_map: HashMap<ValidatorId, SocketAddr>) {
+        let mut peers = self.peers.write().await;
+        peers.clear();
+        peers.extend(peer_map);
+    }
+
     fn spawn_accept_loop(&self) {
         let endpoint = self.endpoint.clone();
         let tx = self.subscribers.clone();
+        let admission = self.admission.clone();
         tokio::spawn(async move {
             while let Some(connecting) = endpoint.accept().await {
-                if let Ok(new_conn) = connecting.await {
-                    let mut uni = new_conn.bi_streams;
-                    while let Some(stream) = uni.next().await {
-                        if let Ok((mut send, mut recv)) = stream {
-                            QuicNetwork::spawn_reader(tx.clone(), recv);
-                            // Drop send side; we only receive on inbound connections.
-                            drop(send);
+                if let Ok(conn) = connecting.await {
+                    loop {
+                        match conn.accept_bi().await {
+                            Ok((send, recv)) => {
+                                QuicNetwork::spawn_reader(tx.clone(), admission.clone(), recv);
+                                drop(send);
+                            }
+                            Err(_) => break,
                         }
                     }
                 }
@@ -364,18 +491,27 @@ impl QuicNetwork {
         });
     }
 
-    fn spawn_reader(tx: broadcast::Sender<ConsensusMessage>, mut recv: RecvStream) {
+    fn spawn_reader(
+        tx: broadcast::Sender<ConsensusMessage>,
+        admission: Arc<AdmissionControl>,
+        mut recv: RecvStream,
+    ) {
         tokio::spawn(async move {
-            let mut buf = Vec::new();
             loop {
-                buf.clear();
                 match recv.read_to_end(1024 * 1024).await {
                     Ok(data) => {
                         if data.is_empty() {
                             break;
                         }
-                        if let Ok(msg) = bincode::deserialize::<ConsensusMessage>(&data) {
-                            let _ = tx.send(msg);
+                        if let Ok(wire) = bincode::deserialize::<WireMessage>(&data) {
+                            if admission.allows(&wire.handshake).await {
+                                let _ = tx.send(wire.message);
+                            } else {
+                                warn!(
+                                    validator = %wire.handshake.validator_id,
+                                    "quic message rejected by admission policy"
+                                );
+                            }
                         }
                     }
                     Err(_) => break,
@@ -391,17 +527,15 @@ impl QuicNetwork {
                 "unknown peer {target}"
             )));
         };
+        let addr = *addr;
         drop(peers);
         let conn = self
             .endpoint
-            .connect_with(self.client_cfg.clone(), *addr, "citizen")
+            .connect_with(self.client_cfg.clone(), addr, "citizen")
             .map_err(ProtocolError::storage)?
             .await
             .map_err(ProtocolError::storage)?;
-        conn.connection
-            .open_bi()
-            .await
-            .map_err(ProtocolError::storage)
+        conn.open_bi().await.map_err(ProtocolError::storage)
     }
 }
 
@@ -417,7 +551,16 @@ impl Network for QuicNetwork {
 
     async fn unicast(&self, target: &ValidatorId, message: ConsensusMessage) -> Result<()> {
         let (mut send, _) = self.connection(target).await?;
-        let data = bincode::serialize(&message).map_err(ProtocolError::storage)?;
+        let epoch = self.admission.maybe_rotate().await;
+        let wire = WireMessage {
+            handshake: PeerHandshake {
+                validator_id: self.local_validator_id.clone(),
+                public_key: self.local_public_key.clone(),
+                key_epoch: epoch,
+            },
+            message,
+        };
+        let data = bincode::serialize(&wire).map_err(ProtocolError::storage)?;
         send.write_all(&data)
             .await
             .map_err(ProtocolError::storage)?;

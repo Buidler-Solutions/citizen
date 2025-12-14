@@ -11,13 +11,14 @@ use citizen_api::ApiServer;
 use citizen_consensus::ConsensusEngine;
 use citizen_crypto::{verifying_key_to_string, KeyRegistry, ValidatorKeypair};
 use citizen_ledger::Ledger;
-use citizen_network::{MockNetwork, Network, NetworkLatency, QuicNetwork};
+use citizen_network::{AdmissionControl, MockNetwork, Network, NetworkLatency, QuicNetwork};
 use citizen_storage::RocksDbStorage;
 use citizen_types::{
     ConsensusConfig, NamespaceRuleset, ProtocolError, ValidatorId, ValidatorMetadata,
     ValidatorSetSnapshot,
 };
 use serde::{Deserialize, Serialize};
+use std::time::Duration;
 use tokio::signal;
 use tracing_subscriber::EnvFilter;
 
@@ -50,6 +51,8 @@ async fn main() -> anyhow::Result<()> {
     ledger.bootstrap_namespaces(config.namespaces.clone());
 
     let snapshot = config.build_validator_set(&verifying_key_hex);
+    let rotation = Duration::from_secs(config.network_key_rotation_secs);
+    let admission = Arc::new(AdmissionControl::from_snapshot(snapshot.clone(), rotation));
 
     let network = if !config.peers.is_empty() {
         let peers = config
@@ -65,6 +68,9 @@ async fn main() -> anyhow::Result<()> {
         Arc::new(NodeNetwork::Quic(QuicNetwork::new(
             config.bind_addr.unwrap_or(default_bind()),
             peers,
+            admission.clone(),
+            config.validator_id.clone(),
+            verifying_key_hex.clone(),
         )?))
     } else {
         Arc::new(NodeNetwork::Mock(MockNetwork::new(NetworkLatency {
@@ -136,6 +142,8 @@ struct NodeConfig {
     validators: Vec<ConfigValidator>,
     #[serde(default)]
     peers: Vec<PeerConfig>,
+    #[serde(default = "default_rotation_secs")]
+    network_key_rotation_secs: u64,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -213,6 +221,7 @@ impl Default for NodeConfig {
             namespaces: Vec::new(),
             validators: Vec::new(),
             peers: Vec::new(),
+            network_key_rotation_secs: default_rotation_secs(),
         }
     }
 }
@@ -227,6 +236,10 @@ fn default_block_time() -> u64 {
 
 fn default_api_port() -> u16 {
     8080
+}
+
+fn default_rotation_secs() -> u64 {
+    3600
 }
 
 fn default_bind() -> SocketAddr {

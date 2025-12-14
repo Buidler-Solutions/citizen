@@ -2,5 +2,11 @@ validator_id = "validator.local"
 block_time_millis = 1000
 quorum_bps = 8000
 api_port = 8080
+network_key_rotation_secs = 3600
 
-# Add partner validators by appending [[validators]] tables with verifying keys.
+# Add partner validators by appending [[validators]] tables with verifying keys. Incoming
+# network connections will be checked against this snapshot as an admission allowlist.
+[[validators]]
+validator_id = "validator.partner"
+public_key = "partner_public_key_hex"
+anchors = ["org:partner"]

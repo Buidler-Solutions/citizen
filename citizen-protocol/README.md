@@ -40,6 +40,14 @@ citizen-protocol/
 
    The node exposes a read-only HTTP API on `http://127.0.0.1:8080` (configurable).
 
+## Transport Admission & Key Rotation
+
+- Incoming QUIC/libp2p peers are validated against the configured validator snapshot in `node.toml`. Use
+  `[[validators]]` entries to define the allowlist (validator ID + verifying key) that peers must present
+  during handshake.
+- Configure `network_key_rotation_secs` to control how frequently nodes refresh their network key epoch
+  and re-authenticate peers. The default rotation cadence is one hour.
+
 ## Simulation Harness
 
 The `citizen-simulation` crate runs deterministic stress scenarios for validator sets between 50 and 100 participants. Example CLI entry point (add inside your own binary or `cargo run -p citizen-simulation` harness):

@@ -40,7 +40,7 @@ impl CommitProof {
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct LedgerEntry {
     pub entry_id: Uuid,
     pub namespace: NamespaceId,
@@ -199,7 +199,7 @@ impl ProtocolError {
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct SimulationConfig {
     pub validators: usize,
     pub scenario: SimulationScenario,
@@ -216,7 +216,7 @@ pub enum SimulationScenario {
     NetworkPartition,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct NetworkModel {
     pub same_region_rtt_ms: (u64, u64),
     pub cross_region_rtt_ms: (u64, u64),
