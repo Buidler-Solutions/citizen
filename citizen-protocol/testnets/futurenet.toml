@@ -1,0 +1,30 @@
+name = "futurenet"
+description = "Citizen developer-stage futurenet for staging upgrades and governance rehearsals"
+block_time_millis = 1000
+quorum_bps = 8000
+
+[namespaces]
+identity = "identity.citizen"
+land = "registry.land"
+audit = "audit.procurement"
+governance = "governance.vote"
+
+# Invite-only validator cohort for staging. Populate with real verifying keys
+# and institutional anchors before launch.
+[[validators]]
+validator_id = "futurenet-alpha"
+public_key = "..."
+anchors = ["org:alpha-lab"]
+
+[[validators]]
+validator_id = "futurenet-beta"
+public_key = "..."
+anchors = ["org:beta-lab"]
+
+[[validators]]
+validator_id = "futurenet-gamma"
+public_key = "..."
+anchors = ["org:gamma-lab"]
+
+# Add additional staging validators here; require on-chain governance approval
+# for each new entry.

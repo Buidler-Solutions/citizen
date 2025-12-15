@@ -40,6 +40,27 @@ citizen-protocol/
 
    The node exposes a read-only HTTP API on `http://127.0.0.1:8080` (configurable).
 
+4. To stand up a three-validator QUIC localnet that mirrors production settings,
+   use the deterministic configs under `config/localnet/` and the helper
+   launcher:
+
+   ```bash
+   scripts/run_localnet.sh
+   ```
+
+   See `docs/LOCALNET_RUNBOOK.md` for details on swapping in your own keys and
+   endpoints for a real deployment.
+
+5. When promoting deployments beyond a single host, use the staged network
+   manifests:
+
+   - `testnets/futurenet.toml` — developer-stage futurenet for governance
+     rehearsals and upgrade validation.
+   - `testnets/mainnet.toml` — public mainnet manifest with governance-approved
+     validator anchors.
+
+   Additional context is available in `docs/NETWORKS.md`.
+
 ## Transport Admission & Key Rotation
 
 - Incoming QUIC/libp2p peers are validated against the configured validator snapshot in `node.toml`. Use

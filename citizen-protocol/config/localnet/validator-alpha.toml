@@ -1,0 +1,69 @@
+validator_id = "validator-alpha"
+block_time_millis = 1000
+quorum_bps = 8000
+signing_key_hex = "1f1e1d1c1b1a191817161514131211100f0e0d0c0b0a09080706050403020100"
+api_port = 8081
+data_dir = "data/alpha"
+bind_addr = "127.0.0.1:9100"
+network_key_rotation_secs = 3600
+
+[[namespaces]]
+descriptor.namespace = "identity.citizen"
+descriptor.version = 1
+descriptor.rules_hash = "sha256:identity-localnet-v1"
+descriptor.governed_by = "governance.vote"
+writers = ["registry.identity"]
+[[namespaces.validators]]
+name = "require_signature"
+config = {}
+
+[[namespaces]]
+descriptor.namespace = "registry.land"
+descriptor.version = 1
+descriptor.rules_hash = "sha256:land-localnet-v1"
+descriptor.governed_by = "governance.vote"
+writers = ["registry.land"]
+[[namespaces.validators]]
+name = "require_signature"
+config = {}
+[[namespaces.validators]]
+name = "prevent_double_transfer"
+config.object_id = "object_id"
+
+[[namespaces]]
+descriptor.namespace = "audit.procurement"
+descriptor.version = 1
+descriptor.rules_hash = "sha256:audit-localnet-v1"
+descriptor.governed_by = "governance.vote"
+writers = ["audit.procurement"]
+[[namespaces.validators]]
+name = "require_signature"
+config = {}
+
+[[namespaces]]
+descriptor.namespace = "governance.vote"
+descriptor.version = 1
+descriptor.rules_hash = "sha256:governance-localnet-v1"
+descriptor.governed_by = "governance.vote"
+writers = ["governance.vote"]
+[[namespaces.validators]]
+name = "require_signature"
+config = {}
+
+[[validators]]
+validator_id = "validator-beta"
+public_key = "dcb38143815f465d8d8d262812260ade8e721b3fe15da833ad477dd711ebc10f"
+anchors = ["org:beta"]
+
+[[validators]]
+validator_id = "validator-gamma"
+public_key = "1482e33d057c573003b7a18e1318c8eb12b847850b450e34a776fef7193a8739"
+anchors = ["org:gamma"]
+
+[[peers]]
+validator_id = "validator-beta"
+address = "127.0.0.1:9101"
+
+[[peers]]
+validator_id = "validator-gamma"
+address = "127.0.0.1:9102"
