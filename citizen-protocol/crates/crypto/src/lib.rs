@@ -1,5 +1,7 @@
 use citizen_types::{BlockHeader, CommitProof, LedgerEntry, ProtocolError, ValidatorId};
-use ed25519_dalek::{Signature, SigningKey, VerifyingKey};
+use ed25519_dalek::{
+    Signature, Signer, SigningKey, VerifyingKey, PUBLIC_KEY_LENGTH, SECRET_KEY_LENGTH,
+};
 use parking_lot::RwLock;
 use rand::rngs::OsRng;
 use sha2::{Digest, Sha256};
@@ -28,8 +30,15 @@ impl ValidatorKeypair {
     }
 
     pub fn from_secret_bytes(validator_id: ValidatorId, secret: &[u8]) -> Result<Self> {
-        let signing_key = SigningKey::from_bytes(secret)
-            .map_err(|err| ProtocolError::crypto(format!("invalid secret key: {err}")))?;
+        if secret.len() != SECRET_KEY_LENGTH {
+            return Err(ProtocolError::crypto(format!(
+                "invalid secret key length: expected {SECRET_KEY_LENGTH} bytes, got {}",
+                secret.len()
+            )));
+        }
+        let mut key_bytes = [0u8; SECRET_KEY_LENGTH];
+        key_bytes.copy_from_slice(secret);
+        let signing_key = SigningKey::from_bytes(&key_bytes);
         let verifying_key = signing_key.verifying_key();
         Ok(Self {
             validator_id,
@@ -75,16 +84,14 @@ pub fn verify_signature(key: &VerifyingKey, message: &[u8], signature: &Signatur
 }
 
 pub fn hash_block_header(header: &BlockHeader) -> String {
-    // Serialize header minimally to hash-critical fields
+    // Serialize header minimally to hash-critical fields.
+    // Commit proofs are excluded so the hash remains stable before and after aggregation.
     let mut hasher = Sha256::new();
     hasher.update(header.height.to_be_bytes());
     hasher.update(header.prev_hash.as_bytes());
     hasher.update(header.entry_root.as_bytes());
     hasher.update(header.proposer.as_bytes());
     hasher.update(header.timestamp.to_be_bytes());
-    for participant in &header.commit_proof.participant_ids {
-        hasher.update(participant.as_bytes());
-    }
     hex::encode(hasher.finalize())
 }
 
@@ -170,7 +177,15 @@ pub fn quorum_threshold(total_validators: usize, quorum_bps: u32) -> usize {
 pub fn parse_verifying_key(encoded: &str) -> Result<VerifyingKey> {
     let bytes = hex::decode(encoded)
         .map_err(|err| ProtocolError::crypto(format!("invalid verifying key hex: {err}")))?;
-    VerifyingKey::from_bytes(&bytes)
+    if bytes.len() != PUBLIC_KEY_LENGTH {
+        return Err(ProtocolError::crypto(format!(
+            "invalid verifying key length: expected {PUBLIC_KEY_LENGTH} bytes, got {}",
+            bytes.len()
+        )));
+    }
+    let mut key_bytes = [0u8; PUBLIC_KEY_LENGTH];
+    key_bytes.copy_from_slice(&bytes);
+    VerifyingKey::from_bytes(&key_bytes)
         .map_err(|err| ProtocolError::crypto(format!("invalid verifying key bytes: {err}")))
 }
 

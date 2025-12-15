@@ -11,7 +11,6 @@ use citizen_types::{
 };
 use ed25519_dalek::Signature;
 use parking_lot::RwLock;
-use serde_json::json;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::sync::Arc;
 use tokio::time::{interval, Duration};
@@ -107,8 +106,7 @@ where
         if leader != self.validator_id {
             return Ok(());
         }
-        let mut rounds = self.rounds.write();
-        if rounds.contains_key(&next_height) {
+        if self.rounds.read().contains_key(&next_height) {
             return Ok(());
         }
         let entries = self.collect_entries().await?;
@@ -140,8 +138,10 @@ where
             entries,
             round: 0,
         };
-        rounds.insert(next_height, PendingRound::new());
-        drop(rounds);
+        {
+            let mut rounds = self.rounds.write();
+            rounds.insert(next_height, PendingRound::new());
+        }
         self.broadcast_proposal(proposal).await
     }
 
@@ -172,10 +172,10 @@ where
             ConsensusMessage::PreVote {
                 height,
                 validator,
-                hash,
+                hash: _hash,
                 signature,
             } => {
-                self.handle_prevote(height, validator, hash, signature)
+                self.handle_prevote(height, validator, _hash, signature)
                     .await
             }
             ConsensusMessage::Commit { height, block } => self.handle_commit(height, block).await,
@@ -186,11 +186,16 @@ where
             }
             ConsensusMessage::GovernanceVote(vote) => {
                 info!(proposal = %vote.proposal_id, voter = %vote.validator, "received governance vote");
-                if let Some(snapshot) = self.ledger.storage().latest_validator_set()? {
+                if self
+                    .ledger
+                    .storage()
+                    .latest_validator_set()?
+                    .is_some()
+                {
                     let _ = self.ledger.storage().track_governance_proposal(
                         citizen_types::GovernanceProposal {
                             proposal_id: vote.proposal_id.clone(),
-                            proposal_type: citizen_types::GovernanceAction::UpdateParameter(
+                            proposal_type: GovernanceAction::UpdateParameter(
                                 "vote".into(),
                                 serde_json::json!({"note": "vote observed"}),
                             ),
@@ -232,7 +237,7 @@ where
         &self,
         height: u64,
         validator: ValidatorId,
-        hash: String,
+        _hash: String,
         signature_hex: String,
     ) -> Result<()> {
         if self.committed.read().contains(&height) {
@@ -331,7 +336,7 @@ fn compute_entry_root(entries: &[LedgerEntry]) -> String {
         hasher.update(entry.action.as_bytes());
         hasher.update(entry.object_id.as_bytes());
         hasher.update(entry.signature.as_bytes());
-        hasher.update(entry.timestamp.to_be_bytes());
+        hasher.update(&entry.timestamp.to_be_bytes());
     }
     hasher.finalize().to_hex().to_string()
 }

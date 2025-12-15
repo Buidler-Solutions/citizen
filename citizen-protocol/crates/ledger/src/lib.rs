@@ -1,8 +1,8 @@
 use citizen_crypto::{hash_block_header, parse_verifying_key, verify_commit_proof, KeyRegistry};
 use citizen_storage::{LedgerStorage, MemoryStorage};
 use citizen_types::{
-    Block, BlockHeader, CommitProof, GovernanceProposal, LedgerEntry, NamespaceId,
-    NamespaceRuleset, ProtocolError, ValidatorSetSnapshot,
+    Block, GovernanceProposal, LedgerEntry, NamespaceId, NamespaceRuleset, ProtocolError,
+    ValidatorSetSnapshot,
 };
 use parking_lot::RwLock;
 use std::collections::HashMap;
@@ -94,12 +94,25 @@ impl<S: LedgerStorage + 'static> Ledger<S> {
     }
 
     fn ensure_unique_object(&self, entry: &LedgerEntry, object_field: &str) -> Result<()> {
+        let object_value = match object_field {
+            "object_id" => entry.object_id.as_str(),
+            other => {
+                return Err(ProtocolError::ValidationFailed(format!(
+                    "unsupported object field {}",
+                    other
+                )))
+            }
+        };
         let entries = self.storage.namespace_entries(&entry.namespace)?;
-        for existing in entries {
-            if existing.object_id == entry.object_id && existing.entry_id != entry.entry_id {
+        for existing in entries.iter() {
+            let existing_value = match object_field {
+                "object_id" => existing.object_id.as_str(),
+                _ => unreachable!("object field should be validated above"),
+            };
+            if existing_value == object_value && existing.entry_id != entry.entry_id {
                 return Err(ProtocolError::ValidationFailed(format!(
                     "object {} already referenced in namespace {}",
-                    entry.object_id, entry.namespace
+                    object_value, entry.namespace
                 )));
             }
         }

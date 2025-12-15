@@ -25,12 +25,12 @@ thiserror = "1.0"
 async-trait = "0.1"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["fmt", "env-filter"] }
-tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "sync"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "sync", "signal"] }
 parking_lot = "0.12"
 rand = "0.8"
 blake3 = "1.3"
 sha2 = "0.10"
-ed25519-dalek = { version = "2", features = ["pkcs8"] }
+ed25519-dalek = { version = "2", features = ["pkcs8", "rand_core"] }
 prost = "0.12"
 bytes = "1"
 axum = { version = "0.7", features = ["macros"] }
@@ -44,7 +44,10 @@ libp2p = { version = "0.53", features = ["tokio", "tcp", "dns", "gossipsub", "no
 quinn = { version = "0.10", features = ["rustls", "runtime-tokio"] }
 rcgen = "0.12"
 bincode = "1.3"
-rocksdb = "0.21"
+rocksdb = { version = "0.21", features = ["static"] }
+
+[patch.crates-io]
+rocksdb = { path = "vendor/rocksdb" }
 
 [workspace.metadata]
 name = "citizen-protocol"

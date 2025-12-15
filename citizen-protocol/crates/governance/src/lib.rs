@@ -4,7 +4,7 @@ use citizen_types::{
     GovernanceProposal, GovernanceVote, ProtocolError, ValidatorSetSnapshot, VoteChoice,
 };
 use parking_lot::RwLock;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 use std::sync::Arc;
 use tracing::{debug, info};
 

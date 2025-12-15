@@ -19,3 +19,4 @@ rand = { workspace = true }
 chrono = { workspace = true }
 thiserror = { workspace = true }
 parking_lot = { workspace = true }
+tracing-subscriber = { workspace = true }

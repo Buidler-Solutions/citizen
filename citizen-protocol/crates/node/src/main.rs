@@ -11,7 +11,9 @@ use citizen_api::ApiServer;
 use citizen_consensus::ConsensusEngine;
 use citizen_crypto::{verifying_key_to_string, KeyRegistry, ValidatorKeypair};
 use citizen_ledger::Ledger;
-use citizen_network::{AdmissionControl, MockNetwork, Network, NetworkLatency, QuicNetwork};
+use citizen_network::{
+    AdmissionControl, ConsensusMessage, MockNetwork, Network, NetworkLatency, QuicNetwork,
+};
 use citizen_storage::RocksDbStorage;
 use citizen_types::{
     ConsensusConfig, NamespaceRuleset, ProtocolError, ValidatorId, ValidatorMetadata,
@@ -253,10 +255,7 @@ enum NodeNetwork {
 
 #[async_trait::async_trait]
 impl Network for NodeNetwork {
-    async fn broadcast(
-        &self,
-        message: citizen_types::ConsensusMessage,
-    ) -> Result<(), ProtocolError> {
+    async fn broadcast(&self, message: ConsensusMessage) -> Result<(), ProtocolError> {
         match self {
             NodeNetwork::Mock(inner) => inner.broadcast(message).await,
             NodeNetwork::Quic(inner) => inner.broadcast(message).await,
@@ -266,7 +265,7 @@ impl Network for NodeNetwork {
     async fn unicast(
         &self,
         target: &ValidatorId,
-        message: citizen_types::ConsensusMessage,
+        message: ConsensusMessage,
     ) -> Result<(), ProtocolError> {
         match self {
             NodeNetwork::Mock(inner) => inner.unicast(target, message).await,
@@ -276,7 +275,7 @@ impl Network for NodeNetwork {
 
     async fn subscribe(
         &self,
-    ) -> Result<tokio::sync::mpsc::Receiver<citizen_types::ConsensusMessage>, ProtocolError> {
+    ) -> Result<tokio::sync::mpsc::Receiver<ConsensusMessage>, ProtocolError> {
         match self {
             NodeNetwork::Mock(inner) => inner.subscribe().await,
             NodeNetwork::Quic(inner) => inner.subscribe().await,

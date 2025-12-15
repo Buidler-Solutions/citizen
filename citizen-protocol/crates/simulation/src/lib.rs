@@ -7,7 +7,7 @@ use citizen_consensus::ConsensusEngine;
 use citizen_crypto::{verifying_key_to_string, KeyRegistry, ValidatorKeypair};
 use citizen_ledger::Ledger;
 use citizen_network::{MessageCounters, MockNetwork, NetworkLatency};
-use citizen_storage::MemoryStorage;
+use citizen_storage::{LedgerStorage, MemoryStorage};
 use citizen_types::{
     ConsensusConfig, NetworkModel, ProtocolError, SimulationConfig, SimulationScenario,
     ValidatorMetadata, ValidatorSetSnapshot,
@@ -84,7 +84,7 @@ impl SimulationHarness {
         })
     }
 
-    pub async fn execute(mut self, duration: Duration) -> Result<SimulationReport> {
+    pub async fn execute(self, duration: Duration) -> Result<SimulationReport> {
         let mut handles: Vec<(String, JoinHandle<()>)> = Vec::new();
         for node in &self.nodes {
             let engine = node.consensus.clone();
