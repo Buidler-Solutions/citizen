@@ -28,7 +28,8 @@ use libp2p::{
 };
 use quinn::{ClientConfig, Endpoint, RecvStream, SendStream, ServerConfig};
 use rcgen::generate_simple_self_signed;
-use rustls::{Certificate, PrivateKey, RootCertStore};
+use rustls::pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer};
+use rustls::RootCertStore;
 
 pub type Result<T> = std::result::Result<T, ProtocolError>;
 
@@ -435,16 +436,16 @@ impl QuicNetwork {
     ) -> Result<Self> {
         let cert = generate_simple_self_signed(["citizen.local".into()])
             .map_err(ProtocolError::storage)?;
-        let priv_key = PrivateKey(cert.serialize_private_key_der());
-        let cert_bytes = cert.serialize_der().map_err(ProtocolError::storage)?;
-        let cert_der = Certificate(cert_bytes.clone());
+        let priv_key_bytes = cert.signing_key.serialize_der();
+        let priv_key = PrivateKeyDer::Pkcs8(PrivatePkcs8KeyDer::from(priv_key_bytes));
+        let cert_der = CertificateDer::from(cert.cert);
         let server_config = ServerConfig::with_single_cert(vec![cert_der.clone()], priv_key)
             .map_err(ProtocolError::storage)?;
         let endpoint =
             Endpoint::server(server_config, bind_addr).map_err(ProtocolError::storage)?;
         let mut roots = RootCertStore::empty();
-        let _ = roots.add_parsable_certificates(&[cert_bytes]);
-        let client_cfg = ClientConfig::with_root_certificates(roots);
+        let _ = roots.add_parsable_certificates([cert_der]);
+        let client_cfg = ClientConfig::with_root_certificates(roots.into()).map_err(ProtocolError::storage)?;
 
         let (tx, _) = broadcast::channel(1024);
         let network = Self {
@@ -564,7 +565,7 @@ impl Network for QuicNetwork {
         send.write_all(&data)
             .await
             .map_err(ProtocolError::storage)?;
-        send.finish().await.map_err(ProtocolError::storage)
+        send.finish().map_err(ProtocolError::storage)
     }
 
     async fn subscribe(&self) -> Result<mpsc::Receiver<ConsensusMessage>> {
