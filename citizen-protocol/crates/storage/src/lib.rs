@@ -2,9 +2,11 @@ use citizen_types::{
     Block, BlockHeight, GovernanceProposal, LedgerEntry, NamespaceDescriptor, NamespaceId,
     ProtocolError, ValidatorId, ValidatorSetSnapshot,
 };
+use lru::LruCache;
 use parking_lot::RwLock;
 use std::collections::{BTreeMap, BTreeSet};
 use std::env;
+use std::num::NonZeroUsize;
 use std::str::FromStr;
 use std::sync::Arc;
 
@@ -153,6 +155,7 @@ impl LedgerStorage for MemoryStorage {
 #[derive(Clone)]
 pub struct RocksDbStorage {
     db: Arc<DB>,
+    block_cache: Arc<RwLock<LruCache<BlockHeight, Block>>>,
 }
 
 const CF_BLOCKS: &str = "blocks";
@@ -245,7 +248,11 @@ impl RocksDbStorage {
         let db =
             DB::open_cf_descriptors(&opts, path, cf_descriptors).map_err(ProtocolError::storage)?;
 
-        Ok(Self { db: Arc::new(db) })
+        let block_cache = LruCache::new(block_cache_capacity());
+        Ok(Self {
+            db: Arc::new(db),
+            block_cache: Arc::new(RwLock::new(block_cache)),
+        })
     }
 
     fn put_cf<T: serde::Serialize>(
@@ -303,6 +310,26 @@ fn height_key(height: BlockHeight) -> [u8; 8] {
     height.to_be_bytes()
 }
 
+fn block_cache_capacity() -> NonZeroUsize {
+    const DEFAULT_CAPACITY: usize = 1_024;
+    let fallback = NonZeroUsize::new(DEFAULT_CAPACITY)
+        .expect("DEFAULT_CAPACITY must be non-zero");
+    match parse_env::<usize>("ROCKSDB_BLOCK_CACHE_SIZE") {
+        Some(value) => {
+            if let Some(non_zero) = NonZeroUsize::new(value) {
+                non_zero
+            } else {
+                eprintln!(
+                    "RocksDB: ignoring invalid value for ROCKSDB_BLOCK_CACHE_SIZE={}",
+                    value
+                );
+                fallback
+            }
+        }
+        None => fallback,
+    }
+}
+
 fn namespaced_entry_key(namespace: &NamespaceId, entry: &LedgerEntry) -> Vec<u8> {
     let mut key = namespace.as_bytes().to_vec();
     key.push(0x1f);
@@ -312,11 +339,21 @@ fn namespaced_entry_key(namespace: &NamespaceId, entry: &LedgerEntry) -> Vec<u8>
 
 impl LedgerStorage for RocksDbStorage {
     fn store_block(&self, block: Block) -> Result<()> {
-        self.put_cf(CF_BLOCKS, height_key(block.header.height), &block)
+        let height = block.header.height;
+        self.put_cf(CF_BLOCKS, height_key(height), &block)?;
+        self.block_cache.write().put(height, block);
+        Ok(())
     }
 
     fn get_block(&self, height: BlockHeight) -> Result<Option<Block>> {
-        self.get_cf(CF_BLOCKS, height_key(height))
+        if let Some(block) = self.block_cache.write().get(&height).cloned() {
+            return Ok(Some(block));
+        }
+        let block = self.get_cf(CF_BLOCKS, height_key(height))?;
+        if let Some(ref block) = block {
+            self.block_cache.write().put(height, block.clone());
+        }
+        Ok(block)
     }
 
     fn latest_height(&self) -> Result<BlockHeight> {
