@@ -349,7 +349,7 @@ impl LedgerStorage for RocksDbStorage {
         if let Some(block) = self.block_cache.write().get(&height).cloned() {
             return Ok(Some(block));
         }
-        let block = self.get_cf(CF_BLOCKS, height_key(height))?;
+        let block: Option<Block> = self.get_cf(CF_BLOCKS, height_key(height))?;
         if let Some(ref block) = block {
             self.block_cache.write().put(height, block.clone());
         }
