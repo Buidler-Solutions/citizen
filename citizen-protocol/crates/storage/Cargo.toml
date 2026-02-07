@@ -12,6 +12,7 @@ parking_lot = { workspace = true }
 thiserror = { workspace = true }
 anyhow = { workspace = true }
 rocksdb = "0.21"
+lru = "0.16.3"
 
 [dev-dependencies]
 criterion = { version = "0.5", default-features = false, features = ["cargo_bench_support"] }
