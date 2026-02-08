@@ -8,6 +8,8 @@ authors.workspace = true
 [dependencies]
 citizen-types = { path = "../types" }
 anyhow = { workspace = true }
+argon2 = "0.5"
+chacha20poly1305 = "0.10"
 chrono = { workspace = true }
 clap = { version = "4.5", features = ["derive"] }
 ed25519-dalek = { workspace = true }
