@@ -769,6 +769,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "citizen-wallet"
+version = "0.1.0"
+dependencies = [
+ "citizen-types",
+ "ed25519-dalek",
+ "hex",
+ "rand 0.8.5",
+ "serde",
+ "serde_json",
+ "thiserror 1.0.69",
+ "uuid",
+]
+
+[[package]]
 name = "clang-sys"
 version = "1.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
