@@ -1,7 +1,8 @@
 use chrono::Utc;
 use citizen_types::LedgerEntry;
 use citizen_wallet::{
-    parse_verifying_key, sign_entry, verify_entry_signature, EntryDraft, WalletKeypair,
+    decrypt_secret_key, encrypt_secret_key, parse_verifying_key, sign_entry,
+    verify_entry_signature, EncryptedSecretKey, EntryDraft, WalletKeypair,
 };
 use clap::{Parser, Subcommand};
 use serde::{Deserialize, Serialize};
@@ -28,6 +29,8 @@ enum Commands {
         path: PathBuf,
         #[arg(long)]
         label: Option<String>,
+        #[arg(long)]
+        password: Option<String>,
     },
     PublicKey {
         #[arg(long, default_value = "wallet.json")]
@@ -52,6 +55,8 @@ enum Commands {
         payload_json: String,
         #[arg(long)]
         timestamp: Option<i64>,
+        #[arg(long)]
+        password: Option<String>,
     },
     VerifyEntry {
         #[arg(long)]
@@ -72,7 +77,10 @@ struct KeyRecord {
     key_id: Uuid,
     label: Option<String>,
     public_key_hex: String,
-    secret_key_hex: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    secret_key_hex: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    encrypted_secret_key: Option<EncryptedSecretKey>,
     created_at: i64,
 }
 
@@ -121,14 +129,21 @@ fn main() -> anyhow::Result<()> {
             store.save(&path)?;
             println!("Initialized keystore at {}", path.display());
         }
-        Commands::Keygen { path, label } => {
+        Commands::Keygen {
+            path,
+            label,
+            password,
+        } => {
             let mut store = Keystore::load_or_create(&path)?;
             let keypair = WalletKeypair::generate();
+            let password = load_password(password)?;
+            let encrypted = encrypt_secret_key(keypair.secret_key_bytes(), &password)?;
             let record = KeyRecord {
                 key_id: keypair.key_id,
                 label,
                 public_key_hex: keypair.verifying_key_hex(),
-                secret_key_hex: hex::encode(keypair.secret_key_bytes()),
+                secret_key_hex: None,
+                encrypted_secret_key: Some(encrypted),
                 created_at: Utc::now().timestamp(),
             };
             store.add_key(record);
@@ -151,13 +166,14 @@ fn main() -> anyhow::Result<()> {
             author,
             payload_json,
             timestamp,
+            password,
         } => {
             let store = Keystore::load_or_create(&path)?;
             let record = store
                 .find_key(key_id)
                 .ok_or_else(|| anyhow::anyhow!("unknown key_id {key_id}"))?;
             let payload: Value = serde_json::from_str(&payload_json)?;
-            let secret_bytes = hex::decode(&record.secret_key_hex)?;
+            let secret_bytes = load_secret_key_bytes(record, password)?;
             let keypair = WalletKeypair::from_secret_bytes(record.key_id, &secret_bytes)?;
             let draft = EntryDraft {
                 namespace,
@@ -183,4 +199,31 @@ fn main() -> anyhow::Result<()> {
     }
 
     Ok(())
+}
+
+fn load_password(explicit: Option<String>) -> anyhow::Result<String> {
+    if let Some(password) = explicit {
+        return Ok(password);
+    }
+    std::env::var("CITIZEN_WALLET_PASSWORD").map_err(|_| {
+        anyhow::anyhow!(
+            "password required (pass --password or set CITIZEN_WALLET_PASSWORD)"
+        )
+    })
+}
+
+fn load_secret_key_bytes(
+    record: &KeyRecord,
+    password: Option<String>,
+) -> anyhow::Result<Vec<u8>> {
+    if let Some(encrypted) = &record.encrypted_secret_key {
+        let password = load_password(password)?;
+        let secret = decrypt_secret_key(encrypted, &password)?;
+        return Ok(secret.to_vec());
+    }
+    if let Some(secret_hex) = &record.secret_key_hex {
+        let secret_bytes = hex::decode(secret_hex)?;
+        return Ok(secret_bytes);
+    }
+    Err(anyhow::anyhow!("no secret key found for key_id {}", record.key_id))
 }
