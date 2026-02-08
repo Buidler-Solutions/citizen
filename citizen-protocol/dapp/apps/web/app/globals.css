@@ -1,0 +1,191 @@
+:root {
+  color-scheme: light;
+  font-family: "Inter", "Segoe UI", sans-serif;
+  --bg: #f7f7fb;
+  --text: #0c1120;
+  --muted: #50556b;
+  --card: #ffffff;
+  --accent: #2d5bff;
+  --accent-weak: rgba(45, 91, 255, 0.12);
+  --border: rgba(12, 17, 32, 0.08);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+}
+
+.page {
+  display: flex;
+  flex-direction: column;
+}
+
+.hero {
+  display: grid;
+  gap: 32px;
+  padding: 64px clamp(24px, 6vw, 96px);
+  background: linear-gradient(120deg, #edf1ff 0%, #fdf6ff 100%);
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+}
+
+.eyebrow {
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-size: 0.75rem;
+  color: var(--muted);
+  margin-bottom: 12px;
+}
+
+.lead {
+  color: var(--muted);
+  max-width: 520px;
+}
+
+.hero-actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 24px;
+}
+
+.button {
+  border-radius: 999px;
+  padding: 10px 20px;
+  font-weight: 600;
+  text-decoration: none;
+  display: inline-flex;
+}
+
+.button.primary {
+  background: var(--accent);
+  color: white;
+}
+
+.button.ghost {
+  background: var(--accent-weak);
+  color: var(--accent);
+}
+
+.hero-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 24px;
+  box-shadow: 0 16px 30px rgba(12, 17, 32, 0.08);
+}
+
+.hero-card dl {
+  display: grid;
+  gap: 12px;
+  margin: 0 0 20px;
+}
+
+.hero-card dl div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.status-pill {
+  background: var(--accent-weak);
+  padding: 8px 12px;
+  border-radius: 999px;
+  font-size: 0.85rem;
+  color: var(--accent);
+  font-weight: 600;
+  display: inline-flex;
+}
+
+.section {
+  padding: 56px clamp(24px, 6vw, 96px);
+}
+
+.section.alt {
+  background: #ffffff;
+}
+
+.section-heading {
+  max-width: 720px;
+  margin-bottom: 32px;
+}
+
+.grid {
+  display: grid;
+  gap: 20px;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+}
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 20px;
+}
+
+.card ul {
+  padding-left: 20px;
+  margin: 12px 0 0;
+  color: var(--muted);
+}
+
+.workflow-grid {
+  display: grid;
+  gap: 20px;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+}
+
+.workflow {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.workflow pre {
+  margin: 0;
+  background: #0f172a;
+  color: #f8fafc;
+  border-radius: 12px;
+  padding: 16px;
+  font-size: 0.85rem;
+  overflow-x: auto;
+}
+
+.namespace-grid {
+  display: grid;
+  gap: 20px;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.api-grid {
+  display: grid;
+  gap: 20px;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 24px;
+}
+
+.api-grid ul {
+  padding-left: 18px;
+  color: var(--muted);
+}
+
+@media (max-width: 720px) {
+  .hero {
+    padding-top: 48px;
+  }
+
+  .hero-card dl div {
+    flex-direction: column;
+  }
+}
