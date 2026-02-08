@@ -32,11 +32,27 @@ enum Commands {
         #[arg(long)]
         password: Option<String>,
     },
+    ImportKey {
+        #[arg(long, default_value = "wallet.json")]
+        path: PathBuf,
+        #[arg(long)]
+        label: Option<String>,
+        #[arg(long)]
+        key_id: Option<Uuid>,
+        #[arg(long)]
+        secret_key_hex: String,
+        #[arg(long)]
+        password: Option<String>,
+    },
     PublicKey {
         #[arg(long, default_value = "wallet.json")]
         path: PathBuf,
         #[arg(long)]
         key_id: Uuid,
+    },
+    ListKeys {
+        #[arg(long, default_value = "wallet.json")]
+        path: PathBuf,
     },
     SignEntry {
         #[arg(long, default_value = "wallet.json")]
@@ -84,6 +100,15 @@ struct KeyRecord {
     created_at: i64,
 }
 
+#[derive(Debug, Serialize)]
+struct KeySummary {
+    key_id: Uuid,
+    label: Option<String>,
+    public_key_hex: String,
+    created_at: i64,
+    has_encrypted_secret_key: bool,
+}
+
 impl Keystore {
     fn load_or_create(path: &Path) -> anyhow::Result<Self> {
         if path.exists() {
@@ -114,6 +139,10 @@ impl Keystore {
 
     fn find_key(&self, key_id: Uuid) -> Option<&KeyRecord> {
         self.keys.iter().find(|record| record.key_id == key_id)
+    }
+
+    fn has_key(&self, key_id: Uuid) -> bool {
+        self.find_key(key_id).is_some()
     }
 }
 
@@ -150,12 +179,56 @@ fn main() -> anyhow::Result<()> {
             store.save(&path)?;
             println!("Generated key {}", keypair.key_id);
         }
+        Commands::ImportKey {
+            path,
+            label,
+            key_id,
+            secret_key_hex,
+            password,
+        } => {
+            let mut store = Keystore::load_or_create(&path)?;
+            let password = load_password(password)?;
+            let key_id = key_id.unwrap_or_else(Uuid::new_v4);
+            if store.has_key(key_id) {
+                return Err(anyhow::anyhow!("key_id {key_id} already exists"));
+            }
+            let secret_bytes = hex::decode(&secret_key_hex)?;
+            let keypair = WalletKeypair::from_secret_bytes(key_id, &secret_bytes)?;
+            let encrypted = encrypt_secret_key(keypair.secret_key_bytes(), &password)?;
+            let record = KeyRecord {
+                key_id: keypair.key_id,
+                label,
+                public_key_hex: keypair.verifying_key_hex(),
+                secret_key_hex: None,
+                encrypted_secret_key: Some(encrypted),
+                created_at: Utc::now().timestamp(),
+            };
+            store.add_key(record);
+            store.save(&path)?;
+            println!("Imported key {}", keypair.key_id);
+        }
         Commands::PublicKey { path, key_id } => {
             let store = Keystore::load_or_create(&path)?;
             let record = store
                 .find_key(key_id)
                 .ok_or_else(|| anyhow::anyhow!("unknown key_id {key_id}"))?;
             println!("{}", record.public_key_hex);
+        }
+        Commands::ListKeys { path } => {
+            let store = Keystore::load_or_create(&path)?;
+            let summaries: Vec<KeySummary> = store
+                .keys
+                .iter()
+                .map(|record| KeySummary {
+                    key_id: record.key_id,
+                    label: record.label.clone(),
+                    public_key_hex: record.public_key_hex.clone(),
+                    created_at: record.created_at,
+                    has_encrypted_secret_key: record.encrypted_secret_key.is_some(),
+                })
+                .collect();
+            let output = serde_json::to_string_pretty(&summaries)?;
+            println!("{output}");
         }
         Commands::SignEntry {
             path,
