@@ -1,6 +1,9 @@
 # Citizen Wallet React App
 
-Placeholder for the Citizen wallet ReactJS interface.
+This folder is a placeholder for the Citizen wallet ReactJS interface.
+
+Current status:
+- No React implementation exists yet; see `crates/wallet` for the Rust CLI prototype.
 
 Planned capabilities:
 - Wallet onboarding and key management flows.
