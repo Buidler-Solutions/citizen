@@ -63,6 +63,10 @@ impl WalletKeypair {
         hex::encode(self.verifying_key.to_bytes())
     }
 
+    pub fn secret_key_bytes(&self) -> [u8; SECRET_KEY_LENGTH] {
+        self.signing_key.to_bytes()
+    }
+
     pub fn sign_bytes(&self, payload: &[u8]) -> Signature {
         self.signing_key.sign(payload)
     }
