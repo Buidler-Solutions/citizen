@@ -1,8 +1,14 @@
+use argon2::{Algorithm, Argon2, Params, Version};
+use chacha20poly1305::{
+    aead::{Aead, KeyInit},
+    ChaCha20Poly1305, Key, Nonce,
+};
 use citizen_types::{LedgerEntry, ProtocolError, UnixTimestamp};
 use ed25519_dalek::{
     Signature, Signer, SigningKey, VerifyingKey, PUBLIC_KEY_LENGTH, SECRET_KEY_LENGTH,
 };
 use rand::rngs::OsRng;
+use rand::RngCore;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use uuid::Uuid;
@@ -110,10 +116,100 @@ pub fn sign_entry(draft: EntryDraft, keypair: &WalletKeypair) -> Result<LedgerEn
     })
 }
 
-pub fn verify_entry_signature(
-    entry: &LedgerEntry,
-    verifying_key: &VerifyingKey,
-) -> Result<()> {
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct KdfParams {
+    pub memory_kib: u32,
+    pub iterations: u32,
+    pub parallelism: u32,
+    pub output_length: usize,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct EncryptedSecretKey {
+    pub ciphertext_hex: String,
+    pub salt_hex: String,
+    pub nonce_hex: String,
+    pub kdf: String,
+    pub kdf_params: KdfParams,
+}
+
+pub fn encrypt_secret_key(
+    secret_key: [u8; SECRET_KEY_LENGTH],
+    password: &str,
+) -> Result<EncryptedSecretKey> {
+    let mut salt = [0u8; 16];
+    OsRng.fill_bytes(&mut salt);
+    let mut nonce = [0u8; 12];
+    OsRng.fill_bytes(&mut nonce);
+    let params = Params::new(19456, 2, 1, Some(32))
+        .map_err(|err| ProtocolError::crypto(format!("invalid kdf params: {err}")))?;
+    let mut derived_key = [0u8; 32];
+    let kdf_params = KdfParams {
+        memory_kib: params.m_cost(),
+        iterations: params.t_cost(),
+        parallelism: params.p_cost(),
+        output_length: 32,
+    };
+    let argon2 = Argon2::new(Algorithm::Argon2id, Version::V0x13, params);
+    argon2
+        .hash_password_into(password.as_bytes(), &salt, &mut derived_key)
+        .map_err(|err| ProtocolError::crypto(format!("failed to derive key: {err}")))?;
+    let cipher = ChaCha20Poly1305::new(Key::from_slice(&derived_key));
+    let ciphertext = cipher
+        .encrypt(Nonce::from_slice(&nonce), secret_key.as_slice())
+        .map_err(|err| ProtocolError::crypto(format!("failed to encrypt secret key: {err}")))?;
+    Ok(EncryptedSecretKey {
+        ciphertext_hex: hex::encode(ciphertext),
+        salt_hex: hex::encode(salt),
+        nonce_hex: hex::encode(nonce),
+        kdf: "argon2id".to_string(),
+        kdf_params,
+    })
+}
+
+pub fn decrypt_secret_key(
+    encrypted: &EncryptedSecretKey,
+    password: &str,
+) -> Result<[u8; SECRET_KEY_LENGTH]> {
+    if encrypted.kdf != "argon2id" {
+        return Err(ProtocolError::crypto(format!(
+            "unsupported kdf: {}",
+            encrypted.kdf
+        )));
+    }
+    let salt = hex::decode(&encrypted.salt_hex)
+        .map_err(|err| ProtocolError::crypto(format!("invalid salt hex: {err}")))?;
+    let nonce = hex::decode(&encrypted.nonce_hex)
+        .map_err(|err| ProtocolError::crypto(format!("invalid nonce hex: {err}")))?;
+    let ciphertext = hex::decode(&encrypted.ciphertext_hex)
+        .map_err(|err| ProtocolError::crypto(format!("invalid ciphertext hex: {err}")))?;
+    let params = Params::new(
+        encrypted.kdf_params.memory_kib,
+        encrypted.kdf_params.iterations,
+        encrypted.kdf_params.parallelism,
+        Some(encrypted.kdf_params.output_length),
+    )
+    .map_err(|err| ProtocolError::crypto(format!("invalid kdf params: {err}")))?;
+    let argon2 = Argon2::new(Algorithm::Argon2id, Version::V0x13, params);
+    let mut derived_key = [0u8; 32];
+    argon2
+        .hash_password_into(password.as_bytes(), &salt, &mut derived_key)
+        .map_err(|err| ProtocolError::crypto(format!("failed to derive key: {err}")))?;
+    let cipher = ChaCha20Poly1305::new(Key::from_slice(&derived_key));
+    let plaintext = cipher
+        .decrypt(Nonce::from_slice(&nonce), ciphertext.as_slice())
+        .map_err(|err| ProtocolError::crypto(format!("failed to decrypt secret key: {err}")))?;
+    let plaintext_len = plaintext.len();
+    let key_bytes: [u8; SECRET_KEY_LENGTH] = plaintext.try_into().map_err(|_| {
+        ProtocolError::crypto(format!(
+            "invalid decrypted key length: expected {SECRET_KEY_LENGTH} bytes, got {}",
+            plaintext_len
+        ))
+    })?;
+    Ok(key_bytes)
+}
+
+pub fn verify_entry_signature(entry: &LedgerEntry, verifying_key: &VerifyingKey) -> Result<()> {
     let payload = EntrySigningPayload {
         entry_id: entry.entry_id,
         namespace: entry.namespace.clone(),
@@ -198,5 +294,14 @@ mod tests {
         };
         let entry = sign_entry(draft, &keypair).expect("sign entry");
         verify_entry_signature(&entry, keypair.verifying_key()).expect("verify signature");
+    }
+
+    #[test]
+    fn encrypts_and_decrypts_secret_key() {
+        let keypair = WalletKeypair::generate();
+        let encrypted =
+            encrypt_secret_key(keypair.secret_key_bytes(), "password").expect("encrypt secret key");
+        let decrypted = decrypt_secret_key(&encrypted, "password").expect("decrypt secret key");
+        assert_eq!(decrypted, keypair.secret_key_bytes());
     }
 }
