@@ -9,4 +9,7 @@ Current status:
 - A Rust wallet library and CLI prototype live in `crates/wallet` at the repo root (keygen, key import, listing, entry signing, signature verification).
 - The `cli/` and `react/` folders remain placeholders pending a dedicated app build-out.
 
+Next steps:
+- See `docs/WALLET_IMPLEMENTATION_TASKS.md` for ready-to-assign wallet implementation tasks.
+
 Each subproject will document its own setup, build, and usage details.
