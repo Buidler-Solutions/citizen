@@ -15,6 +15,8 @@ use uuid::Uuid;
 
 pub type Result<T> = std::result::Result<T, ProtocolError>;
 
+pub mod cli;
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct EntryDraft {
     pub namespace: String,
