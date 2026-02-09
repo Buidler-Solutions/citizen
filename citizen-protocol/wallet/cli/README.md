@@ -1,14 +1,14 @@
 # Citizen Wallet CLI
 
-This folder is a placeholder for a standalone wallet CLI application.
+This folder contains the standalone wallet CLI binary backed by the
+`citizen-wallet` library crate.
 
-Current status:
-- A Rust wallet library and CLI prototype are implemented in `crates/wallet` (keygen, key import, listing, entry signing, signature verification).
-- Use `cargo run -p citizen-wallet -- --help` to access the prototype commands.
+## Usage
+```bash
+cargo run -p citizen-wallet-cli -- --help
+```
 
-Planned capabilities:
-- Key management (generate/import/export).
-- Ledger entry submission.
-- Balance and identity lookups per namespace.
-
-Implementation notes will live here as the CLI is built out further.
+## Status
+- Key management, entry signing, and verification are available via the shared
+  CLI implementation in `crates/wallet`.
+- Ledger submission and namespace-specific builders are still in progress.
