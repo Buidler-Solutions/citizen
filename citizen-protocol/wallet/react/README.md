@@ -1,13 +1,25 @@
 # Citizen Wallet React App
 
-This folder is a placeholder for the Citizen wallet ReactJS interface.
+User-facing wallet scaffold for Citizen Protocol.
 
-Current status:
-- No React implementation exists yet; see `crates/wallet` for the Rust CLI prototype.
+## Delivered Scope
 
-Planned capabilities:
-- Wallet onboarding and key management flows.
-- Namespace-specific activity views.
-- Governance and ledger entry submission.
+- Onboarding and key management UI (create key, rotate/archive).
+- Namespace-aware entry builder for `identity.citizen`, `registry.land`, `audit.procurement`, and `governance.vote`.
+- Submission status panel with receipt finalization and export bundle.
+- Governance UX skeleton for proposal creation, vote action affordance, and finality display.
+- API alignment note: submissions target `http://127.0.0.1:8080/api/v1/entries/submit`.
 
-Implementation notes will live here as the UI is built.
+## Development
+
+```bash
+npm install
+npm run dev
+```
+
+## Validation
+
+```bash
+npm run test
+npm run build
+```

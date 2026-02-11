@@ -99,7 +99,7 @@ enum Commands {
         entry_json: String,
         #[arg(long, default_value = "http://127.0.0.1:8080")]
         api_url: String,
-        #[arg(long, default_value = "/entries/submit")]
+        #[arg(long, default_value = "/api/v1/entries/submit")]
         endpoint: String,
         #[arg(long, default_value = "wallet-receipts.json")]
         receipts_path: PathBuf,
