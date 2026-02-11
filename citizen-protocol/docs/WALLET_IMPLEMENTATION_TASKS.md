@@ -16,8 +16,8 @@ Legend: `[x] done`, `[~] in progress`, `[ ] not started`.
 ## Phase 1 — CLI Wallet (Developer/Operator Ready)
 - [x] Scaffold `wallet/cli` as a standalone Rust binary (workspace or separate crate).  
       Owner: _Protocol engineering_ · Status: _Done (`citizen-wallet-cli`)_
-- [~] Implement CLI commands for key lifecycle (init, keygen, import, list, export).  
-      Owner: _Protocol engineering_ · Status: _In progress (init/keygen/import/list/public-key done; export pending)_
+- [x] Implement CLI commands for key lifecycle (init, keygen, import, list, export).  
+      Owner: _Protocol engineering_ · Status: _Done (init/keygen/import/list/public-key/export available)_
 - [ ] Add entry authoring helpers per namespace (identity, governance, registry, audit).  
       Owner: _TBD_ · Status: _Not started_
 - [ ] Implement `submit` command to POST signed entries to node API.  
@@ -66,4 +66,3 @@ Legend: `[x] done`, `[~] in progress`, `[ ] not started`.
       Owner: _TBD_ · Status: _Not started_
 - [ ] Release packaging + versioned changelog.  
       Owner: _TBD_ · Status: _Not started_
-
