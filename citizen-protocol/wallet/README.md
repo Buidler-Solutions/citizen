@@ -1,15 +1,16 @@
 # Citizen Wallet
 
-This directory contains the Citizen wallet applications and placeholders:
+This directory contains the Citizen wallet applications:
 
-- `cli/` — placeholder for a standalone command-line wallet client.
-- `react/` — placeholder for a ReactJS wallet interface.
+- `cli/` — standalone command-line wallet client (built on `crates/wallet`).
+- `react/` — user-facing React wallet app (onboarding, key management, entry builders, receipts, governance UX).
 
 Current status:
-- A Rust wallet library and CLI prototype live in `crates/wallet` at the repo root (keygen, key import, listing, entry signing, signature verification).
-- The `cli/` and `react/` folders remain placeholders pending a dedicated app build-out.
+- Rust wallet core (`crates/wallet`) provides key custody, signing, verification, hardware-provider abstraction hooks, and action policy checks.
+- CLI app supports key lifecycle, namespace signing helpers, submission, and receipt verification.
+- React app provides phase-2 and phase-3 UX flows with local persistence and export support.
 
-Next steps:
-- See `docs/WALLET_IMPLEMENTATION_TASKS.md` for ready-to-assign wallet implementation tasks.
-
-Each subproject will document its own setup, build, and usage details.
+Key docs:
+- `docs/WALLET_IMPLEMENTATION_TASKS.md`
+- `docs/WALLET_DECISIONS.md`
+- `docs/WALLET_SECURITY_REVIEW.md`
