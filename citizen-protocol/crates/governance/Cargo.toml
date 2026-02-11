@@ -13,3 +13,6 @@ thiserror = { workspace = true }
 tracing = { workspace = true }
 parking_lot = { workspace = true }
 chrono = { workspace = true }
+
+[dev-dependencies]
+serde_json = "1"
