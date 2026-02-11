@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Citizen BlogChain Demo</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="page">
+      <header class="hero card">
+        <p class="eyebrow">CITIZEN · Demo dApp</p>
+        <h1>BlogChain Publisher</h1>
+        <p>
+          Publish an article, anchor it as a ledger entry, and inspect the block receipt for
+          immutable proof.
+        </p>
+      </header>
+
+      <section class="layout">
+        <article class="card composer">
+          <h2>Publish a new article</h2>
+          <form id="publish-form">
+            <label>
+              Author DID / Name
+              <input id="author" name="author" placeholder="did:citizen:writer:alexa" minlength="3" required />
+            </label>
+
+            <label>
+              Title
+              <input id="title" name="title" placeholder="Civic procurement transparency pilot" minlength="5" required />
+            </label>
+
+            <label>
+              Tags (comma separated)
+              <input id="tags" name="tags" placeholder="audit, public, governance" />
+            </label>
+
+            <label>
+              Article content
+              <textarea
+                id="content"
+                name="content"
+                rows="10"
+                minlength="100"
+                placeholder="Write at least 100 characters describing the public record event..."
+                required
+              ></textarea>
+            </label>
+
+            <button type="submit">Publish & Anchor</button>
+          </form>
+
+          <div id="publish-message" class="message" hidden></div>
+        </article>
+
+        <article class="card">
+          <h2>Latest chain receipt</h2>
+          <pre id="receipt">Publish an article to generate a receipt.</pre>
+        </article>
+      </section>
+
+      <section class="layout second-row">
+        <article class="card">
+          <h2>Published articles</h2>
+          <div id="article-list" class="list"></div>
+        </article>
+
+        <article class="card">
+          <h2>Chain overview</h2>
+          <div id="chain-meta" class="chain-meta"></div>
+          <pre id="chain-blocks"></pre>
+        </article>
+      </section>
+    </main>
+
+    <script src="/app.js" type="module"></script>
+  </body>
+</html>
