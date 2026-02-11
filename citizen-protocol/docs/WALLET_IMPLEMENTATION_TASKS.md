@@ -3,19 +3,21 @@
 This checklist turns the wallet plan into ready-to-assign tasks. It is scoped to the
 CLI + React wallet apps while reusing the existing `crates/wallet` library.
 
+Legend: `[x] done`, `[~] in progress`, `[ ] not started`.
+
 ## Phase 0 — Repository Prep
-- [ ] Confirm Rust wallet crate API surface needed by apps (keygen/import, sign/verify).  
-      Owner: _TBD_ · Status: _Not started_
+- [x] Confirm Rust wallet crate API surface needed by apps (keygen/import, sign/verify).  
+      Owner: _Protocol engineering_ · Status: _Done (shared API available in `crates/wallet`)_
 - [ ] Decide storage format for CLI keystore (JSON vs SQLite).  
       Owner: _TBD_ · Status: _Not started_
 - [ ] Align on node API base URL + versioning for wallet submissions.  
       Owner: _TBD_ · Status: _Not started_
 
 ## Phase 1 — CLI Wallet (Developer/Operator Ready)
-- [ ] Scaffold `wallet/cli` as a standalone Rust binary (workspace or separate crate).  
-      Owner: _TBD_ · Status: _Not started_
-- [ ] Implement CLI commands for key lifecycle (init, keygen, import, list, export).  
-      Owner: _TBD_ · Status: _Not started_
+- [x] Scaffold `wallet/cli` as a standalone Rust binary (workspace or separate crate).  
+      Owner: _Protocol engineering_ · Status: _Done (`citizen-wallet-cli`)_
+- [~] Implement CLI commands for key lifecycle (init, keygen, import, list, export).  
+      Owner: _Protocol engineering_ · Status: _In progress (init/keygen/import/list/public-key done; export pending)_
 - [ ] Add entry authoring helpers per namespace (identity, governance, registry, audit).  
       Owner: _TBD_ · Status: _Not started_
 - [ ] Implement `submit` command to POST signed entries to node API.  
@@ -29,7 +31,7 @@ CLI + React wallet apps while reusing the existing `crates/wallet` library.
 
 ## Phase 2 — React Wallet (User Facing)
 - [ ] Scaffold `wallet/react` app (Vite/Next/Remix decision).  
-      Owner: _TBD_ · Status: _Not started_
+      Owner: _Wallet UI team_ · Status: _Ready to start (placeholder exists)_
 - [ ] Implement onboarding (create/import key + passphrase).  
       Owner: _TBD_ · Status: _Not started_
 - [ ] Build key management views (list, export, rotate).  
