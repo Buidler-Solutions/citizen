@@ -192,6 +192,35 @@ ledger.register_rule_handler("require_region", |_, entry, config| {
 
 ## 7) Step-by-step: implement a new namespace for any use case
 
+### Secure decision policy (default + change path)
+
+Use this policy for every dApp namespace request:
+
+1. **Reuse by default**
+   - If the dApp semantics fit an already approved namespace/ruleset, reuse it.
+   - This keeps attack surface and governance overhead low.
+
+2. **Govern only deltas**
+   - If new semantics are required, submit a namespace/ruleset version proposal.
+   - Require validator governance approval before activation.
+
+3. **Activation hard gate**
+   - Require readiness attestations from every active validator.
+   - Validators must prove support for all rules in the proposed ruleset (including custom handlers).
+   - Activation is rejected if any validator is missing support.
+
+4. **Mandatory adversarial tests before execution**
+   - Namespace updates must include passing evidence for:
+     - schema-failure rejection,
+     - duplicate rejection,
+     - replay rejection,
+     - writer bypass rejection.
+
+The governance crate exposes this flow directly via:
+
+- `decide_namespace_path(...)` to choose **reuse** vs **governance-required**.
+- `validate_namespace_activation(...)` to enforce validator readiness + mandatory tests before activation.
+
 ## Step 1 — Define business actions and invariants
 
 For each action, define:
