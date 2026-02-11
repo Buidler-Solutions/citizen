@@ -20,14 +20,14 @@ Legend: `[x] done`, `[~] in progress`, `[ ] not started`.
       Owner: _Protocol engineering_ · Status: _Done (init/keygen/import/list/public-key/export available)_
 - [x] Add entry authoring helpers per namespace (identity, governance, registry, audit).  
       Owner: _Protocol engineering_ · Status: _Done (`sign-identity-register`, `sign-governance-vote`, `sign-registry-transfer`, `sign-audit-record`)_
-- [ ] Implement `submit` command to POST signed entries to node API.  
-      Owner: _TBD_ · Status: _Not started_
-- [ ] Add receipt persistence (entry_id, tx_hash, block_height, merkle_proof).  
-      Owner: _TBD_ · Status: _Not started_
-- [ ] Provide `verify` command for entry + merkle proof.  
-      Owner: _TBD_ · Status: _Not started_
-- [ ] Document localnet usage + example flows.  
-      Owner: _TBD_ · Status: _Not started_
+- [x] Implement `submit` command to POST signed entries to node API.  
+      Owner: _Protocol engineering_ · Status: _Done (`submit` command with configurable API URL and endpoint)_
+- [x] Add receipt persistence (entry_id, tx_hash, block_height, merkle_proof).  
+      Owner: _Protocol engineering_ · Status: _Done (`wallet-receipts.json` store + `list-receipts`)_
+- [x] Provide `verify` command for entry + merkle proof.  
+      Owner: _Protocol engineering_ · Status: _Done (`verify-receipt` validates entry_id + Merkle inclusion proof)_
+- [x] Document localnet usage + example flows.  
+      Owner: _Protocol engineering_ · Status: _Done (`wallet/cli/README.md` localnet walkthrough)_
 
 ## Phase 2 — React Wallet (User Facing)
 - [ ] Scaffold `wallet/react` app (Vite/Next/Remix decision).  

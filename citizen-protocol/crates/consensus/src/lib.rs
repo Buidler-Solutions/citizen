@@ -186,12 +186,7 @@ where
             }
             ConsensusMessage::GovernanceVote(vote) => {
                 info!(proposal = %vote.proposal_id, voter = %vote.validator, "received governance vote");
-                if self
-                    .ledger
-                    .storage()
-                    .latest_validator_set()?
-                    .is_some()
-                {
+                if self.ledger.storage().latest_validator_set()?.is_some() {
                     let _ = self.ledger.storage().track_governance_proposal(
                         citizen_types::GovernanceProposal {
                             proposal_id: vote.proposal_id.clone(),

@@ -3,6 +3,7 @@ use citizen_types::LedgerEntry;
 use clap::{Parser, Subcommand};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use sha2::{Digest, Sha256};
 use std::fs;
 use std::path::{Path, PathBuf};
 use uuid::Uuid;
@@ -92,6 +93,26 @@ enum Commands {
         entry_json: String,
         #[arg(long)]
         public_key: String,
+    },
+    Submit {
+        #[arg(long)]
+        entry_json: String,
+        #[arg(long, default_value = "http://127.0.0.1:8080")]
+        api_url: String,
+        #[arg(long, default_value = "/entries/submit")]
+        endpoint: String,
+        #[arg(long, default_value = "wallet-receipts.json")]
+        receipts_path: PathBuf,
+    },
+    ListReceipts {
+        #[arg(long, default_value = "wallet-receipts.json")]
+        receipts_path: PathBuf,
+    },
+    VerifyReceipt {
+        #[arg(long)]
+        receipt_json: String,
+        #[arg(long)]
+        entry_json: String,
     },
     SignIdentityRegister {
         #[arg(long, default_value = "wallet.json")]
@@ -203,6 +224,45 @@ struct KeyExport {
     secret_key_hex: Option<String>,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+struct ReceiptStore {
+    version: u32,
+    receipts: Vec<SubmissionReceipt>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct SubmissionReceipt {
+    entry_id: Uuid,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tx_hash: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    block_height: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    merkle_proof: Option<MerkleProof>,
+    status: String,
+    submitted_at: i64,
+    api_url: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct MerkleProof {
+    root_hash: String,
+    siblings: Vec<MerkleProofSibling>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct MerkleProofSibling {
+    hash: String,
+    position: MerkleSiblingPosition,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+enum MerkleSiblingPosition {
+    Left,
+    Right,
+}
+
 impl Keystore {
     fn load_or_create(path: &Path) -> anyhow::Result<Self> {
         if path.exists() {
@@ -237,6 +297,35 @@ impl Keystore {
 
     fn has_key(&self, key_id: Uuid) -> bool {
         self.find_key(key_id).is_some()
+    }
+}
+
+impl ReceiptStore {
+    fn load_or_create(path: &Path) -> anyhow::Result<Self> {
+        if path.exists() {
+            let contents = fs::read_to_string(path)?;
+            Ok(serde_json::from_str(&contents)?)
+        } else {
+            Ok(Self {
+                version: 1,
+                receipts: Vec::new(),
+            })
+        }
+    }
+
+    fn save(&self, path: &Path) -> anyhow::Result<()> {
+        if let Some(parent) = path.parent() {
+            if !parent.as_os_str().is_empty() {
+                fs::create_dir_all(parent)?;
+            }
+        }
+        let contents = serde_json::to_string_pretty(self)?;
+        fs::write(path, contents)?;
+        Ok(())
+    }
+
+    fn add_receipt(&mut self, receipt: SubmissionReceipt) {
+        self.receipts.push(receipt);
     }
 }
 
@@ -400,6 +489,32 @@ pub fn run() -> anyhow::Result<()> {
             let verifying_key = parse_verifying_key(&public_key)?;
             verify_entry_signature(&entry, &verifying_key)?;
             println!("Signature verified.");
+        }
+        Commands::Submit {
+            entry_json,
+            api_url,
+            endpoint,
+            receipts_path,
+        } => {
+            let entry: LedgerEntry = serde_json::from_str(&entry_json)?;
+            let receipt = submit_entry(&api_url, &endpoint, &entry)?;
+            let mut store = ReceiptStore::load_or_create(&receipts_path)?;
+            store.add_receipt(receipt.clone());
+            store.save(&receipts_path)?;
+            println!("{}", serde_json::to_string_pretty(&receipt)?);
+        }
+        Commands::ListReceipts { receipts_path } => {
+            let store = ReceiptStore::load_or_create(&receipts_path)?;
+            println!("{}", serde_json::to_string_pretty(&store.receipts)?);
+        }
+        Commands::VerifyReceipt {
+            receipt_json,
+            entry_json,
+        } => {
+            let receipt: SubmissionReceipt = serde_json::from_str(&receipt_json)?;
+            let entry: LedgerEntry = serde_json::from_str(&entry_json)?;
+            verify_receipt(&receipt, &entry)?;
+            println!("Receipt verified.");
         }
         Commands::SignIdentityRegister {
             path,
@@ -566,4 +681,155 @@ fn load_secret_key_bytes(record: &KeyRecord, password: Option<String>) -> anyhow
         "no secret key found for key_id {}",
         record.key_id
     ))
+}
+
+fn submit_entry(
+    api_url: &str,
+    endpoint: &str,
+    entry: &LedgerEntry,
+) -> anyhow::Result<SubmissionReceipt> {
+    let url = format!("{}{}", api_url.trim_end_matches('/'), endpoint);
+    let payload = serde_json::json!({ "entry": entry });
+    let response_json: Value = reqwest::blocking::Client::new()
+        .post(url)
+        .json(&payload)
+        .send()?
+        .error_for_status()?
+        .json()?;
+
+    let tx_hash = response_json
+        .get("tx_hash")
+        .and_then(Value::as_str)
+        .map(ToOwned::to_owned);
+    let block_height = response_json.get("block_height").and_then(Value::as_u64);
+    let status = response_json
+        .get("status")
+        .and_then(Value::as_str)
+        .unwrap_or("submitted")
+        .to_string();
+
+    let receipt_entry_id = response_json
+        .get("entry_id")
+        .and_then(Value::as_str)
+        .and_then(|raw| Uuid::parse_str(raw).ok())
+        .unwrap_or(entry.entry_id);
+
+    let merkle_proof = response_json
+        .get("merkle_proof")
+        .cloned()
+        .map(serde_json::from_value)
+        .transpose()?;
+
+    Ok(SubmissionReceipt {
+        entry_id: receipt_entry_id,
+        tx_hash,
+        block_height,
+        merkle_proof,
+        status,
+        submitted_at: Utc::now().timestamp(),
+        api_url: api_url.to_string(),
+    })
+}
+
+fn verify_receipt(receipt: &SubmissionReceipt, entry: &LedgerEntry) -> anyhow::Result<()> {
+    if receipt.entry_id != entry.entry_id {
+        return Err(anyhow::anyhow!(
+            "receipt entry_id {} does not match entry {}",
+            receipt.entry_id,
+            entry.entry_id
+        ));
+    }
+
+    if let Some(proof) = &receipt.merkle_proof {
+        let computed_root = compute_merkle_root(entry, proof)?;
+        if !computed_root.eq_ignore_ascii_case(&proof.root_hash) {
+            return Err(anyhow::anyhow!(
+                "merkle proof mismatch: computed {}, expected {}",
+                computed_root,
+                proof.root_hash
+            ));
+        }
+    }
+
+    Ok(())
+}
+
+fn compute_merkle_root(entry: &LedgerEntry, proof: &MerkleProof) -> anyhow::Result<String> {
+    let leaf_payload = serde_json::to_string(entry)?;
+    let mut current = hash_hex(leaf_payload.as_bytes());
+    for sibling in &proof.siblings {
+        let current_bytes = hex::decode(&current)?;
+        let sibling_bytes = hex::decode(&sibling.hash)?;
+        let mut hasher = Sha256::new();
+        match sibling.position {
+            MerkleSiblingPosition::Left => {
+                hasher.update(sibling_bytes);
+                hasher.update(current_bytes);
+            }
+            MerkleSiblingPosition::Right => {
+                hasher.update(current_bytes);
+                hasher.update(sibling_bytes);
+            }
+        }
+        current = hex::encode(hasher.finalize());
+    }
+    Ok(current)
+}
+
+fn hash_hex(payload: &[u8]) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(payload);
+    hex::encode(hasher.finalize())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn verifies_receipt_with_merkle_proof() {
+        let keypair = WalletKeypair::generate();
+        let entry = sign_entry(
+            EntryDraft {
+                namespace: "audit.procurement".to_string(),
+                action: "RECORD_EVENT".to_string(),
+                object_id: "AUD-1".to_string(),
+                payload: json!({"event": "BID_OPENED"}),
+                author: "did:ledger:test".to_string(),
+                timestamp: 1_736_500_000,
+            },
+            &keypair,
+        )
+        .expect("entry signed");
+
+        let sibling_hash = hash_hex(b"sibling");
+        let leaf_hash = hash_hex(
+            serde_json::to_string(&entry)
+                .expect("serialize entry")
+                .as_bytes(),
+        );
+        let mut hasher = Sha256::new();
+        hasher.update(hex::decode(&leaf_hash).expect("leaf hash decode"));
+        hasher.update(hex::decode(&sibling_hash).expect("sibling hash decode"));
+        let root_hash = hex::encode(hasher.finalize());
+
+        let receipt = SubmissionReceipt {
+            entry_id: entry.entry_id,
+            tx_hash: Some("tx-1".to_string()),
+            block_height: Some(1),
+            merkle_proof: Some(MerkleProof {
+                root_hash,
+                siblings: vec![MerkleProofSibling {
+                    hash: sibling_hash,
+                    position: MerkleSiblingPosition::Right,
+                }],
+            }),
+            status: "finalized".to_string(),
+            submitted_at: 1_736_500_000,
+            api_url: "http://localhost:8080".to_string(),
+        };
+
+        verify_receipt(&receipt, &entry).expect("receipt verified");
+    }
 }
