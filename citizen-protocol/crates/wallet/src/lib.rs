@@ -11,6 +11,7 @@ use rand::rngs::OsRng;
 use rand::RngCore;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::collections::HashSet;
 use uuid::Uuid;
 
 pub type Result<T> = std::result::Result<T, ProtocolError>;
@@ -32,6 +33,61 @@ pub struct WalletKeypair {
     pub key_id: Uuid,
     signing_key: SigningKey,
     verifying_key: VerifyingKey,
+}
+
+pub trait KeyProvider {
+    fn provider_id(&self) -> &str;
+    fn public_key_hex(&self) -> String;
+    fn sign_bytes(&self, payload: &[u8]) -> Result<Vec<u8>>;
+}
+
+pub struct SoftwareKeyProvider {
+    keypair: WalletKeypair,
+}
+
+impl SoftwareKeyProvider {
+    pub fn new(keypair: WalletKeypair) -> Self {
+        Self { keypair }
+    }
+}
+
+impl KeyProvider for SoftwareKeyProvider {
+    fn provider_id(&self) -> &str {
+        "software-ed25519"
+    }
+
+    fn public_key_hex(&self) -> String {
+        self.keypair.verifying_key_hex()
+    }
+
+    fn sign_bytes(&self, payload: &[u8]) -> Result<Vec<u8>> {
+        Ok(self.keypair.sign_bytes(payload).to_bytes().to_vec())
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ActionPolicy {
+    pub action: String,
+    pub required_approvals: usize,
+    pub approvers: Vec<String>,
+}
+
+impl ActionPolicy {
+    pub fn evaluate(&self, signatures: &[String]) -> Result<()> {
+        let approvers: HashSet<&str> = self.approvers.iter().map(String::as_str).collect();
+        let approvals = signatures
+            .iter()
+            .map(String::as_str)
+            .filter(|sig| approvers.contains(sig))
+            .count();
+        if approvals < self.required_approvals {
+            return Err(ProtocolError::crypto(format!(
+                "policy `{}` requires {} approvals; got {}",
+                self.action, self.required_approvals, approvals
+            )));
+        }
+        Ok(())
+    }
 }
 
 impl WalletKeypair {
@@ -305,5 +361,26 @@ mod tests {
             encrypt_secret_key(keypair.secret_key_bytes(), "password").expect("encrypt secret key");
         let decrypted = decrypt_secret_key(&encrypted, "password").expect("decrypt secret key");
         assert_eq!(decrypted, keypair.secret_key_bytes());
+    }
+
+    #[test]
+    fn software_provider_signs_payload() {
+        let keypair = WalletKeypair::generate();
+        let provider = SoftwareKeyProvider::new(keypair);
+        let sig = provider.sign_bytes(b"citizen").expect("sign payload");
+        assert_eq!(sig.len(), 64);
+    }
+
+    #[test]
+    fn action_policy_checks_threshold() {
+        let policy = ActionPolicy {
+            action: "REMOVE_VALIDATOR".to_string(),
+            required_approvals: 2,
+            approvers: vec!["validator-a".to_string(), "validator-b".to_string()],
+        };
+        policy
+            .evaluate(&["validator-a".to_string(), "validator-b".to_string()])
+            .expect("policy approved");
+        assert!(policy.evaluate(&["validator-a".to_string()]).is_err());
     }
 }

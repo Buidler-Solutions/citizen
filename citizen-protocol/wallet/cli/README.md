@@ -45,7 +45,7 @@ cargo run -p citizen-wallet-cli -- sign-audit-record \
 cargo run -p citizen-wallet-cli -- submit \
   --entry-json "$(cat ./tmp/entry.json)" \
   --api-url http://127.0.0.1:8080 \
-  --endpoint /entries/submit \
+  --endpoint /api/v1/entries/submit \
   --receipts-path ./tmp/wallet-receipts.json
 ```
 
@@ -54,4 +54,11 @@ cargo run -p citizen-wallet-cli -- submit \
 cargo run -p citizen-wallet-cli -- verify-receipt \
   --receipt-json "$(cat ./tmp/receipt.json)" \
   --entry-json "$(cat ./tmp/entry.json)"
+```
+
+
+## E2E smoke test
+
+```bash
+./scripts/run_wallet_cli_e2e.sh
 ```
