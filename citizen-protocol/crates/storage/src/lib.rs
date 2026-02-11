@@ -312,8 +312,7 @@ fn height_key(height: BlockHeight) -> [u8; 8] {
 
 fn block_cache_capacity() -> NonZeroUsize {
     const DEFAULT_CAPACITY: usize = 1_024;
-    let fallback = NonZeroUsize::new(DEFAULT_CAPACITY)
-        .expect("DEFAULT_CAPACITY must be non-zero");
+    let fallback = NonZeroUsize::new(DEFAULT_CAPACITY).expect("DEFAULT_CAPACITY must be non-zero");
     match parse_env::<usize>("ROCKSDB_BLOCK_CACHE_SIZE") {
         Some(value) => {
             if let Some(non_zero) = NonZeroUsize::new(value) {
