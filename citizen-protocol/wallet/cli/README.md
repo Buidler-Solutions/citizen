@@ -11,4 +11,5 @@ cargo run -p citizen-wallet-cli -- --help
 ## Status
 - Key management, entry signing, and verification are available via the shared
   CLI implementation in `crates/wallet`.
-- Ledger submission and namespace-specific builders are still in progress.
+- Namespace-specific signing helpers are available for identity, governance, registry, and audit entry flows.
+- Ledger submission and receipt workflows are still in progress.
