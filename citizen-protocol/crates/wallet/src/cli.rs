@@ -51,6 +51,18 @@ enum Commands {
         #[arg(long)]
         key_id: Uuid,
     },
+    ExportKey {
+        #[arg(long, default_value = "wallet.json")]
+        path: PathBuf,
+        #[arg(long)]
+        key_id: Uuid,
+        #[arg(long)]
+        include_secret: bool,
+        #[arg(long)]
+        password: Option<String>,
+        #[arg(long)]
+        output: Option<PathBuf>,
+    },
     ListKeys {
         #[arg(long, default_value = "wallet.json")]
         path: PathBuf,
@@ -108,6 +120,17 @@ struct KeySummary {
     public_key_hex: String,
     created_at: i64,
     has_encrypted_secret_key: bool,
+}
+
+#[derive(Debug, Serialize)]
+struct KeyExport {
+    key_id: Uuid,
+    label: Option<String>,
+    public_key_hex: String,
+    created_at: i64,
+    encrypted_secret_key: Option<EncryptedSecretKey>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    secret_key_hex: Option<String>,
 }
 
 impl Keystore {
@@ -214,6 +237,44 @@ pub fn run() -> anyhow::Result<()> {
                 .find_key(key_id)
                 .ok_or_else(|| anyhow::anyhow!("unknown key_id {key_id}"))?;
             println!("{}", record.public_key_hex);
+        }
+        Commands::ExportKey {
+            path,
+            key_id,
+            include_secret,
+            password,
+            output,
+        } => {
+            let store = Keystore::load_or_create(&path)?;
+            let record = store
+                .find_key(key_id)
+                .ok_or_else(|| anyhow::anyhow!("unknown key_id {key_id}"))?;
+            let secret_key_hex = if include_secret {
+                let secret = load_secret_key_bytes(record, password)?;
+                Some(hex::encode(secret))
+            } else {
+                None
+            };
+            let export = KeyExport {
+                key_id: record.key_id,
+                label: record.label.clone(),
+                public_key_hex: record.public_key_hex.clone(),
+                created_at: record.created_at,
+                encrypted_secret_key: record.encrypted_secret_key.clone(),
+                secret_key_hex,
+            };
+            let output_json = serde_json::to_string_pretty(&export)?;
+            if let Some(output_path) = output {
+                if let Some(parent) = output_path.parent() {
+                    if !parent.as_os_str().is_empty() {
+                        fs::create_dir_all(parent)?;
+                    }
+                }
+                fs::write(&output_path, output_json)?;
+                println!("Exported key {key_id} to {}", output_path.display());
+            } else {
+                println!("{output_json}");
+            }
         }
         Commands::ListKeys { path } => {
             let store = Keystore::load_or_create(&path)?;
