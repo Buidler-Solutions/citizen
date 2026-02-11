@@ -11,5 +11,6 @@ Current status:
 
 Next steps:
 - See `docs/WALLET_IMPLEMENTATION_TASKS.md` for ready-to-assign wallet implementation tasks.
+- See `docs/WALLET_GENERATION_GUIDE.md` for wallet key generation and export commands.
 
 Each subproject will document its own setup, build, and usage details.
