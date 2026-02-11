@@ -14,6 +14,7 @@ cargo run -p citizen-wallet-cli -- --help
   `sign-registry-transfer`, `sign-audit-record`
 - Verification: `verify-entry`, `verify-receipt`
 - Submission + receipts: `submit`, `list-receipts`
+- Governance policy controls: `sign-governance-vote --required-approvals --policy-approver --approval`
 
 ## Localnet example flow
 
@@ -56,9 +57,27 @@ cargo run -p citizen-wallet-cli -- verify-receipt \
   --entry-json "$(cat ./tmp/entry.json)"
 ```
 
-
 ## E2E smoke test
 
 ```bash
 ./scripts/run_wallet_cli_e2e.sh
+```
+
+## Governance policy-gated vote signing
+
+You can require explicit approvals before the CLI signs a governance vote:
+
+```bash
+cargo run -p citizen-wallet-cli -- sign-governance-vote \
+  --path ./tmp/wallet.json \
+  --key-id <KEY_ID> \
+  --proposal-id GOV-042 \
+  --vote YES \
+  --validator did:ledger:validator:a \
+  --author did:ledger:validator:a \
+  --required-approvals 2 \
+  --policy-approver validator-a \
+  --policy-approver validator-b \
+  --approval validator-a \
+  --approval validator-b
 ```
