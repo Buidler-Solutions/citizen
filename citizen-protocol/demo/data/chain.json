@@ -1,0 +1,71 @@
+{
+  "network": "citizen-demo",
+  "namespace": "content.blog",
+  "createdAt": "2026-01-01T00:00:00.000Z",
+  "blocks": [
+    {
+      "height": 0,
+      "previousHash": "0000000000000000000000000000000000000000000000000000000000000000",
+      "timestamp": "2026-01-01T00:00:00.000Z",
+      "proposer": "genesis.system",
+      "transactions": [],
+      "merkleRoot": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed0d8f6f9f2a1f8d8b9f4f8f4d5f7d55",
+      "blockHash": "a3b36f2576665ef0fe0f46adf2f94ec3ef9f525b9e7b59f7eda6ec626f412b19"
+    },
+    {
+      "height": 1,
+      "previousHash": "a3b36f2576665ef0fe0f46adf2f94ec3ef9f525b9e7b59f7eda6ec626f412b19",
+      "timestamp": "2026-02-11T17:38:15.240Z",
+      "proposer": "validator.demo.alpha",
+      "transactions": [
+        {
+          "entryId": "0552e5bb-c66a-4c75-89e1-1ceb23453f6c",
+          "namespace": "content.blog",
+          "action": "PUBLISH_ARTICLE",
+          "objectId": "article-1770831495241",
+          "author": "did:citizen:writer:alexa",
+          "title": "Citizen procurement audit trail rollout",
+          "excerpt": "This article announces the first pilot rollout for procurement transparency across multiple agencies. Every event is now published and anchored with signatures for public verificat",
+          "tags": [
+            "audit",
+            "governance"
+          ],
+          "content": "This article announces the first pilot rollout for procurement transparency across multiple agencies. Every event is now published and anchored with signatures for public verification and accountability.",
+          "contentHash": "49928fc3432e20dbd0c16441ba54b996da85b53df67ce389012e2196fcd0ef48",
+          "publishedAt": "2026-02-11T17:38:15.240Z",
+          "signature": "e88c5698890a60e615911d071efe47b24f2b35515c1a6065177856c5b1d390f2"
+        }
+      ],
+      "merkleRoot": "03a7b05da59758a6c4ee340ea0cd830672926574adfc38a7c17d66c160043711",
+      "blockHash": "43713b77fc94c2a2e6a29e3c6face3ff293463a543521a25c19080ae8bbd8b90"
+    },
+    {
+      "height": 2,
+      "previousHash": "43713b77fc94c2a2e6a29e3c6face3ff293463a543521a25c19080ae8bbd8b90",
+      "timestamp": "2026-02-11T17:38:48.787Z",
+      "proposer": "validator.demo.alpha",
+      "transactions": [
+        {
+          "entryId": "3fb1bd4f-a691-4be4-8c06-112683a42c68",
+          "namespace": "content.blog",
+          "action": "PUBLISH_ARTICLE",
+          "objectId": "article-1770831528787",
+          "author": "did:citizen:writer:jamal",
+          "title": "Municipal climate budget records now anchored",
+          "excerpt": "The city climate budget records are now published through the citizen blog namespace with immutable append-only receipts. This allows residents, watchdog groups, and internal audit",
+          "tags": [
+            "climate",
+            "budget",
+            "civic-data"
+          ],
+          "content": "The city climate budget records are now published through the citizen blog namespace with immutable append-only receipts. This allows residents, watchdog groups, and internal audit teams to verify policy commitments and implementation changes over time with a tamper-evident public timeline.",
+          "contentHash": "315ae24a607be951bc7c930a35e6d7eef6a2b66bcb9d5a04cafa0110ab8863ad",
+          "publishedAt": "2026-02-11T17:38:48.787Z",
+          "signature": "30743b0c0d055d921b8df95b284c4c6596feddc9352e7003c74245102ef5724f"
+        }
+      ],
+      "merkleRoot": "60d90214920a291c45259ec4b156b4130f169ce79afc67adfda8676060e8f76a",
+      "blockHash": "b3696c548666f4cc8b9ecfc4ff3a88810dfd3df0e93560301806133e5bf64bce"
+    }
+  ]
+}
