@@ -10,7 +10,7 @@ use uuid::Uuid;
 
 use crate::{
     decrypt_secret_key, encrypt_secret_key, parse_verifying_key, sign_entry,
-    verify_entry_signature, EncryptedSecretKey, EntryDraft, WalletKeypair,
+    verify_entry_signature, ActionPolicy, EncryptedSecretKey, EntryDraft, WalletKeypair,
 };
 
 #[derive(Debug, Parser)]
@@ -147,6 +147,12 @@ enum Commands {
         timestamp: Option<i64>,
         #[arg(long)]
         password: Option<String>,
+        #[arg(long)]
+        required_approvals: Option<usize>,
+        #[arg(long = "policy-approver")]
+        policy_approvers: Vec<String>,
+        #[arg(long = "approval")]
+        approvals: Vec<String>,
     },
     SignRegistryTransfer {
         #[arg(long, default_value = "wallet.json")]
@@ -550,7 +556,16 @@ pub fn run() -> anyhow::Result<()> {
             author,
             timestamp,
             password,
+            required_approvals,
+            policy_approvers,
+            approvals,
         } => {
+            enforce_policy_for_action(
+                "CAST_VOTE",
+                required_approvals,
+                policy_approvers,
+                approvals,
+            )?;
             let payload = serde_json::json!({
                 "proposal_id": proposal_id.clone(),
                 "vote": vote,
@@ -656,6 +671,33 @@ fn sign_namespace_entry(
     let entry_json = serde_json::to_string_pretty(&entry)?;
     println!("{entry_json}");
     Ok(())
+}
+
+fn enforce_policy_for_action(
+    action: &str,
+    required_approvals: Option<usize>,
+    policy_approvers: Vec<String>,
+    approvals: Vec<String>,
+) -> anyhow::Result<()> {
+    let Some(required_approvals) = required_approvals else {
+        return Ok(());
+    };
+    if required_approvals == 0 {
+        return Ok(());
+    }
+    if policy_approvers.is_empty() {
+        return Err(anyhow::anyhow!(
+            "policy approvers are required when --required-approvals is set"
+        ));
+    }
+    let policy = ActionPolicy {
+        action: action.to_string(),
+        required_approvals,
+        approvers: policy_approvers,
+    };
+    policy
+        .evaluate(&approvals)
+        .map_err(|err| anyhow::anyhow!("policy evaluation failed: {err}"))
 }
 
 fn load_password(explicit: Option<String>) -> anyhow::Result<String> {
@@ -831,5 +873,27 @@ mod tests {
         };
 
         verify_receipt(&receipt, &entry).expect("receipt verified");
+    }
+    #[test]
+    fn policy_enforcement_accepts_sufficient_approvals() {
+        enforce_policy_for_action(
+            "CAST_VOTE",
+            Some(2),
+            vec!["validator-a".to_string(), "validator-b".to_string()],
+            vec!["validator-b".to_string(), "validator-a".to_string()],
+        )
+        .expect("policy approved");
+    }
+
+    #[test]
+    fn policy_enforcement_rejects_insufficient_approvals() {
+        let err = enforce_policy_for_action(
+            "CAST_VOTE",
+            Some(2),
+            vec!["validator-a".to_string(), "validator-b".to_string()],
+            vec!["validator-a".to_string()],
+        )
+        .expect_err("policy should fail");
+        assert!(err.to_string().contains("requires 2 approvals"));
     }
 }

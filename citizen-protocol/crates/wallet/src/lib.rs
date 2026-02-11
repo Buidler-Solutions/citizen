@@ -65,6 +65,69 @@ impl KeyProvider for SoftwareKeyProvider {
     }
 }
 
+pub struct MockTpmKeyProvider {
+    keypair: WalletKeypair,
+    key_label: String,
+}
+
+impl MockTpmKeyProvider {
+    pub fn new(keypair: WalletKeypair, key_label: impl Into<String>) -> Self {
+        Self {
+            keypair,
+            key_label: key_label.into(),
+        }
+    }
+}
+
+impl KeyProvider for MockTpmKeyProvider {
+    fn provider_id(&self) -> &str {
+        "mock-tpm-ed25519"
+    }
+
+    fn public_key_hex(&self) -> String {
+        self.keypair.verifying_key_hex()
+    }
+
+    fn sign_bytes(&self, payload: &[u8]) -> Result<Vec<u8>> {
+        if self.key_label.trim().is_empty() {
+            return Err(ProtocolError::crypto(
+                "mock TPM key label must not be empty".to_string(),
+            ));
+        }
+        Ok(self.keypair.sign_bytes(payload).to_bytes().to_vec())
+    }
+}
+
+pub struct MockHsmKeyProvider {
+    keypair: WalletKeypair,
+    slot: u32,
+}
+
+impl MockHsmKeyProvider {
+    pub fn new(keypair: WalletKeypair, slot: u32) -> Self {
+        Self { keypair, slot }
+    }
+}
+
+impl KeyProvider for MockHsmKeyProvider {
+    fn provider_id(&self) -> &str {
+        "mock-hsm-ed25519"
+    }
+
+    fn public_key_hex(&self) -> String {
+        self.keypair.verifying_key_hex()
+    }
+
+    fn sign_bytes(&self, payload: &[u8]) -> Result<Vec<u8>> {
+        if self.slot == 0 {
+            return Err(ProtocolError::crypto(
+                "mock HSM slot must be greater than zero".to_string(),
+            ));
+        }
+        Ok(self.keypair.sign_bytes(payload).to_bytes().to_vec())
+    }
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ActionPolicy {
     pub action: String,
@@ -382,5 +445,21 @@ mod tests {
             .evaluate(&["validator-a".to_string(), "validator-b".to_string()])
             .expect("policy approved");
         assert!(policy.evaluate(&["validator-a".to_string()]).is_err());
+    }
+
+    #[test]
+    fn mock_tpm_provider_signs_payload() {
+        let keypair = WalletKeypair::generate();
+        let provider = MockTpmKeyProvider::new(keypair, "tpm-key-1");
+        let sig = provider.sign_bytes(b"citizen").expect("sign payload");
+        assert_eq!(sig.len(), 64);
+    }
+
+    #[test]
+    fn mock_hsm_provider_signs_payload() {
+        let keypair = WalletKeypair::generate();
+        let provider = MockHsmKeyProvider::new(keypair, 7);
+        let sig = provider.sign_bytes(b"citizen").expect("sign payload");
+        assert_eq!(sig.len(), 64);
     }
 }
