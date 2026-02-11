@@ -18,8 +18,8 @@ Legend: `[x] done`, `[~] in progress`, `[ ] not started`.
       Owner: _Protocol engineering_ · Status: _Done (`citizen-wallet-cli`)_
 - [x] Implement CLI commands for key lifecycle (init, keygen, import, list, export).  
       Owner: _Protocol engineering_ · Status: _Done (init/keygen/import/list/public-key/export available)_
-- [ ] Add entry authoring helpers per namespace (identity, governance, registry, audit).  
-      Owner: _TBD_ · Status: _Not started_
+- [x] Add entry authoring helpers per namespace (identity, governance, registry, audit).  
+      Owner: _Protocol engineering_ · Status: _Done (`sign-identity-register`, `sign-governance-vote`, `sign-registry-transfer`, `sign-audit-record`)_
 - [ ] Implement `submit` command to POST signed entries to node API.  
       Owner: _TBD_ · Status: _Not started_
 - [ ] Add receipt persistence (entry_id, tx_hash, block_height, merkle_proof).  
