@@ -93,6 +93,76 @@ enum Commands {
         #[arg(long)]
         public_key: String,
     },
+    SignIdentityRegister {
+        #[arg(long, default_value = "wallet.json")]
+        path: PathBuf,
+        #[arg(long)]
+        key_id: Uuid,
+        #[arg(long)]
+        subject: String,
+        #[arg(long)]
+        claims_hash: String,
+        #[arg(long)]
+        author: String,
+        #[arg(long)]
+        timestamp: Option<i64>,
+        #[arg(long)]
+        password: Option<String>,
+    },
+    SignGovernanceVote {
+        #[arg(long, default_value = "wallet.json")]
+        path: PathBuf,
+        #[arg(long)]
+        key_id: Uuid,
+        #[arg(long)]
+        proposal_id: String,
+        #[arg(long)]
+        vote: String,
+        #[arg(long)]
+        validator: String,
+        #[arg(long)]
+        author: String,
+        #[arg(long)]
+        timestamp: Option<i64>,
+        #[arg(long)]
+        password: Option<String>,
+    },
+    SignRegistryTransfer {
+        #[arg(long, default_value = "wallet.json")]
+        path: PathBuf,
+        #[arg(long)]
+        key_id: Uuid,
+        #[arg(long)]
+        parcel_id: String,
+        #[arg(long)]
+        from: String,
+        #[arg(long)]
+        to: String,
+        #[arg(long)]
+        author: String,
+        #[arg(long)]
+        timestamp: Option<i64>,
+        #[arg(long)]
+        password: Option<String>,
+    },
+    SignAuditRecord {
+        #[arg(long, default_value = "wallet.json")]
+        path: PathBuf,
+        #[arg(long)]
+        key_id: Uuid,
+        #[arg(long)]
+        event: String,
+        #[arg(long)]
+        document_hash: String,
+        #[arg(long)]
+        audit_id: String,
+        #[arg(long)]
+        author: String,
+        #[arg(long)]
+        timestamp: Option<i64>,
+        #[arg(long)]
+        password: Option<String>,
+    },
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -331,8 +401,145 @@ pub fn run() -> anyhow::Result<()> {
             verify_entry_signature(&entry, &verifying_key)?;
             println!("Signature verified.");
         }
+        Commands::SignIdentityRegister {
+            path,
+            key_id,
+            subject,
+            claims_hash,
+            author,
+            timestamp,
+            password,
+        } => {
+            let payload = serde_json::json!({
+                "subject": subject.clone(),
+                "claims_hash": claims_hash,
+            });
+            sign_namespace_entry(
+                &path,
+                key_id,
+                "identity.citizen",
+                "REGISTER_IDENTITY",
+                subject,
+                author,
+                payload,
+                timestamp,
+                password,
+            )?;
+        }
+        Commands::SignGovernanceVote {
+            path,
+            key_id,
+            proposal_id,
+            vote,
+            validator,
+            author,
+            timestamp,
+            password,
+        } => {
+            let payload = serde_json::json!({
+                "proposal_id": proposal_id.clone(),
+                "vote": vote,
+                "validator": validator,
+            });
+            sign_namespace_entry(
+                &path,
+                key_id,
+                "governance.vote",
+                "CAST_VOTE",
+                proposal_id,
+                author,
+                payload,
+                timestamp,
+                password,
+            )?;
+        }
+        Commands::SignRegistryTransfer {
+            path,
+            key_id,
+            parcel_id,
+            from,
+            to,
+            author,
+            timestamp,
+            password,
+        } => {
+            let payload = serde_json::json!({
+                "parcel_id": parcel_id.clone(),
+                "from": from,
+                "to": to,
+            });
+            sign_namespace_entry(
+                &path,
+                key_id,
+                "registry.land",
+                "TRANSFER_OWNERSHIP",
+                parcel_id,
+                author,
+                payload,
+                timestamp,
+                password,
+            )?;
+        }
+        Commands::SignAuditRecord {
+            path,
+            key_id,
+            event,
+            document_hash,
+            audit_id,
+            author,
+            timestamp,
+            password,
+        } => {
+            let payload = serde_json::json!({
+                "event": event,
+                "document_hash": document_hash,
+            });
+            sign_namespace_entry(
+                &path,
+                key_id,
+                "audit.procurement",
+                "RECORD_EVENT",
+                audit_id,
+                author,
+                payload,
+                timestamp,
+                password,
+            )?;
+        }
     }
 
+    Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+fn sign_namespace_entry(
+    path: &Path,
+    key_id: Uuid,
+    namespace: &str,
+    action: &str,
+    object_id: String,
+    author: String,
+    payload: Value,
+    timestamp: Option<i64>,
+    password: Option<String>,
+) -> anyhow::Result<()> {
+    let store = Keystore::load_or_create(path)?;
+    let record = store
+        .find_key(key_id)
+        .ok_or_else(|| anyhow::anyhow!("unknown key_id {key_id}"))?;
+    let secret_bytes = load_secret_key_bytes(record, password)?;
+    let keypair = WalletKeypair::from_secret_bytes(record.key_id, &secret_bytes)?;
+    let draft = EntryDraft {
+        namespace: namespace.to_string(),
+        action: action.to_string(),
+        object_id,
+        payload,
+        author,
+        timestamp: timestamp.unwrap_or_else(|| Utc::now().timestamp()),
+    };
+    let entry = sign_entry(draft, &keypair)?;
+    let entry_json = serde_json::to_string_pretty(&entry)?;
+    println!("{entry_json}");
     Ok(())
 }
 
@@ -341,16 +548,11 @@ fn load_password(explicit: Option<String>) -> anyhow::Result<String> {
         return Ok(password);
     }
     std::env::var("CITIZEN_WALLET_PASSWORD").map_err(|_| {
-        anyhow::anyhow!(
-            "password required (pass --password or set CITIZEN_WALLET_PASSWORD)"
-        )
+        anyhow::anyhow!("password required (pass --password or set CITIZEN_WALLET_PASSWORD)")
     })
 }
 
-fn load_secret_key_bytes(
-    record: &KeyRecord,
-    password: Option<String>,
-) -> anyhow::Result<Vec<u8>> {
+fn load_secret_key_bytes(record: &KeyRecord, password: Option<String>) -> anyhow::Result<Vec<u8>> {
     if let Some(encrypted) = &record.encrypted_secret_key {
         let password = load_password(password)?;
         let secret = decrypt_secret_key(encrypted, &password)?;
@@ -360,5 +562,8 @@ fn load_secret_key_bytes(
         let secret_bytes = hex::decode(secret_hex)?;
         return Ok(secret_bytes);
     }
-    Err(anyhow::anyhow!("no secret key found for key_id {}", record.key_id))
+    Err(anyhow::anyhow!(
+        "no secret key found for key_id {}",
+        record.key_id
+    ))
 }
