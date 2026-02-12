@@ -50,6 +50,20 @@ writers = ["governance.vote"]
 name = "require_signature"
 config = {}
 
+
+[[namespaces]]
+descriptor.namespace = "content.article"
+descriptor.version = 1
+descriptor.rules_hash = "sha256:content-article-localnet-v1"
+descriptor.governed_by = "governance.vote"
+writers = []
+[[namespaces.validators]]
+name = "require_signature"
+config = {}
+[[namespaces.validators]]
+name = "require_payload_fields"
+config.fields = ["title", "content", "signedMessage", "network"]
+
 [[validators]]
 validator_id = "validator-alpha"
 public_key = "712651f450ba05b63898b99ef5f7ba45632e8e2527f7f715cd671ec4024cc51e"

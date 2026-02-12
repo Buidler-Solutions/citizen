@@ -194,7 +194,12 @@ impl<S: LedgerStorage + 'static> Ledger<S> {
         }
     }
 
+    pub fn validate_entry_submission(&self, entry: &LedgerEntry) -> Result<()> {
+        self.validate_entry(entry)
+    }
+
     pub fn apply_entry(&self, entry: LedgerEntry) -> Result<()> {
+        self.validate_entry(&entry)?;
         self.storage.store_entry(entry)
     }
 
