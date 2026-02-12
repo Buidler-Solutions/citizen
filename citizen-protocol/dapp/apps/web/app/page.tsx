@@ -1,3 +1,4 @@
+import ArticlePublisher from "./components/ArticlePublisher";
 const apiBase = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:4000";
 
 async function fetchJson<T>(path: string, fallback: T): Promise<T> {
@@ -196,6 +197,8 @@ export default async function Home() {
           ))}
         </div>
       </section>
+
+      <ArticlePublisher />
 
       <section className="section alt">
         <div className="section-heading">

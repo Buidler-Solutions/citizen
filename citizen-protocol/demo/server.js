@@ -3,6 +3,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const crypto = require("node:crypto");
 const { URL } = require("node:url");
+const { verifyMessage } = require("ethers");
 
 const HOST = process.env.HOST ?? "0.0.0.0";
 const PORT = Number(process.env.PORT ?? 4300);
@@ -115,7 +116,9 @@ function appendArticleToChain(chain, articleDraft) {
     content: articleDraft.content,
     contentHash: articleHash,
     publishedAt: timestamp,
-    signature: sha256(`${articleDraft.author}:${articleHash}`)
+    signature: articleDraft.walletSignature,
+    signedMessage: articleDraft.signedMessage,
+    verification: articleDraft.verification
   };
 
   const newBlock = {
@@ -151,6 +154,50 @@ function parseBody(req) {
     });
     req.on("error", reject);
   });
+}
+
+
+function validateWalletSubmission(body, draft) {
+  const signedMessage = typeof body.signedMessage === "string" ? body.signedMessage : "";
+  const walletSignature = typeof body.walletSignature === "string" ? body.walletSignature : "";
+  const authorWallet = draft.author.toLowerCase();
+  const expectedContentHash = sha256(draft.content);
+
+  if (!/^0x[a-f0-9]{40}$/.test(authorWallet)) {
+    return { valid: false, error: "author must be a wallet address for node-validated submissions" };
+  }
+
+  if (!signedMessage || !walletSignature) {
+    return { valid: false, error: "signedMessage and walletSignature are required" };
+  }
+
+  if (!signedMessage.includes(`Wallet: ${authorWallet}`)) {
+    return { valid: false, error: "signedMessage wallet does not match author" };
+  }
+
+  if (!signedMessage.includes(`Content Hash: ${expectedContentHash}`)) {
+    return { valid: false, error: "signedMessage content hash does not match article content" };
+  }
+
+  let recoveredAddress = "";
+  try {
+    recoveredAddress = verifyMessage(signedMessage, walletSignature).toLowerCase();
+  } catch (error) {
+    return { valid: false, error: "walletSignature is invalid" };
+  }
+
+  if (recoveredAddress !== authorWallet) {
+    return { valid: false, error: "walletSignature does not recover the author address" };
+  }
+
+  return {
+    valid: true,
+    verification: {
+      authorWallet,
+      recoveredAddress,
+      contentHash: expectedContentHash
+    }
+  };
 }
 
 function validateDraft(body) {
@@ -231,9 +278,22 @@ function handleApi(req, res, url) {
           return sendJson(res, 422, { error: "validation_failed", details: errors });
         }
 
-        const receipt = appendArticleToChain(chain, draft);
+        const walletCheck = validateWalletSubmission(body, draft);
+        if (!walletCheck.valid) {
+          return sendJson(res, 422, {
+            error: "wallet_validation_failed",
+            details: [walletCheck.error]
+          });
+        }
+
+        const receipt = appendArticleToChain(chain, {
+          ...draft,
+          walletSignature: body.walletSignature,
+          signedMessage: body.signedMessage,
+          verification: walletCheck.verification
+        });
         return sendJson(res, 201, {
-          message: "Article published and anchored to blockchain",
+          message: "Article published, wallet validated, and anchored to blockchain",
           receipt
         });
       })
