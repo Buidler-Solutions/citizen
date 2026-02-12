@@ -1,0 +1,11 @@
+{
+  "manifest_version": 3,
+  "name": "Citizen Browser Wallet",
+  "description": "CITIZEN browser wallet popup for reviewing and signing ledger events.",
+  "version": "0.1.0",
+  "action": {
+    "default_title": "Citizen Wallet",
+    "default_popup": "dist/index.html"
+  },
+  "permissions": ["storage"]
+}

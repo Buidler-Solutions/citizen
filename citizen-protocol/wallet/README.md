@@ -4,6 +4,7 @@ This directory contains the Citizen wallet applications:
 
 - `cli/` — standalone command-line wallet client (built on `crates/wallet`).
 - `react/` — user-facing React wallet app (onboarding, key management, entry builders, receipts, governance UX).
+- `browser/` — dedicated browser-wallet UX project focused on popup signing/review interactions.
 
 Current status:
 - Rust wallet core (`crates/wallet`) provides key custody, signing, verification, hardware-provider abstraction hooks, concrete mock TPM/HSM providers, and action policy checks.
