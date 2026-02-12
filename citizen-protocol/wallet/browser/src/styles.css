@@ -68,6 +68,13 @@ body {
   color: #8bb7ff;
 }
 
+.top-address {
+  margin-top: 0.45rem;
+  color: #d6e5ff;
+  font-weight: 700;
+  font-size: 0.75rem;
+}
+
 .wallet-scroll {
   padding: 0.75rem;
   overflow-y: auto;
@@ -134,15 +141,6 @@ body {
   color: #ffca89;
 }
 
-.wallet-actions {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 0.65rem;
-  padding: 0.75rem;
-  border-top: 1px solid #1f315f;
-  background: #101a36;
-}
-
 button {
   border: 0;
   border-radius: 10px;
@@ -160,4 +158,43 @@ button.ghost {
 button.primary {
   background: linear-gradient(135deg, #4e7fff, #39d5d8);
   color: #041027;
+}
+
+input {
+  width: 100%;
+  border: 1px solid #314b7f;
+  border-radius: 10px;
+  padding: 0.55rem 0.65rem;
+  font-size: 0.8rem;
+  color: #eaf2ff;
+  background: #0f1a36;
+}
+
+input::placeholder {
+  color: #8ea7da;
+}
+
+.form-grid {
+  margin-top: 0.7rem;
+  display: grid;
+  gap: 0.5rem;
+}
+
+.meta-text {
+  color: #a7bce6;
+  font-size: 0.76rem;
+  margin: 0;
+}
+
+.secret-box {
+  display: block;
+  width: 100%;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  border: 1px solid #3d5ea5;
+  border-radius: 10px;
+  padding: 0.55rem 0.6rem;
+  background: #0b1733;
+  color: #bfe1ff;
+  font-size: 0.72rem;
 }
