@@ -83,7 +83,7 @@ export function App() {
       return;
     }
 
-    const accountResponse = (await callWallet('eth_accounts')) as { ok: boolean; result?: string[] };
+    const accountResponse = (await callWallet('citizen_accounts')) as { ok: boolean; result?: string[] };
     const account = accountResponse.ok ? accountResponse.result?.[0] ?? 'Unavailable' : 'Unavailable';
     setState({ account, network, lastRequest: lastRequest ?? null });
   };
@@ -232,7 +232,7 @@ export function App() {
               </div>
               <div>
                 <dt>Capabilities</dt>
-                <dd>eth_accounts, eth_requestAccounts, personal_sign</dd>
+                <dd>citizen_accounts, citizen_requestAccounts, personal_sign</dd>
               </div>
               <div>
                 <dt>Behavior</dt>

@@ -20,9 +20,13 @@
       <section class="layout">
         <article class="card composer">
           <h2>Publish a new article</h2>
+          <div class="wallet-row">
+            <button id="connect-wallet" type="button">Connect Browser Wallet</button>
+            <p id="wallet-status" class="meta">Wallet not connected.</p>
+          </div>
           <form id="publish-form">
             <label>
-              Author DID / Name
+              Author DID
               <input id="author" name="author" placeholder="did:citizen:writer:alexa" minlength="3" required />
             </label>
 

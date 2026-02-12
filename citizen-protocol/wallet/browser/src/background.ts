@@ -272,9 +272,12 @@ async function handleWalletRequest(
   await recordRequest(request, account);
 
   switch (request.method) {
+    case 'citizen_requestAccounts':
+    case 'citizen_accounts':
     case 'eth_requestAccounts':
     case 'eth_accounts':
       return { ok: true, result: [account] };
+    case 'citizen_chainId':
     case 'eth_chainId':
       return { ok: true, result: NETWORKS[await getSelectedNetwork()].chainIdHex };
     case 'personal_sign': {

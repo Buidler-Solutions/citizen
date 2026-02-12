@@ -56,10 +56,17 @@ const provider = {
   request: ({ method, params }: { method: string; params?: unknown[] }) => request(method, params),
 };
 
+Object.defineProperty(window, 'citizen', {
+  value: provider,
+  configurable: false,
+  writable: false,
+});
+
 Object.defineProperty(window, 'ethereum', {
   value: provider,
   configurable: false,
   writable: false,
 });
 
+window.dispatchEvent(new Event('citizen#initialized'));
 window.dispatchEvent(new Event('ethereum#initialized'));
