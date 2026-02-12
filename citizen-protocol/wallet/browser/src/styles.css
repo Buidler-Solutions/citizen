@@ -58,6 +58,27 @@ body {
   font-size: 0.84rem;
 }
 
+.header-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.network-label {
+  font-size: 0.74rem;
+  color: #a7bce6;
+}
+
+.header-controls select {
+  border: 1px solid #314b7f;
+  border-radius: 8px;
+  padding: 0.3rem 0.45rem;
+  font-size: 0.74rem;
+  color: #eaf2ff;
+  background: #0f1a36;
+}
+
 .network-pill {
   display: inline-block;
   margin: 0;
@@ -73,6 +94,7 @@ body {
   color: #d6e5ff;
   font-weight: 700;
   font-size: 0.75rem;
+  overflow-wrap: anywhere;
 }
 
 .wallet-scroll {
