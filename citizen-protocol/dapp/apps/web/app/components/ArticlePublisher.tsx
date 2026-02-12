@@ -32,9 +32,28 @@ type ApiError = {
 
 declare global {
   interface Window {
+    citizen?: {
+      request: (args: { method: string; params?: unknown[] }) => Promise<unknown>;
+    };
     ethereum?: {
       request: (args: { method: string; params?: unknown[] }) => Promise<unknown>;
     };
+  }
+}
+
+
+
+function getWalletProvider() {
+  return window.citizen ?? window.ethereum;
+}
+
+async function requestAccountsFromProvider(provider: {
+  request: (args: { method: string; params?: unknown[] }) => Promise<unknown>;
+}) {
+  try {
+    return (await provider.request({ method: "citizen_requestAccounts" })) as string[];
+  } catch {
+    return (await provider.request({ method: "eth_requestAccounts" })) as string[];
   }
 }
 
@@ -74,15 +93,14 @@ export default function ArticlePublisher() {
   }
 
   async function connectWallet() {
-    if (!window.ethereum) {
-      setStatus("No injected wallet detected. Install MetaMask or a compatible wallet.");
+    const provider = getWalletProvider();
+    if (!provider) {
+      setStatus("No injected Citizen wallet detected. Start the Citizen Browser Wallet extension.");
       return;
     }
 
     try {
-      const accounts = (await window.ethereum.request({
-        method: "eth_requestAccounts"
-      })) as string[];
+      const accounts = await requestAccountsFromProvider(provider);
       const account = accounts[0];
       if (!account) {
         setStatus("Wallet connected but no account was returned.");
@@ -112,7 +130,8 @@ export default function ArticlePublisher() {
 
   async function signAndSubmit(event: FormEvent) {
     event.preventDefault();
-    if (!wallet || !window.ethereum) {
+    const provider = getWalletProvider();
+    if (!wallet || !provider) {
       setStatus("Connect a wallet before submitting.");
       return;
     }
@@ -146,7 +165,7 @@ export default function ArticlePublisher() {
       }
 
       setStatus("Signing challenge with wallet...");
-      const signature = (await window.ethereum.request({
+      const signature = (await provider.request({
         method: "personal_sign",
         params: [challengePayload.message, wallet]
       })) as string;

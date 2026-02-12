@@ -9,6 +9,20 @@ const walletStatus = document.querySelector("#wallet-status");
 
 let connectedWallet = "";
 
+
+function getWalletProvider() {
+  return window.citizen ?? window.ethereum;
+}
+
+async function requestAccountsFromProvider(provider) {
+  try {
+    return await provider.request({ method: "citizen_requestAccounts" });
+  } catch {
+    return await provider.request({ method: "eth_requestAccounts" });
+  }
+}
+
+
 function setMessage(text, mode) {
   message.hidden = false;
   message.textContent = text;
@@ -98,13 +112,14 @@ async function refresh() {
 }
 
 async function connectWallet() {
-  if (!window.ethereum?.request) {
-    setWalletStatus("No injected wallet found. Start Citizen Browser Wallet extension.");
+  const provider = getWalletProvider();
+  if (!provider?.request) {
+    setWalletStatus("No injected Citizen wallet found. Start Citizen Browser Wallet extension.");
     return;
   }
 
   try {
-    const accounts = await window.ethereum.request({ method: "eth_requestAccounts" });
+    const accounts = await requestAccountsFromProvider(provider);
     const wallet = Array.isArray(accounts) && typeof accounts[0] === "string" ? accounts[0].toLowerCase() : "";
     if (!wallet) {
       setWalletStatus("Wallet connected but no account returned.");
@@ -148,7 +163,8 @@ form.addEventListener("submit", async (event) => {
     wallet: connectedWallet
   };
 
-  if (!window.ethereum?.request) {
+  const provider = getWalletProvider();
+  if (!provider?.request) {
     setMessage("Wallet provider missing.", "error");
     return;
   }
@@ -160,7 +176,7 @@ form.addEventListener("submit", async (event) => {
       body: JSON.stringify(payload)
     });
 
-    const walletSignature = await window.ethereum.request({
+    const walletSignature = await provider.request({
       method: "personal_sign",
       params: [challenge.message, connectedWallet]
     });
