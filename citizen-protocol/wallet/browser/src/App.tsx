@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 
 type WalletState = {
   account: string;
+  network: NetworkId;
   lastRequest: {
     requestedAt: string;
     origin: string;
@@ -10,6 +11,15 @@ type WalletState = {
     account: string;
   } | null;
 };
+
+type NetworkId = 'mainnet' | 'futurenet' | 'testnet' | 'localnode';
+
+const NETWORK_OPTIONS: { id: NetworkId; label: string }[] = [
+  { id: 'mainnet', label: 'Mainnet' },
+  { id: 'futurenet', label: 'Futurenet' },
+  { id: 'testnet', label: 'Testnet' },
+  { id: 'localnode', label: 'Local Node' },
+];
 
 type WalletResponse = {
   ok: boolean;
@@ -32,7 +42,11 @@ async function callWallet(method: string, params?: unknown[]): Promise<WalletRes
 }
 
 export function App() {
-  const [state, setState] = useState<WalletState>({ account: 'Not initialized', lastRequest: null });
+  const [state, setState] = useState<WalletState>({
+    account: 'Not initialized',
+    network: 'mainnet',
+    lastRequest: null,
+  });
   const [passwordInput, setPasswordInput] = useState('');
   const [needsPasswordSetup, setNeedsPasswordSetup] = useState(false);
   const [locked, setLocked] = useState(false);
@@ -52,9 +66,15 @@ export function App() {
     const isUnlocked = unlocked.ok ? (unlocked.result as boolean) : false;
     setLocked(!isUnlocked);
 
+    const selectedNetwork = await callWallet('wallet_getNetwork');
+    const network = selectedNetwork.ok
+      ? (selectedNetwork.result as NetworkId)
+      : 'mainnet';
+
     if (!wallet?.privateKey || !isUnlocked) {
       setState({
         account: isUnlocked ? 'Wallet will initialize on first request' : 'Locked',
+        network,
         lastRequest: lastRequest ?? null,
       });
       if (!isUnlocked) {
@@ -65,7 +85,7 @@ export function App() {
 
     const accountResponse = (await callWallet('eth_accounts')) as { ok: boolean; result?: string[] };
     const account = accountResponse.ok ? accountResponse.result?.[0] ?? 'Unavailable' : 'Unavailable';
-    setState({ account, lastRequest: lastRequest ?? null });
+    setState({ account, network, lastRequest: lastRequest ?? null });
   };
 
   useEffect(() => {
@@ -125,12 +145,34 @@ export function App() {
     setStatus('Secret key copied to clipboard.');
   };
 
+  const handleNetworkChange = async (network: NetworkId) => {
+    const result = await callWallet('wallet_setNetwork', [network]);
+    if (!result.ok) {
+      setStatus(result.error ?? 'Failed to change network.');
+      return;
+    }
+    setStatus(`Network switched to ${network}.`);
+    await refreshState();
+  };
+
   return (
     <main className="wallet-root">
       <section className="wallet-frame" aria-label="browser wallet status">
         <header className="wallet-header">
-          <p className="network-pill">citizen-mainnet</p>
-          <p className="top-address">Wallet: {mask(state.account)}</p>
+          <div className="header-controls">
+            <label htmlFor="network" className="network-label">Network</label>
+            <select
+              id="network"
+              value={state.network}
+              onChange={(event) => void handleNetworkChange(event.target.value as NetworkId)}
+            >
+              {NETWORK_OPTIONS.map((option) => (
+                <option key={option.id} value={option.id}>{option.label}</option>
+              ))}
+            </select>
+          </div>
+          <p className="network-pill">citizen-{state.network}</p>
+          <p className="top-address" title={state.account}>Wallet: {state.account}</p>
           <h1>Citizen Browser Wallet</h1>
           <p>Password lock is required before account access and signing.</p>
         </header>

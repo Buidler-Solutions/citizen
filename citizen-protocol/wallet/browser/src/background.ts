@@ -30,7 +30,49 @@ const STORAGE_KEY = 'citizen.browser.wallet.v1';
 const LAST_REQUEST_KEY = 'citizen.browser.wallet.last_request.v1';
 const PASSWORD_HASH_KEY = 'citizen.browser.wallet.password_hash.v1';
 const SESSION_UNLOCKED_KEY = 'citizen.browser.wallet.unlocked.v1';
-const CHAIN_ID_HEX = '0xc17';
+const NETWORK_KEY = 'citizen.browser.wallet.network.v1';
+
+const NETWORKS = {
+  mainnet: {
+    id: 'mainnet',
+    chainIdHex: '0xc17',
+    label: 'Mainnet',
+  },
+  futurenet: {
+    id: 'futurenet',
+    chainIdHex: '0xc18',
+    label: 'Futurenet',
+  },
+  testnet: {
+    id: 'testnet',
+    chainIdHex: '0xc19',
+    label: 'Testnet',
+  },
+  localnode: {
+    id: 'localnode',
+    chainIdHex: '0x539',
+    label: 'Local Node',
+  },
+} as const;
+
+type NetworkId = keyof typeof NETWORKS;
+
+function isNetworkId(value: unknown): value is NetworkId {
+  return typeof value === 'string' && value in NETWORKS;
+}
+
+async function getSelectedNetwork(): Promise<NetworkId> {
+  const stored = await chrome.storage.local.get(NETWORK_KEY);
+  const network = stored[NETWORK_KEY];
+  if (isNetworkId(network)) {
+    return network;
+  }
+  return 'mainnet';
+}
+
+async function setSelectedNetwork(network: NetworkId): Promise<void> {
+  await chrome.storage.local.set({ [NETWORK_KEY]: network });
+}
 
 async function sha256Hex(input: string): Promise<string> {
   const bytes = new TextEncoder().encode(input);
@@ -205,6 +247,22 @@ async function handleWalletRequest(
     return exportPrivateKey(password);
   }
 
+  if (request.method === 'wallet_getNetwork') {
+    return { ok: true, result: await getSelectedNetwork() };
+  }
+
+  if (request.method === 'wallet_setNetwork') {
+    if (!isUiRequest) {
+      return { ok: false, error: 'Unauthorized wallet method.' };
+    }
+    const [network] = request.params ?? [];
+    if (!isNetworkId(network)) {
+      return { ok: false, error: 'wallet_setNetwork requires mainnet, futurenet, testnet, or localnode.' };
+    }
+    await setSelectedNetwork(network);
+    return { ok: true, result: network };
+  }
+
   if (await isWalletLocked()) {
     return { ok: false, error: 'Wallet is locked. Open the extension popup to unlock.' };
   }
@@ -218,7 +276,7 @@ async function handleWalletRequest(
     case 'eth_accounts':
       return { ok: true, result: [account] };
     case 'eth_chainId':
-      return { ok: true, result: CHAIN_ID_HEX };
+      return { ok: true, result: NETWORKS[await getSelectedNetwork()].chainIdHex };
     case 'personal_sign': {
       const [rawMessage, requestedAccount] = request.params ?? [];
       if (typeof rawMessage !== 'string') {
