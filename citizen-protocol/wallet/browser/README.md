@@ -13,15 +13,46 @@ The existing `wallet/react` app is a broad web console for onboarding, governanc
 
 This project provides that dedicated UX surface.
 
-## Run locally
+## Install
 
 ```bash
 npm install
+```
+
+## Development server (UI iteration)
+
+```bash
 npm run dev
 ```
 
-## Build
+## Build extension bundle
 
 ```bash
 npm run build
 ```
+
+Build output is written to `dist/`.
+
+## Load extension in Chromium browsers
+
+1. Open `chrome://extensions`
+2. Enable **Developer mode**
+3. Click **Load unpacked**
+4. Select `wallet/browser/dist`
+5. Pin and open the extension popup
+
+## Watch mode for extension development
+
+```bash
+npm run build -- --watch
+```
+
+After each rebuild, press **Reload** on the extension card.
+
+## Full local testing with localnode + demo blog
+
+Use the runbook at `docs/STACK_TESTING_GUIDE.md` from repo root to run all of:
+
+- Rust local validator network
+- Demo blog backend/UI
+- Browser wallet extension watch build
