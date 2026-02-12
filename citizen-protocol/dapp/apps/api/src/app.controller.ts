@@ -1,5 +1,17 @@
-import { Controller, Get } from "@nestjs/common";
+import { Body, Controller, Get, Post } from "@nestjs/common";
 import { AppService } from "./app.service";
+
+type ChallengeBody = {
+  authorWallet: string;
+  title: string;
+  content: string;
+  network?: string;
+};
+
+type SubmitBody = {
+  challengeId: string;
+  signature: string;
+};
 
 @Controller()
 export class AppController {
@@ -8,6 +20,11 @@ export class AppController {
   @Get("/health")
   getHealth() {
     return this.appService.getHealth();
+  }
+
+  @Get("/networks")
+  getNetworks() {
+    return this.appService.getNetworks();
   }
 
   @Get("/capabilities")
@@ -23,5 +40,27 @@ export class AppController {
   @Get("/workflows")
   getWorkflows() {
     return this.appService.getWorkflows();
+  }
+
+  @Get("/articles")
+  getArticles() {
+    return this.appService.getArticles();
+  }
+
+  @Post("/articles/challenge")
+  createChallenge(@Body() body: ChallengeBody) {
+    return this.appService.createArticleChallenge(
+      body.authorWallet,
+      {
+        title: body.title,
+        content: body.content
+      },
+      body.network
+    );
+  }
+
+  @Post("/articles/submit")
+  submitArticle(@Body() body: SubmitBody) {
+    return this.appService.submitSignedArticle(body.challengeId, body.signature);
   }
 }
