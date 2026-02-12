@@ -1,78 +1,226 @@
-const signingRequest = {
-  origin: 'registry.citizen.gov',
-  network: 'citizen-mainnet',
-  account: 'did:ledger:wallet:6f83b9',
-  action: 'TRANSFER_OWNERSHIP',
-  namespace: 'registry.land',
-  objectId: 'LOT-239-A',
-  feePolicy: 'governance-bond enforced',
+import { useEffect, useState } from 'react';
+
+type WalletState = {
+  account: string;
+  lastRequest: {
+    requestedAt: string;
+    origin: string;
+    method: string;
+    params: unknown[];
+    account: string;
+  } | null;
 };
 
-const riskChecks = [
-  { label: 'Domain verified', value: 'Yes', good: true },
-  { label: 'Known contract namespace', value: 'registry.land', good: true },
-  { label: 'Simulation result', value: 'No state conflict detected', good: true },
-  { label: 'Permissions requested', value: 'Sign one event entry', good: true },
-];
+type WalletResponse = {
+  ok: boolean;
+  result?: unknown;
+  error?: string;
+};
+
+const STORAGE_KEY = 'citizen.browser.wallet.v1';
+const LAST_REQUEST_KEY = 'citizen.browser.wallet.last_request.v1';
+
+function mask(value: string) {
+  if (value.length < 14) {
+    return value;
+  }
+  return `${value.slice(0, 8)}…${value.slice(-6)}`;
+}
+
+async function callWallet(method: string, params?: unknown[]): Promise<WalletResponse> {
+  return chrome.runtime.sendMessage({ method, params }) as Promise<WalletResponse>;
+}
 
 export function App() {
+  const [state, setState] = useState<WalletState>({ account: 'Not initialized', lastRequest: null });
+  const [passwordInput, setPasswordInput] = useState('');
+  const [needsPasswordSetup, setNeedsPasswordSetup] = useState(false);
+  const [locked, setLocked] = useState(false);
+  const [status, setStatus] = useState('');
+  const [secretPassword, setSecretPassword] = useState('');
+  const [secretKey, setSecretKey] = useState('');
+
+  const refreshState = async () => {
+    const stored = await chrome.storage.local.get([STORAGE_KEY, LAST_REQUEST_KEY]);
+    const wallet = stored[STORAGE_KEY] as { privateKey?: string } | undefined;
+    const lastRequest = stored[LAST_REQUEST_KEY] as WalletState['lastRequest'];
+
+    const passwordSet = await callWallet('wallet_isPasswordSet');
+    setNeedsPasswordSetup(passwordSet.ok ? !(passwordSet.result as boolean) : true);
+
+    const unlocked = await callWallet('wallet_isUnlocked');
+    const isUnlocked = unlocked.ok ? (unlocked.result as boolean) : false;
+    setLocked(!isUnlocked);
+
+    if (!wallet?.privateKey || !isUnlocked) {
+      setState({
+        account: isUnlocked ? 'Wallet will initialize on first request' : 'Locked',
+        lastRequest: lastRequest ?? null,
+      });
+      if (!isUnlocked) {
+        setSecretKey('');
+      }
+      return;
+    }
+
+    const accountResponse = (await callWallet('eth_accounts')) as { ok: boolean; result?: string[] };
+    const account = accountResponse.ok ? accountResponse.result?.[0] ?? 'Unavailable' : 'Unavailable';
+    setState({ account, lastRequest: lastRequest ?? null });
+  };
+
+  useEffect(() => {
+    void refreshState();
+  }, []);
+
+  const handlePasswordSubmit = async () => {
+    setStatus('');
+    if (!passwordInput) {
+      setStatus('Enter a password first.');
+      return;
+    }
+
+    const method = needsPasswordSetup ? 'wallet_setPassword' : 'wallet_unlock';
+    const result = await callWallet(method, [passwordInput]);
+    if (!result.ok) {
+      setStatus(result.error ?? 'Password action failed.');
+      return;
+    }
+
+    setPasswordInput('');
+    setStatus(needsPasswordSetup ? 'Password set. Wallet unlocked.' : 'Wallet unlocked.');
+    await refreshState();
+  };
+
+  const handleLock = async () => {
+    const result = await callWallet('wallet_lock');
+    setStatus(result.ok ? 'Wallet locked.' : result.error ?? 'Failed to lock wallet.');
+    setSecretKey('');
+    setSecretPassword('');
+    await refreshState();
+  };
+
+  const handleRevealSecret = async () => {
+    setStatus('');
+    if (!secretPassword) {
+      setStatus('Enter password to view secret key.');
+      return;
+    }
+
+    const result = await callWallet('wallet_exportPrivateKey', [secretPassword]);
+    if (!result.ok || typeof result.result !== 'string') {
+      setStatus(result.error ?? 'Unable to reveal secret key.');
+      return;
+    }
+
+    setSecretKey(result.result);
+    setSecretPassword('');
+    setStatus('Secret key revealed. Keep it private and rotate if exposed.');
+  };
+
+  const handleCopySecret = async () => {
+    if (!secretKey) {
+      return;
+    }
+    await navigator.clipboard.writeText(secretKey);
+    setStatus('Secret key copied to clipboard.');
+  };
+
   return (
     <main className="wallet-root">
-      <section className="wallet-frame" aria-label="browser wallet sign request">
+      <section className="wallet-frame" aria-label="browser wallet status">
         <header className="wallet-header">
-          <p className="network-pill">{signingRequest.network}</p>
+          <p className="network-pill">citizen-mainnet</p>
+          <p className="top-address">Wallet: {mask(state.account)}</p>
           <h1>Citizen Browser Wallet</h1>
-          <p>Review and sign this ledger event request.</p>
+          <p>Password lock is required before account access and signing.</p>
         </header>
 
         <div className="wallet-scroll">
           <article className="request-card">
-            <h2>Signature request</h2>
+            <h2>Security</h2>
             <dl>
               <div>
-                <dt>Origin</dt>
-                <dd>{signingRequest.origin}</dd>
+                <dt>Password</dt>
+                <dd>{needsPasswordSetup ? 'Not set' : 'Configured'}</dd>
               </div>
               <div>
-                <dt>Account</dt>
-                <dd>{signingRequest.account}</dd>
+                <dt>Wallet state</dt>
+                <dd>{locked ? 'Locked' : 'Unlocked'}</dd>
+              </div>
+            </dl>
+            <div className="form-grid">
+              <input
+                type="password"
+                placeholder={needsPasswordSetup ? 'Set wallet password' : 'Enter wallet password'}
+                value={passwordInput}
+                onChange={(event) => setPasswordInput(event.target.value)}
+              />
+              <button className="primary" onClick={handlePasswordSubmit}>
+                {needsPasswordSetup ? 'Set password & unlock' : 'Unlock wallet'}
+              </button>
+              {!locked && !needsPasswordSetup ? (
+                <button className="ghost" onClick={handleLock}>Lock wallet</button>
+              ) : null}
+              {status ? <p>{status}</p> : null}
+            </div>
+          </article>
+
+          <article className="request-card">
+            <h2>Secret key (secure reveal)</h2>
+            <p className="meta-text">Requires unlocked wallet + password confirmation.</p>
+            <div className="form-grid">
+              <input
+                type="password"
+                placeholder="Re-enter password to reveal secret key"
+                value={secretPassword}
+                onChange={(event) => setSecretPassword(event.target.value)}
+              />
+              <button className="primary" onClick={handleRevealSecret}>Reveal secret key</button>
+              {secretKey ? <button className="ghost" onClick={handleCopySecret}>Copy secret key</button> : null}
+              {secretKey ? <code className="secret-box">{secretKey}</code> : <p className="meta-text">Hidden</p>}
+            </div>
+          </article>
+
+          <article className="request-card">
+            <h2>Active account</h2>
+            <dl>
+              <div>
+                <dt>Address</dt>
+                <dd>{mask(state.account)}</dd>
               </div>
               <div>
-                <dt>Namespace</dt>
-                <dd>{signingRequest.namespace}</dd>
+                <dt>Capabilities</dt>
+                <dd>eth_accounts, eth_requestAccounts, personal_sign</dd>
               </div>
               <div>
-                <dt>Action</dt>
-                <dd>{signingRequest.action}</dd>
-              </div>
-              <div>
-                <dt>Object</dt>
-                <dd>{signingRequest.objectId}</dd>
-              </div>
-              <div>
-                <dt>Policy</dt>
-                <dd>{signingRequest.feePolicy}</dd>
+                <dt>Behavior</dt>
+                <dd>Signs any namespace challenge submitted by the demo app when unlocked</dd>
               </div>
             </dl>
           </article>
 
           <article className="request-card">
-            <h2>Security checks</h2>
-            <ul>
-              {riskChecks.map((check) => (
-                <li key={check.label}>
-                  <span>{check.label}</span>
-                  <strong className={check.good ? 'ok' : 'warn'}>{check.value}</strong>
-                </li>
-              ))}
-            </ul>
+            <h2>Last dApp request</h2>
+            {state.lastRequest ? (
+              <dl>
+                <div>
+                  <dt>Origin</dt>
+                  <dd>{state.lastRequest.origin}</dd>
+                </div>
+                <div>
+                  <dt>Method</dt>
+                  <dd>{state.lastRequest.method}</dd>
+                </div>
+                <div>
+                  <dt>Time</dt>
+                  <dd>{new Date(state.lastRequest.requestedAt).toLocaleString()}</dd>
+                </div>
+              </dl>
+            ) : (
+              <p>No signing requests yet.</p>
+            )}
           </article>
         </div>
-
-        <footer className="wallet-actions">
-          <button className="ghost">Reject</button>
-          <button className="primary">Sign event</button>
-        </footer>
       </section>
     </main>
   );
