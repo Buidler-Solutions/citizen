@@ -1,12 +1,14 @@
-# Local Full-Stack Testing Guide (Node + Demo Blog + Browser Wallet)
+# Local Full-Stack Testing Guide (Node + Demo Blog + Browser Wallet + Explorer)
 
-This guide runs the three pieces needed for end-to-end manual testing:
+This guide runs the full local testing stack:
 
 1. **Citizen local validator network** (Rust localnode trio)
 2. **Demo blog dApp** (`demo/server.js`)
 3. **Browser wallet extension** (`wallet/browser`)
+4. **Blockchain explorer backend** (`explorer/backend`)
+5. **Blockchain explorer frontend** (`explorer/frontend`)
 
-It includes both a **recommended three-terminal workflow** and an **optional helper script** that launches the stack together.
+It includes both a **recommended five-terminal workflow** and an **optional helper script** that launches the stack together.
 
 ## 1) Prerequisites
 
@@ -32,6 +34,8 @@ From repository root:
 cd citizen-protocol
 npm --prefix demo install
 npm --prefix wallet/browser install
+npm --prefix explorer/backend install
+npm --prefix explorer/frontend install
 ```
 
 ## 3) Recommended: run each service in its own terminal
@@ -79,6 +83,35 @@ npm run build -- --watch
 
 This writes extension assets into `wallet/browser/dist/` whenever files change.
 
+### Terminal D — explorer backend (NestJS)
+
+Run explorer API on a dedicated port and point it at the local validator node API:
+
+```bash
+cd citizen-protocol/explorer/backend
+PORT=4010 CITIZEN_NODE_URL=http://127.0.0.1:8081 npm run start:dev
+```
+
+What you get:
+
+- Explorer backend API: `http://127.0.0.1:4010`
+- Backend status endpoint: `GET http://127.0.0.1:4010/status`
+- Backend block proxy endpoint: `GET http://127.0.0.1:4010/blocks`
+
+### Terminal E — explorer frontend (Next.js)
+
+Point the UI to the explorer backend API:
+
+```bash
+cd citizen-protocol/explorer/frontend
+NEXT_PUBLIC_API_BASE_URL=http://127.0.0.1:4010 npm run dev -- --port 4020
+```
+
+What you get:
+
+- Explorer web UI: `http://127.0.0.1:4020`
+- Frontend calls explorer backend using `NEXT_PUBLIC_API_BASE_URL`
+
 ## 4) Load the wallet extension in browser
 
 1. Open `chrome://extensions`
@@ -92,15 +125,25 @@ When you make code changes, click **Reload** on the extension card after the wat
 ## 5) End-to-end testing flow
 
 1. Ensure localnet is running (Terminal A).
-2. Open `http://localhost:4300` (Terminal B output confirms server start).
-3. Open the wallet extension popup and create/unlock a wallet.
-4. In the demo blog, compose and publish an article.
-5. Approve signing in the wallet extension.
-6. Verify the resulting block receipt in the demo UI and/or inspect:
+2. Confirm explorer backend is reachable:
+
+```bash
+curl http://127.0.0.1:4010/status
+curl http://127.0.0.1:4010/blocks
+```
+
+3. Open `http://localhost:4300` (Terminal B output confirms server start).
+4. Open the wallet extension popup and create/unlock a wallet.
+5. In the demo blog, compose and publish an article.
+6. Approve signing in the wallet extension.
+7. Verify the resulting block receipt in the demo UI and inspect both chain APIs:
 
 ```bash
 curl http://localhost:4300/api/chain
+curl http://127.0.0.1:4010/blocks
 ```
+
+8. Open the explorer UI at `http://127.0.0.1:4020` and confirm latest blocks/entries are visible.
 
 ## 6) Optional: launch everything with one script
 
@@ -116,6 +159,8 @@ The script starts:
 - `scripts/run_localnet.sh`
 - `demo` server (`npm run start`)
 - wallet extension watch build (`npm run build -- --watch`)
+- explorer backend (`PORT=4010 CITIZEN_NODE_URL=http://127.0.0.1:8081 npm run start:dev`)
+- explorer frontend (`NEXT_PUBLIC_API_BASE_URL=http://127.0.0.1:4010 npm run dev -- --port 4020`)
 
 Press `Ctrl+C` once to stop all spawned processes.
 
@@ -126,3 +171,5 @@ Press `Ctrl+C` once to stop all spawned processes.
 - **Extension fails to load**: ensure `wallet/browser/dist/manifest.json` exists (run build first).
 - **Wallet changes not visible**: rebuild/watch then press extension **Reload** in `chrome://extensions`.
 - **Rust recompiling too slowly**: keep Terminal A running; iterative restarts are faster with warm target cache.
+- **Explorer backend cannot reach node**: verify `CITIZEN_NODE_URL` points to a live node API (recommended: `http://127.0.0.1:8081`).
+- **Explorer UI empty or stale**: verify `NEXT_PUBLIC_API_BASE_URL=http://127.0.0.1:4010` and that Terminal D is running.
