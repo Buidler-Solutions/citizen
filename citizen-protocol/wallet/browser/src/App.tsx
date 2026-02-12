@@ -25,29 +25,49 @@ export function App() {
           <p>Review and sign this ledger event request.</p>
         </header>
 
-        <article className="request-card">
-          <h2>Signature request</h2>
-          <dl>
-            <div><dt>Origin</dt><dd>{signingRequest.origin}</dd></div>
-            <div><dt>Account</dt><dd>{signingRequest.account}</dd></div>
-            <div><dt>Namespace</dt><dd>{signingRequest.namespace}</dd></div>
-            <div><dt>Action</dt><dd>{signingRequest.action}</dd></div>
-            <div><dt>Object</dt><dd>{signingRequest.objectId}</dd></div>
-            <div><dt>Policy</dt><dd>{signingRequest.feePolicy}</dd></div>
-          </dl>
-        </article>
+        <div className="wallet-scroll">
+          <article className="request-card">
+            <h2>Signature request</h2>
+            <dl>
+              <div>
+                <dt>Origin</dt>
+                <dd>{signingRequest.origin}</dd>
+              </div>
+              <div>
+                <dt>Account</dt>
+                <dd>{signingRequest.account}</dd>
+              </div>
+              <div>
+                <dt>Namespace</dt>
+                <dd>{signingRequest.namespace}</dd>
+              </div>
+              <div>
+                <dt>Action</dt>
+                <dd>{signingRequest.action}</dd>
+              </div>
+              <div>
+                <dt>Object</dt>
+                <dd>{signingRequest.objectId}</dd>
+              </div>
+              <div>
+                <dt>Policy</dt>
+                <dd>{signingRequest.feePolicy}</dd>
+              </div>
+            </dl>
+          </article>
 
-        <article className="request-card">
-          <h2>Security checks</h2>
-          <ul>
-            {riskChecks.map((check) => (
-              <li key={check.label}>
-                <span>{check.label}</span>
-                <strong className={check.good ? 'ok' : 'warn'}>{check.value}</strong>
-              </li>
-            ))}
-          </ul>
-        </article>
+          <article className="request-card">
+            <h2>Security checks</h2>
+            <ul>
+              {riskChecks.map((check) => (
+                <li key={check.label}>
+                  <span>{check.label}</span>
+                  <strong className={check.good ? 'ok' : 'warn'}>{check.value}</strong>
+                </li>
+              ))}
+            </ul>
+          </article>
+        </div>
 
         <footer className="wallet-actions">
           <button className="ghost">Reject</button>
