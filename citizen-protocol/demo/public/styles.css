@@ -59,6 +59,24 @@ body {
   align-items: start;
 }
 
+
+.wallet-row {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  margin-bottom: 0.9rem;
+}
+
+.wallet-row button {
+  width: auto;
+  margin-top: 0;
+  padding: 0.55rem 0.9rem;
+}
+
+.wallet-row .meta {
+  margin: 0;
+}
+
 h2 {
   margin: 0 0 0.8rem;
 }
