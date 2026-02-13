@@ -66,6 +66,7 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
         let submit_ledger = Arc::clone(&self.ledger);
         let submit_envelope_ledger = Arc::clone(&self.ledger);
         let builder_credits_ledger = Arc::clone(&self.ledger);
+        let asset_positions_ledger = Arc::clone(&self.ledger);
         let submit_receipts = Arc::clone(&self.receipts);
         let submit_legacy_receipts = Arc::clone(&self.receipts);
         let get_receipt_store = Arc::clone(&self.receipts);
@@ -135,6 +136,13 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
                 get(move |Path(builder_id): Path<String>| {
                     let ledger = Arc::clone(&builder_credits_ledger);
                     async move { Self::handle_get_builder_credits(ledger, builder_id).await }
+                }),
+            )
+            .route(
+                "/api/v1/assets/:account_id",
+                get(move |Path(account_id): Path<String>| {
+                    let ledger = Arc::clone(&asset_positions_ledger);
+                    async move { Self::handle_get_asset_positions(ledger, account_id).await }
                 }),
             )
     }
@@ -398,6 +406,102 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
         )
     }
 
+    async fn handle_get_asset_positions(
+        ledger: Arc<Ledger<S>>,
+        account_id: String,
+    ) -> (StatusCode, Json<serde_json::Value>) {
+        let entries = ledger
+            .storage()
+            .namespace_entries(&"asset.control".to_string())
+            .unwrap_or_default();
+
+        let mut trustlines: BTreeMap<(String, String), serde_json::Value> = BTreeMap::new();
+        let mut holdings: BTreeMap<(String, String), i128> = BTreeMap::new();
+
+        for entry in entries {
+            if entry.object_id != account_id {
+                continue;
+            }
+            let Some(issuer) = entry.payload.get("issuer").and_then(|value| value.as_str()) else {
+                continue;
+            };
+            let Some(asset_code) = entry
+                .payload
+                .get("asset_code")
+                .and_then(|value| value.as_str())
+            else {
+                continue;
+            };
+            let key = (issuer.to_string(), asset_code.to_string());
+
+            match entry.action.as_str() {
+                "TRUSTLINE_OPEN" | "TRUSTLINE_CLOSE" => {
+                    trustlines.insert(
+                        key.clone(),
+                        serde_json::json!({
+                            "status": if entry.action == "TRUSTLINE_CLOSE" { "closed" } else { "active" },
+                            "max_holding": entry.payload.get("max_holding").and_then(|value| value.as_u64()).unwrap_or_default(),
+                            "policy_flags": entry.payload.get("policy_flags").cloned().unwrap_or_else(|| serde_json::json!([])),
+                            "disclosure": entry.payload.get("disclosure").cloned().unwrap_or_else(|| serde_json::json!({"mode":"public"})),
+                        }),
+                    );
+                }
+                "ASSET_HOLD" => {
+                    let amount = entry
+                        .payload
+                        .get("amount")
+                        .and_then(|value| value.as_u64())
+                        .unwrap_or_default() as i128;
+                    holdings
+                        .entry(key)
+                        .and_modify(|current| *current = current.saturating_add(amount))
+                        .or_insert(amount);
+                }
+                "ASSET_RELEASE" => {
+                    let amount = entry
+                        .payload
+                        .get("amount")
+                        .and_then(|value| value.as_u64())
+                        .unwrap_or_default() as i128;
+                    holdings
+                        .entry(key)
+                        .and_modify(|current| *current = current.saturating_sub(amount))
+                        .or_insert(-amount);
+                }
+                _ => {}
+            }
+        }
+
+        let mut positions = Vec::new();
+        for ((issuer, asset_code), trustline) in trustlines {
+            let held = holdings
+                .get(&(issuer.clone(), asset_code.clone()))
+                .copied()
+                .unwrap_or_default()
+                .max(0) as u64;
+            let max_holding = trustline
+                .get("max_holding")
+                .and_then(|value| value.as_u64())
+                .unwrap_or_default();
+            positions.push(serde_json::json!({
+                "issuer": issuer,
+                "asset_code": asset_code,
+                "held": held,
+                "available_capacity": max_holding.saturating_sub(held),
+                "trustline": trustline,
+            }));
+        }
+
+        (
+            StatusCode::OK,
+            Json(serde_json::json!({
+                "account_id": account_id,
+                "namespace": "asset.control",
+                "positions": positions,
+            })),
+        )
+    }
+
     async fn finalize_entry(
         ledger: Arc<Ledger<S>>,
         entry: LedgerEntry,
@@ -572,6 +676,19 @@ mod tests {
             validators: vec![NamespaceRule {
                 name: "builder_credit_policy".to_string(),
                 config: json!({"max_daily_spend": 10_000}),
+            }],
+        }]);
+        ledger.bootstrap_namespaces(vec![NamespaceRuleset {
+            descriptor: NamespaceDescriptor {
+                namespace: "asset.control".to_string(),
+                version: 1,
+                rules_hash: "asset-controls-v1".to_string(),
+                governed_by: "governance".to_string(),
+            },
+            writers: BTreeSet::new(),
+            validators: vec![NamespaceRule {
+                name: "asset_control_policy".to_string(),
+                config: json!({"allowed_policy_flags": ["kyc_required", "attestation_required"]}),
             }],
         }]);
         ApiServer::new(ledger)
@@ -995,5 +1112,87 @@ mod tests {
         assert_eq!(payload["sponsored"], 30);
         assert_eq!(payload["available"], 70);
         assert_eq!(payload["instrumentation"]["unique_sponsorship_count"], 1);
+    }
+
+    #[tokio::test]
+    async fn asset_positions_endpoint_returns_trustline_holdings_and_disclosure() {
+        let app = build_server().router();
+        let now = chrono::Utc::now().timestamp();
+
+        let trustline_entry = LedgerEntry {
+            entry_id: Uuid::new_v4(),
+            namespace: "asset.control".to_string(),
+            action: "TRUSTLINE_OPEN".to_string(),
+            object_id: "did:ledger:alice".to_string(),
+            payload: json!({
+                "issuer":"issuer:treasury",
+                "asset_code":"CITZ-CRED",
+                "max_holding":100_u64,
+                "policy_flags":["kyc_required"],
+                "disclosure":{"mode":"hashed", "commitment":"0xabc"}
+            }),
+            author: "did:ledger:alice".to_string(),
+            signature: "sig".to_string(),
+            timestamp: now,
+        };
+        let hold_entry = LedgerEntry {
+            entry_id: Uuid::new_v4(),
+            namespace: "asset.control".to_string(),
+            action: "ASSET_HOLD".to_string(),
+            object_id: "did:ledger:alice".to_string(),
+            payload: json!({
+                "issuer":"issuer:treasury",
+                "asset_code":"CITZ-CRED",
+                "amount":40_u64,
+                "policy_flags":["kyc_required"],
+                "disclosure":{"mode":"public"}
+            }),
+            author: "issuer:treasury".to_string(),
+            signature: "sig".to_string(),
+            timestamp: now + 1,
+        };
+
+        for entry in [trustline_entry, hold_entry] {
+            app.clone()
+                .oneshot(
+                    Request::builder()
+                        .method("POST")
+                        .uri("/api/v1/entries/submit")
+                        .header("content-type", "application/json")
+                        .body(Body::from(
+                            serde_json::to_vec(&entry).expect("serialize entry"),
+                        ))
+                        .expect("request"),
+                )
+                .await
+                .expect("submit response");
+        }
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri("/api/v1/assets/did:ledger:alice")
+                    .body(Body::empty())
+                    .expect("request"),
+            )
+            .await
+            .expect("asset positions response");
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("body bytes");
+        let payload: Value = serde_json::from_slice(&body).expect("asset positions payload");
+        assert_eq!(payload["positions"][0]["held"], 40);
+        assert_eq!(payload["positions"][0]["available_capacity"], 60);
+        assert_eq!(
+            payload["positions"][0]["trustline"]["policy_flags"][0],
+            "kyc_required"
+        );
+        assert_eq!(
+            payload["positions"][0]["trustline"]["disclosure"]["mode"],
+            "hashed"
+        );
     }
 }
