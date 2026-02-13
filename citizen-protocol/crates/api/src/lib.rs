@@ -7,8 +7,9 @@ use citizen_crypto::hash_block_header;
 use citizen_ledger::Ledger;
 use citizen_storage::LedgerStorage;
 use citizen_types::{
-    Block, BlockHeader, BlockHeight, CommitProof, DeterministicReceipt, FinalityProof, LedgerEntry,
-    ProtocolError, ReceiptStatus, SignedEnvelope, ValidationSummary,
+    Block, BlockHeader, BlockHeight, CommitProof, ConsentPolicyCheck, ConsentReceipt,
+    DeterministicReceipt, DidDocument, DidStatus, FinalityProof, LedgerEntry, ProtocolError,
+    ReceiptStatus, SignedEnvelope, ValidationSummary,
 };
 use serde::Serialize;
 use std::collections::BTreeMap;
@@ -59,6 +60,8 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
         let blocks_ledger = Arc::clone(&self.ledger);
         let namespaces_ledger = Arc::clone(&self.ledger);
         let entries_ledger = Arc::clone(&self.ledger);
+        let resolve_did_ledger = Arc::clone(&self.ledger);
+        let consent_check_ledger = Arc::clone(&self.ledger);
         let submit_ledger = Arc::clone(&self.ledger);
         let submit_envelope_ledger = Arc::clone(&self.ledger);
         let submit_receipts = Arc::clone(&self.receipts);
@@ -86,6 +89,20 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
                 get(move |Path(namespace): Path<String>| {
                     let ledger = Arc::clone(&entries_ledger);
                     async move { Self::handle_list_entries(ledger, namespace).await }
+                }),
+            )
+            .route(
+                "/api/v1/identity/:did",
+                get(move |Path(did): Path<String>| {
+                    let ledger = Arc::clone(&resolve_did_ledger);
+                    async move { Self::handle_resolve_did(ledger, did).await }
+                }),
+            )
+            .route(
+                "/api/v1/consent/check",
+                post(move |Json(receipt): Json<ConsentReceipt>| {
+                    let ledger = Arc::clone(&consent_check_ledger);
+                    async move { Self::handle_check_consent(ledger, receipt).await }
                 }),
             )
             .route(
@@ -154,6 +171,78 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
             payload: entry,
         };
         Self::handle_submit_envelope(ledger, receipts, envelope).await
+    }
+
+    async fn handle_resolve_did(
+        ledger: Arc<Ledger<S>>,
+        did: String,
+    ) -> (StatusCode, Json<serde_json::Value>) {
+        let encoded_did = urlencoding::decode(&did)
+            .map(|value| value.into_owned())
+            .unwrap_or(did);
+        let entries = ledger
+            .storage()
+            .namespace_entries(&"identity.citizen".to_string())
+            .unwrap_or_default();
+        let did_doc = Self::build_did_document(&encoded_did, &entries);
+        match did_doc {
+            Some(document) => (
+                StatusCode::OK,
+                Json(serde_json::json!({"did_document": document})),
+            ),
+            None => (
+                StatusCode::NOT_FOUND,
+                Json(serde_json::json!({"error": "did not found"})),
+            ),
+        }
+    }
+
+    async fn handle_check_consent(
+        ledger: Arc<Ledger<S>>,
+        receipt: ConsentReceipt,
+    ) -> (StatusCode, Json<serde_json::Value>) {
+        let now = Utc::now().timestamp();
+        let exists = ledger
+            .storage()
+            .namespace_entries(&"consent.receipt".to_string())
+            .unwrap_or_default()
+            .into_iter()
+            .any(|entry| {
+                entry.author == receipt.subject_did
+                    && entry
+                        .payload
+                        .get("data_hash")
+                        .and_then(|value| value.as_str())
+                        == Some(receipt.data_hash.as_str())
+                    && entry
+                        .payload
+                        .get("policy_ref")
+                        .and_then(|value| value.as_str())
+                        == Some(receipt.policy_ref.as_str())
+            });
+
+        let check = if !exists {
+            ConsentPolicyCheck {
+                valid: false,
+                reason: Some("consent receipt not found on-chain".to_string()),
+            }
+        } else if receipt.expires_at <= now {
+            ConsentPolicyCheck {
+                valid: false,
+                reason: Some("consent receipt expired".to_string()),
+            }
+        } else {
+            ConsentPolicyCheck {
+                valid: true,
+                reason: None,
+            }
+        };
+        let status = if check.valid {
+            StatusCode::OK
+        } else {
+            StatusCode::UNPROCESSABLE_ENTITY
+        };
+        (status, Json(serde_json::json!({"result": check})))
     }
 
     async fn handle_submit_envelope(
@@ -272,6 +361,36 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
             commit_proof,
         })
     }
+
+    fn build_did_document(did: &str, entries: &[LedgerEntry]) -> Option<DidDocument> {
+        let mut latest: Option<&LedgerEntry> = None;
+        for entry in entries {
+            if entry.object_id != did {
+                continue;
+            }
+            if latest
+                .map(|current| entry.timestamp > current.timestamp)
+                .unwrap_or(true)
+            {
+                latest = Some(entry);
+            }
+        }
+        latest.map(|entry| DidDocument {
+            did: did.to_string(),
+            controller: entry.author.clone(),
+            status: if entry.action == "REVOKE_IDENTITY" {
+                DidStatus::Revoked
+            } else {
+                DidStatus::Active
+            },
+            claims_hash: entry
+                .payload
+                .get("claims_hash")
+                .and_then(|value| value.as_str())
+                .map(ToString::to_string),
+            updated_at: entry.timestamp,
+        })
+    }
 }
 
 fn protocol_error_response(err: ProtocolError) -> (StatusCode, Json<serde_json::Value>) {
@@ -322,6 +441,35 @@ mod tests {
             validators: vec![NamespaceRule {
                 name: "require_signature".to_string(),
                 config: json!({}),
+            }],
+        }]);
+        ledger.bootstrap_namespaces(vec![NamespaceRuleset {
+            descriptor: NamespaceDescriptor {
+                namespace: "identity.citizen".to_string(),
+                version: 1,
+                rules_hash: "identity-v1".to_string(),
+                governed_by: "governance".to_string(),
+            },
+            writers: BTreeSet::new(),
+            validators: vec![NamespaceRule {
+                name: "allowed_actions".to_string(),
+                config: json!({"actions":["REGISTER_IDENTITY","UPDATE_CLAIM","REVOKE_IDENTITY"]}),
+            }],
+        }]);
+        ledger.bootstrap_namespaces(vec![NamespaceRuleset {
+            descriptor: NamespaceDescriptor {
+                namespace: "consent.receipt".to_string(),
+                version: 1,
+                rules_hash: "consent-v1".to_string(),
+                governed_by: "governance".to_string(),
+            },
+            writers: BTreeSet::new(),
+            validators: vec![NamespaceRule {
+                name: "consent_policy".to_string(),
+                config: json!({
+                    "required_fields":["data_hash","policy_ref","expires_at"],
+                    "max_ttl_secs": 86400
+                }),
             }],
         }]);
         ApiServer::new(ledger)
@@ -491,5 +639,117 @@ mod tests {
             receipt_json["receipt"]["finality"]["commit_proof"]["aggregated_signature"],
             "local-dev-finality"
         );
+    }
+
+    #[tokio::test]
+    async fn resolves_did_from_identity_namespace() {
+        let app = build_server().router();
+        let now = chrono::Utc::now().timestamp();
+        let identity_entry = LedgerEntry {
+            entry_id: Uuid::new_v4(),
+            namespace: "identity.citizen".to_string(),
+            action: "REGISTER_IDENTITY".to_string(),
+            object_id: "did:ledger:alice".to_string(),
+            payload: json!({"claims_hash":"0xabc"}),
+            author: "did:ledger:alice".to_string(),
+            signature: "sig".to_string(),
+            timestamp: now,
+        };
+
+        app.clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/entries/submit")
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        serde_json::to_vec(&identity_entry).expect("serialize entry"),
+                    ))
+                    .expect("request"),
+            )
+            .await
+            .expect("submit response");
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri("/api/v1/identity/did%3Aledger%3Aalice")
+                    .body(Body::empty())
+                    .expect("request"),
+            )
+            .await
+            .expect("resolve response");
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("body bytes");
+        let payload: Value = serde_json::from_slice(&body).expect("resolve payload");
+        assert_eq!(payload["did_document"]["did"], "did:ledger:alice");
+        assert_eq!(payload["did_document"]["status"], "Active");
+    }
+
+    #[tokio::test]
+    async fn consent_policy_check_returns_valid_for_live_receipt() {
+        let app = build_server().router();
+        let now = chrono::Utc::now().timestamp();
+        let consent_entry = LedgerEntry {
+            entry_id: Uuid::new_v4(),
+            namespace: "consent.receipt".to_string(),
+            action: "CONSENT_GRANTED".to_string(),
+            object_id: "did:ledger:alice".to_string(),
+            payload: json!({
+                "data_hash":"0xabc",
+                "policy_ref":"policy:v1",
+                "expires_at": now + 600
+            }),
+            author: "did:ledger:alice".to_string(),
+            signature: "sig".to_string(),
+            timestamp: now,
+        };
+
+        app.clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/entries/submit")
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        serde_json::to_vec(&consent_entry).expect("serialize entry"),
+                    ))
+                    .expect("request"),
+            )
+            .await
+            .expect("submit response");
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/consent/check")
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        serde_json::to_vec(&json!({
+                            "subject_did":"did:ledger:alice",
+                            "data_hash":"0xabc",
+                            "policy_ref":"policy:v1",
+                            "granted_at": now,
+                            "expires_at": now + 600
+                        }))
+                        .expect("serialize consent check"),
+                    ))
+                    .expect("request"),
+            )
+            .await
+            .expect("consent check response");
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("body bytes");
+        let payload: Value = serde_json::from_slice(&body).expect("consent payload");
+        assert_eq!(payload["result"]["valid"], true);
+        assert!(payload["result"]["reason"].is_null());
     }
 }

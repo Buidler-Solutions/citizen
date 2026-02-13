@@ -95,6 +95,8 @@ impl<S: LedgerStorage + 'static> Ledger<S> {
             }
             "unique_by_field" => self.unique_by_field(entry, config),
             "require_payload_fields" => self.require_payload_fields(entry, config),
+            "allowed_actions" => self.allowed_actions(entry, config),
+            "consent_policy" => self.consent_policy(entry, config),
             _ => {
                 let handler = self
                     .custom_rule_handlers
@@ -167,6 +169,80 @@ impl<S: LedgerStorage + 'static> Ledger<S> {
                     entry.namespace
                 )));
             }
+        }
+        Ok(())
+    }
+
+    fn allowed_actions(&self, entry: &LedgerEntry, config: &Value) -> Result<()> {
+        let actions = config
+            .get("actions")
+            .and_then(Value::as_array)
+            .ok_or_else(|| {
+                ProtocolError::ValidationFailed(
+                    "allowed_actions requires { actions: [..] } config".into(),
+                )
+            })?;
+        if actions
+            .iter()
+            .any(|action| action.as_str() == Some(entry.action.as_str()))
+        {
+            Ok(())
+        } else {
+            Err(ProtocolError::ValidationFailed(format!(
+                "action '{}' is not allowed for namespace {}",
+                entry.action, entry.namespace
+            )))
+        }
+    }
+
+    fn consent_policy(&self, entry: &LedgerEntry, config: &Value) -> Result<()> {
+        let required_fields = config
+            .get("required_fields")
+            .and_then(Value::as_array)
+            .ok_or_else(|| {
+                ProtocolError::ValidationFailed(
+                    "consent_policy requires { required_fields: [..], max_ttl_secs } config".into(),
+                )
+            })?;
+        for field in required_fields {
+            let Some(field_name) = field.as_str() else {
+                return Err(ProtocolError::ValidationFailed(
+                    "consent_policy required_fields must be strings".into(),
+                ));
+            };
+            if entry.payload.get(field_name).is_none() {
+                return Err(ProtocolError::ValidationFailed(format!(
+                    "consent receipt is missing required payload field '{field_name}'"
+                )));
+            }
+        }
+
+        let expires_at = entry
+            .payload
+            .get("expires_at")
+            .and_then(Value::as_i64)
+            .ok_or_else(|| {
+                ProtocolError::ValidationFailed(
+                    "consent receipt requires numeric payload.expires_at".into(),
+                )
+            })?;
+        let max_ttl_secs = config
+            .get("max_ttl_secs")
+            .and_then(Value::as_i64)
+            .ok_or_else(|| {
+                ProtocolError::ValidationFailed("consent_policy requires max_ttl_secs".into())
+            })?;
+        let ttl = expires_at - entry.timestamp;
+        if ttl <= 0 {
+            return Err(ProtocolError::ValidationFailed(
+                "consent receipt expires_at must be in the future".into(),
+            ));
+        }
+        if ttl > max_ttl_secs {
+            return Err(ProtocolError::ValidationFailed(format!(
+                "consent receipt ttl {}s exceeds allowed {}s",
+                ttl, max_ttl_secs
+            )));
         }
         Ok(())
     }
@@ -353,5 +429,52 @@ mod tests {
                 entries: vec![entry],
             })
             .expect("custom rule should pass");
+    }
+
+    #[test]
+    fn enforces_identity_allowed_actions() {
+        let ledger = Ledger::in_memory();
+        let namespace = "identity.citizen";
+        ledger.bootstrap_namespaces(vec![namespace_with_rules(
+            namespace,
+            vec![NamespaceRule {
+                name: "allowed_actions".into(),
+                config: json!({"actions":["REGISTER_IDENTITY","UPDATE_CLAIM","REVOKE_IDENTITY"]}),
+            }],
+        )]);
+
+        let mut entry = test_entry(namespace);
+        entry.action = "INVALID_ACTION".into();
+        let err = ledger
+            .apply_entry(entry)
+            .expect_err("invalid action must fail");
+        assert!(err.to_string().contains("is not allowed"));
+    }
+
+    #[test]
+    fn enforces_consent_policy_ttl_checks() {
+        let ledger = Ledger::in_memory();
+        let namespace = "consent.receipt";
+        ledger.bootstrap_namespaces(vec![namespace_with_rules(
+            namespace,
+            vec![NamespaceRule {
+                name: "consent_policy".into(),
+                config: json!({
+                    "required_fields":["data_hash", "policy_ref", "expires_at"],
+                    "max_ttl_secs": 3_600
+                }),
+            }],
+        )]);
+
+        let mut entry = test_entry(namespace);
+        entry.payload = json!({
+            "data_hash":"0xabc",
+            "policy_ref":"policy:v1",
+            "expires_at": entry.timestamp + 7_200
+        });
+        let err = ledger
+            .apply_entry(entry)
+            .expect_err("ttl above max must fail");
+        assert!(err.to_string().contains("exceeds allowed"));
     }
 }
