@@ -51,9 +51,16 @@ Baseline reference: `docs/DEEP_RESEARCH_ARCHITECTURE_BASELINE.md` (Phase 1 secti
 - [x] Resolver service and SDK verification primitives
 - [x] Consent receipt namespace and policy checks
 
+### Completed
+- [x] Enforced DID subject ownership for identity writes via `author_matches_object_id` namespace rule.
+- [x] Expanded consent namespace policy with explicit action allowlist (`CONSENT_GRANTED` / `CONSENT_REVOKED`) and subject-ownership checks.
+- [x] Updated consent verification endpoint to evaluate latest on-chain consent status and reject revoked receipts.
+- [x] Added regression coverage for identity subject mismatch and consent revocation evaluation.
+
 ### Last Update
+- 2026-02-13: Continued Phase 2 hardening after review by adding DID subject ownership enforcement and consent revocation-aware policy checks + tests.
 - 2026-02-13: Implemented identity/data-ownership baseline: DID action enforcement, API DID resolver, consent receipt policy validation/check endpoint, and wallet SDK verification primitives.
-- Commit: e38c374
+- Commit: 42504be
 
 ---
 
