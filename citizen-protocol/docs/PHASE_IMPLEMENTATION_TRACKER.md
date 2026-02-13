@@ -85,11 +85,13 @@ Baseline reference: `docs/DEEP_RESEARCH_ARCHITECTURE_BASELINE.md` (Phase 1 secti
 
 ## Phase 4 — Asset Controls
 ### Scope
-- [ ] Governed asset module + trustline-like holding model
-- [ ] Controlled policy flags and disclosure UX
+- [x] Governed asset module + trustline-like holding model
+- [x] Controlled policy flags and disclosure UX
 
 ### Last Update
-- 2026-02-13: Not started.
+- 2026-02-13: Implemented governed asset controls in `asset.control` with trustline-enforced holdings, issuer/holder authorization checks, and policy-flag/disclosure validation + regression tests.
+- 2026-02-13: Added builder-facing asset disclosure endpoint (`GET /api/v1/assets/:account_id`) exposing trustline status, held balances, policy flags, and disclosure mode summary.
+- Commit: see git history
 
 ---
 
