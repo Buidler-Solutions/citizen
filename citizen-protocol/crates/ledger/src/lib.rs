@@ -97,6 +97,7 @@ impl<S: LedgerStorage + 'static> Ledger<S> {
             "require_payload_fields" => self.require_payload_fields(entry, config),
             "allowed_actions" => self.allowed_actions(entry, config),
             "consent_policy" => self.consent_policy(entry, config),
+            "author_matches_object_id" => self.author_matches_object_id(entry),
             _ => {
                 let handler = self
                     .custom_rule_handlers
@@ -242,6 +243,16 @@ impl<S: LedgerStorage + 'static> Ledger<S> {
             return Err(ProtocolError::ValidationFailed(format!(
                 "consent receipt ttl {}s exceeds allowed {}s",
                 ttl, max_ttl_secs
+            )));
+        }
+        Ok(())
+    }
+
+    fn author_matches_object_id(&self, entry: &LedgerEntry) -> Result<()> {
+        if entry.author != entry.object_id {
+            return Err(ProtocolError::ValidationFailed(format!(
+                "author {} must match object_id {}",
+                entry.author, entry.object_id
             )));
         }
         Ok(())
@@ -449,6 +460,27 @@ mod tests {
             .apply_entry(entry)
             .expect_err("invalid action must fail");
         assert!(err.to_string().contains("is not allowed"));
+    }
+
+    #[test]
+    fn enforces_author_matches_object_id_rule() {
+        let ledger = Ledger::in_memory();
+        let namespace = "identity.citizen";
+        ledger.bootstrap_namespaces(vec![namespace_with_rules(
+            namespace,
+            vec![NamespaceRule {
+                name: "author_matches_object_id".into(),
+                config: json!({}),
+            }],
+        )]);
+
+        let mut entry = test_entry(namespace);
+        entry.object_id = "did:ledger:alice".into();
+        entry.author = "did:ledger:bob".into();
+        let err = ledger
+            .apply_entry(entry)
+            .expect_err("identity subject mismatch must fail");
+        assert!(err.to_string().contains("must match object_id"));
     }
 
     #[test]

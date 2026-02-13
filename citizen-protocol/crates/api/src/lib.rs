@@ -205,10 +205,11 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
         let exists = ledger
             .storage()
             .namespace_entries(&"consent.receipt".to_string())
-            .unwrap_or_default()
+            .unwrap_or_default();
+        let latest = exists
             .into_iter()
-            .any(|entry| {
-                entry.author == receipt.subject_did
+            .filter(|entry| {
+                entry.object_id == receipt.subject_did
                     && entry
                         .payload
                         .get("data_hash")
@@ -219,9 +220,10 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
                         .get("policy_ref")
                         .and_then(|value| value.as_str())
                         == Some(receipt.policy_ref.as_str())
-            });
+            })
+            .max_by_key(|entry| entry.timestamp);
 
-        let check = if !exists {
+        let check = if latest.is_none() {
             ConsentPolicyCheck {
                 valid: false,
                 reason: Some("consent receipt not found on-chain".to_string()),
@@ -230,6 +232,15 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
             ConsentPolicyCheck {
                 valid: false,
                 reason: Some("consent receipt expired".to_string()),
+            }
+        } else if latest
+            .as_ref()
+            .map(|entry| entry.action.as_str() == "CONSENT_REVOKED")
+            .unwrap_or(false)
+        {
+            ConsentPolicyCheck {
+                valid: false,
+                reason: Some("consent receipt revoked".to_string()),
             }
         } else {
             ConsentPolicyCheck {
@@ -454,6 +465,9 @@ mod tests {
             validators: vec![NamespaceRule {
                 name: "allowed_actions".to_string(),
                 config: json!({"actions":["REGISTER_IDENTITY","UPDATE_CLAIM","REVOKE_IDENTITY"]}),
+            }, NamespaceRule {
+                name: "author_matches_object_id".to_string(),
+                config: json!({}),
             }],
         }]);
         ledger.bootstrap_namespaces(vec![NamespaceRuleset {
@@ -464,13 +478,23 @@ mod tests {
                 governed_by: "governance".to_string(),
             },
             writers: BTreeSet::new(),
-            validators: vec![NamespaceRule {
-                name: "consent_policy".to_string(),
-                config: json!({
-                    "required_fields":["data_hash","policy_ref","expires_at"],
-                    "max_ttl_secs": 86400
-                }),
-            }],
+            validators: vec![
+                NamespaceRule {
+                    name: "consent_policy".to_string(),
+                    config: json!({
+                        "required_fields":["data_hash","policy_ref","expires_at"],
+                        "max_ttl_secs": 86400
+                    }),
+                },
+                NamespaceRule {
+                    name: "allowed_actions".to_string(),
+                    config: json!({"actions":["CONSENT_GRANTED","CONSENT_REVOKED"]}),
+                },
+                NamespaceRule {
+                    name: "author_matches_object_id".to_string(),
+                    config: json!({}),
+                },
+            ],
         }]);
         ApiServer::new(ledger)
     }
@@ -751,5 +775,84 @@ mod tests {
         let payload: Value = serde_json::from_slice(&body).expect("consent payload");
         assert_eq!(payload["result"]["valid"], true);
         assert!(payload["result"]["reason"].is_null());
+    }
+
+    #[tokio::test]
+    async fn consent_policy_check_returns_revoked_when_latest_event_revokes() {
+        let app = build_server().router();
+        let now = chrono::Utc::now().timestamp();
+        let granted_entry = LedgerEntry {
+            entry_id: Uuid::new_v4(),
+            namespace: "consent.receipt".to_string(),
+            action: "CONSENT_GRANTED".to_string(),
+            object_id: "did:ledger:alice".to_string(),
+            payload: json!({
+                "data_hash":"0xabc",
+                "policy_ref":"policy:v1",
+                "expires_at": now + 600
+            }),
+            author: "did:ledger:alice".to_string(),
+            signature: "sig".to_string(),
+            timestamp: now,
+        };
+        let revoked_entry = LedgerEntry {
+            entry_id: Uuid::new_v4(),
+            namespace: "consent.receipt".to_string(),
+            action: "CONSENT_REVOKED".to_string(),
+            object_id: "did:ledger:alice".to_string(),
+            payload: json!({
+                "data_hash":"0xabc",
+                "policy_ref":"policy:v1",
+                "expires_at": now + 600
+            }),
+            author: "did:ledger:alice".to_string(),
+            signature: "sig".to_string(),
+            timestamp: now + 1,
+        };
+
+        for entry in [granted_entry, revoked_entry] {
+            app.clone()
+                .oneshot(
+                    Request::builder()
+                        .method("POST")
+                        .uri("/api/v1/entries/submit")
+                        .header("content-type", "application/json")
+                        .body(Body::from(
+                            serde_json::to_vec(&entry).expect("serialize entry"),
+                        ))
+                        .expect("request"),
+                )
+                .await
+                .expect("submit response");
+        }
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/consent/check")
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        serde_json::to_vec(&json!({
+                            "subject_did":"did:ledger:alice",
+                            "data_hash":"0xabc",
+                            "policy_ref":"policy:v1",
+                            "granted_at": now,
+                            "expires_at": now + 600
+                        }))
+                        .expect("serialize consent check"),
+                    ))
+                    .expect("request"),
+            )
+            .await
+            .expect("consent check response");
+
+        assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("body bytes");
+        let payload: Value = serde_json::from_slice(&body).expect("consent payload");
+        assert_eq!(payload["result"]["valid"], false);
+        assert_eq!(payload["result"]["reason"], "consent receipt revoked");
     }
 }
