@@ -1,0 +1,686 @@
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on artifact directory
+warning: hiding a lifetime that's elided elsewhere is confusing
+   --> vendor/rocksdb/src/db.rs:165:9
+    |
+165 |         &self,
+    |         ^^^^^ the lifetime is elided here
+...
+168 |     ) -> Result<Option<DBPinnableSlice>, Error>;
+    |                        ^^^^^^^^^^^^^^^ the same lifetime is hidden here
+    |
+    = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+    = note: `#[warn(mismatched_lifetime_syntaxes)]` on by default
+help: use `'_` for type paths
+    |
+168 |     ) -> Result<Option<DBPinnableSlice<'_>>, Error>;
+    |                                       ++++
+
+warning: hiding a lifetime that's elided elsewhere is confusing
+   --> vendor/rocksdb/src/db.rs:171:9
+    |
+171 |         &self,
+    |         ^^^^^ the lifetime is elided here
+...
+175 |     ) -> Result<Option<DBPinnableSlice>, Error>;
+    |                        ^^^^^^^^^^^^^^^ the same lifetime is hidden here
+    |
+    = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+help: use `'_` for type paths
+    |
+175 |     ) -> Result<Option<DBPinnableSlice<'_>>, Error>;
+    |                                       ++++
+
+warning: hiding a lifetime that's elided elsewhere is confusing
+   --> vendor/rocksdb/src/db.rs:236:9
+    |
+236 |         &self,
+    |         ^^^^^ the lifetime is elided here
+...
+239 |     ) -> Result<Option<DBPinnableSlice>, Error> {
+    |                        ^^^^^^^^^^^^^^^ the same lifetime is hidden here
+    |
+    = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+help: use `'_` for type paths
+    |
+239 |     ) -> Result<Option<DBPinnableSlice<'_>>, Error> {
+    |                                       ++++
+
+warning: hiding a lifetime that's elided elsewhere is confusing
+   --> vendor/rocksdb/src/db.rs:244:9
+    |
+244 |         &self,
+    |         ^^^^^ the lifetime is elided here
+...
+248 |     ) -> Result<Option<DBPinnableSlice>, Error> {
+    |                        ^^^^^^^^^^^^^^^ the same lifetime is hidden here
+    |
+    = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+help: use `'_` for type paths
+    |
+248 |     ) -> Result<Option<DBPinnableSlice<'_>>, Error> {
+    |                                       ++++
+
+warning: hiding a lifetime that's elided elsewhere is confusing
+   --> vendor/rocksdb/src/db.rs:970:9
+    |
+970 |         &self,
+    |         ^^^^^ the lifetime is elided here
+...
+973 |     ) -> Result<Option<DBPinnableSlice>, Error> {
+    |                        ^^^^^^^^^^^^^^^ the same lifetime is hidden here
+    |
+    = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+help: use `'_` for type paths
+    |
+973 |     ) -> Result<Option<DBPinnableSlice<'_>>, Error> {
+    |                                       ++++
+
+warning: hiding a lifetime that's elided elsewhere is confusing
+    --> vendor/rocksdb/src/db.rs:1001:39
+     |
+1001 |     pub fn get_pinned<K: AsRef<[u8]>>(&self, key: K) -> Result<Option<DBPinnableSlice>, Error> {
+     |                                       ^^^^^                           ^^^^^^^^^^^^^^^ the same lifetime is hidden here
+     |                                       |
+     |                                       the lifetime is elided here
+     |
+     = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+help: use `'_` for type paths
+     |
+1001 |     pub fn get_pinned<K: AsRef<[u8]>>(&self, key: K) -> Result<Option<DBPinnableSlice<'_>>, Error> {
+     |                                                                                      ++++
+
+warning: hiding a lifetime that's elided elsewhere is confusing
+    --> vendor/rocksdb/src/db.rs:1009:9
+     |
+1009 |         &self,
+     |         ^^^^^ the lifetime is elided here
+...
+1013 |     ) -> Result<Option<DBPinnableSlice>, Error> {
+     |                        ^^^^^^^^^^^^^^^ the same lifetime is hidden here
+     |
+     = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+help: use `'_` for type paths
+     |
+1013 |     ) -> Result<Option<DBPinnableSlice<'_>>, Error> {
+     |                                       ++++
+
+warning: hiding a lifetime that's elided elsewhere is confusing
+    --> vendor/rocksdb/src/db.rs:1043:9
+     |
+1043 |         &self,
+     |         ^^^^^ the lifetime is elided here
+...
+1046 |     ) -> Result<Option<DBPinnableSlice>, Error> {
+     |                        ^^^^^^^^^^^^^^^ the same lifetime is hidden here
+     |
+     = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+help: use `'_` for type paths
+     |
+1046 |     ) -> Result<Option<DBPinnableSlice<'_>>, Error> {
+     |                                       ++++
+
+warning: hiding a lifetime that's elided elsewhere is confusing
+    --> vendor/rocksdb/src/db.rs:1155:9
+     |
+1155 |         &self,
+     |         ^^^^^ the lifetime is elided here
+...
+1159 |     ) -> Vec<Result<Option<DBPinnableSlice>, Error>>
+     |                            ^^^^^^^^^^^^^^^ the same lifetime is hidden here
+     |
+     = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+help: use `'_` for type paths
+     |
+1159 |     ) -> Vec<Result<Option<DBPinnableSlice<'_>>, Error>>
+     |                                           ++++
+
+warning: hiding a lifetime that's elided elsewhere is confusing
+    --> vendor/rocksdb/src/db.rs:1171:9
+     |
+1171 |         &self,
+     |         ^^^^^ the lifetime is elided here
+...
+1176 |     ) -> Vec<Result<Option<DBPinnableSlice>, Error>>
+     |                            ^^^^^^^^^^^^^^^ the same lifetime is hidden here
+     |
+     = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+help: use `'_` for type paths
+     |
+1176 |     ) -> Vec<Result<Option<DBPinnableSlice<'_>>, Error>>
+     |                                           ++++
+
+warning: hiding a lifetime that's elided elsewhere is confusing
+    --> vendor/rocksdb/src/db.rs:1456:21
+     |
+1456 |     pub fn snapshot(&self) -> SnapshotWithThreadMode<Self> {
+     |                     ^^^^^     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^ the same lifetime is hidden here
+     |                     |
+     |                     the lifetime is elided here
+     |
+     = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+help: use `'_` for type paths
+     |
+1456 |     pub fn snapshot(&self) -> SnapshotWithThreadMode<'_, Self> {
+     |                                                      +++
+
+warning: hiding a lifetime that's elided elsewhere is confusing
+    --> vendor/rocksdb/src/db.rs:2153:22
+     |
+2153 |     pub fn cf_handle(&self, name: &str) -> Option<Arc<BoundColumnFamily>> {
+     |                      ^^^^^                            ^^^^^^^^^^^^^^^^^ the same lifetime is hidden here
+     |                      |
+     |                      the lifetime is elided here
+     |
+     = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+help: use `'_` for type paths
+     |
+2153 |     pub fn cf_handle(&self, name: &str) -> Option<Arc<BoundColumnFamily<'_>>> {
+     |                                                                        ++++
+
+warning: hiding a lifetime that's elided elsewhere is confusing
+   --> vendor/rocksdb/src/merge_operator.rs:195:17
+    |
+195 |     pub fn iter(&self) -> MergeOperandsIter {
+    |                 ^^^^^     ^^^^^^^^^^^^^^^^^ the same lifetime is hidden here
+    |                 |
+    |                 the lifetime is elided here
+    |
+    = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+help: use `'_` for type paths
+    |
+195 |     pub fn iter(&self) -> MergeOperandsIter<'_> {
+    |                                            ++++
+
+warning: hiding a lifetime that's elided elsewhere is confusing
+  --> vendor/rocksdb/src/snapshot.rs:63:9
+   |
+63 |         &self,
+   |         ^^^^^ the lifetime is elided here
+...
+66 |     ) -> DBIteratorWithThreadMode<D> {
+   |          ^^^^^^^^^^^^^^^^^^^^^^^^^^^ the same lifetime is hidden here
+   |
+   = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+help: use `'_` for type paths
+   |
+66 |     ) -> DBIteratorWithThreadMode<'_, D> {
+   |                                   +++
+
+warning: hiding a lifetime that's elided elsewhere is confusing
+  --> vendor/rocksdb/src/snapshot.rs:84:9
+   |
+84 |         &self,
+   |         ^^^^^ the lifetime is elided here
+...
+88 |     ) -> DBIteratorWithThreadMode<D> {
+   |          ^^^^^^^^^^^^^^^^^^^^^^^^^^^ the same lifetime is hidden here
+   |
+   = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+help: use `'_` for type paths
+   |
+88 |     ) -> DBIteratorWithThreadMode<'_, D> {
+   |                                   +++
+
+warning: hiding a lifetime that's elided elsewhere is confusing
+  --> vendor/rocksdb/src/snapshot.rs:94:25
+   |
+94 |     pub fn raw_iterator(&self) -> DBRawIteratorWithThreadMode<D> {
+   |                         ^^^^^     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ the same lifetime is hidden here
+   |                         |
+   |                         the lifetime is elided here
+   |
+   = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+help: use `'_` for type paths
+   |
+94 |     pub fn raw_iterator(&self) -> DBRawIteratorWithThreadMode<'_, D> {
+   |                                                               +++
+
+warning: hiding a lifetime that's elided elsewhere is confusing
+   --> vendor/rocksdb/src/snapshot.rs:102:9
+    |
+102 |         &self,
+    |         ^^^^^ the lifetime is elided here
+103 |         cf_handle: &impl AsColumnFamilyRef,
+104 |     ) -> DBRawIteratorWithThreadMode<D> {
+    |          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ the same lifetime is hidden here
+    |
+    = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+help: use `'_` for type paths
+    |
+104 |     ) -> DBRawIteratorWithThreadMode<'_, D> {
+    |                                      +++
+
+warning: hiding a lifetime that's elided elsewhere is confusing
+   --> vendor/rocksdb/src/snapshot.rs:110:29
+    |
+110 |     pub fn raw_iterator_opt(&self, mut readopts: ReadOptions) -> DBRawIteratorWithThreadMode<D> {
+    |                             ^^^^^ the lifetime is elided here    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ the same lifetime is hidden here
+    |
+    = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+help: use `'_` for type paths
+    |
+110 |     pub fn raw_iterator_opt(&self, mut readopts: ReadOptions) -> DBRawIteratorWithThreadMode<'_, D> {
+    |                                                                                              +++
+
+warning: hiding a lifetime that's elided elsewhere is confusing
+   --> vendor/rocksdb/src/snapshot.rs:118:9
+    |
+118 |         &self,
+    |         ^^^^^ the lifetime is elided here
+...
+121 |     ) -> DBRawIteratorWithThreadMode<D> {
+    |          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ the same lifetime is hidden here
+    |
+    = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+help: use `'_` for type paths
+    |
+121 |     ) -> DBRawIteratorWithThreadMode<'_, D> {
+    |                                      +++
+
+warning: hiding a lifetime that's elided elsewhere is confusing
+   --> vendor/rocksdb/src/snapshot.rs:167:39
+    |
+167 |     pub fn get_pinned<K: AsRef<[u8]>>(&self, key: K) -> Result<Option<DBPinnableSlice>, Error> {
+    |                                       ^^^^^                           ^^^^^^^^^^^^^^^ the same lifetime is hidden here
+    |                                       |
+    |                                       the lifetime is elided here
+    |
+    = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+help: use `'_` for type paths
+    |
+167 |     pub fn get_pinned<K: AsRef<[u8]>>(&self, key: K) -> Result<Option<DBPinnableSlice<'_>>, Error> {
+    |                                                                                      ++++
+
+warning: hiding a lifetime that's elided elsewhere is confusing
+   --> vendor/rocksdb/src/snapshot.rs:176:9
+    |
+176 |         &self,
+    |         ^^^^^ the lifetime is elided here
+...
+179 |     ) -> Result<Option<DBPinnableSlice>, Error> {
+    |                        ^^^^^^^^^^^^^^^ the same lifetime is hidden here
+    |
+    = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+help: use `'_` for type paths
+    |
+179 |     ) -> Result<Option<DBPinnableSlice<'_>>, Error> {
+    |                                       ++++
+
+warning: hiding a lifetime that's elided elsewhere is confusing
+   --> vendor/rocksdb/src/snapshot.rs:187:9
+    |
+187 |         &self,
+    |         ^^^^^ the lifetime is elided here
+...
+190 |     ) -> Result<Option<DBPinnableSlice>, Error> {
+    |                        ^^^^^^^^^^^^^^^ the same lifetime is hidden here
+    |
+    = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+help: use `'_` for type paths
+    |
+190 |     ) -> Result<Option<DBPinnableSlice<'_>>, Error> {
+    |                                       ++++
+
+warning: hiding a lifetime that's elided elsewhere is confusing
+   --> vendor/rocksdb/src/snapshot.rs:199:9
+    |
+199 |         &self,
+    |         ^^^^^ the lifetime is elided here
+...
+203 |     ) -> Result<Option<DBPinnableSlice>, Error> {
+    |                        ^^^^^^^^^^^^^^^ the same lifetime is hidden here
+    |
+    = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+help: use `'_` for type paths
+    |
+203 |     ) -> Result<Option<DBPinnableSlice<'_>>, Error> {
+    |                                       ++++
+
+warning: hiding a lifetime that's elided elsewhere is confusing
+   --> vendor/rocksdb/src/transactions/optimistic_transaction_db.rs:243:24
+    |
+243 |     pub fn transaction(&self) -> Transaction<Self> {
+    |                        ^^^^^     ^^^^^^^^^^^^^^^^^ the same lifetime is hidden here
+    |                        |
+    |                        the lifetime is elided here
+    |
+    = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+help: use `'_` for type paths
+    |
+243 |     pub fn transaction(&self) -> Transaction<'_, Self> {
+    |                                              +++
+
+warning: hiding a lifetime that's elided elsewhere is confusing
+   --> vendor/rocksdb/src/transactions/optimistic_transaction_db.rs:252:9
+    |
+252 |         &self,
+    |         ^^^^^ the lifetime is elided here
+...
+255 |     ) -> Transaction<Self> {
+    |          ^^^^^^^^^^^^^^^^^ the same lifetime is hidden here
+    |
+    = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+help: use `'_` for type paths
+    |
+255 |     ) -> Transaction<'_, Self> {
+    |                      +++
+
+warning: hiding a lifetime that's elided elsewhere is confusing
+  --> vendor/rocksdb/src/transactions/transaction.rs:77:9
+   |
+77 |         &self,
+   |         ^^^^^ the lifetime is elided here
+...
+80 |     ) -> Result<Option<DBPinnableSlice>, Error> {
+   |                        ^^^^^^^^^^^^^^^ the same lifetime is hidden here
+   |
+   = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+help: use `'_` for type paths
+   |
+80 |     ) -> Result<Option<DBPinnableSlice<'_>>, Error> {
+   |                                       ++++
+
+warning: hiding a lifetime that's elided elsewhere is confusing
+  --> vendor/rocksdb/src/transactions/transaction.rs:85:9
+   |
+85 |         &self,
+   |         ^^^^^ the lifetime is elided here
+...
+89 |     ) -> Result<Option<DBPinnableSlice>, Error> {
+   |                        ^^^^^^^^^^^^^^^ the same lifetime is hidden here
+   |
+   = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+help: use `'_` for type paths
+   |
+89 |     ) -> Result<Option<DBPinnableSlice<'_>>, Error> {
+   |                                       ++++
+
+warning: hiding a lifetime that's elided elsewhere is confusing
+   --> vendor/rocksdb/src/transactions/transaction.rs:186:21
+    |
+186 |     pub fn snapshot(&self) -> SnapshotWithThreadMode<Self> {
+    |                     ^^^^^     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^ the same lifetime is hidden here
+    |                     |
+    |                     the lifetime is elided here
+    |
+    = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+help: use `'_` for type paths
+    |
+186 |     pub fn snapshot(&self) -> SnapshotWithThreadMode<'_, Self> {
+    |                                                      +++
+
+warning: hiding a lifetime that's elided elsewhere is confusing
+   --> vendor/rocksdb/src/transactions/transaction.rs:230:39
+    |
+230 |     pub fn get_pinned<K: AsRef<[u8]>>(&self, key: K) -> Result<Option<DBPinnableSlice>, Error> {
+    |                                       ^^^^^                           ^^^^^^^^^^^^^^^ the same lifetime is hidden here
+    |                                       |
+    |                                       the lifetime is elided here
+    |
+    = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+help: use `'_` for type paths
+    |
+230 |     pub fn get_pinned<K: AsRef<[u8]>>(&self, key: K) -> Result<Option<DBPinnableSlice<'_>>, Error> {
+    |                                                                                      ++++
+
+warning: hiding a lifetime that's elided elsewhere is confusing
+   --> vendor/rocksdb/src/transactions/transaction.rs:248:9
+    |
+248 |         &self,
+    |         ^^^^^ the lifetime is elided here
+...
+251 |     ) -> Result<Option<DBPinnableSlice>, Error> {
+    |                        ^^^^^^^^^^^^^^^ the same lifetime is hidden here
+    |
+    = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+help: use `'_` for type paths
+    |
+251 |     ) -> Result<Option<DBPinnableSlice<'_>>, Error> {
+    |                                       ++++
+
+warning: hiding a lifetime that's elided elsewhere is confusing
+   --> vendor/rocksdb/src/transactions/transaction.rs:272:9
+    |
+272 |         &self,
+    |         ^^^^^ the lifetime is elided here
+...
+275 |     ) -> Result<Option<DBPinnableSlice>, Error> {
+    |                        ^^^^^^^^^^^^^^^ the same lifetime is hidden here
+    |
+    = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+help: use `'_` for type paths
+    |
+275 |     ) -> Result<Option<DBPinnableSlice<'_>>, Error> {
+    |                                       ++++
+
+warning: hiding a lifetime that's elided elsewhere is confusing
+   --> vendor/rocksdb/src/transactions/transaction.rs:297:9
+    |
+297 |         &self,
+    |         ^^^^^ the lifetime is elided here
+...
+301 |     ) -> Result<Option<DBPinnableSlice>, Error> {
+    |                        ^^^^^^^^^^^^^^^ the same lifetime is hidden here
+    |
+    = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+help: use `'_` for type paths
+    |
+301 |     ) -> Result<Option<DBPinnableSlice<'_>>, Error> {
+    |                                       ++++
+
+warning: hiding a lifetime that's elided elsewhere is confusing
+   --> vendor/rocksdb/src/transactions/transaction.rs:320:9
+    |
+320 |         &self,
+    |         ^^^^^ the lifetime is elided here
+...
+323 |     ) -> Result<Option<DBPinnableSlice>, Error> {
+    |                        ^^^^^^^^^^^^^^^ the same lifetime is hidden here
+    |
+    = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+help: use `'_` for type paths
+    |
+323 |     ) -> Result<Option<DBPinnableSlice<'_>>, Error> {
+    |                                       ++++
+
+warning: hiding a lifetime that's elided elsewhere is confusing
+   --> vendor/rocksdb/src/transactions/transaction.rs:357:9
+    |
+357 |         &self,
+    |         ^^^^^ the lifetime is elided here
+...
+361 |     ) -> Result<Option<DBPinnableSlice>, Error> {
+    |                        ^^^^^^^^^^^^^^^ the same lifetime is hidden here
+    |
+    = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+help: use `'_` for type paths
+    |
+361 |     ) -> Result<Option<DBPinnableSlice<'_>>, Error> {
+    |                                       ++++
+
+warning: hiding a lifetime that's elided elsewhere is confusing
+   --> vendor/rocksdb/src/transactions/transaction.rs:397:9
+    |
+397 |         &self,
+    |         ^^^^^ the lifetime is elided here
+...
+401 |     ) -> Result<Option<DBPinnableSlice>, Error> {
+    |                        ^^^^^^^^^^^^^^^ the same lifetime is hidden here
+    |
+    = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+help: use `'_` for type paths
+    |
+401 |     ) -> Result<Option<DBPinnableSlice<'_>>, Error> {
+    |                                       ++++
+
+warning: hiding a lifetime that's elided elsewhere is confusing
+   --> vendor/rocksdb/src/transactions/transaction.rs:458:9
+    |
+458 |         &self,
+    |         ^^^^^ the lifetime is elided here
+...
+463 |     ) -> Result<Option<DBPinnableSlice>, Error> {
+    |                        ^^^^^^^^^^^^^^^ the same lifetime is hidden here
+    |
+    = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+help: use `'_` for type paths
+    |
+463 |     ) -> Result<Option<DBPinnableSlice<'_>>, Error> {
+    |                                       ++++
+
+warning: hiding a lifetime that's elided elsewhere is confusing
+   --> vendor/rocksdb/src/transactions/transaction_db.rs:122:9
+    |
+122 |         &self,
+    |         ^^^^^ the lifetime is elided here
+...
+125 |     ) -> Result<Option<DBPinnableSlice>, Error> {
+    |                        ^^^^^^^^^^^^^^^ the same lifetime is hidden here
+    |
+    = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+help: use `'_` for type paths
+    |
+125 |     ) -> Result<Option<DBPinnableSlice<'_>>, Error> {
+    |                                       ++++
+
+warning: hiding a lifetime that's elided elsewhere is confusing
+   --> vendor/rocksdb/src/transactions/transaction_db.rs:130:9
+    |
+130 |         &self,
+    |         ^^^^^ the lifetime is elided here
+...
+134 |     ) -> Result<Option<DBPinnableSlice>, Error> {
+    |                        ^^^^^^^^^^^^^^^ the same lifetime is hidden here
+    |
+    = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+help: use `'_` for type paths
+    |
+134 |     ) -> Result<Option<DBPinnableSlice<'_>>, Error> {
+    |                                       ++++
+
+warning: hiding a lifetime that's elided elsewhere is confusing
+   --> vendor/rocksdb/src/transactions/transaction_db.rs:392:24
+    |
+392 |     pub fn transaction(&self) -> Transaction<Self> {
+    |                        ^^^^^     ^^^^^^^^^^^^^^^^^ the same lifetime is hidden here
+    |                        |
+    |                        the lifetime is elided here
+    |
+    = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+help: use `'_` for type paths
+    |
+392 |     pub fn transaction(&self) -> Transaction<'_, Self> {
+    |                                              +++
+
+warning: hiding a lifetime that's elided elsewhere is confusing
+   --> vendor/rocksdb/src/transactions/transaction_db.rs:419:34
+    |
+419 |     pub fn prepared_transactions(&self) -> Vec<Transaction<Self>> {
+    |                                  ^^^^^         ^^^^^^^^^^^^^^^^^ the same lifetime is hidden here
+    |                                  |
+    |                                  the lifetime is elided here
+    |
+    = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+help: use `'_` for type paths
+    |
+419 |     pub fn prepared_transactions(&self) -> Vec<Transaction<'_, Self>> {
+    |                                                            +++
+
+warning: hiding a lifetime that's elided elsewhere is confusing
+   --> vendor/rocksdb/src/transactions/transaction_db.rs:467:39
+    |
+467 |     pub fn get_pinned<K: AsRef<[u8]>>(&self, key: K) -> Result<Option<DBPinnableSlice>, Error> {
+    |                                       ^^^^^                           ^^^^^^^^^^^^^^^ the same lifetime is hidden here
+    |                                       |
+    |                                       the lifetime is elided here
+    |
+    = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+help: use `'_` for type paths
+    |
+467 |     pub fn get_pinned<K: AsRef<[u8]>>(&self, key: K) -> Result<Option<DBPinnableSlice<'_>>, Error> {
+    |                                                                                      ++++
+
+warning: hiding a lifetime that's elided elsewhere is confusing
+   --> vendor/rocksdb/src/transactions/transaction_db.rs:473:9
+    |
+473 |         &self,
+    |         ^^^^^ the lifetime is elided here
+...
+476 |     ) -> Result<Option<DBPinnableSlice>, Error> {
+    |                        ^^^^^^^^^^^^^^^ the same lifetime is hidden here
+    |
+    = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+help: use `'_` for type paths
+    |
+476 |     ) -> Result<Option<DBPinnableSlice<'_>>, Error> {
+    |                                       ++++
+
+warning: hiding a lifetime that's elided elsewhere is confusing
+   --> vendor/rocksdb/src/transactions/transaction_db.rs:482:9
+    |
+482 |         &self,
+    |         ^^^^^ the lifetime is elided here
+...
+485 |     ) -> Result<Option<DBPinnableSlice>, Error> {
+    |                        ^^^^^^^^^^^^^^^ the same lifetime is hidden here
+    |
+    = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+help: use `'_` for type paths
+    |
+485 |     ) -> Result<Option<DBPinnableSlice<'_>>, Error> {
+    |                                       ++++
+
+warning: hiding a lifetime that's elided elsewhere is confusing
+   --> vendor/rocksdb/src/transactions/transaction_db.rs:504:9
+    |
+504 |         &self,
+    |         ^^^^^ the lifetime is elided here
+...
+508 |     ) -> Result<Option<DBPinnableSlice>, Error> {
+    |                        ^^^^^^^^^^^^^^^ the same lifetime is hidden here
+    |
+    = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+help: use `'_` for type paths
+    |
+508 |     ) -> Result<Option<DBPinnableSlice<'_>>, Error> {
+    |                                       ++++
+
+warning: hiding a lifetime that's elided elsewhere is confusing
+   --> vendor/rocksdb/src/transactions/transaction_db.rs:927:21
+    |
+927 |     pub fn snapshot(&self) -> SnapshotWithThreadMode<Self> {
+    |                     ^^^^^     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^ the same lifetime is hidden here
+    |                     |
+    |                     the lifetime is elided here
+    |
+    = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+help: use `'_` for type paths
+    |
+927 |     pub fn snapshot(&self) -> SnapshotWithThreadMode<'_, Self> {
+    |                                                      +++
+
+warning: hiding a lifetime that's elided elsewhere is confusing
+   --> vendor/rocksdb/src/transactions/transaction_db.rs:986:22
+    |
+986 |     pub fn cf_handle(&self, name: &str) -> Option<Arc<BoundColumnFamily>> {
+    |                      ^^^^^                            ^^^^^^^^^^^^^^^^^ the same lifetime is hidden here
+    |                      |
+    |                      the lifetime is elided here
+    |
+    = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+help: use `'_` for type paths
+    |
+986 |     pub fn cf_handle(&self, name: &str) -> Option<Arc<BoundColumnFamily<'_>>> {
+    |                                                                        ++++
+
+warning: `rocksdb` (lib) generated 46 warnings (run `cargo fix --lib -p rocksdb` to apply 46 suggestions)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.55s
+     Running `target/debug/citizen-node config/localnet/validator-alpha.toml`
+[2m2026-02-12T16:40:00.753529Z[0m [32m INFO[0m [3mvalidator_id[0m[2m=[0mvalidator-alpha [3mblock_time_ms[0m[2m=[0m1000 [3mquorum_bps[0m[2m=[0m8000 [3mloaded_config[0m[2m=[0mconfig/localnet/validator-alpha.toml
+[2m2026-02-12T16:40:00.753892Z[0m [32m INFO[0m [3mverifying_key[0m[2m=[0m712651f450ba05b63898b99ef5f7ba45632e8e2527f7f715cd671ec4024cc51e [3mnote[0m[2m=[0m"share this key for validator admission"
+[2m2026-02-12T16:40:01.143958Z[0m [32m INFO[0m starting API server [3maddr[0m[2m=[0m127.0.0.1:8081
+[2m2026-02-12T16:40:01.144037Z[0m [32m INFO[0m [3mmsg[0m[2m=[0m"node running" [3mapi_port[0m[2m=[0m8081
+[2m2026-02-12T16:53:24.156895Z[0m [32m INFO[0m [3mmsg[0m[2m=[0m"shutdown signal received"

@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "keys": [
+    {
+      "key_id": "00a0731a-025a-42d9-a011-b70c4f699b63",
+      "label": "e2e",
+      "public_key_hex": "5cdb5332869c7d8ecf240c9a77ea1038dd090f411a4b8d0f481902cd6e9ce8fb",
+      "encrypted_secret_key": {
+        "ciphertext_hex": "57a0bfb2f93918b53019303d20423e0a5f05ce2138626a9970de7c44cd691d88068b0388ba9944436ae3fc65613bad7f",
+        "salt_hex": "aed85b8a35e4c8aff456688d521ae894",
+        "nonce_hex": "377ccb128bf0ef3bde1990e3",
+        "kdf": "argon2id",
+        "kdf_params": {
+          "memory_kib": 19456,
+          "iterations": 2,
+          "parallelism": 1,
+          "output_length": 32
+        }
+      },
+      "created_at": 1770813619
+    }
+  ]
+}
