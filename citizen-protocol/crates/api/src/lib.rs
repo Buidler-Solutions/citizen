@@ -14,6 +14,7 @@ use citizen_types::{
 use serde::Serialize;
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
+use std::collections::HashSet;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::net::TcpListener;
@@ -64,6 +65,7 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
         let consent_check_ledger = Arc::clone(&self.ledger);
         let submit_ledger = Arc::clone(&self.ledger);
         let submit_envelope_ledger = Arc::clone(&self.ledger);
+        let builder_credits_ledger = Arc::clone(&self.ledger);
         let submit_receipts = Arc::clone(&self.receipts);
         let submit_legacy_receipts = Arc::clone(&self.receipts);
         let get_receipt_store = Arc::clone(&self.receipts);
@@ -126,6 +128,13 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
                 get(move |Path(receipt_id): Path<Uuid>| {
                     let receipts = Arc::clone(&get_receipt_store);
                     async move { Self::handle_get_receipt(receipts, receipt_id).await }
+                }),
+            )
+            .route(
+                "/api/v1/builder-credits/:builder_id",
+                get(move |Path(builder_id): Path<String>| {
+                    let ledger = Arc::clone(&builder_credits_ledger);
+                    async move { Self::handle_get_builder_credits(ledger, builder_id).await }
                 }),
             )
     }
@@ -333,6 +342,62 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
         )
     }
 
+    async fn handle_get_builder_credits(
+        ledger: Arc<Ledger<S>>,
+        builder_id: String,
+    ) -> (StatusCode, Json<serde_json::Value>) {
+        let entries = ledger
+            .storage()
+            .namespace_entries(&"builder.credits".to_string())
+            .unwrap_or_default();
+
+        let mut credited: u64 = 0;
+        let mut sponsored: u64 = 0;
+        let mut seen_sponsorships: HashSet<String> = HashSet::new();
+        let mut unique_sponsorship_count = 0_u64;
+
+        for entry in entries {
+            if entry.object_id != builder_id {
+                continue;
+            }
+            let amount = entry
+                .payload
+                .get("amount")
+                .and_then(|value| value.as_u64())
+                .unwrap_or_default();
+            match entry.action.as_str() {
+                "CREDIT_GRANT" => credited = credited.saturating_add(amount),
+                "SPONSOR_USAGE" => {
+                    sponsored = sponsored.saturating_add(amount);
+                    if let Some(sponsorship_id) = entry
+                        .payload
+                        .get("sponsorship_id")
+                        .and_then(|value| value.as_str())
+                    {
+                        if seen_sponsorships.insert(sponsorship_id.to_string()) {
+                            unique_sponsorship_count = unique_sponsorship_count.saturating_add(1);
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        (
+            StatusCode::OK,
+            Json(serde_json::json!({
+                "builder_id": builder_id,
+                "namespace": "builder.credits",
+                "credited": credited,
+                "sponsored": sponsored,
+                "available": credited.saturating_sub(sponsored),
+                "instrumentation": {
+                    "unique_sponsorship_count": unique_sponsorship_count
+                }
+            })),
+        )
+    }
+
     async fn finalize_entry(
         ledger: Arc<Ledger<S>>,
         entry: LedgerEntry,
@@ -495,6 +560,19 @@ mod tests {
                     config: json!({}),
                 },
             ],
+        }]);
+        ledger.bootstrap_namespaces(vec![NamespaceRuleset {
+            descriptor: NamespaceDescriptor {
+                namespace: "builder.credits".to_string(),
+                version: 1,
+                rules_hash: "builder-credits-v1".to_string(),
+                governed_by: "governance".to_string(),
+            },
+            writers: BTreeSet::new(),
+            validators: vec![NamespaceRule {
+                name: "builder_credit_policy".to_string(),
+                config: json!({"max_daily_spend": 10_000}),
+            }],
         }]);
         ApiServer::new(ledger)
     }
@@ -854,5 +932,68 @@ mod tests {
         let payload: Value = serde_json::from_slice(&body).expect("consent payload");
         assert_eq!(payload["result"]["valid"], false);
         assert_eq!(payload["result"]["reason"], "consent receipt revoked");
+    }
+
+    #[tokio::test]
+    async fn builder_credit_endpoint_returns_available_balance_and_instrumentation() {
+        let app = build_server().router();
+        let now = chrono::Utc::now().timestamp();
+        let grant_entry = LedgerEntry {
+            entry_id: Uuid::new_v4(),
+            namespace: "builder.credits".to_string(),
+            action: "CREDIT_GRANT".to_string(),
+            object_id: "builder:alpha".to_string(),
+            payload: json!({"amount": 100_u64}),
+            author: "governance:ops".to_string(),
+            signature: "sig".to_string(),
+            timestamp: now,
+        };
+        let sponsor_entry = LedgerEntry {
+            entry_id: Uuid::new_v4(),
+            namespace: "builder.credits".to_string(),
+            action: "SPONSOR_USAGE".to_string(),
+            object_id: "builder:alpha".to_string(),
+            payload: json!({"amount": 30_u64, "sponsorship_id":"spn-1", "sponsored_did":"did:ledger:user1"}),
+            author: "builder:alpha".to_string(),
+            signature: "sig".to_string(),
+            timestamp: now + 1,
+        };
+
+        for entry in [grant_entry, sponsor_entry] {
+            app.clone()
+                .oneshot(
+                    Request::builder()
+                        .method("POST")
+                        .uri("/api/v1/entries/submit")
+                        .header("content-type", "application/json")
+                        .body(Body::from(
+                            serde_json::to_vec(&entry).expect("serialize entry"),
+                        ))
+                        .expect("request"),
+                )
+                .await
+                .expect("submit response");
+        }
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri("/api/v1/builder-credits/builder:alpha")
+                    .body(Body::empty())
+                    .expect("request"),
+            )
+            .await
+            .expect("builder credits response");
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("body bytes");
+        let payload: Value = serde_json::from_slice(&body).expect("builder credits payload");
+        assert_eq!(payload["credited"], 100);
+        assert_eq!(payload["sponsored"], 30);
+        assert_eq!(payload["available"], 70);
+        assert_eq!(payload["instrumentation"]["unique_sponsorship_count"], 1);
     }
 }
