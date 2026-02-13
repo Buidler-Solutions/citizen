@@ -42,6 +42,13 @@ Implementation handoff status is tracked in:
 
 - `docs/PHASE_IMPLEMENTATION_TRACKER.md`
 
+Current delivery includes Phase 2 identity/data ownership primitives:
+
+- DID registry namespace rule enforcement (`identity.citizen`) with governed action allowlists.
+- Resolver endpoint: `GET /api/v1/identity/:did` for latest DID status (`Active`/`Revoked`).
+- Consent receipt namespace policy enforcement (`consent.receipt`) and API policy checks via `POST /api/v1/consent/check`.
+- Wallet SDK verification helpers for DID document checks and off-chain commitment validation against on-chain consent receipts.
+
 ## Getting Started
 
 1. Install the Rust toolchain (`rustup` with stable compiler).
