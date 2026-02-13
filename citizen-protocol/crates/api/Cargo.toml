@@ -1,12 +1,12 @@
 [package]
-name = "citizen-api"
+name = "api"
 version = "0.1.0"
 edition = "2021"
 license = "Apache-2.0"
 
 [dependencies]
 citizen-types = { path = "../types" }
-citizen-ledger = { path = "../ledger" }
+citizen-ledger = { package = "ledger", path = "../ledger" }
 citizen-crypto = { path = "../crypto" }
 citizen-storage = { path = "../storage" }
 axum = { workspace = true }
