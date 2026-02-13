@@ -648,6 +648,8 @@ name = "citizen-api"
 version = "0.1.0"
 dependencies = [
  "axum",
+ "chrono",
+ "citizen-crypto",
  "citizen-ledger",
  "citizen-storage",
  "citizen-types",
@@ -655,7 +657,9 @@ dependencies = [
  "serde_json",
  "thiserror 1.0.69",
  "tokio",
+ "tower",
  "tracing",
+ "uuid",
 ]
 
 [[package]]
