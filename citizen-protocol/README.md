@@ -23,6 +23,21 @@ citizen-protocol/
     └── GOVERNANCE_CHARTER_V1.md
 ```
 
+
+## Strategic Overhaul Baseline
+
+Citizen's overhaul direction is defined in:
+
+- `docs/DEEP_RESEARCH_ARCHITECTURE_BASELINE.md`
+
+The baseline sets the authoritative plan for:
+
+- two-plane architecture (governed namespaces + scoped audited execution),
+- non-transferable builder fee credits and sponsored usage,
+- user-owned data with on-chain verifiability,
+- standards-led interoperability rollout, and
+- canonical API + deterministic receipt unification.
+
 ## Getting Started
 
 1. Install the Rust toolchain (`rustup` with stable compiler).
