@@ -32,13 +32,13 @@ Baseline reference: `docs/DEEP_RESEARCH_ARCHITECTURE_BASELINE.md` (Phase 1 secti
   - `POST /api/v1/entries/submit` now routes through envelope flow.
 
 ### Remaining for Phase 1 completion
-- [ ] Populate deterministic receipt finality payload (`block_height`, `block_hash`, `commit_proof`) when entries are finalized.
+- [x] Populate deterministic receipt finality payload (`block_height`, `block_hash`, `commit_proof`) when entries are finalized.
 - [ ] Align explorer backend/frontend contracts with canonical API and receipt model.
 - [ ] Remove/replace mock legacy explorer assumptions with canonical contract responses.
-- [ ] Add end-to-end integration tests for envelope submit -> receipt retrieval -> finality proof visibility.
+- [x] Add end-to-end integration tests for envelope submit -> receipt retrieval -> finality proof visibility.
 
 ### Last Update
-- 2026-02-13: Added Phase 1 completion checklist and handoff rules after review of prior PR progress.
+- 2026-02-13: Added deterministic finality payload wiring for canonical receipts and API integration coverage for submit->receipt->finality flow.
 - Commit: this commit.
 
 ---
