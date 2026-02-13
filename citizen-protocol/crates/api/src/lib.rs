@@ -2,19 +2,27 @@ use axum::extract::Path;
 use axum::http::StatusCode;
 use axum::routing::{get, post};
 use axum::{serve, Json, Router};
+use chrono::Utc;
 use citizen_ledger::Ledger;
 use citizen_storage::LedgerStorage;
-use citizen_types::{BlockHeight, LedgerEntry, ProtocolError};
+use citizen_types::{
+    BlockHeight, DeterministicReceipt, LedgerEntry, ProtocolError, ReceiptStatus, SignedEnvelope,
+    ValidationSummary,
+};
 use serde::Serialize;
+use std::collections::BTreeMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::net::TcpListener;
+use tokio::sync::RwLock;
 use tokio::task::JoinHandle;
 use tracing::info;
+use uuid::Uuid;
 
 #[derive(Clone)]
 pub struct ApiServer<S: LedgerStorage + 'static> {
     ledger: Arc<Ledger<S>>,
+    receipts: Arc<RwLock<BTreeMap<Uuid, DeterministicReceipt>>>,
 }
 
 #[derive(Debug, Serialize)]
@@ -24,7 +32,10 @@ struct ApiError {
 
 impl<S: LedgerStorage + 'static> ApiServer<S> {
     pub fn new(ledger: Arc<Ledger<S>>) -> Self {
-        Self { ledger }
+        Self {
+            ledger,
+            receipts: Arc::new(RwLock::new(BTreeMap::new())),
+        }
     }
 
     pub async fn serve(self, addr: SocketAddr) -> JoinHandle<()> {
@@ -47,6 +58,10 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
         let namespaces_ledger = Arc::clone(&self.ledger);
         let entries_ledger = Arc::clone(&self.ledger);
         let submit_ledger = Arc::clone(&self.ledger);
+        let submit_envelope_ledger = Arc::clone(&self.ledger);
+        let submit_receipts = Arc::clone(&self.receipts);
+        let submit_legacy_receipts = Arc::clone(&self.receipts);
+        let get_receipt_store = Arc::clone(&self.receipts);
 
         Router::new()
             .route("/health", get(Self::health))
@@ -75,7 +90,23 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
                 "/api/v1/entries/submit",
                 post(move |Json(entry): Json<LedgerEntry>| {
                     let ledger = Arc::clone(&submit_ledger);
-                    async move { Self::handle_submit_entry(ledger, entry).await }
+                    let receipts = Arc::clone(&submit_legacy_receipts);
+                    async move { Self::handle_submit_entry(ledger, receipts, entry).await }
+                }),
+            )
+            .route(
+                "/api/v1/envelopes/submit",
+                post(move |Json(envelope): Json<SignedEnvelope<LedgerEntry>>| {
+                    let ledger = Arc::clone(&submit_envelope_ledger);
+                    let receipts = Arc::clone(&submit_receipts);
+                    async move { Self::handle_submit_envelope(ledger, receipts, envelope).await }
+                }),
+            )
+            .route(
+                "/api/v1/receipts/:receipt_id",
+                get(move |Path(receipt_id): Path<Uuid>| {
+                    let receipts = Arc::clone(&get_receipt_store);
+                    async move { Self::handle_get_receipt(receipts, receipt_id).await }
                 }),
             )
     }
@@ -110,8 +141,36 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
 
     async fn handle_submit_entry(
         ledger: Arc<Ledger<S>>,
+        receipts: Arc<RwLock<BTreeMap<Uuid, DeterministicReceipt>>>,
         entry: LedgerEntry,
     ) -> (StatusCode, Json<serde_json::Value>) {
+        let envelope = SignedEnvelope {
+            envelope_id: Uuid::new_v4(),
+            signer: entry.author.clone(),
+            signature: entry.signature.clone(),
+            submitted_at: Utc::now(),
+            payload: entry,
+        };
+        Self::handle_submit_envelope(ledger, receipts, envelope).await
+    }
+
+    async fn handle_submit_envelope(
+        ledger: Arc<Ledger<S>>,
+        receipts: Arc<RwLock<BTreeMap<Uuid, DeterministicReceipt>>>,
+        envelope: SignedEnvelope<LedgerEntry>,
+    ) -> (StatusCode, Json<serde_json::Value>) {
+        if envelope.signature.is_empty() {
+            return protocol_error_response(ProtocolError::ValidationFailed(
+                "missing envelope signature".into(),
+            ));
+        }
+
+        let action = envelope.payload.action.clone();
+        let mut entry = envelope.payload;
+        if entry.signature.is_empty() {
+            entry.signature = envelope.signature.clone();
+        }
+
         if let Err(err) = ledger.validate_entry_submission(&entry) {
             return protocol_error_response(err);
         }
@@ -122,13 +181,48 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
             return protocol_error_response(err);
         }
 
+        let receipt = DeterministicReceipt {
+            receipt_id: Uuid::new_v4(),
+            envelope_id: envelope.envelope_id,
+            status: ReceiptStatus::Accepted,
+            validation: ValidationSummary {
+                namespace: namespace.clone(),
+                action,
+                outcome: "namespace rules accepted; pending block commit proof".into(),
+            },
+            finality: None,
+            recorded_at: Utc::now(),
+        };
+        receipts
+            .write()
+            .await
+            .insert(receipt.receipt_id, receipt.clone());
+
         (
             StatusCode::ACCEPTED,
             Json(serde_json::json!({
                 "status": "accepted",
                 "entry_id": entry_id,
                 "namespace": namespace,
+                "receipt": receipt,
             })),
+        )
+    }
+
+    async fn handle_get_receipt(
+        receipts: Arc<RwLock<BTreeMap<Uuid, DeterministicReceipt>>>,
+        receipt_id: Uuid,
+    ) -> (StatusCode, Json<serde_json::Value>) {
+        let store = receipts.read().await;
+        if let Some(receipt) = store.get(&receipt_id) {
+            return (
+                StatusCode::OK,
+                Json(serde_json::json!({"receipt": receipt})),
+            );
+        }
+        (
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({"error": "receipt not found"})),
         )
     }
 }

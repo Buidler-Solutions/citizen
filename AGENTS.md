@@ -8,6 +8,41 @@ Working Draft – Non-Currency, Governance-First Ledger
 
 ---
 
+
+## Strategic Update
+v0.2 – Deep Research Alignment (Authoritative for current implementation planning)
+
+The repository is now aligned to the deep-research baseline in:
+- `citizen-protocol/docs/DEEP_RESEARCH_ARCHITECTURE_BASELINE.md`
+
+All contributors and agents should treat the following as active direction:
+
+1. **Two-Plane Architecture**
+   - Governed Data Plane (namespace-first) is the default build path.
+   - Programmable Execution Plane (Rust/WASM) is optional, scoped, audited, and governance-gated.
+
+2. **Builder-First Product Surface**
+   - Prioritize canonical APIs, deterministic receipts, SDK usability, and local-stack onboarding.
+   - Keep namespaces first-class even as execution capabilities expand.
+
+3. **User Data Ownership**
+   - On-chain: commitments, consent receipts, status/revocation events, governance proofs.
+   - Off-chain: encrypted user-controlled data custody by default.
+
+4. **Interoperability Rollout**
+   - Standards-led and staged (identifier standards first, adapters/bridges later).
+   - No ad-hoc one-off interoperability paths without governance review.
+
+5. **Non-Speculative Economics**
+   - Favor non-transferable builder fee credits and sponsored user actions.
+   - Avoid introducing speculative token narratives into core protocol docs.
+
+6. **Documentation Consistency Rule**
+   - If documentation conflicts with the deep-research baseline, update or remove it.
+   - Keep README and architecture docs synchronized with the baseline.
+
+---
+
 ## 1. Abstract
 
 This document specifies the **Decentralized Public Ledger Protocol (CITIZEN)** — a fast, Sybil-resistant, governance-driven distributed ledger designed for **public truth, records, and accountability**, not cryptocurrency speculation.
