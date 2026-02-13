@@ -98,8 +98,17 @@ Baseline reference: `docs/DEEP_RESEARCH_ARCHITECTURE_BASELINE.md` (Phase 1 secti
 
 ## Phase 5 — Scoped WASM + Interop
 ### Scope
-- [ ] Deterministic audited module runtime
-- [ ] Standards-based interoperability adapters
+- [x] Deterministic audited module runtime
+- [x] Standards-based interoperability adapters
+
+### Completed
+- [x] Added `wasm_runtime_policy` namespace rule for `execution.module` to enforce governance-approved module classes, audit artifact requirements, deterministic gas bounds, and deterministic execution receipt commitments.
+- [x] Added `interop_adapter_policy` namespace rule for `interop.adapter` to enforce governance-approved standards and explicit adapter/link/proof payload requirements.
+- [x] Added builder-facing endpoints:
+  - `GET /api/v1/modules/:module_id` for deterministic module runtime/audit status.
+  - `GET /api/v1/interop/:object_id` for standards-based interop linkage/proof visibility.
+- [x] Added regression coverage for scoped WASM policy enforcement and interop policy/endpoint behavior.
 
 ### Last Update
-- 2026-02-13: Not started.
+- 2026-02-13: Implemented Phase 5 scoped WASM runtime and standards-led interop adapters with new governance-aware namespace rules, builder-facing status endpoints, and regression test coverage.
+- Commit: see git history
