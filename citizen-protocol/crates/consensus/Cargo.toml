@@ -7,7 +7,7 @@ license = "Apache-2.0"
 [dependencies]
 citizen-types = { path = "../types" }
 citizen-crypto = { path = "../crypto" }
-citizen-ledger = { package = "ledger", path = "../ledger" }
+citizen-ledger = { path = "../ledger" }
 citizen-governance = { path = "../governance" }
 citizen-network = { path = "../network" }
 citizen-storage = { path = "../storage" }
