@@ -100,6 +100,8 @@ impl<S: LedgerStorage + 'static> Ledger<S> {
             "author_matches_object_id" => self.author_matches_object_id(entry),
             "builder_credit_policy" => self.builder_credit_policy(entry, config),
             "asset_control_policy" => self.asset_control_policy(entry, config),
+            "wasm_runtime_policy" => self.wasm_runtime_policy(entry, config),
+            "interop_adapter_policy" => self.interop_adapter_policy(entry, config),
             _ => {
                 let handler = self
                     .custom_rule_handlers
@@ -669,6 +671,210 @@ impl<S: LedgerStorage + 'static> Ledger<S> {
         }
     }
 
+    fn wasm_runtime_policy(&self, entry: &LedgerEntry, config: &Value) -> Result<()> {
+        let module_id = entry
+            .payload
+            .get("module_id")
+            .and_then(Value::as_str)
+            .ok_or_else(|| {
+                ProtocolError::ValidationFailed(
+                    "wasm runtime entries require payload.module_id".to_string(),
+                )
+            })?;
+        if module_id != entry.object_id {
+            return Err(ProtocolError::ValidationFailed(
+                "wasm runtime object_id must equal payload.module_id".to_string(),
+            ));
+        }
+
+        let allowed_classes: HashSet<String> = config
+            .get("allowed_module_classes")
+            .and_then(Value::as_array)
+            .map(|items| {
+                items
+                    .iter()
+                    .filter_map(Value::as_str)
+                    .map(ToString::to_string)
+                    .collect()
+            })
+            .unwrap_or_default();
+
+        match entry.action.as_str() {
+            "REGISTER_MODULE" => {
+                let module_class = entry
+                    .payload
+                    .get("module_class")
+                    .and_then(Value::as_str)
+                    .ok_or_else(|| {
+                        ProtocolError::ValidationFailed(
+                            "register module requires payload.module_class".to_string(),
+                        )
+                    })?;
+                if !allowed_classes.is_empty() && !allowed_classes.contains(module_class) {
+                    return Err(ProtocolError::ValidationFailed(format!(
+                        "module_class '{module_class}' is not governance approved"
+                    )));
+                }
+                if entry
+                    .payload
+                    .get("wasm_hash")
+                    .and_then(Value::as_str)
+                    .is_none()
+                {
+                    return Err(ProtocolError::ValidationFailed(
+                        "register module requires payload.wasm_hash".to_string(),
+                    ));
+                }
+                if entry
+                    .payload
+                    .get("audit_hash")
+                    .and_then(Value::as_str)
+                    .is_none()
+                {
+                    return Err(ProtocolError::ValidationFailed(
+                        "register module requires payload.audit_hash".to_string(),
+                    ));
+                }
+                Ok(())
+            }
+            "ACTIVATE_MODULE" => {
+                let required_approvals = config
+                    .get("required_governance_approvals")
+                    .and_then(Value::as_u64)
+                    .unwrap_or(1);
+                let approvals = entry
+                    .payload
+                    .get("governance_approvals")
+                    .and_then(Value::as_u64)
+                    .ok_or_else(|| {
+                        ProtocolError::ValidationFailed(
+                            "activate module requires payload.governance_approvals".to_string(),
+                        )
+                    })?;
+                if approvals < required_approvals {
+                    return Err(ProtocolError::ValidationFailed(format!(
+                        "governance approvals {approvals} below required {required_approvals}"
+                    )));
+                }
+                Ok(())
+            }
+            "EXECUTE_MODULE" => {
+                let gas_limit = entry
+                    .payload
+                    .get("deterministic_gas_limit")
+                    .and_then(Value::as_u64)
+                    .ok_or_else(|| {
+                        ProtocolError::ValidationFailed(
+                            "execute module requires payload.deterministic_gas_limit".to_string(),
+                        )
+                    })?;
+                if gas_limit == 0 {
+                    return Err(ProtocolError::ValidationFailed(
+                        "deterministic gas limit must be greater than zero".to_string(),
+                    ));
+                }
+                if entry
+                    .payload
+                    .get("deterministic_receipt_hash")
+                    .and_then(Value::as_str)
+                    .is_none()
+                {
+                    return Err(ProtocolError::ValidationFailed(
+                        "execute module requires payload.deterministic_receipt_hash".to_string(),
+                    ));
+                }
+                Ok(())
+            }
+            _ => Err(ProtocolError::ValidationFailed(
+                "wasm runtime action is not supported".to_string(),
+            )),
+        }
+    }
+
+    fn interop_adapter_policy(&self, entry: &LedgerEntry, config: &Value) -> Result<()> {
+        let allowed_standards: HashSet<String> = config
+            .get("allowed_standards")
+            .and_then(Value::as_array)
+            .map(|items| {
+                items
+                    .iter()
+                    .filter_map(Value::as_str)
+                    .map(ToString::to_string)
+                    .collect()
+            })
+            .unwrap_or_default();
+
+        let standard = entry
+            .payload
+            .get("standard")
+            .and_then(Value::as_str)
+            .ok_or_else(|| {
+                ProtocolError::ValidationFailed(
+                    "interop adapter entries require payload.standard".to_string(),
+                )
+            })?;
+        if !allowed_standards.is_empty() && !allowed_standards.contains(standard) {
+            return Err(ProtocolError::ValidationFailed(format!(
+                "interop standard '{standard}' is not governance approved"
+            )));
+        }
+
+        match entry.action.as_str() {
+            "REGISTER_ADAPTER" => {
+                if entry
+                    .payload
+                    .get("adapter_id")
+                    .and_then(Value::as_str)
+                    .is_none()
+                {
+                    return Err(ProtocolError::ValidationFailed(
+                        "register adapter requires payload.adapter_id".to_string(),
+                    ));
+                }
+                if entry
+                    .payload
+                    .get("spec_ref")
+                    .and_then(Value::as_str)
+                    .is_none()
+                {
+                    return Err(ProtocolError::ValidationFailed(
+                        "register adapter requires payload.spec_ref".to_string(),
+                    ));
+                }
+                Ok(())
+            }
+            "LINK_IDENTIFIER" => {
+                if entry
+                    .payload
+                    .get("remote_id")
+                    .and_then(Value::as_str)
+                    .is_none()
+                {
+                    return Err(ProtocolError::ValidationFailed(
+                        "link identifier requires payload.remote_id".to_string(),
+                    ));
+                }
+                Ok(())
+            }
+            "EMIT_PROOF" => {
+                if entry
+                    .payload
+                    .get("proof_hash")
+                    .and_then(Value::as_str)
+                    .is_none()
+                {
+                    return Err(ProtocolError::ValidationFailed(
+                        "emit proof requires payload.proof_hash".to_string(),
+                    ));
+                }
+                Ok(())
+            }
+            _ => Err(ProtocolError::ValidationFailed(
+                "interop adapter action is not supported".to_string(),
+            )),
+        }
+    }
+
     pub fn validate_entry_submission(&self, entry: &LedgerEntry) -> Result<()> {
         self.validate_entry(entry)
     }
@@ -1082,5 +1288,88 @@ mod tests {
         assert!(flag_err
             .to_string()
             .contains("asset policy flag is not allowed"));
+    }
+
+    #[test]
+    fn enforces_wasm_runtime_policy_requirements() {
+        let ledger = Ledger::in_memory();
+        let namespace = "execution.module";
+        ledger.bootstrap_namespaces(vec![namespace_with_rules(
+            namespace,
+            vec![NamespaceRule {
+                name: "wasm_runtime_policy".into(),
+                config: json!({
+                    "allowed_module_classes": ["asset", "interop"],
+                    "required_governance_approvals": 3
+                }),
+            }],
+        )]);
+
+        let mut register = test_entry(namespace);
+        register.action = "REGISTER_MODULE".into();
+        register.object_id = "module.asset.v1".into();
+        register.payload = json!({
+            "module_id": "module.asset.v1",
+            "module_class": "asset",
+            "wasm_hash": "wasm:abc",
+            "audit_hash": "audit:abc"
+        });
+        ledger
+            .apply_entry(register)
+            .expect("registered module should pass policy");
+
+        let mut activate = test_entry(namespace);
+        activate.action = "ACTIVATE_MODULE".into();
+        activate.object_id = "module.asset.v1".into();
+        activate.payload = json!({
+            "module_id": "module.asset.v1",
+            "governance_approvals": 2
+        });
+
+        let err = ledger
+            .apply_entry(activate)
+            .expect_err("activation below quorum should fail");
+        assert!(err
+            .to_string()
+            .contains("governance approvals 2 below required 3"));
+    }
+
+    #[test]
+    fn enforces_interop_adapter_policy_standard_allowlist() {
+        let ledger = Ledger::in_memory();
+        let namespace = "interop.adapter";
+        ledger.bootstrap_namespaces(vec![namespace_with_rules(
+            namespace,
+            vec![NamespaceRule {
+                name: "interop_adapter_policy".into(),
+                config: json!({"allowed_standards":["did-core","vc-data-model"]}),
+            }],
+        )]);
+
+        let mut register = test_entry(namespace);
+        register.action = "REGISTER_ADAPTER".into();
+        register.object_id = "adapter.did.v1".into();
+        register.payload = json!({
+            "adapter_id":"adapter.did.v1",
+            "standard":"did-core",
+            "spec_ref":"https://www.w3.org/TR/did-core/"
+        });
+        ledger
+            .apply_entry(register)
+            .expect("did-core adapter should pass policy");
+
+        let mut unsupported = test_entry(namespace);
+        unsupported.action = "LINK_IDENTIFIER".into();
+        unsupported.object_id = "did:ledger:alice".into();
+        unsupported.payload = json!({
+            "standard":"custom-oneoff",
+            "remote_id":"did:web:example.com:alice"
+        });
+        let err = ledger
+            .apply_entry(unsupported)
+            .expect_err("unsupported standards must fail");
+        assert!(err
+            .to_string()
+            .contains("interop standard 'custom-oneoff' is not governance approved"));
     }
 }

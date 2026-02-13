@@ -67,6 +67,8 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
         let submit_envelope_ledger = Arc::clone(&self.ledger);
         let builder_credits_ledger = Arc::clone(&self.ledger);
         let asset_positions_ledger = Arc::clone(&self.ledger);
+        let module_runtime_ledger = Arc::clone(&self.ledger);
+        let interop_status_ledger = Arc::clone(&self.ledger);
         let submit_receipts = Arc::clone(&self.receipts);
         let submit_legacy_receipts = Arc::clone(&self.receipts);
         let get_receipt_store = Arc::clone(&self.receipts);
@@ -143,6 +145,20 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
                 get(move |Path(account_id): Path<String>| {
                     let ledger = Arc::clone(&asset_positions_ledger);
                     async move { Self::handle_get_asset_positions(ledger, account_id).await }
+                }),
+            )
+            .route(
+                "/api/v1/modules/:module_id",
+                get(move |Path(module_id): Path<String>| {
+                    let ledger = Arc::clone(&module_runtime_ledger);
+                    async move { Self::handle_get_module_runtime(ledger, module_id).await }
+                }),
+            )
+            .route(
+                "/api/v1/interop/:object_id",
+                get(move |Path(object_id): Path<String>| {
+                    let ledger = Arc::clone(&interop_status_ledger);
+                    async move { Self::handle_get_interop_status(ledger, object_id).await }
                 }),
             )
     }
@@ -542,6 +558,111 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
         })
     }
 
+    async fn handle_get_module_runtime(
+        ledger: Arc<Ledger<S>>,
+        module_id: String,
+    ) -> (StatusCode, Json<serde_json::Value>) {
+        let entries = ledger
+            .storage()
+            .namespace_entries(&"execution.module".to_string())
+            .unwrap_or_default();
+
+        let module_entries: Vec<&LedgerEntry> = entries
+            .iter()
+            .filter(|entry| entry.object_id == module_id)
+            .collect();
+        if module_entries.is_empty() {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(serde_json::json!({"error":"module not found"})),
+            );
+        }
+
+        let registered = module_entries
+            .iter()
+            .filter(|entry| entry.action == "REGISTER_MODULE")
+            .max_by_key(|entry| entry.timestamp)
+            .copied();
+        let activated = module_entries
+            .iter()
+            .filter(|entry| entry.action == "ACTIVATE_MODULE")
+            .max_by_key(|entry| entry.timestamp)
+            .copied();
+
+        (
+            StatusCode::OK,
+            Json(serde_json::json!({
+                "module_id": module_id,
+                "namespace": "execution.module",
+                "registered": registered.is_some(),
+                "active": activated.is_some(),
+                "module_class": registered
+                    .and_then(|entry| entry.payload.get("module_class"))
+                    .and_then(|value| value.as_str()),
+                "audit_hash": registered
+                    .and_then(|entry| entry.payload.get("audit_hash"))
+                    .and_then(|value| value.as_str()),
+                "wasm_hash": registered
+                    .and_then(|entry| entry.payload.get("wasm_hash"))
+                    .and_then(|value| value.as_str()),
+                "last_execution_receipt": module_entries
+                    .iter()
+                    .filter(|entry| entry.action == "EXECUTE_MODULE")
+                    .max_by_key(|entry| entry.timestamp)
+                    .and_then(|entry| entry.payload.get("deterministic_receipt_hash"))
+                    .and_then(|value| value.as_str()),
+                "entries": module_entries.len()
+            })),
+        )
+    }
+
+    async fn handle_get_interop_status(
+        ledger: Arc<Ledger<S>>,
+        object_id: String,
+    ) -> Json<serde_json::Value> {
+        let entries = ledger
+            .storage()
+            .namespace_entries(&"interop.adapter".to_string())
+            .unwrap_or_default();
+
+        let object_entries: Vec<&LedgerEntry> = entries
+            .iter()
+            .filter(|entry| entry.object_id == object_id)
+            .collect();
+
+        let standards: Vec<String> = object_entries
+            .iter()
+            .filter_map(|entry| {
+                entry
+                    .payload
+                    .get("standard")
+                    .and_then(|value| value.as_str())
+            })
+            .map(ToString::to_string)
+            .collect::<HashSet<_>>()
+            .into_iter()
+            .collect();
+
+        Json(serde_json::json!({
+            "object_id": object_id,
+            "namespace": "interop.adapter",
+            "entries": object_entries.len(),
+            "standards": standards,
+            "latest_link": object_entries
+                .iter()
+                .filter(|entry| entry.action == "LINK_IDENTIFIER")
+                .max_by_key(|entry| entry.timestamp)
+                .and_then(|entry| entry.payload.get("remote_id"))
+                .and_then(|value| value.as_str()),
+            "latest_proof_hash": object_entries
+                .iter()
+                .filter(|entry| entry.action == "EMIT_PROOF")
+                .max_by_key(|entry| entry.timestamp)
+                .and_then(|entry| entry.payload.get("proof_hash"))
+                .and_then(|value| value.as_str())
+        }))
+    }
+
     fn build_did_document(did: &str, entries: &[LedgerEntry]) -> Option<DidDocument> {
         let mut latest: Option<&LedgerEntry> = None;
         for entry in entries {
@@ -689,6 +810,35 @@ mod tests {
             validators: vec![NamespaceRule {
                 name: "asset_control_policy".to_string(),
                 config: json!({"allowed_policy_flags": ["kyc_required", "attestation_required"]}),
+            }],
+        }]);
+        ledger.bootstrap_namespaces(vec![NamespaceRuleset {
+            descriptor: NamespaceDescriptor {
+                namespace: "execution.module".to_string(),
+                version: 1,
+                rules_hash: "execution-module-v1".to_string(),
+                governed_by: "governance".to_string(),
+            },
+            writers: BTreeSet::new(),
+            validators: vec![NamespaceRule {
+                name: "wasm_runtime_policy".to_string(),
+                config: json!({
+                    "allowed_module_classes": ["asset", "interop", "identity"],
+                    "required_governance_approvals": 1
+                }),
+            }],
+        }]);
+        ledger.bootstrap_namespaces(vec![NamespaceRuleset {
+            descriptor: NamespaceDescriptor {
+                namespace: "interop.adapter".to_string(),
+                version: 1,
+                rules_hash: "interop-adapter-v1".to_string(),
+                governed_by: "governance".to_string(),
+            },
+            writers: BTreeSet::new(),
+            validators: vec![NamespaceRule {
+                name: "interop_adapter_policy".to_string(),
+                config: json!({"allowed_standards": ["did-core", "vc-data-model"]}),
             }],
         }]);
         ApiServer::new(ledger)
@@ -1194,5 +1344,160 @@ mod tests {
             payload["positions"][0]["trustline"]["disclosure"]["mode"],
             "hashed"
         );
+    }
+
+    #[tokio::test]
+    async fn module_runtime_endpoint_reports_registration_and_activation() {
+        let app = build_server().router();
+
+        let register = LedgerEntry {
+            entry_id: Uuid::new_v4(),
+            namespace: "execution.module".to_string(),
+            action: "REGISTER_MODULE".to_string(),
+            object_id: "module.asset.v1".to_string(),
+            payload: json!({
+                "module_id": "module.asset.v1",
+                "module_class": "asset",
+                "wasm_hash": "wasm:abc",
+                "audit_hash": "audit:abc"
+            }),
+            author: "did:ledger:maintainer".to_string(),
+            signature: "sig".to_string(),
+            timestamp: 1_736_500_200,
+        };
+        let activate = LedgerEntry {
+            entry_id: Uuid::new_v4(),
+            namespace: "execution.module".to_string(),
+            action: "ACTIVATE_MODULE".to_string(),
+            object_id: "module.asset.v1".to_string(),
+            payload: json!({
+                "module_id": "module.asset.v1",
+                "governance_approvals": 1
+            }),
+            author: "governance:vote".to_string(),
+            signature: "sig".to_string(),
+            timestamp: 1_736_500_201,
+        };
+
+        app.clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/entries/submit")
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        serde_json::to_vec(&register).expect("register body"),
+                    ))
+                    .expect("register request"),
+            )
+            .await
+            .expect("register submit response");
+        app.clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/entries/submit")
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        serde_json::to_vec(&activate).expect("activate body"),
+                    ))
+                    .expect("activate request"),
+            )
+            .await
+            .expect("activate submit response");
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri("/api/v1/modules/module.asset.v1")
+                    .body(Body::empty())
+                    .expect("request"),
+            )
+            .await
+            .expect("module query response");
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("body bytes");
+        let payload: Value = serde_json::from_slice(&body).expect("module payload");
+        assert_eq!(payload["module_id"], "module.asset.v1");
+        assert_eq!(payload["registered"], true);
+        assert_eq!(payload["active"], true);
+    }
+
+    #[tokio::test]
+    async fn interop_endpoint_reports_latest_link_and_proof() {
+        let app = build_server().router();
+
+        let link = LedgerEntry {
+            entry_id: Uuid::new_v4(),
+            namespace: "interop.adapter".to_string(),
+            action: "LINK_IDENTIFIER".to_string(),
+            object_id: "did:ledger:alice".to_string(),
+            payload: json!({
+                "standard":"did-core",
+                "remote_id":"did:web:example.com:alice"
+            }),
+            author: "did:ledger:alice".to_string(),
+            signature: "sig".to_string(),
+            timestamp: 1_736_500_210,
+        };
+        let proof = LedgerEntry {
+            entry_id: Uuid::new_v4(),
+            namespace: "interop.adapter".to_string(),
+            action: "EMIT_PROOF".to_string(),
+            object_id: "did:ledger:alice".to_string(),
+            payload: json!({
+                "standard":"did-core",
+                "proof_hash":"proof:0xabc"
+            }),
+            author: "did:ledger:alice".to_string(),
+            signature: "sig".to_string(),
+            timestamp: 1_736_500_211,
+        };
+
+        app.clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/entries/submit")
+                    .header("content-type", "application/json")
+                    .body(Body::from(serde_json::to_vec(&link).expect("link body")))
+                    .expect("link request"),
+            )
+            .await
+            .expect("link submit response");
+        app.clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/entries/submit")
+                    .header("content-type", "application/json")
+                    .body(Body::from(serde_json::to_vec(&proof).expect("proof body")))
+                    .expect("proof request"),
+            )
+            .await
+            .expect("proof submit response");
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri("/api/v1/interop/did:ledger:alice")
+                    .body(Body::empty())
+                    .expect("request"),
+            )
+            .await
+            .expect("interop query response");
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("body bytes");
+        let payload: Value = serde_json::from_slice(&body).expect("interop payload");
+        assert_eq!(payload["latest_link"], "did:web:example.com:alice");
+        assert_eq!(payload["latest_proof_hash"], "proof:0xabc");
     }
 }
