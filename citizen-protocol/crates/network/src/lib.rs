@@ -445,7 +445,8 @@ impl QuicNetwork {
             Endpoint::server(server_config, bind_addr).map_err(ProtocolError::storage)?;
         let mut roots = RootCertStore::empty();
         let _ = roots.add_parsable_certificates([cert_der]);
-        let client_cfg = ClientConfig::with_root_certificates(roots.into()).map_err(ProtocolError::storage)?;
+        let client_cfg =
+            ClientConfig::with_root_certificates(roots.into()).map_err(ProtocolError::storage)?;
 
         let (tx, _) = broadcast::channel(1024);
         let network = Self {

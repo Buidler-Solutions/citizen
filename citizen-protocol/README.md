@@ -51,6 +51,10 @@ citizen-protocol/
    See `docs/LOCALNET_RUNBOOK.md` for details on swapping in your own keys and
    endpoints for a real deployment.
 
+   For running the validator localnet together with the demo blog, browser
+   wallet extension, and blockchain explorer (backend + frontend), follow
+   `docs/STACK_TESTING_GUIDE.md`.
+
 5. When promoting deployments beyond a single host, use the staged network
    manifests:
 

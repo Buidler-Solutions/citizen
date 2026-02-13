@@ -1,9 +1,11 @@
 use axum::extract::Path;
-use axum::routing::get;
+use axum::http::StatusCode;
+use axum::routing::{get, post};
 use axum::{serve, Json, Router};
 use citizen_ledger::Ledger;
 use citizen_storage::LedgerStorage;
-use citizen_types::BlockHeight;
+use citizen_types::{BlockHeight, LedgerEntry, ProtocolError};
+use serde::Serialize;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::net::TcpListener;
@@ -13,6 +15,11 @@ use tracing::info;
 #[derive(Clone)]
 pub struct ApiServer<S: LedgerStorage + 'static> {
     ledger: Arc<Ledger<S>>,
+}
+
+#[derive(Debug, Serialize)]
+struct ApiError {
+    error: String,
 }
 
 impl<S: LedgerStorage + 'static> ApiServer<S> {
@@ -39,6 +46,7 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
         let blocks_ledger = Arc::clone(&self.ledger);
         let namespaces_ledger = Arc::clone(&self.ledger);
         let entries_ledger = Arc::clone(&self.ledger);
+        let submit_ledger = Arc::clone(&self.ledger);
 
         Router::new()
             .route("/health", get(Self::health))
@@ -61,6 +69,13 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
                 get(move |Path(namespace): Path<String>| {
                     let ledger = Arc::clone(&entries_ledger);
                     async move { Self::handle_list_entries(ledger, namespace).await }
+                }),
+            )
+            .route(
+                "/api/v1/entries/submit",
+                post(move |Json(entry): Json<LedgerEntry>| {
+                    let ledger = Arc::clone(&submit_ledger);
+                    async move { Self::handle_submit_entry(ledger, entry).await }
                 }),
             )
     }
@@ -92,4 +107,45 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
             .unwrap_or_default();
         Json(serde_json::json!({"namespace": namespace, "entries": entries}))
     }
+
+    async fn handle_submit_entry(
+        ledger: Arc<Ledger<S>>,
+        entry: LedgerEntry,
+    ) -> (StatusCode, Json<serde_json::Value>) {
+        if let Err(err) = ledger.validate_entry_submission(&entry) {
+            return protocol_error_response(err);
+        }
+
+        let entry_id = entry.entry_id;
+        let namespace = entry.namespace.clone();
+        if let Err(err) = ledger.apply_entry(entry) {
+            return protocol_error_response(err);
+        }
+
+        (
+            StatusCode::ACCEPTED,
+            Json(serde_json::json!({
+                "status": "accepted",
+                "entry_id": entry_id,
+                "namespace": namespace,
+            })),
+        )
+    }
+}
+
+fn protocol_error_response(err: ProtocolError) -> (StatusCode, Json<serde_json::Value>) {
+    let status = match &err {
+        ProtocolError::InvalidNamespace(_) | ProtocolError::ValidationFailed(_) => {
+            StatusCode::BAD_REQUEST
+        }
+        ProtocolError::StorageError(_) => StatusCode::SERVICE_UNAVAILABLE,
+        _ => StatusCode::INTERNAL_SERVER_ERROR,
+    };
+
+    (
+        status,
+        Json(serde_json::json!(ApiError {
+            error: err.to_string(),
+        })),
+    )
 }

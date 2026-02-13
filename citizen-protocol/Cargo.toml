@@ -10,6 +10,8 @@ members = [
     "crates/api",
     "crates/node",
     "crates/simulation",
+    "crates/wallet",
+    "wallet/cli",
 ]
 resolver = "2"
 
