@@ -171,6 +171,45 @@ pub struct ConsensusOutcome {
     pub leader_rotations: u32,
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct SignedEnvelope<T> {
+    pub envelope_id: Uuid,
+    pub signer: String,
+    pub signature: String,
+    pub submitted_at: DateTime<Utc>,
+    pub payload: T,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct DeterministicReceipt {
+    pub receipt_id: Uuid,
+    pub envelope_id: Uuid,
+    pub status: ReceiptStatus,
+    pub validation: ValidationSummary,
+    pub finality: Option<FinalityProof>,
+    pub recorded_at: DateTime<Utc>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ValidationSummary {
+    pub namespace: NamespaceId,
+    pub action: String,
+    pub outcome: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct FinalityProof {
+    pub block_height: BlockHeight,
+    pub block_hash: String,
+    pub commit_proof: CommitProof,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub enum ReceiptStatus {
+    Accepted,
+    Rejected,
+}
+
 #[derive(thiserror::Error, Debug)]
 pub enum ProtocolError {
     #[error("invalid namespace: {0}")]

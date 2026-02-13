@@ -38,6 +38,10 @@ The baseline sets the authoritative plan for:
 - standards-led interoperability rollout, and
 - canonical API + deterministic receipt unification.
 
+Implementation handoff status is tracked in:
+
+- `docs/PHASE_IMPLEMENTATION_TRACKER.md`
+
 ## Getting Started
 
 1. Install the Rust toolchain (`rustup` with stable compiler).
