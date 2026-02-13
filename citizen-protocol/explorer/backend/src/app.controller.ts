@@ -1,4 +1,4 @@
-import { Controller, Get } from '@nestjs/common';
+import { Controller, Get, Param } from '@nestjs/common';
 import { CitizenService } from './citizen.service';
 
 @Controller()
@@ -15,13 +15,18 @@ export class AppController {
     return this.citizenService.getStatus();
   }
 
-  @Get('blocks')
-  async blocks() {
-    return this.citizenService.getBlocks();
+  @Get('blocks/:height')
+  async block(@Param('height') height: string) {
+    return this.citizenService.getBlock(Number(height));
   }
 
-  @Get('entries')
-  async entries() {
-    return this.citizenService.getEntries();
+  @Get('entries/:namespace')
+  async entries(@Param('namespace') namespace: string) {
+    return this.citizenService.getEntries(namespace);
+  }
+
+  @Get('receipts/:receiptId')
+  async receipt(@Param('receiptId') receiptId: string) {
+    return this.citizenService.getReceipt(receiptId);
   }
 }
