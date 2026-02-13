@@ -8,11 +8,11 @@ license = "Apache-2.0"
 citizen-types = { path = "../types" }
 citizen-crypto = { path = "../crypto" }
 citizen-consensus = { path = "../consensus" }
-citizen-ledger = { package = "ledger", path = "../ledger" }
+citizen-ledger = { path = "../ledger" }
 citizen-governance = { path = "../governance" }
 citizen-network = { path = "../network" }
 citizen-storage = { path = "../storage" }
-citizen-api = { package = "api", path = "../api" }
+citizen-api = { path = "../api" }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 tokio = { workspace = true }
