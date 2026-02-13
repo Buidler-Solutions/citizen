@@ -9,7 +9,7 @@ citizen-types = { path = "../types" }
 citizen-consensus = { path = "../consensus" }
 citizen-network = { path = "../network" }
 citizen-storage = { path = "../storage" }
-citizen-ledger = { package = "ledger", path = "../ledger" }
+citizen-ledger = { path = "../ledger" }
 citizen-crypto = { path = "../crypto" }
 tracing = { workspace = true }
 tokio = { workspace = true }
