@@ -1,23 +1,62 @@
 import { Injectable } from '@nestjs/common';
 
-type CitizenBlock = {
-  height: number;
-  prev_hash: string;
-  entry_root: string;
-  proposer: string;
-  timestamp: number;
-  commit_proof: string;
+type ApiSource<T> = {
+  source: string;
+  data: T;
 };
 
-type CitizenEntry = {
-  entry_id: string;
+type BlockLookup = {
+  height: number;
+  block: {
+    header: {
+      height: number;
+      prev_hash: string;
+      entry_root: string;
+      proposer: string;
+      timestamp: number;
+      commit_proof: {
+        aggregated_signature: string;
+        participant_ids: string[];
+      };
+    };
+    entries: unknown[];
+  } | null;
+};
+
+type NamespaceEntries = {
   namespace: string;
-  action: string;
-  object_id?: string;
-  payload: Record<string, unknown>;
-  author: string;
-  signature: string;
-  timestamp: number;
+  entries: Array<{
+    entry_id: string;
+    namespace: string;
+    action: string;
+    object_id?: string;
+    payload: Record<string, unknown>;
+    author: string;
+    signature: string;
+    timestamp: number;
+  }>;
+};
+
+type ReceiptLookup = {
+  receipt: {
+    receipt_id: string;
+    envelope_id: string;
+    status: string;
+    validation: {
+      namespace: string;
+      action: string;
+      outcome: string;
+    };
+    finality: {
+      block_height: number;
+      block_hash: string;
+      commit_proof: {
+        aggregated_signature: string;
+        participant_ids: string[];
+      };
+    } | null;
+    recorded_at: string;
+  };
 };
 
 @Injectable()
@@ -31,57 +70,28 @@ export class CitizenService {
     };
   }
 
-  async getBlocks(): Promise<{ source: string; blocks: CitizenBlock[] }> {
-    const endpoint = `${this.baseUrl.replace(/\/$/, '')}/blocks`;
-    try {
-      const response = await fetch(endpoint);
-      if (!response.ok) {
-        throw new Error(`Citizen node responded with ${response.status}`);
-      }
-      const blocks = (await response.json()) as CitizenBlock[];
-      return { source: endpoint, blocks };
-    } catch (error) {
-      return {
-        source: endpoint,
-        blocks: [
-          {
-            height: 0,
-            prev_hash: 'GENESIS',
-            entry_root: 'mock-entry-root',
-            proposer: 'mock-validator',
-            timestamp: Math.floor(Date.now() / 1000),
-            commit_proof: 'mock-proof',
-          },
-        ],
-      };
-    }
+  async getBlock(height: number): Promise<ApiSource<BlockLookup>> {
+    const endpoint = `${this.baseUrl.replace(/\/$/, '')}/blocks/${height}`;
+    return this.fetchJson<BlockLookup>(endpoint);
   }
 
-  async getEntries(): Promise<{ source: string; entries: CitizenEntry[] }> {
-    const endpoint = `${this.baseUrl.replace(/\/$/, '')}/entries`;
-    try {
-      const response = await fetch(endpoint);
-      if (!response.ok) {
-        throw new Error(`Citizen node responded with ${response.status}`);
-      }
-      const entries = (await response.json()) as CitizenEntry[];
-      return { source: endpoint, entries };
-    } catch (error) {
-      return {
-        source: endpoint,
-        entries: [
-          {
-            entry_id: 'mock-entry',
-            namespace: 'governance.vote',
-            action: 'CAST_VOTE',
-            object_id: 'GOV-000',
-            payload: { vote: 'YES' },
-            author: 'did:validator:mock',
-            signature: 'mock-signature',
-            timestamp: Math.floor(Date.now() / 1000),
-          },
-        ],
-      };
+  async getEntries(namespace: string): Promise<ApiSource<NamespaceEntries>> {
+    const endpoint = `${this.baseUrl.replace(/\/$/, '')}/entries/${namespace}`;
+    return this.fetchJson<NamespaceEntries>(endpoint);
+  }
+
+  async getReceipt(receiptId: string): Promise<ApiSource<ReceiptLookup>> {
+    const endpoint = `${this.baseUrl.replace(/\/$/, '')}/api/v1/receipts/${receiptId}`;
+    return this.fetchJson<ReceiptLookup>(endpoint);
+  }
+
+  private async fetchJson<T>(endpoint: string): Promise<ApiSource<T>> {
+    const response = await fetch(endpoint);
+    if (!response.ok) {
+      throw new Error(`Citizen node responded with ${response.status} for ${endpoint}`);
     }
+
+    const data = (await response.json()) as T;
+    return { source: endpoint, data };
   }
 }

@@ -14,9 +14,9 @@ After each phase-related delivery:
 Baseline reference: `docs/DEEP_RESEARCH_ARCHITECTURE_BASELINE.md` (Phase 1 section).
 
 ### Scope
-- [ ] Canonical API unification
+- [x] Canonical API unification
 - [x] Signed envelope and receipt standardization (initial foundation)
-- [ ] Explorer/indexer contract alignment
+- [x] Explorer/indexer contract alignment
 
 ### Completed
 - [x] Added protocol types for canonical envelope/receipt contract:
@@ -32,14 +32,15 @@ Baseline reference: `docs/DEEP_RESEARCH_ARCHITECTURE_BASELINE.md` (Phase 1 secti
   - `POST /api/v1/entries/submit` now routes through envelope flow.
 
 ### Remaining for Phase 1 completion
-- [ ] Populate deterministic receipt finality payload (`block_height`, `block_hash`, `commit_proof`) when entries are finalized.
-- [ ] Align explorer backend/frontend contracts with canonical API and receipt model.
-- [ ] Remove/replace mock legacy explorer assumptions with canonical contract responses.
-- [ ] Add end-to-end integration tests for envelope submit -> receipt retrieval -> finality proof visibility.
+- [x] Populate deterministic receipt finality payload (`block_height`, `block_hash`, `commit_proof`) when entries are finalized.
+- [x] Align explorer backend/frontend contracts with canonical API and receipt model.
+- [x] Remove/replace mock legacy explorer assumptions with canonical contract responses.
+- [x] Add end-to-end integration tests for envelope submit -> receipt retrieval -> finality proof visibility.
 
 ### Last Update
-- 2026-02-13: Added Phase 1 completion checklist and handoff rules after review of prior PR progress.
-- Commit: this commit.
+- 2026-02-13: Added legacy compatibility integration coverage for `POST /api/v1/entries/submit` to assert canonical receipt retrieval + finality proof visibility through `/api/v1/receipts/:receipt_id`.
+- 2026-02-13: Aligned explorer backend/frontend to canonical node contracts (`/blocks/:height`, `/entries/:namespace`, `/api/v1/receipts/:receipt_id`) and removed mock fallback payloads.
+- Commit: 1c08978, pending latest Phase 1 test-extension commit
 
 ---
 
