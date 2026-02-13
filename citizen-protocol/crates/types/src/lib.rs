@@ -205,6 +205,36 @@ pub struct FinalityProof {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct DidDocument {
+    pub did: String,
+    pub controller: String,
+    pub status: DidStatus,
+    pub claims_hash: Option<String>,
+    pub updated_at: UnixTimestamp,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub enum DidStatus {
+    Active,
+    Revoked,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ConsentReceipt {
+    pub subject_did: String,
+    pub data_hash: String,
+    pub policy_ref: String,
+    pub granted_at: UnixTimestamp,
+    pub expires_at: UnixTimestamp,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ConsentPolicyCheck {
+    pub valid: bool,
+    pub reason: Option<String>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub enum ReceiptStatus {
     Accepted,
     Rejected,

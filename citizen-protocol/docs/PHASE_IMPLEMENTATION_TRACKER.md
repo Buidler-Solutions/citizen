@@ -47,12 +47,13 @@ Baseline reference: `docs/DEEP_RESEARCH_ARCHITECTURE_BASELINE.md` (Phase 1 secti
 
 ## Phase 2 — Identity/Data Ownership
 ### Scope
-- [ ] DID registry operations
-- [ ] Resolver service and SDK verification primitives
-- [ ] Consent receipt namespace and policy checks
+- [x] DID registry operations
+- [x] Resolver service and SDK verification primitives
+- [x] Consent receipt namespace and policy checks
 
 ### Last Update
-- 2026-02-13: Not started.
+- 2026-02-13: Implemented identity/data-ownership baseline: DID action enforcement, API DID resolver, consent receipt policy validation/check endpoint, and wallet SDK verification primitives.
+- Commit: e38c374
 
 ---
 
