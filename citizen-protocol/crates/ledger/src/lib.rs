@@ -99,6 +99,7 @@ impl<S: LedgerStorage + 'static> Ledger<S> {
             "consent_policy" => self.consent_policy(entry, config),
             "author_matches_object_id" => self.author_matches_object_id(entry),
             "builder_credit_policy" => self.builder_credit_policy(entry, config),
+            "asset_control_policy" => self.asset_control_policy(entry, config),
             _ => {
                 let handler = self
                     .custom_rule_handlers
@@ -375,6 +376,274 @@ impl<S: LedgerStorage + 'static> Ledger<S> {
             }
         }
         Ok(balance)
+    }
+
+    fn asset_control_policy(&self, entry: &LedgerEntry, config: &Value) -> Result<()> {
+        let issuer = entry
+            .payload
+            .get("issuer")
+            .and_then(Value::as_str)
+            .ok_or_else(|| {
+                ProtocolError::ValidationFailed(
+                    "asset control entries require payload.issuer".to_string(),
+                )
+            })?;
+        let asset_code = entry
+            .payload
+            .get("asset_code")
+            .and_then(Value::as_str)
+            .ok_or_else(|| {
+                ProtocolError::ValidationFailed(
+                    "asset control entries require payload.asset_code".to_string(),
+                )
+            })?;
+
+        let allowed_flags: HashSet<String> = config
+            .get("allowed_policy_flags")
+            .and_then(Value::as_array)
+            .map(|flags| {
+                flags
+                    .iter()
+                    .filter_map(Value::as_str)
+                    .map(ToString::to_string)
+                    .collect::<HashSet<_>>()
+            })
+            .unwrap_or_default();
+
+        let disclosure_mode = entry
+            .payload
+            .get("disclosure")
+            .and_then(Value::as_object)
+            .and_then(|value| value.get("mode"))
+            .and_then(Value::as_str)
+            .unwrap_or("public");
+        if !["public", "hashed"].contains(&disclosure_mode) {
+            return Err(ProtocolError::ValidationFailed(format!(
+                "unsupported disclosure mode '{disclosure_mode}'"
+            )));
+        }
+        if disclosure_mode == "hashed"
+            && entry
+                .payload
+                .get("disclosure")
+                .and_then(Value::as_object)
+                .and_then(|value| value.get("commitment"))
+                .and_then(Value::as_str)
+                .is_none()
+        {
+            return Err(ProtocolError::ValidationFailed(
+                "hashed disclosure mode requires payload.disclosure.commitment".to_string(),
+            ));
+        }
+
+        let payload_flags: Vec<String> = entry
+            .payload
+            .get("policy_flags")
+            .and_then(Value::as_array)
+            .map(|flags| {
+                flags
+                    .iter()
+                    .filter_map(Value::as_str)
+                    .map(ToString::to_string)
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+        if !allowed_flags.is_empty()
+            && payload_flags
+                .iter()
+                .any(|flag| !allowed_flags.contains(flag))
+        {
+            return Err(ProtocolError::ValidationFailed(
+                "asset policy flag is not allowed by governance".to_string(),
+            ));
+        }
+
+        match entry.action.as_str() {
+            "TRUSTLINE_OPEN" => {
+                if entry.author != entry.object_id {
+                    return Err(ProtocolError::ValidationFailed(
+                        "trustline opening requires author to equal account object_id".into(),
+                    ));
+                }
+                let max_holding = entry
+                    .payload
+                    .get("max_holding")
+                    .and_then(Value::as_u64)
+                    .ok_or_else(|| {
+                        ProtocolError::ValidationFailed(
+                            "trustline opening requires payload.max_holding".into(),
+                        )
+                    })?;
+                if max_holding == 0 {
+                    return Err(ProtocolError::ValidationFailed(
+                        "trustline max_holding must be greater than zero".into(),
+                    ));
+                }
+                Ok(())
+            }
+            "TRUSTLINE_CLOSE" => {
+                if entry.author != entry.object_id {
+                    return Err(ProtocolError::ValidationFailed(
+                        "trustline closing requires author to equal account object_id".into(),
+                    ));
+                }
+                let current = self.compute_asset_holding(
+                    &entry.namespace,
+                    &entry.object_id,
+                    issuer,
+                    asset_code,
+                )?;
+                if current > 0 {
+                    return Err(ProtocolError::ValidationFailed(
+                        "trustline cannot close while holdings remain".into(),
+                    ));
+                }
+                Ok(())
+            }
+            "ASSET_HOLD" => {
+                let amount = entry
+                    .payload
+                    .get("amount")
+                    .and_then(Value::as_u64)
+                    .ok_or_else(|| {
+                        ProtocolError::ValidationFailed(
+                            "asset holds require numeric payload.amount".to_string(),
+                        )
+                    })?;
+                if amount == 0 {
+                    return Err(ProtocolError::ValidationFailed(
+                        "asset hold amount must be greater than zero".into(),
+                    ));
+                }
+                if entry.author != issuer {
+                    return Err(ProtocolError::ValidationFailed(
+                        "asset holds must be authorized by payload.issuer".into(),
+                    ));
+                }
+                let trustline = self
+                    .latest_asset_trustline(&entry.namespace, &entry.object_id, issuer, asset_code)?
+                    .ok_or_else(|| {
+                        ProtocolError::ValidationFailed(
+                            "no active trustline for requested issuer/asset".into(),
+                        )
+                    })?;
+                if trustline.action == "TRUSTLINE_CLOSE" {
+                    return Err(ProtocolError::ValidationFailed(
+                        "trustline is closed for requested issuer/asset".into(),
+                    ));
+                }
+                let max_holding = trustline
+                    .payload
+                    .get("max_holding")
+                    .and_then(Value::as_u64)
+                    .ok_or_else(|| {
+                        ProtocolError::ValidationFailed(
+                            "active trustline missing max_holding".into(),
+                        )
+                    })?;
+                let current = self.compute_asset_holding(
+                    &entry.namespace,
+                    &entry.object_id,
+                    issuer,
+                    asset_code,
+                )?;
+                if current.saturating_add(amount as i128) > max_holding as i128 {
+                    return Err(ProtocolError::ValidationFailed(format!(
+                        "trustline capacity exceeded: cap {max_holding}, attempted {}",
+                        current.saturating_add(amount as i128)
+                    )));
+                }
+                Ok(())
+            }
+            "ASSET_RELEASE" => {
+                let amount = entry
+                    .payload
+                    .get("amount")
+                    .and_then(Value::as_u64)
+                    .ok_or_else(|| {
+                        ProtocolError::ValidationFailed(
+                            "asset releases require numeric payload.amount".to_string(),
+                        )
+                    })?;
+                if amount == 0 {
+                    return Err(ProtocolError::ValidationFailed(
+                        "asset release amount must be greater than zero".into(),
+                    ));
+                }
+                if entry.author != entry.object_id {
+                    return Err(ProtocolError::ValidationFailed(
+                        "asset releases must be signed by account holder".into(),
+                    ));
+                }
+                let current = self.compute_asset_holding(
+                    &entry.namespace,
+                    &entry.object_id,
+                    issuer,
+                    asset_code,
+                )?;
+                if current < amount as i128 {
+                    return Err(ProtocolError::ValidationFailed(format!(
+                        "insufficient held assets: available {current}, requested {amount}"
+                    )));
+                }
+                Ok(())
+            }
+            _ => Err(ProtocolError::ValidationFailed(
+                "asset control action is not supported".into(),
+            )),
+        }
+    }
+
+    fn latest_asset_trustline(
+        &self,
+        namespace: &str,
+        account_id: &str,
+        issuer: &str,
+        asset_code: &str,
+    ) -> Result<Option<LedgerEntry>> {
+        let entries = self.storage.namespace_entries(&namespace.to_string())?;
+        Ok(entries
+            .into_iter()
+            .filter(|entry| {
+                entry.object_id == account_id
+                    && matches!(entry.action.as_str(), "TRUSTLINE_OPEN" | "TRUSTLINE_CLOSE")
+                    && entry.payload.get("issuer").and_then(Value::as_str) == Some(issuer)
+                    && entry.payload.get("asset_code").and_then(Value::as_str) == Some(asset_code)
+            })
+            .max_by_key(|entry| entry.timestamp))
+    }
+
+    fn compute_asset_holding(
+        &self,
+        namespace: &str,
+        account_id: &str,
+        issuer: &str,
+        asset_code: &str,
+    ) -> Result<i128> {
+        let entries = self.storage.namespace_entries(&namespace.to_string())?;
+        let mut holding = 0_i128;
+        for entry in entries {
+            if entry.object_id != account_id {
+                continue;
+            }
+            if entry.payload.get("issuer").and_then(Value::as_str) != Some(issuer)
+                || entry.payload.get("asset_code").and_then(Value::as_str) != Some(asset_code)
+            {
+                continue;
+            }
+
+            let amount = entry
+                .payload
+                .get("amount")
+                .and_then(Value::as_u64)
+                .unwrap_or_default() as i128;
+            match entry.action.as_str() {
+                "ASSET_HOLD" => holding = holding.saturating_add(amount),
+                "ASSET_RELEASE" => holding = holding.saturating_sub(amount),
+                _ => {}
+            }
+        }
+        Ok(holding)
     }
 
     fn extract_field<'a>(&self, entry: &'a LedgerEntry, field_path: &str) -> Result<&'a str> {
@@ -725,5 +994,93 @@ mod tests {
         assert!(limit_err
             .to_string()
             .contains("daily sponsored spend limit exceeded"));
+    }
+
+    #[test]
+    fn enforces_asset_trustline_capacity_and_release_controls() {
+        let ledger = Ledger::in_memory();
+        let namespace = "asset.control";
+        ledger.bootstrap_namespaces(vec![namespace_with_rules(
+            namespace,
+            vec![NamespaceRule {
+                name: "asset_control_policy".into(),
+                config: json!({"allowed_policy_flags": ["kyc_required", "attestation_required"]}),
+            }],
+        )]);
+
+        let mut trustline = test_entry(namespace);
+        trustline.action = "TRUSTLINE_OPEN".into();
+        trustline.object_id = "did:ledger:alice".into();
+        trustline.author = "did:ledger:alice".into();
+        trustline.payload = json!({
+            "issuer": "issuer:treasury",
+            "asset_code": "CITZ-CRED",
+            "max_holding": 100_u64,
+            "policy_flags": ["kyc_required"],
+            "disclosure": {"mode":"hashed", "commitment":"0xabc"}
+        });
+        ledger
+            .apply_entry(trustline)
+            .expect("trustline should pass");
+
+        let mut hold = test_entry(namespace);
+        hold.action = "ASSET_HOLD".into();
+        hold.object_id = "did:ledger:alice".into();
+        hold.author = "issuer:treasury".into();
+        hold.payload = json!({
+            "issuer": "issuer:treasury",
+            "asset_code": "CITZ-CRED",
+            "amount": 80_u64,
+            "policy_flags": ["kyc_required"],
+            "disclosure": {"mode":"public"}
+        });
+        ledger.apply_entry(hold).expect("hold should pass");
+
+        let mut over_cap = test_entry(namespace);
+        over_cap.action = "ASSET_HOLD".into();
+        over_cap.object_id = "did:ledger:alice".into();
+        over_cap.author = "issuer:treasury".into();
+        over_cap.payload = json!({
+            "issuer": "issuer:treasury",
+            "asset_code": "CITZ-CRED",
+            "amount": 30_u64,
+            "policy_flags": ["kyc_required"],
+            "disclosure": {"mode":"public"}
+        });
+        let cap_err = ledger
+            .apply_entry(over_cap)
+            .expect_err("holding above trustline cap should fail");
+        assert!(cap_err.to_string().contains("trustline capacity exceeded"));
+
+        let mut release = test_entry(namespace);
+        release.action = "ASSET_RELEASE".into();
+        release.object_id = "did:ledger:alice".into();
+        release.author = "did:ledger:alice".into();
+        release.payload = json!({
+            "issuer": "issuer:treasury",
+            "asset_code": "CITZ-CRED",
+            "amount": 20_u64,
+            "policy_flags": ["kyc_required"],
+            "disclosure": {"mode":"public"}
+        });
+        ledger.apply_entry(release).expect("release should pass");
+
+        let mut invalid_flag = test_entry(namespace);
+        invalid_flag.action = "ASSET_HOLD".into();
+        invalid_flag.object_id = "did:ledger:alice".into();
+        invalid_flag.author = "issuer:treasury".into();
+        invalid_flag.payload = json!({
+            "issuer": "issuer:treasury",
+            "asset_code": "CITZ-CRED",
+            "amount": 5_u64,
+            "policy_flags": ["unaudited_flag"],
+            "disclosure": {"mode":"public"}
+        });
+        let flag_err = ledger
+            .apply_entry(invalid_flag)
+            .expect_err("unknown policy flags should be rejected");
+        assert!(flag_err
+            .to_string()
+            .contains("asset policy flag is not allowed"));
     }
 }
