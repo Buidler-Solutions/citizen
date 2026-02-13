@@ -435,4 +435,61 @@ mod tests {
         );
         assert_eq!(receipt_json["receipt"]["finality"]["block_height"], 1);
     }
+
+    #[tokio::test]
+    async fn legacy_submit_entry_routes_through_envelope_receipt_flow() {
+        let app = build_server().router();
+        let envelope = test_envelope();
+        let entry = envelope.payload;
+
+        let submit = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/entries/submit")
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        serde_json::to_vec(&entry).expect("serialize entry"),
+                    ))
+                    .expect("request"),
+            )
+            .await
+            .expect("submit response");
+
+        assert_eq!(submit.status(), StatusCode::ACCEPTED);
+        let submit_body = axum::body::to_bytes(submit.into_body(), usize::MAX)
+            .await
+            .expect("submit bytes");
+        let submit_json: Value = serde_json::from_slice(&submit_body).expect("submit json");
+
+        let receipt_id = submit_json["receipt"]["receipt_id"]
+            .as_str()
+            .expect("receipt id string");
+        assert_eq!(submit_json["status"], "accepted");
+        assert_eq!(submit_json["namespace"], "audit.procurement");
+
+        let receipt_response = app
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri(format!("/api/v1/receipts/{receipt_id}"))
+                    .body(Body::empty())
+                    .expect("request"),
+            )
+            .await
+            .expect("receipt response");
+
+        assert_eq!(receipt_response.status(), StatusCode::OK);
+        let receipt_body = axum::body::to_bytes(receipt_response.into_body(), usize::MAX)
+            .await
+            .expect("receipt bytes");
+        let receipt_json: Value = serde_json::from_slice(&receipt_body).expect("receipt json");
+        assert_eq!(receipt_json["receipt"]["status"], "Accepted");
+        assert_eq!(receipt_json["receipt"]["finality"]["block_height"], 1);
+        assert_eq!(
+            receipt_json["receipt"]["finality"]["commit_proof"]["aggregated_signature"],
+            "local-dev-finality"
+        );
+    }
 }
