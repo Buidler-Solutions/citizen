@@ -42,7 +42,7 @@ Implementation handoff status is tracked in:
 
 - `docs/PHASE_IMPLEMENTATION_TRACKER.md`
 
-Current delivery includes Phase 2 identity/data ownership primitives, Phase 3 builder credit controls, and Phase 4 governed asset controls:
+Current delivery includes Phase 2 identity/data ownership primitives, Phase 3 builder credit controls, Phase 4 governed asset controls, and Phase 5 scoped WASM + interop controls:
 
 - DID registry namespace rule enforcement (`identity.citizen`) with governed action allowlists.
 - Resolver endpoint: `GET /api/v1/identity/:did` for latest DID status (`Active`/`Revoked`).
@@ -51,6 +51,10 @@ Current delivery includes Phase 2 identity/data ownership primitives, Phase 3 bu
 - Builder credit reporting endpoint: `GET /api/v1/builder-credits/:builder_id` for deterministic credited/sponsored/available accounting and instrumentation.
 - Governed asset control namespace policy (`asset.control`) enforcing trustline activation, issuer-authorized holds, holder-authorized releases, and governance-scoped policy flags/disclosure commitments.
 - Asset disclosure endpoint: `GET /api/v1/assets/:account_id` for trustline status, controlled policy flags, held balance, and available trustline capacity.
+- Scoped WASM runtime namespace policy (`execution.module`) enforcing audit artifact requirements, governance-gated activation thresholds, and deterministic execution receipt commitments.
+- Standards-based interoperability namespace policy (`interop.adapter`) enforcing governance-approved standards for adapter registration, identifier linking, and proof emission.
+- Module runtime status endpoint: `GET /api/v1/modules/:module_id` for registration/activation/audit visibility.
+- Interop linkage endpoint: `GET /api/v1/interop/:object_id` for latest remote identifier and proof disclosures.
 - Wallet SDK verification helpers for DID document checks and off-chain commitment validation against on-chain consent receipts.
 
 ## Getting Started
