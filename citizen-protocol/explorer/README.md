@@ -8,8 +8,15 @@ This folder contains a blockchain explorer application for the Citizen Protocol.
 - `infra/` - Optional infrastructure (PostgreSQL) for relational storage
 
 ## Goals
-- Fetch data from a Citizen Protocol node/API and present it in a read-only explorer UI.
+- Fetch canonical data from a Citizen Protocol node/API and present it in a read-only explorer UI.
+- Surface deterministic receipt + finality proof data from canonical API responses.
 - Provide an extensible backend that can cache or index chain data (PostgreSQL optional).
+
+## Canonical contracts used
+Explorer backend now proxies canonical node contracts (no mock fallback payloads):
+- `GET /blocks/:height` -> node `GET /blocks/:height`
+- `GET /entries/:namespace` -> node `GET /entries/:namespace`
+- `GET /receipts/:receiptId` -> node `GET /api/v1/receipts/:receipt_id`
 
 ## Quick start
 
@@ -20,7 +27,7 @@ npm install
 npm run start:dev
 ```
 
-Environment variables (see `backend/.env.example`):
+Environment variables:
 - `CITIZEN_NODE_URL` - base URL to a Citizen node API.
 - `DATABASE_URL` - optional PostgreSQL connection string.
 
@@ -31,12 +38,14 @@ npm install
 npm run dev
 ```
 
-Environment variables (see `frontend/.env.example`):
+Environment variables:
 - `NEXT_PUBLIC_API_BASE_URL` - base URL for the backend API.
+- `NEXT_PUBLIC_BLOCK_HEIGHT` - block height to inspect (`1` by default).
+- `NEXT_PUBLIC_NAMESPACE` - namespace to inspect (`governance.vote` by default).
+- `NEXT_PUBLIC_RECEIPT_ID` - optional deterministic receipt ID for finality proof lookup.
 
 ### Postgres (optional)
 ```bash
 cd infra
 docker compose up -d
 ```
-

@@ -14,9 +14,9 @@ After each phase-related delivery:
 Baseline reference: `docs/DEEP_RESEARCH_ARCHITECTURE_BASELINE.md` (Phase 1 section).
 
 ### Scope
-- [ ] Canonical API unification
+- [x] Canonical API unification
 - [x] Signed envelope and receipt standardization (initial foundation)
-- [ ] Explorer/indexer contract alignment
+- [x] Explorer/indexer contract alignment
 
 ### Completed
 - [x] Added protocol types for canonical envelope/receipt contract:
@@ -33,13 +33,13 @@ Baseline reference: `docs/DEEP_RESEARCH_ARCHITECTURE_BASELINE.md` (Phase 1 secti
 
 ### Remaining for Phase 1 completion
 - [x] Populate deterministic receipt finality payload (`block_height`, `block_hash`, `commit_proof`) when entries are finalized.
-- [ ] Align explorer backend/frontend contracts with canonical API and receipt model.
-- [ ] Remove/replace mock legacy explorer assumptions with canonical contract responses.
+- [x] Align explorer backend/frontend contracts with canonical API and receipt model.
+- [x] Remove/replace mock legacy explorer assumptions with canonical contract responses.
 - [x] Add end-to-end integration tests for envelope submit -> receipt retrieval -> finality proof visibility.
 
 ### Last Update
-- 2026-02-13: Added deterministic finality payload wiring for canonical receipts and API integration coverage for submit->receipt->finality flow.
-- Commit: this commit.
+- 2026-02-13: Aligned explorer backend/frontend to canonical node contracts (`/blocks/:height`, `/entries/:namespace`, `/api/v1/receipts/:receipt_id`) and removed mock fallback payloads.
+- Commit: 1c08978
 
 ---
 
