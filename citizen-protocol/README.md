@@ -42,11 +42,13 @@ Implementation handoff status is tracked in:
 
 - `docs/PHASE_IMPLEMENTATION_TRACKER.md`
 
-Current delivery includes Phase 2 identity/data ownership primitives:
+Current delivery includes Phase 2 identity/data ownership primitives and Phase 3 builder credit controls:
 
 - DID registry namespace rule enforcement (`identity.citizen`) with governed action allowlists.
 - Resolver endpoint: `GET /api/v1/identity/:did` for latest DID status (`Active`/`Revoked`).
 - Consent receipt namespace policy enforcement (`consent.receipt`) and API policy checks via `POST /api/v1/consent/check`.
+- Builder fee credit namespace policy enforcement (`builder.credits`) with non-transferability, sponsorship balance checks, and anti-abuse controls (`sponsorship_id` uniqueness + daily spend cap).
+- Builder credit reporting endpoint: `GET /api/v1/builder-credits/:builder_id` for deterministic credited/sponsored/available accounting and instrumentation.
 - Wallet SDK verification helpers for DID document checks and off-chain commitment validation against on-chain consent receipts.
 
 ## Getting Started
