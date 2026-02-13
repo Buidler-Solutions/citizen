@@ -3,7 +3,9 @@ use chacha20poly1305::{
     aead::{Aead, KeyInit},
     ChaCha20Poly1305, Key, Nonce,
 };
-use citizen_types::{LedgerEntry, ProtocolError, UnixTimestamp};
+use citizen_types::{
+    ConsentReceipt, DidDocument, DidStatus, LedgerEntry, ProtocolError, UnixTimestamp,
+};
 use ed25519_dalek::{
     Signature, Signer, SigningKey, VerifyingKey, PUBLIC_KEY_LENGTH, SECRET_KEY_LENGTH,
 };
@@ -11,6 +13,7 @@ use rand::rngs::OsRng;
 use rand::RngCore;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use sha2::{Digest, Sha256};
 use std::collections::HashSet;
 use uuid::Uuid;
 
@@ -367,6 +370,50 @@ pub fn parse_verifying_key(encoded: &str) -> Result<VerifyingKey> {
         .map_err(|err| ProtocolError::crypto(format!("invalid verifying key bytes: {err}")))
 }
 
+pub fn verify_did_document(document: &DidDocument, expected_did: &str) -> Result<()> {
+    if document.did != expected_did {
+        return Err(ProtocolError::ValidationFailed(
+            "resolved DID does not match expected DID".into(),
+        ));
+    }
+    if !document.did.starts_with("did:") {
+        return Err(ProtocolError::ValidationFailed(
+            "resolved DID must use did: prefix".into(),
+        ));
+    }
+    if matches!(document.status, DidStatus::Revoked) {
+        return Err(ProtocolError::ValidationFailed(
+            "resolved DID is revoked".into(),
+        ));
+    }
+    Ok(())
+}
+
+pub fn verify_claims_commitment(claims_bytes: &[u8], expected_hash_hex: &str) -> Result<()> {
+    let digest = Sha256::digest(claims_bytes);
+    let computed = hex::encode(digest);
+    if computed == expected_hash_hex {
+        Ok(())
+    } else {
+        Err(ProtocolError::ValidationFailed(
+            "claims commitment mismatch".into(),
+        ))
+    }
+}
+
+pub fn verify_consent_receipt_offchain(
+    receipt: &ConsentReceipt,
+    plaintext_data: &[u8],
+    now: UnixTimestamp,
+) -> Result<()> {
+    if receipt.expires_at <= now {
+        return Err(ProtocolError::ValidationFailed(
+            "consent receipt expired".into(),
+        ));
+    }
+    verify_claims_commitment(plaintext_data, &receipt.data_hash)
+}
+
 fn canonical_json(value: &Value) -> String {
     let normalized = normalize_value(value);
     serde_json::to_string(&normalized).unwrap_or_else(|_| "null".to_string())
@@ -461,5 +508,44 @@ mod tests {
         let provider = MockHsmKeyProvider::new(keypair, 7);
         let sig = provider.sign_bytes(b"citizen").expect("sign payload");
         assert_eq!(sig.len(), 64);
+    }
+
+    #[test]
+    fn verifies_active_did_document() {
+        let document = DidDocument {
+            did: "did:ledger:alice".into(),
+            controller: "did:ledger:alice".into(),
+            status: DidStatus::Active,
+            claims_hash: Some("abc".into()),
+            updated_at: 1_736_500_000,
+        };
+        verify_did_document(&document, "did:ledger:alice").expect("active did should verify");
+    }
+
+    #[test]
+    fn rejects_revoked_did_document() {
+        let document = DidDocument {
+            did: "did:ledger:alice".into(),
+            controller: "did:ledger:alice".into(),
+            status: DidStatus::Revoked,
+            claims_hash: None,
+            updated_at: 1_736_500_000,
+        };
+        assert!(verify_did_document(&document, "did:ledger:alice").is_err());
+    }
+
+    #[test]
+    fn verifies_consent_receipt_commitment() {
+        let data = br#"{"email":"alice@example.org"}"#;
+        let digest = hex::encode(Sha256::digest(data));
+        let receipt = ConsentReceipt {
+            subject_did: "did:ledger:alice".into(),
+            data_hash: digest,
+            policy_ref: "policy:v1".into(),
+            granted_at: 1_736_500_000,
+            expires_at: 1_736_503_600,
+        };
+        verify_consent_receipt_offchain(&receipt, data, 1_736_500_100)
+            .expect("consent receipt should verify");
     }
 }
