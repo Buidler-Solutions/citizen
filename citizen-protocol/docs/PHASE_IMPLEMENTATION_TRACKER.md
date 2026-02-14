@@ -118,7 +118,8 @@ Baseline reference: `docs/DEEP_RESEARCH_ARCHITECTURE_BASELINE.md` (Phase 1 secti
 
 ## Post-Phase Operational Backlog
 ### Next Priority Tasks
-- [ ] Confirm validator-node rollout readiness across target operators (keys, peer admission policy, telemetry, and runbooks).
+- [x] Confirm validator-node rollout readiness across target operators (keys, peer admission policy, telemetry, and runbooks).
+  - 2026-02-14 update: added `docs/VALIDATOR_ROLLOUT_READINESS.md` with a four-gate validator sign-off workflow (keys, admission policy, telemetry, runbooks), explicit pass criteria, and release sign-off template for operator onboarding cohorts.
 - [x] Add a dedicated watcher/observer node delivery track immediately after validator readiness sign-off:
   - explicit read-only runtime profile,
   - no consensus voting/proposer participation,
