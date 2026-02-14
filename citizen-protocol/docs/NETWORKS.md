@@ -25,6 +25,9 @@ enabled, deterministic keys).
 - **Notes:** Treat as pre-production: run with production-like monitoring,
   capture telemetry (finality p50/p95, aborted rounds, leader rotations,
   message volume, CPU/RAM), and publish upgrade playbooks after each change.
+  Before release promotion, execute `scripts/run_simulation_release_gate.sh` to
+  publish Section 19 simulation artifacts (50/75/100 validators x all
+  adversarial scenarios) under `reports/releases/`.
 
 ## Mainnet (Public)
 - **Purpose:** Long-lived public ledger for identity, land registry, audit, and
