@@ -18,7 +18,6 @@ use std::collections::HashSet;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::net::TcpListener;
-use tokio::sync::RwLock;
 use tokio::task::JoinHandle;
 use tracing::info;
 use uuid::Uuid;
@@ -26,7 +25,6 @@ use uuid::Uuid;
 #[derive(Clone)]
 pub struct ApiServer<S: LedgerStorage + 'static> {
     ledger: Arc<Ledger<S>>,
-    receipts: Arc<RwLock<BTreeMap<Uuid, DeterministicReceipt>>>,
 }
 
 #[derive(Debug, Serialize)]
@@ -36,10 +34,7 @@ struct ApiError {
 
 impl<S: LedgerStorage + 'static> ApiServer<S> {
     pub fn new(ledger: Arc<Ledger<S>>) -> Self {
-        Self {
-            ledger,
-            receipts: Arc::new(RwLock::new(BTreeMap::new())),
-        }
+        Self { ledger }
     }
 
     pub async fn serve(self, addr: SocketAddr) -> JoinHandle<()> {
@@ -65,14 +60,11 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
         let consent_check_ledger = Arc::clone(&self.ledger);
         let submit_ledger = Arc::clone(&self.ledger);
         let submit_envelope_ledger = Arc::clone(&self.ledger);
+        let get_receipt_ledger = Arc::clone(&self.ledger);
         let builder_credits_ledger = Arc::clone(&self.ledger);
         let asset_positions_ledger = Arc::clone(&self.ledger);
         let module_runtime_ledger = Arc::clone(&self.ledger);
         let interop_status_ledger = Arc::clone(&self.ledger);
-        let submit_receipts = Arc::clone(&self.receipts);
-        let submit_legacy_receipts = Arc::clone(&self.receipts);
-        let get_receipt_store = Arc::clone(&self.receipts);
-
         Router::new()
             .route("/health", get(Self::health))
             .route(
@@ -114,23 +106,21 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
                 "/api/v1/entries/submit",
                 post(move |Json(entry): Json<LedgerEntry>| {
                     let ledger = Arc::clone(&submit_ledger);
-                    let receipts = Arc::clone(&submit_legacy_receipts);
-                    async move { Self::handle_submit_entry(ledger, receipts, entry).await }
+                    async move { Self::handle_submit_entry(ledger, entry).await }
                 }),
             )
             .route(
                 "/api/v1/envelopes/submit",
                 post(move |Json(envelope): Json<SignedEnvelope<LedgerEntry>>| {
                     let ledger = Arc::clone(&submit_envelope_ledger);
-                    let receipts = Arc::clone(&submit_receipts);
-                    async move { Self::handle_submit_envelope(ledger, receipts, envelope).await }
+                    async move { Self::handle_submit_envelope(ledger, envelope).await }
                 }),
             )
             .route(
                 "/api/v1/receipts/:receipt_id",
                 get(move |Path(receipt_id): Path<Uuid>| {
-                    let receipts = Arc::clone(&get_receipt_store);
-                    async move { Self::handle_get_receipt(receipts, receipt_id).await }
+                    let ledger = Arc::clone(&get_receipt_ledger);
+                    async move { Self::handle_get_receipt(ledger, receipt_id).await }
                 }),
             )
             .route(
@@ -193,7 +183,6 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
 
     async fn handle_submit_entry(
         ledger: Arc<Ledger<S>>,
-        receipts: Arc<RwLock<BTreeMap<Uuid, DeterministicReceipt>>>,
         entry: LedgerEntry,
     ) -> (StatusCode, Json<serde_json::Value>) {
         let envelope = SignedEnvelope {
@@ -203,7 +192,7 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
             submitted_at: Utc::now(),
             payload: entry,
         };
-        Self::handle_submit_envelope(ledger, receipts, envelope).await
+        Self::handle_submit_envelope(ledger, envelope).await
     }
 
     async fn handle_resolve_did(
@@ -291,7 +280,6 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
 
     async fn handle_submit_envelope(
         ledger: Arc<Ledger<S>>,
-        receipts: Arc<RwLock<BTreeMap<Uuid, DeterministicReceipt>>>,
         envelope: SignedEnvelope<LedgerEntry>,
     ) -> (StatusCode, Json<serde_json::Value>) {
         if envelope.signature.is_empty() {
@@ -316,7 +304,7 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
             return protocol_error_response(err);
         }
 
-        let finality = match Self::finalize_entry(ledger, entry).await {
+        let finality = match Self::finalize_entry(Arc::clone(&ledger), entry).await {
             Ok(finality) => finality,
             Err(err) => return protocol_error_response(err),
         };
@@ -333,10 +321,9 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
             finality: Some(finality),
             recorded_at: Utc::now(),
         };
-        receipts
-            .write()
-            .await
-            .insert(receipt.receipt_id, receipt.clone());
+        if let Err(err) = ledger.storage().store_receipt(receipt.clone()) {
+            return protocol_error_response(err);
+        }
 
         (
             StatusCode::ACCEPTED,
@@ -350,11 +337,10 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
     }
 
     async fn handle_get_receipt(
-        receipts: Arc<RwLock<BTreeMap<Uuid, DeterministicReceipt>>>,
+        ledger: Arc<Ledger<S>>,
         receipt_id: Uuid,
     ) -> (StatusCode, Json<serde_json::Value>) {
-        let store = receipts.read().await;
-        if let Some(receipt) = store.get(&receipt_id) {
+        if let Ok(Some(receipt)) = ledger.storage().get_receipt(receipt_id) {
             return (
                 StatusCode::OK,
                 Json(serde_json::json!({"receipt": receipt})),
@@ -723,6 +709,7 @@ mod tests {
         LedgerEntry, NamespaceDescriptor, NamespaceRule, NamespaceRuleset, SignedEnvelope,
     };
     use serde_json::{json, Value};
+    use std::collections::BTreeMap;
     use std::collections::BTreeSet;
     use std::sync::Arc;
     use tower::util::ServiceExt;
