@@ -124,3 +124,13 @@ Baseline reference: `docs/DEEP_RESEARCH_ARCHITECTURE_BASELINE.md` (Phase 1 secti
   - no consensus voting/proposer participation,
   - public query + verification endpoint deployment template,
   - operator runbook for builder/public watcher onboarding.
+- [ ] **Critical**: Make deterministic receipt retrieval durable across restarts by moving receipt storage from in-memory API state to persistent/indexed storage with replay/rebuild tooling.
+  - Why now: `ApiServer` currently keeps receipts only in `Arc<RwLock<BTreeMap<Uuid, DeterministicReceipt>>>`, so a node restart can drop historical `GET /api/v1/receipts/:receipt_id` lookups.
+- [ ] **Critical**: Establish production API edge controls before public rollout (authn/authz profile, rate limiting, and abuse controls for write endpoints).
+  - Why now: submission routes are directly exposed in the router (`/api/v1/entries/submit`, `/api/v1/envelopes/submit`) without an operational gateway policy defined in runbooks.
+- [ ] Add a disaster-recovery workstream for validator and observer operators:
+  - scheduled RocksDB snapshot/restore drills,
+  - signed backup retention policy,
+  - quorum-safe regional restore runbook and RTO/RPO targets.
+- [ ] Add a mandatory simulation-release gate for Section 19 coverage (50/75/100 validators and all adversarial scenarios) with artifact publication per release.
+  - Why now: the simulation runner currently defaults to a single `50-validator + Normal` config in `crates/simulation/src/bin/run.rs`, so release readiness is not yet tied to the full stress matrix.
