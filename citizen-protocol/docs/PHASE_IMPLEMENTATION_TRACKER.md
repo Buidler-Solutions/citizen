@@ -134,8 +134,9 @@ Baseline reference: `docs/DEEP_RESEARCH_ARCHITECTURE_BASELINE.md` (Phase 1 secti
   - scheduled RocksDB snapshot/restore drills,
   - signed backup retention policy,
   - quorum-safe regional restore runbook and RTO/RPO targets.
-- [ ] Add a mandatory simulation-release gate for Section 19 coverage (50/75/100 validators and all adversarial scenarios) with artifact publication per release.
+- [x] Add a mandatory simulation-release gate for Section 19 coverage (50/75/100 validators and all adversarial scenarios) with artifact publication per release.
   - Why now: the simulation runner currently defaults to a single `50-validator + Normal` config in `crates/simulation/src/bin/run.rs`, so release readiness is not yet tied to the full stress matrix.
+  - 2026-02-14 update: extended `crates/simulation/src/bin/run.rs` with a `--matrix` mode that executes 50/75/100 validators across all Section 19 scenarios and emits a release artifact under `reports/releases`; added `scripts/run_simulation_release_gate.sh` for reproducible release gating.
 - [ ] Document and validate opt-in clawback flag behavior for builder-created assets (`asset.control`):
   - publish a normative behavior matrix (enabled vs disabled clawback flags, authorization rules, and expected holder-facing outcomes),
   - add regression coverage for flag-driven hold/release/revocation paths,
