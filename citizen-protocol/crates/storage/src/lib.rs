@@ -1,6 +1,6 @@
 use citizen_types::{
-    Block, BlockHeight, GovernanceProposal, LedgerEntry, NamespaceDescriptor, NamespaceId,
-    ProtocolError, ValidatorId, ValidatorSetSnapshot,
+    Block, BlockHeight, DeterministicReceipt, GovernanceProposal, LedgerEntry, NamespaceDescriptor,
+    NamespaceId, ProtocolError, ValidatorId, ValidatorSetSnapshot,
 };
 use lru::LruCache;
 use parking_lot::RwLock;
@@ -9,6 +9,7 @@ use std::env;
 use std::num::NonZeroUsize;
 use std::str::FromStr;
 use std::sync::Arc;
+use uuid::Uuid;
 
 use rocksdb::{ColumnFamilyDescriptor, DBCompactionStyle, Options, WriteBatch, DB};
 
@@ -26,6 +27,8 @@ pub trait LedgerStorage: Send + Sync {
     fn latest_validator_set(&self) -> Result<Option<ValidatorSetSnapshot>>;
     fn track_governance_proposal(&self, proposal: GovernanceProposal) -> Result<()>;
     fn governance_proposals(&self) -> Result<Vec<GovernanceProposal>>;
+    fn store_receipt(&self, receipt: DeterministicReceipt) -> Result<()>;
+    fn get_receipt(&self, receipt_id: Uuid) -> Result<Option<DeterministicReceipt>>;
 }
 
 fn serialize<T: serde::Serialize>(value: &T) -> Result<Vec<u8>> {
@@ -48,6 +51,7 @@ struct Inner {
     namespaces: BTreeMap<NamespaceId, NamespaceDescriptor>,
     validator_sets: BTreeMap<BlockHeight, ValidatorSetSnapshot>,
     governance: BTreeMap<String, GovernanceProposal>,
+    receipts: BTreeMap<Uuid, DeterministicReceipt>,
 }
 
 impl MemoryStorage {
@@ -150,6 +154,18 @@ impl LedgerStorage for MemoryStorage {
     fn governance_proposals(&self) -> Result<Vec<GovernanceProposal>> {
         Ok(self.inner.read().governance.values().cloned().collect())
     }
+
+    fn store_receipt(&self, receipt: DeterministicReceipt) -> Result<()> {
+        self.inner
+            .write()
+            .receipts
+            .insert(receipt.receipt_id, receipt);
+        Ok(())
+    }
+
+    fn get_receipt(&self, receipt_id: Uuid) -> Result<Option<DeterministicReceipt>> {
+        Ok(self.inner.read().receipts.get(&receipt_id).cloned())
+    }
 }
 
 #[derive(Clone)]
@@ -163,6 +179,7 @@ const CF_ENTRIES: &str = "entries";
 const CF_NAMESPACES: &str = "namespaces";
 const CF_VALIDATORS: &str = "validators";
 const CF_GOVERNANCE: &str = "governance";
+const CF_RECEIPTS: &str = "receipts";
 
 fn parse_env<T>(key: &str) -> Option<T>
 where
@@ -243,6 +260,7 @@ impl RocksDbStorage {
             ColumnFamilyDescriptor::new(CF_NAMESPACES, Options::default()),
             ColumnFamilyDescriptor::new(CF_VALIDATORS, Options::default()),
             ColumnFamilyDescriptor::new(CF_GOVERNANCE, Options::default()),
+            ColumnFamilyDescriptor::new(CF_RECEIPTS, Options::default()),
         ];
 
         let db =
@@ -437,5 +455,13 @@ impl LedgerStorage for RocksDbStorage {
             out.push(deserialize(&value)?);
         }
         Ok(out)
+    }
+
+    fn store_receipt(&self, receipt: DeterministicReceipt) -> Result<()> {
+        self.put_cf(CF_RECEIPTS, receipt.receipt_id.as_bytes(), &receipt)
+    }
+
+    fn get_receipt(&self, receipt_id: Uuid) -> Result<Option<DeterministicReceipt>> {
+        self.get_cf(CF_RECEIPTS, receipt_id.as_bytes())
     }
 }
