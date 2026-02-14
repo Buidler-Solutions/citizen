@@ -1,5 +1,6 @@
 use axum::extract::Path;
 use axum::http::StatusCode;
+use axum::http::{HeaderMap, HeaderValue};
 use axum::routing::{get, post};
 use axum::{serve, Json, Router};
 use chrono::Utc;
@@ -18,6 +19,7 @@ use std::collections::HashSet;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::net::TcpListener;
+use tokio::sync::Mutex;
 use tokio::task::JoinHandle;
 use tracing::info;
 use uuid::Uuid;
@@ -25,6 +27,52 @@ use uuid::Uuid;
 #[derive(Clone)]
 pub struct ApiServer<S: LedgerStorage + 'static> {
     ledger: Arc<Ledger<S>>,
+    edge: Arc<ApiEdgeState>,
+}
+
+#[derive(Clone, Debug)]
+pub struct ApiEdgeConfig {
+    pub auth_required: bool,
+    pub max_write_requests_per_minute: usize,
+    pub clients: BTreeMap<String, ApiClientProfile>,
+}
+
+#[derive(Clone, Debug)]
+pub struct ApiClientProfile {
+    pub scopes: BTreeSet<String>,
+}
+
+impl ApiClientProfile {
+    pub fn with_scopes(scopes: impl IntoIterator<Item = impl Into<String>>) -> Self {
+        Self {
+            scopes: scopes.into_iter().map(Into::into).collect(),
+        }
+    }
+}
+
+impl Default for ApiEdgeConfig {
+    fn default() -> Self {
+        Self {
+            auth_required: false,
+            max_write_requests_per_minute: 120,
+            clients: BTreeMap::new(),
+        }
+    }
+}
+
+#[derive(Debug)]
+struct ApiEdgeState {
+    config: ApiEdgeConfig,
+    write_windows: Mutex<BTreeMap<String, Vec<i64>>>,
+}
+
+impl ApiEdgeState {
+    fn new(config: ApiEdgeConfig) -> Self {
+        Self {
+            config,
+            write_windows: Mutex::new(BTreeMap::new()),
+        }
+    }
 }
 
 #[derive(Debug, Serialize)]
@@ -34,7 +82,14 @@ struct ApiError {
 
 impl<S: LedgerStorage + 'static> ApiServer<S> {
     pub fn new(ledger: Arc<Ledger<S>>) -> Self {
-        Self { ledger }
+        Self::with_edge_config(ledger, ApiEdgeConfig::default())
+    }
+
+    pub fn with_edge_config(ledger: Arc<Ledger<S>>, edge_config: ApiEdgeConfig) -> Self {
+        Self {
+            ledger,
+            edge: Arc::new(ApiEdgeState::new(edge_config)),
+        }
     }
 
     pub async fn serve(self, addr: SocketAddr) -> JoinHandle<()> {
@@ -59,7 +114,9 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
         let resolve_did_ledger = Arc::clone(&self.ledger);
         let consent_check_ledger = Arc::clone(&self.ledger);
         let submit_ledger = Arc::clone(&self.ledger);
+        let submit_edge = Arc::clone(&self.edge);
         let submit_envelope_ledger = Arc::clone(&self.ledger);
+        let submit_envelope_edge = Arc::clone(&self.edge);
         let get_receipt_ledger = Arc::clone(&self.ledger);
         let builder_credits_ledger = Arc::clone(&self.ledger);
         let asset_positions_ledger = Arc::clone(&self.ledger);
@@ -104,17 +161,23 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
             )
             .route(
                 "/api/v1/entries/submit",
-                post(move |Json(entry): Json<LedgerEntry>| {
+                post(move |headers: HeaderMap, Json(entry): Json<LedgerEntry>| {
                     let ledger = Arc::clone(&submit_ledger);
-                    async move { Self::handle_submit_entry(ledger, entry).await }
+                    let edge = Arc::clone(&submit_edge);
+                    async move { Self::handle_submit_entry(ledger, edge, headers, entry).await }
                 }),
             )
             .route(
                 "/api/v1/envelopes/submit",
-                post(move |Json(envelope): Json<SignedEnvelope<LedgerEntry>>| {
-                    let ledger = Arc::clone(&submit_envelope_ledger);
-                    async move { Self::handle_submit_envelope(ledger, envelope).await }
-                }),
+                post(
+                    move |headers: HeaderMap, Json(envelope): Json<SignedEnvelope<LedgerEntry>>| {
+                        let ledger = Arc::clone(&submit_envelope_ledger);
+                        let edge = Arc::clone(&submit_envelope_edge);
+                        async move {
+                            Self::handle_submit_envelope(ledger, edge, headers, envelope).await
+                        }
+                    },
+                ),
             )
             .route(
                 "/api/v1/receipts/:receipt_id",
@@ -183,8 +246,15 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
 
     async fn handle_submit_entry(
         ledger: Arc<Ledger<S>>,
+        edge: Arc<ApiEdgeState>,
+        headers: HeaderMap,
         entry: LedgerEntry,
     ) -> (StatusCode, Json<serde_json::Value>) {
+        if let Err(response) =
+            Self::authorize_write(Arc::clone(&edge), &headers, "entries.submit").await
+        {
+            return response;
+        }
         let envelope = SignedEnvelope {
             envelope_id: Uuid::new_v4(),
             signer: entry.author.clone(),
@@ -192,7 +262,7 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
             submitted_at: Utc::now(),
             payload: entry,
         };
-        Self::handle_submit_envelope(ledger, envelope).await
+        Self::process_envelope_submission(ledger, envelope).await
     }
 
     async fn handle_resolve_did(
@@ -279,6 +349,18 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
     }
 
     async fn handle_submit_envelope(
+        ledger: Arc<Ledger<S>>,
+        edge: Arc<ApiEdgeState>,
+        headers: HeaderMap,
+        envelope: SignedEnvelope<LedgerEntry>,
+    ) -> (StatusCode, Json<serde_json::Value>) {
+        if let Err(response) = Self::authorize_write(edge, &headers, "envelopes.submit").await {
+            return response;
+        }
+        Self::process_envelope_submission(ledger, envelope).await
+    }
+
+    async fn process_envelope_submission(
         ledger: Arc<Ledger<S>>,
         envelope: SignedEnvelope<LedgerEntry>,
     ) -> (StatusCode, Json<serde_json::Value>) {
@@ -678,6 +760,59 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
             updated_at: entry.timestamp,
         })
     }
+
+    async fn authorize_write(
+        edge: Arc<ApiEdgeState>,
+        headers: &HeaderMap,
+        required_scope: &str,
+    ) -> Result<(), (StatusCode, Json<serde_json::Value>)> {
+        let principal = if edge.config.auth_required {
+            let Some(token) = headers.get("x-api-key") else {
+                return Err((
+                    StatusCode::UNAUTHORIZED,
+                    Json(serde_json::json!({"error": "missing x-api-key header"})),
+                ));
+            };
+            let token = token.to_str().ok().unwrap_or_default().to_string();
+            let Some(client) = edge.config.clients.get(&token) else {
+                return Err((
+                    StatusCode::UNAUTHORIZED,
+                    Json(serde_json::json!({"error": "invalid api key"})),
+                ));
+            };
+            if !client.scopes.contains(required_scope) {
+                return Err((
+                    StatusCode::FORBIDDEN,
+                    Json(
+                        serde_json::json!({"error": "api key missing required scope", "required_scope": required_scope}),
+                    ),
+                ));
+            }
+            token
+        } else {
+            headers
+                .get("x-forwarded-for")
+                .and_then(header_to_string)
+                .unwrap_or_else(|| "anonymous".to_string())
+        };
+
+        let now = Utc::now().timestamp();
+        let mut windows = edge.write_windows.lock().await;
+        let entries = windows.entry(principal).or_default();
+        entries.retain(|timestamp| *timestamp > now - 60);
+        if entries.len() >= edge.config.max_write_requests_per_minute {
+            return Err((
+                StatusCode::TOO_MANY_REQUESTS,
+                Json(serde_json::json!({"error": "write rate limit exceeded"})),
+            ));
+        }
+        entries.push(now);
+        Ok(())
+    }
+}
+
+fn header_to_string(value: &HeaderValue) -> Option<String> {
+    value.to_str().ok().map(ToString::to_string)
 }
 
 fn protocol_error_response(err: ProtocolError) -> (StatusCode, Json<serde_json::Value>) {
@@ -699,7 +834,7 @@ fn protocol_error_response(err: ProtocolError) -> (StatusCode, Json<serde_json::
 
 #[cfg(test)]
 mod tests {
-    use super::ApiServer;
+    use super::{ApiClientProfile, ApiEdgeConfig, ApiServer};
     use axum::body::Body;
     use axum::http::{Request, StatusCode};
     use citizen_crypto::KeyRegistry;
@@ -829,6 +964,25 @@ mod tests {
             }],
         }]);
         ApiServer::new(ledger)
+    }
+
+    fn build_server_with_edge(edge: ApiEdgeConfig) -> ApiServer<MemoryStorage> {
+        let storage = Arc::new(MemoryStorage::new());
+        let ledger = Arc::new(Ledger::new(storage, KeyRegistry::new()));
+        ledger.bootstrap_namespaces(vec![NamespaceRuleset {
+            descriptor: NamespaceDescriptor {
+                namespace: "audit.procurement".to_string(),
+                version: 1,
+                rules_hash: "rules-v1".to_string(),
+                governed_by: "governance".to_string(),
+            },
+            writers: BTreeSet::new(),
+            validators: vec![NamespaceRule {
+                name: "require_signature".to_string(),
+                config: json!({}),
+            }],
+        }]);
+        ApiServer::with_edge_config(ledger, edge)
     }
 
     fn test_envelope() -> SignedEnvelope<LedgerEntry> {
@@ -1486,5 +1640,116 @@ mod tests {
         let payload: Value = serde_json::from_slice(&body).expect("interop payload");
         assert_eq!(payload["latest_link"], "did:web:example.com:alice");
         assert_eq!(payload["latest_proof_hash"], "proof:0xabc");
+    }
+
+    #[tokio::test]
+    async fn write_endpoints_require_api_key_when_auth_enabled() {
+        let mut clients = BTreeMap::new();
+        clients.insert(
+            "writer-key".to_string(),
+            ApiClientProfile::with_scopes(["entries.submit", "envelopes.submit"]),
+        );
+        let app = build_server_with_edge(ApiEdgeConfig {
+            auth_required: true,
+            max_write_requests_per_minute: 10,
+            clients,
+        })
+        .router();
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/entries/submit")
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        serde_json::to_vec(&test_envelope().payload).expect("entry body"),
+                    ))
+                    .expect("request"),
+            )
+            .await
+            .expect("submit response");
+
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[tokio::test]
+    async fn write_endpoints_enforce_scope_authorization() {
+        let mut clients = BTreeMap::new();
+        clients.insert(
+            "entries-only".to_string(),
+            ApiClientProfile::with_scopes(["entries.submit"]),
+        );
+        let app = build_server_with_edge(ApiEdgeConfig {
+            auth_required: true,
+            max_write_requests_per_minute: 10,
+            clients,
+        })
+        .router();
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/envelopes/submit")
+                    .header("content-type", "application/json")
+                    .header("x-api-key", "entries-only")
+                    .body(Body::from(
+                        serde_json::to_vec(&test_envelope()).expect("envelope body"),
+                    ))
+                    .expect("request"),
+            )
+            .await
+            .expect("submit response");
+
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    }
+
+    #[tokio::test]
+    async fn write_endpoints_apply_rate_limits() {
+        let mut clients = BTreeMap::new();
+        clients.insert(
+            "writer-key".to_string(),
+            ApiClientProfile::with_scopes(["entries.submit", "envelopes.submit"]),
+        );
+        let app = build_server_with_edge(ApiEdgeConfig {
+            auth_required: true,
+            max_write_requests_per_minute: 1,
+            clients,
+        })
+        .router();
+
+        let first = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/entries/submit")
+                    .header("content-type", "application/json")
+                    .header("x-api-key", "writer-key")
+                    .body(Body::from(
+                        serde_json::to_vec(&test_envelope().payload).expect("entry body"),
+                    ))
+                    .expect("first request"),
+            )
+            .await
+            .expect("first submit");
+        assert_eq!(first.status(), StatusCode::ACCEPTED);
+
+        let second = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/entries/submit")
+                    .header("content-type", "application/json")
+                    .header("x-api-key", "writer-key")
+                    .body(Body::from(
+                        serde_json::to_vec(&test_envelope().payload).expect("entry body"),
+                    ))
+                    .expect("second request"),
+            )
+            .await
+            .expect("second submit");
+        assert_eq!(second.status(), StatusCode::TOO_MANY_REQUESTS);
     }
 }
