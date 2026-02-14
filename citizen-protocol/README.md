@@ -20,6 +20,7 @@ citizen-protocol/
 │   └── types/                # Shared protocol data structures
 └── docs/
     ├── CITIZEN_MANIFESTO.md  # Positioning + civic mission statement
+    ├── DEVELOPER_EXPERIENCE_BLUEPRINT.md # Validator + dApp + wallet + explorer + laboratory plan
     └── GOVERNANCE_CHARTER_V1.md
 ```
 
@@ -98,6 +99,12 @@ Current delivery includes Phase 2 identity/data ownership primitives, Phase 3 bu
      validator anchors.
 
    Additional context is available in `docs/NETWORKS.md`.
+
+6. For a consolidated builder + user enablement guide (validator setup, dApp
+   flow, signer keeper usage, explorer verification, and Laboratory app plan),
+   read:
+
+   - `docs/DEVELOPER_EXPERIENCE_BLUEPRINT.md`
 
 ## Transport Admission & Key Rotation
 
