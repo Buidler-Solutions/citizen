@@ -108,6 +108,10 @@ Current delivery includes Phase 2 identity/data ownership primitives, Phase 3 bu
 
    - `docs/OBSERVER_NODE_RUNBOOK.md`
 
+   Validator rollout readiness gate (keys, admission policy, telemetry, and runbook sign-off) is documented in:
+
+   - `docs/VALIDATOR_ROLLOUT_READINESS.md`
+
 6. For a consolidated builder + user enablement guide (validator setup, dApp
    flow, signer keeper usage, explorer verification, and Laboratory app plan),
    read:
