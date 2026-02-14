@@ -39,10 +39,6 @@ async fn main() -> anyhow::Result<()> {
 
     tracing::info!("validator_id" = %config.validator_id, "block_time_ms" = config.block_time_millis, "quorum_bps" = config.quorum_bps, "loaded_config" = %config_path.display());
 
-    let keypair = config.load_or_generate_keypair()?;
-    let verifying_key_hex = verifying_key_to_string(keypair.verifying_key());
-    tracing::info!("verifying_key" = %verifying_key_hex, "note" = "share this key for validator admission");
-
     let storage_path = config
         .data_dir
         .clone()
@@ -52,62 +48,70 @@ async fn main() -> anyhow::Result<()> {
     let ledger = Arc::new(Ledger::new(storage.clone(), key_registry));
     ledger.bootstrap_namespaces(config.namespaces.clone());
 
-    let snapshot = config.build_validator_set(&verifying_key_hex);
-    let rotation = Duration::from_secs(config.network_key_rotation_secs);
-    let admission = Arc::new(AdmissionControl::from_snapshot(snapshot.clone(), rotation));
-
-    let network = if !config.peers.is_empty() {
-        let peers = config
-            .peers
-            .iter()
-            .filter_map(|p| {
-                p.address
-                    .parse()
-                    .ok()
-                    .map(|addr| (p.validator_id.clone(), addr))
-            })
-            .collect();
-        Arc::new(NodeNetwork::Quic(QuicNetwork::new(
-            config.bind_addr.unwrap_or(default_bind()),
-            peers,
-            admission.clone(),
-            config.validator_id.clone(),
-            verifying_key_hex.clone(),
-        )?))
-    } else {
-        Arc::new(NodeNetwork::Mock(MockNetwork::new(NetworkLatency {
-            min_ms: 20,
-            max_ms: 80,
-            jitter_ms: 20,
-            packet_loss: 0.0,
-        })))
-    };
-
-    let consensus = Arc::new(ConsensusEngine::new(
-        config.validator_id.clone(),
-        keypair,
-        ConsensusConfig {
-            block_time_millis: config.block_time_millis,
-            max_entries_per_block: 1024,
-            quorum_bps: config.quorum_bps,
-        },
-        network.clone(),
-        ledger.clone(),
-        snapshot,
-    )?);
-
     let api_server = ApiServer::with_edge_config(ledger.clone(), config.api_edge_config());
     let api_handle = api_server
         .serve(SocketAddr::from((Ipv4Addr::LOCALHOST, config.api_port)))
         .await;
 
-    let consensus_task = {
-        let engine = consensus.clone();
-        tokio::spawn(async move {
-            if let Err(err) = engine.run().await {
+    let consensus_task = if config.node_role == NodeRole::Validator {
+        let keypair = config.load_or_generate_keypair()?;
+        let verifying_key_hex = verifying_key_to_string(keypair.verifying_key());
+        tracing::info!("verifying_key" = %verifying_key_hex, "note" = "share this key for validator admission");
+        let snapshot = config.build_validator_set(&verifying_key_hex);
+        let rotation = Duration::from_secs(config.network_key_rotation_secs);
+        let admission = Arc::new(AdmissionControl::from_snapshot(snapshot.clone(), rotation));
+
+        let network = if !config.peers.is_empty() {
+            let peers = config
+                .peers
+                .iter()
+                .filter_map(|p| {
+                    p.address
+                        .parse()
+                        .ok()
+                        .map(|addr| (p.validator_id.clone(), addr))
+                })
+                .collect();
+            Arc::new(NodeNetwork::Quic(QuicNetwork::new(
+                config.bind_addr.unwrap_or(default_bind()),
+                peers,
+                admission,
+                config.validator_id.clone(),
+                verifying_key_hex,
+            )?))
+        } else {
+            Arc::new(NodeNetwork::Mock(MockNetwork::new(NetworkLatency {
+                min_ms: 20,
+                max_ms: 80,
+                jitter_ms: 20,
+                packet_loss: 0.0,
+            })))
+        };
+
+        let consensus = Arc::new(ConsensusEngine::new(
+            config.validator_id.clone(),
+            keypair,
+            ConsensusConfig {
+                block_time_millis: config.block_time_millis,
+                max_entries_per_block: 1024,
+                quorum_bps: config.quorum_bps,
+            },
+            network,
+            ledger,
+            snapshot,
+        )?);
+
+        Some(tokio::spawn(async move {
+            if let Err(err) = consensus.run().await {
                 tracing::error!(?err, "consensus error");
             }
-        })
+        }))
+    } else {
+        tracing::info!(
+            "mode" = "observer",
+            "msg" = "consensus disabled; read-only API profile active"
+        );
+        None
     };
 
     tracing::info!("msg" = "node running", "api_port" = config.api_port);
@@ -117,7 +121,9 @@ async fn main() -> anyhow::Result<()> {
         .context("failed to listen for shutdown signal")?;
     tracing::info!("msg" = "shutdown signal received");
 
-    consensus_task.abort();
+    if let Some(task) = consensus_task {
+        task.abort();
+    }
     api_handle.abort();
 
     Ok(())
@@ -125,6 +131,8 @@ async fn main() -> anyhow::Result<()> {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 struct NodeConfig {
+    #[serde(default)]
+    node_role: NodeRole,
     validator_id: ValidatorId,
     #[serde(default = "default_quorum")]
     quorum_bps: u32,
@@ -188,6 +196,7 @@ impl NodeConfig {
             })
             .collect();
         ApiEdgeConfig {
+            write_enabled: self.node_role != NodeRole::Observer,
             auth_required: self.api_auth_required,
             max_write_requests_per_minute: self.api_max_write_requests_per_minute,
             clients,
@@ -244,6 +253,7 @@ impl NodeConfig {
 impl Default for NodeConfig {
     fn default() -> Self {
         Self {
+            node_role: NodeRole::default(),
             validator_id: "validator.local".into(),
             quorum_bps: default_quorum(),
             block_time_millis: default_block_time(),
@@ -260,6 +270,14 @@ impl Default for NodeConfig {
             network_key_rotation_secs: default_rotation_secs(),
         }
     }
+}
+
+#[derive(Clone, Copy, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+enum NodeRole {
+    #[default]
+    Validator,
+    Observer,
 }
 
 fn default_quorum() -> u32 {
