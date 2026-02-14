@@ -1,0 +1,80 @@
+node_role = "validator"
+validator_id = "futurenet-alpha"
+block_time_millis = 1000
+quorum_bps = 8000
+signing_key_hex = "REPLACE_WITH_32_BYTE_SECRET_HEX_ALPHA"
+api_port = 8181
+api_auth_required = true
+api_max_write_requests_per_minute = 120
+data_dir = "data/futurenet-alpha"
+bind_addr = "0.0.0.0:9200"
+network_key_rotation_secs = 3600
+
+[[api_clients]]
+api_key = "REPLACE_WITH_BUILDER_INGEST_KEY"
+scopes = ["entries.submit", "envelopes.submit"]
+
+[[api_clients]]
+api_key = "REPLACE_WITH_OPS_ENVELOPE_KEY"
+scopes = ["envelopes.submit"]
+
+[[namespaces]]
+descriptor.namespace = "identity.citizen"
+descriptor.version = 1
+descriptor.rules_hash = "sha256:identity-futurenet-v1"
+descriptor.governed_by = "governance.vote"
+writers = ["registry.identity"]
+[[namespaces.validators]]
+name = "require_signature"
+config = {}
+
+[[namespaces]]
+descriptor.namespace = "registry.land"
+descriptor.version = 1
+descriptor.rules_hash = "sha256:land-futurenet-v1"
+descriptor.governed_by = "governance.vote"
+writers = ["registry.land"]
+[[namespaces.validators]]
+name = "require_signature"
+config = {}
+[[namespaces.validators]]
+name = "prevent_double_transfer"
+config.object_id = "object_id"
+
+[[namespaces]]
+descriptor.namespace = "audit.procurement"
+descriptor.version = 1
+descriptor.rules_hash = "sha256:audit-futurenet-v1"
+descriptor.governed_by = "governance.vote"
+writers = ["audit.procurement"]
+[[namespaces.validators]]
+name = "require_signature"
+config = {}
+
+[[namespaces]]
+descriptor.namespace = "governance.vote"
+descriptor.version = 1
+descriptor.rules_hash = "sha256:governance-futurenet-v1"
+descriptor.governed_by = "governance.vote"
+writers = ["governance.vote"]
+[[namespaces.validators]]
+name = "require_signature"
+config = {}
+
+[[validators]]
+validator_id = "futurenet-beta"
+public_key = "REPLACE_WITH_BETA_VERIFYING_KEY_HEX"
+anchors = ["org:beta-lab"]
+
+[[validators]]
+validator_id = "futurenet-gamma"
+public_key = "REPLACE_WITH_GAMMA_VERIFYING_KEY_HEX"
+anchors = ["org:gamma-lab"]
+
+[[peers]]
+validator_id = "futurenet-beta"
+address = "beta.example.org:9201"
+
+[[peers]]
+validator_id = "futurenet-gamma"
+address = "gamma.example.org:9202"
