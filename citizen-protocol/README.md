@@ -104,6 +104,10 @@ Current delivery includes Phase 2 identity/data ownership primitives, Phase 3 bu
 
    - `docs/OPERATOR_DISASTER_RECOVERY_RUNBOOK.md`
 
+   Observer/watcher rollout profile (read-only runtime mode, bootstrap template, and onboarding checks) is documented in:
+
+   - `docs/OBSERVER_NODE_RUNBOOK.md`
+
 6. For a consolidated builder + user enablement guide (validator setup, dApp
    flow, signer keeper usage, explorer verification, and Laboratory app plan),
    read:
