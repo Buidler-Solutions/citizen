@@ -82,9 +82,9 @@ Set API environment values:
 
 For local validator trio, use:
 
-- `testnet` → `http://127.0.0.1:8081/api/v1/entries/submit`
-- `futurenet` → `http://127.0.0.1:8082/api/v1/entries/submit`
-- `mainnet` → `http://127.0.0.1:8083/api/v1/entries/submit`
+- `testnet` → `http://127.0.0.1:8081/api/v1/envelopes/submit`
+- `futurenet` → `http://127.0.0.1:8082/api/v1/envelopes/submit`
+- `mainnet` → `http://127.0.0.1:8083/api/v1/envelopes/submit`
 
 ---
 
@@ -217,11 +217,11 @@ These ten surfaces together provide an end-to-end ecosystem where builders, user
 
 1. Continue using `docs/STACK_TESTING_GUIDE.md` for local end-to-end workflow.
 2. Confirm validator-node production readiness first (keys, admission policy, routable endpoints, telemetry).
-3. Immediately after validator readiness sign-off, implement a dedicated **Watcher/Observer Node Profile** task:
-   - read-only deployment profile for builders and public operators,
+3. Observer-node delivery is complete and should now be treated as a standard deployment profile:
+   - use `node_role = "observer"` for read-only runtime behavior,
    - no voting/proposer rights,
-   - public query + verification endpoints,
-   - explicit runbook and bootstrap config template.
+   - public query + verification endpoints enabled for builder/public consumers,
+   - follow `docs/OBSERVER_NODE_RUNBOOK.md` and `config/observer/observer-public.toml` for onboarding.
 4. Promote this blueprint as the cross-team implementation checklist.
 5. Create `laboratory/` MVP with:
    - network selector,
