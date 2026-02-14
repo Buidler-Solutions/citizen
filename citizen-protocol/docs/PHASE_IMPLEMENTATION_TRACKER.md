@@ -130,10 +130,11 @@ Baseline reference: `docs/DEEP_RESEARCH_ARCHITECTURE_BASELINE.md` (Phase 1 secti
 - [x] **Critical**: Establish production API edge controls before public rollout (authn/authz profile, rate limiting, and abuse controls for write endpoints).
   - Why now: submission routes are directly exposed in the router (`/api/v1/entries/submit`, `/api/v1/envelopes/submit`) without an operational gateway policy defined in runbooks.
   - 2026-02-14 update: Added API edge controls for write endpoints with optional API-key authn/authz scopes (`entries.submit`, `envelopes.submit`) and per-principal write rate limiting; node config now exposes `api_auth_required`, `api_max_write_requests_per_minute`, and `api_clients` for rollout policy wiring.
-- [ ] Add a disaster-recovery workstream for validator and observer operators:
+- [x] Add a disaster-recovery workstream for validator and observer operators:
   - scheduled RocksDB snapshot/restore drills,
   - signed backup retention policy,
   - quorum-safe regional restore runbook and RTO/RPO targets.
+  - 2026-02-14 update: added `docs/OPERATOR_DISASTER_RECOVERY_RUNBOOK.md` with validator/observer RTO-RPO targets, retention policy, and quorum-safe regional restore sequencing; added `scripts/run_rocksdb_drill.sh` to standardize snapshot/verify/restore drills.
 - [x] Add a mandatory simulation-release gate for Section 19 coverage (50/75/100 validators and all adversarial scenarios) with artifact publication per release.
   - Why now: the simulation runner currently defaults to a single `50-validator + Normal` config in `crates/simulation/src/bin/run.rs`, so release readiness is not yet tied to the full stress matrix.
   - 2026-02-14 update: extended `crates/simulation/src/bin/run.rs` with a `--matrix` mode that executes 50/75/100 validators across all Section 19 scenarios and emits a release artifact under `reports/releases`; added `scripts/run_simulation_release_gate.sh` for reproducible release gating.
