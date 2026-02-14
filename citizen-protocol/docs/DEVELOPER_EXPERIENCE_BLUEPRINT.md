@@ -216,11 +216,16 @@ These ten surfaces together provide an end-to-end ecosystem where builders, user
 ## 7) Recommended Immediate Execution Plan
 
 1. Continue using `docs/STACK_TESTING_GUIDE.md` for local end-to-end workflow.
-2. Promote this blueprint as the cross-team implementation checklist.
-3. Create `laboratory/` MVP with:
+2. Confirm validator-node production readiness first (keys, admission policy, routable endpoints, telemetry).
+3. Immediately after validator readiness sign-off, implement a dedicated **Watcher/Observer Node Profile** task:
+   - read-only deployment profile for builders and public operators,
+   - no voting/proposer rights,
+   - public query + verification endpoints,
+   - explicit runbook and bootstrap config template.
+4. Promote this blueprint as the cross-team implementation checklist.
+5. Create `laboratory/` MVP with:
    - network selector,
    - submit/query console,
    - signer keeper integration,
    - deterministic receipt verification view.
-4. Expand dApp starter templates for namespace-specific modules (`identity.citizen`, `consent.receipt`, `governance.vote`).
-
+6. Expand dApp starter templates for namespace-specific modules (`identity.citizen`, `consent.receipt`, `governance.vote`).
