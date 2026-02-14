@@ -119,11 +119,12 @@ Baseline reference: `docs/DEEP_RESEARCH_ARCHITECTURE_BASELINE.md` (Phase 1 secti
 ## Post-Phase Operational Backlog
 ### Next Priority Tasks
 - [ ] Confirm validator-node rollout readiness across target operators (keys, peer admission policy, telemetry, and runbooks).
-- [ ] Add a dedicated watcher/observer node delivery track immediately after validator readiness sign-off:
+- [x] Add a dedicated watcher/observer node delivery track immediately after validator readiness sign-off:
   - explicit read-only runtime profile,
   - no consensus voting/proposer participation,
   - public query + verification endpoint deployment template,
   - operator runbook for builder/public watcher onboarding.
+  - 2026-02-14 update: added `node_role = "observer"` runtime support that disables consensus execution and write endpoints, published observer bootstrap template `config/observer/observer-public.toml`, and added `docs/OBSERVER_NODE_RUNBOOK.md` for operator onboarding/validation.
 - [x] **Critical**: Make deterministic receipt retrieval durable across restarts by moving receipt storage from in-memory API state to persistent/indexed storage with replay/rebuild tooling.
   - Why now: `ApiServer` currently keeps receipts only in `Arc<RwLock<BTreeMap<Uuid, DeterministicReceipt>>>`, so a node restart can drop historical `GET /api/v1/receipts/:receipt_id` lookups.
   - 2026-02-14 update: receipt persistence was moved into the storage layer (`LedgerStorage::store_receipt` / `get_receipt`) with Memory and RocksDB implementations; API handlers now write/read receipts via ledger storage instead of in-memory API state.
