@@ -50,11 +50,11 @@ const DEFAULT_NETWORK: TargetNetwork = "futurenet";
 
 const NODE_ENDPOINTS: Record<TargetNetwork, string> = {
   testnet:
-    process.env.CITIZEN_TESTNET_SUBMIT_URL ?? "http://127.0.0.1:8081/api/v1/entries/submit",
+    process.env.CITIZEN_TESTNET_SUBMIT_URL ?? "http://127.0.0.1:8081/api/v1/envelopes/submit",
   futurenet:
-    process.env.CITIZEN_FUTURENET_SUBMIT_URL ?? "http://127.0.0.1:8082/api/v1/entries/submit",
+    process.env.CITIZEN_FUTURENET_SUBMIT_URL ?? "http://127.0.0.1:8082/api/v1/envelopes/submit",
   mainnet:
-    process.env.CITIZEN_MAINNET_SUBMIT_URL ?? "http://127.0.0.1:8083/api/v1/entries/submit"
+    process.env.CITIZEN_MAINNET_SUBMIT_URL ?? "http://127.0.0.1:8083/api/v1/envelopes/submit"
 };
 
 @Injectable()
@@ -282,19 +282,25 @@ export class AppService {
             walletSignature: signature
           }
         : {
-            entry_id: randomUUID(),
-            namespace: "content.article",
-            action: "PUBLISH_ARTICLE",
-            object_id: `article:${challenge.id}`,
-            payload: {
-              title: challenge.draft.title,
-              content: challenge.draft.content,
-              signedMessage: challenge.message,
-              network: challenge.network
-            },
-            author: challenge.authorWallet,
+            envelope_id: randomUUID(),
+            signer: challenge.authorWallet,
             signature,
-            timestamp: Math.floor(Date.now() / 1000)
+            submitted_at: new Date().toISOString(),
+            payload: {
+              entry_id: randomUUID(),
+              namespace: "content.article",
+              action: "PUBLISH_ARTICLE",
+              object_id: `article:${challenge.id}`,
+              payload: {
+                title: challenge.draft.title,
+                content: challenge.draft.content,
+                signedMessage: challenge.message,
+                network: challenge.network
+              },
+              author: challenge.authorWallet,
+              signature,
+              timestamp: Math.floor(Date.now() / 1000)
+            }
           };
 
       response = await fetch(endpoint, {
