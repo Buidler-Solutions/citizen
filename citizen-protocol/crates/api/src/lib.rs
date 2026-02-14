@@ -552,6 +552,17 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
                         .and_modify(|current| *current = current.saturating_sub(amount))
                         .or_insert(-amount);
                 }
+                "ASSET_REVOKE" => {
+                    let amount = entry
+                        .payload
+                        .get("amount")
+                        .and_then(|value| value.as_u64())
+                        .unwrap_or_default() as i128;
+                    holdings
+                        .entry(key)
+                        .and_modify(|current| *current = current.saturating_sub(amount))
+                        .or_insert(-amount);
+                }
                 _ => {}
             }
         }
@@ -567,11 +578,29 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
                 .get("max_holding")
                 .and_then(|value| value.as_u64())
                 .unwrap_or_default();
+            let clawback_enabled = trustline
+                .get("policy_flags")
+                .and_then(|value| value.as_array())
+                .map(|flags| {
+                    flags
+                        .iter()
+                        .filter_map(|flag| flag.as_str())
+                        .any(|flag| flag == "clawback_enabled")
+                })
+                .unwrap_or(false);
             positions.push(serde_json::json!({
                 "issuer": issuer,
                 "asset_code": asset_code,
                 "held": held,
                 "available_capacity": max_holding.saturating_sub(held),
+                "holder_notice": if clawback_enabled {
+                    "Issuer clawback is ENABLED for this trustline. Issuer may revoke held units according to policy."
+                } else {
+                    "Issuer clawback is DISABLED for this trustline. Only holder-initiated releases reduce holdings."
+                },
+                "clawback": {
+                    "enabled": clawback_enabled,
+                },
                 "trustline": trustline,
             }));
         }
@@ -931,7 +960,7 @@ mod tests {
             writers: BTreeSet::new(),
             validators: vec![NamespaceRule {
                 name: "asset_control_policy".to_string(),
-                config: json!({"allowed_policy_flags": ["kyc_required", "attestation_required"]}),
+                config: json!({"allowed_policy_flags": ["kyc_required", "attestation_required", "clawback_enabled"]}),
             }],
         }]);
         ledger.bootstrap_namespaces(vec![NamespaceRuleset {
@@ -1419,7 +1448,7 @@ mod tests {
                 "issuer":"issuer:treasury",
                 "asset_code":"CITZ-CRED",
                 "max_holding":100_u64,
-                "policy_flags":["kyc_required"],
+                "policy_flags":["kyc_required", "clawback_enabled"],
                 "disclosure":{"mode":"hashed", "commitment":"0xabc"}
             }),
             author: "did:ledger:alice".to_string(),
@@ -1443,7 +1472,24 @@ mod tests {
             timestamp: now + 1,
         };
 
-        for entry in [trustline_entry, hold_entry] {
+        let revoke_entry = LedgerEntry {
+            entry_id: Uuid::new_v4(),
+            namespace: "asset.control".to_string(),
+            action: "ASSET_REVOKE".to_string(),
+            object_id: "did:ledger:alice".to_string(),
+            payload: json!({
+                "issuer":"issuer:treasury",
+                "asset_code":"CITZ-CRED",
+                "amount":10_u64,
+                "policy_flags":["kyc_required", "clawback_enabled"],
+                "disclosure":{"mode":"public"}
+            }),
+            author: "issuer:treasury".to_string(),
+            signature: "sig".to_string(),
+            timestamp: now + 2,
+        };
+
+        for entry in [trustline_entry, hold_entry, revoke_entry] {
             app.clone()
                 .oneshot(
                     Request::builder()
@@ -1475,11 +1521,16 @@ mod tests {
             .await
             .expect("body bytes");
         let payload: Value = serde_json::from_slice(&body).expect("asset positions payload");
-        assert_eq!(payload["positions"][0]["held"], 40);
-        assert_eq!(payload["positions"][0]["available_capacity"], 60);
+        assert_eq!(payload["positions"][0]["held"], 30);
+        assert_eq!(payload["positions"][0]["available_capacity"], 70);
         assert_eq!(
             payload["positions"][0]["trustline"]["policy_flags"][0],
             "kyc_required"
+        );
+        assert_eq!(payload["positions"][0]["clawback"]["enabled"], true);
+        assert_eq!(
+            payload["positions"][0]["holder_notice"],
+            "Issuer clawback is ENABLED for this trustline. Issuer may revoke held units according to policy."
         );
         assert_eq!(
             payload["positions"][0]["trustline"]["disclosure"]["mode"],
