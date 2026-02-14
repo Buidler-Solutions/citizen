@@ -124,8 +124,9 @@ Baseline reference: `docs/DEEP_RESEARCH_ARCHITECTURE_BASELINE.md` (Phase 1 secti
   - no consensus voting/proposer participation,
   - public query + verification endpoint deployment template,
   - operator runbook for builder/public watcher onboarding.
-- [ ] **Critical**: Make deterministic receipt retrieval durable across restarts by moving receipt storage from in-memory API state to persistent/indexed storage with replay/rebuild tooling.
+- [x] **Critical**: Make deterministic receipt retrieval durable across restarts by moving receipt storage from in-memory API state to persistent/indexed storage with replay/rebuild tooling.
   - Why now: `ApiServer` currently keeps receipts only in `Arc<RwLock<BTreeMap<Uuid, DeterministicReceipt>>>`, so a node restart can drop historical `GET /api/v1/receipts/:receipt_id` lookups.
+  - 2026-02-14 update: receipt persistence was moved into the storage layer (`LedgerStorage::store_receipt` / `get_receipt`) with Memory and RocksDB implementations; API handlers now write/read receipts via ledger storage instead of in-memory API state.
 - [ ] **Critical**: Establish production API edge controls before public rollout (authn/authz profile, rate limiting, and abuse controls for write endpoints).
   - Why now: submission routes are directly exposed in the router (`/api/v1/entries/submit`, `/api/v1/envelopes/submit`) without an operational gateway policy defined in runbooks.
 - [ ] Add a disaster-recovery workstream for validator and observer operators:
