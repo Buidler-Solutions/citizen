@@ -138,7 +138,8 @@ Baseline reference: `docs/DEEP_RESEARCH_ARCHITECTURE_BASELINE.md` (Phase 1 secti
 - [x] Add a mandatory simulation-release gate for Section 19 coverage (50/75/100 validators and all adversarial scenarios) with artifact publication per release.
   - Why now: the simulation runner currently defaults to a single `50-validator + Normal` config in `crates/simulation/src/bin/run.rs`, so release readiness is not yet tied to the full stress matrix.
   - 2026-02-14 update: extended `crates/simulation/src/bin/run.rs` with a `--matrix` mode that executes 50/75/100 validators across all Section 19 scenarios and emits a release artifact under `reports/releases`; added `scripts/run_simulation_release_gate.sh` for reproducible release gating.
-- [ ] Document and validate opt-in clawback flag behavior for builder-created assets (`asset.control`):
+- [x] Document and validate opt-in clawback flag behavior for builder-created assets (`asset.control`):
   - publish a normative behavior matrix (enabled vs disabled clawback flags, authorization rules, and expected holder-facing outcomes),
   - add regression coverage for flag-driven hold/release/revocation paths,
   - expose clear wallet/explorer disclosure text so holders can understand clawback risk before opting into a trustline.
+  - 2026-02-14 update: added `docs/ASSET_CLAWBACK_BEHAVIOR_MATRIX.md` with a normative enable/disable behavior matrix, added ledger/API regression coverage for `ASSET_REVOKE` clawback paths, and exposed holder-facing clawback risk notice text via `GET /api/v1/assets/:account_id`.

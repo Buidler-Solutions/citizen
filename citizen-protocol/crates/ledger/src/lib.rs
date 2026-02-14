@@ -557,6 +557,68 @@ impl<S: LedgerStorage + 'static> Ledger<S> {
                 }
                 Ok(())
             }
+            "ASSET_REVOKE" => {
+                let amount = entry
+                    .payload
+                    .get("amount")
+                    .and_then(Value::as_u64)
+                    .ok_or_else(|| {
+                        ProtocolError::ValidationFailed(
+                            "asset revocations require numeric payload.amount".to_string(),
+                        )
+                    })?;
+                if amount == 0 {
+                    return Err(ProtocolError::ValidationFailed(
+                        "asset revocation amount must be greater than zero".into(),
+                    ));
+                }
+                if entry.author != issuer {
+                    return Err(ProtocolError::ValidationFailed(
+                        "asset revocations must be authorized by payload.issuer".into(),
+                    ));
+                }
+                let trustline = self
+                    .latest_asset_trustline(&entry.namespace, &entry.object_id, issuer, asset_code)?
+                    .ok_or_else(|| {
+                        ProtocolError::ValidationFailed(
+                            "no active trustline for requested issuer/asset".into(),
+                        )
+                    })?;
+                if trustline.action == "TRUSTLINE_CLOSE" {
+                    return Err(ProtocolError::ValidationFailed(
+                        "trustline is closed for requested issuer/asset".into(),
+                    ));
+                }
+                let trustline_flags: HashSet<String> = trustline
+                    .payload
+                    .get("policy_flags")
+                    .and_then(Value::as_array)
+                    .map(|flags| {
+                        flags
+                            .iter()
+                            .filter_map(Value::as_str)
+                            .map(ToString::to_string)
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                if !trustline_flags.contains("clawback_enabled") {
+                    return Err(ProtocolError::ValidationFailed(
+                        "asset revocations require trustline policy flag clawback_enabled".into(),
+                    ));
+                }
+                let current = self.compute_asset_holding(
+                    &entry.namespace,
+                    &entry.object_id,
+                    issuer,
+                    asset_code,
+                )?;
+                if current < amount as i128 {
+                    return Err(ProtocolError::ValidationFailed(format!(
+                        "insufficient held assets for revocation: available {current}, requested {amount}"
+                    )));
+                }
+                Ok(())
+            }
             "ASSET_RELEASE" => {
                 let amount = entry
                     .payload
@@ -642,6 +704,7 @@ impl<S: LedgerStorage + 'static> Ledger<S> {
             match entry.action.as_str() {
                 "ASSET_HOLD" => holding = holding.saturating_add(amount),
                 "ASSET_RELEASE" => holding = holding.saturating_sub(amount),
+                "ASSET_REVOKE" => holding = holding.saturating_sub(amount),
                 _ => {}
             }
         }
@@ -1203,14 +1266,14 @@ mod tests {
     }
 
     #[test]
-    fn enforces_asset_trustline_capacity_and_release_controls() {
+    fn enforces_asset_trustline_capacity_release_and_clawback_controls() {
         let ledger = Ledger::in_memory();
         let namespace = "asset.control";
         ledger.bootstrap_namespaces(vec![namespace_with_rules(
             namespace,
             vec![NamespaceRule {
                 name: "asset_control_policy".into(),
-                config: json!({"allowed_policy_flags": ["kyc_required", "attestation_required"]}),
+                config: json!({"allowed_policy_flags": ["kyc_required", "attestation_required", "clawback_enabled"]}),
             }],
         )]);
 
@@ -1288,6 +1351,67 @@ mod tests {
         assert!(flag_err
             .to_string()
             .contains("asset policy flag is not allowed"));
+
+        let mut revoke_without_flag = test_entry(namespace);
+        revoke_without_flag.action = "ASSET_REVOKE".into();
+        revoke_without_flag.object_id = "did:ledger:alice".into();
+        revoke_without_flag.author = "issuer:treasury".into();
+        revoke_without_flag.payload = json!({
+            "issuer": "issuer:treasury",
+            "asset_code": "CITZ-CRED",
+            "amount": 5_u64,
+            "policy_flags": ["kyc_required"],
+            "disclosure": {"mode":"public"}
+        });
+        let revoke_without_flag_err = ledger
+            .apply_entry(revoke_without_flag)
+            .expect_err("revocation without clawback flag should fail");
+        assert!(revoke_without_flag_err
+            .to_string()
+            .contains("clawback_enabled"));
+
+        let mut clawback_trustline = test_entry(namespace);
+        clawback_trustline.action = "TRUSTLINE_OPEN".into();
+        clawback_trustline.object_id = "did:ledger:bob".into();
+        clawback_trustline.author = "did:ledger:bob".into();
+        clawback_trustline.payload = json!({
+            "issuer": "issuer:treasury",
+            "asset_code": "CITZ-CRED",
+            "max_holding": 100_u64,
+            "policy_flags": ["kyc_required", "clawback_enabled"],
+            "disclosure": {"mode":"public"}
+        });
+        ledger
+            .apply_entry(clawback_trustline)
+            .expect("clawback trustline should pass");
+
+        let mut bob_hold = test_entry(namespace);
+        bob_hold.action = "ASSET_HOLD".into();
+        bob_hold.object_id = "did:ledger:bob".into();
+        bob_hold.author = "issuer:treasury".into();
+        bob_hold.payload = json!({
+            "issuer": "issuer:treasury",
+            "asset_code": "CITZ-CRED",
+            "amount": 30_u64,
+            "policy_flags": ["kyc_required", "clawback_enabled"],
+            "disclosure": {"mode":"public"}
+        });
+        ledger.apply_entry(bob_hold).expect("bob hold should pass");
+
+        let mut revoke_with_flag = test_entry(namespace);
+        revoke_with_flag.action = "ASSET_REVOKE".into();
+        revoke_with_flag.object_id = "did:ledger:bob".into();
+        revoke_with_flag.author = "issuer:treasury".into();
+        revoke_with_flag.payload = json!({
+            "issuer": "issuer:treasury",
+            "asset_code": "CITZ-CRED",
+            "amount": 10_u64,
+            "policy_flags": ["kyc_required", "clawback_enabled"],
+            "disclosure": {"mode":"public"}
+        });
+        ledger
+            .apply_entry(revoke_with_flag)
+            .expect("revocation with clawback flag should pass");
     }
 
     #[test]
