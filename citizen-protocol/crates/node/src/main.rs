@@ -7,7 +7,7 @@ use std::sync::Arc;
 
 use anyhow::Context;
 use chrono::Utc;
-use citizen_api::ApiServer;
+use citizen_api::{ApiClientProfile, ApiEdgeConfig, ApiServer};
 use citizen_consensus::ConsensusEngine;
 use citizen_crypto::{verifying_key_to_string, KeyRegistry, ValidatorKeypair};
 use citizen_ledger::Ledger;
@@ -96,7 +96,7 @@ async fn main() -> anyhow::Result<()> {
         snapshot,
     )?);
 
-    let api_server = ApiServer::new(ledger.clone());
+    let api_server = ApiServer::with_edge_config(ledger.clone(), config.api_edge_config());
     let api_handle = api_server
         .serve(SocketAddr::from((Ipv4Addr::LOCALHOST, config.api_port)))
         .await;
@@ -135,6 +135,12 @@ struct NodeConfig {
     #[serde(default = "default_api_port")]
     api_port: u16,
     #[serde(default)]
+    api_auth_required: bool,
+    #[serde(default = "default_api_write_rpm")]
+    api_max_write_requests_per_minute: usize,
+    #[serde(default)]
+    api_clients: Vec<ApiClientConfig>,
+    #[serde(default)]
     data_dir: Option<PathBuf>,
     #[serde(default)]
     bind_addr: Option<SocketAddr>,
@@ -162,7 +168,32 @@ struct PeerConfig {
     address: String,
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize)]
+struct ApiClientConfig {
+    api_key: String,
+    #[serde(default)]
+    scopes: Vec<String>,
+}
+
 impl NodeConfig {
+    fn api_edge_config(&self) -> ApiEdgeConfig {
+        let clients = self
+            .api_clients
+            .iter()
+            .map(|client| {
+                (
+                    client.api_key.clone(),
+                    ApiClientProfile::with_scopes(client.scopes.clone()),
+                )
+            })
+            .collect();
+        ApiEdgeConfig {
+            auth_required: self.api_auth_required,
+            max_write_requests_per_minute: self.api_max_write_requests_per_minute,
+            clients,
+        }
+    }
+
     fn load(path: &PathBuf) -> Option<Self> {
         let contents = fs::read_to_string(path).ok()?;
         toml::from_str(&contents).ok()
@@ -218,6 +249,9 @@ impl Default for NodeConfig {
             block_time_millis: default_block_time(),
             signing_key_hex: None,
             api_port: default_api_port(),
+            api_auth_required: false,
+            api_max_write_requests_per_minute: default_api_write_rpm(),
+            api_clients: Vec::new(),
             data_dir: Some(PathBuf::from("data")),
             bind_addr: Some(default_bind()),
             namespaces: Vec::new(),
@@ -234,6 +268,10 @@ fn default_quorum() -> u32 {
 
 fn default_block_time() -> u64 {
     1_000
+}
+
+fn default_api_write_rpm() -> usize {
+    120
 }
 
 fn default_api_port() -> u16 {
