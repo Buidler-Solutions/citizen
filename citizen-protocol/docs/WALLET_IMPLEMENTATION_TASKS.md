@@ -1,9 +1,9 @@
-# Wallet Implementation Task Stubs
+# Wallet Implementation Task Tracker
 
 This checklist turns the wallet plan into ready-to-assign tasks. It is scoped to the
 CLI + React wallet apps while reusing the existing `crates/wallet` library.
 
-Legend: `[x] done`, `[~] in progress`, `[ ] not started`.
+Legend: `[x] done` (all scoped tasks completed; tracker retained as implementation record).
 
 ## Phase 0 — Repository Prep
 - [x] Confirm Rust wallet crate API surface needed by apps (keygen/import, sign/verify).  
