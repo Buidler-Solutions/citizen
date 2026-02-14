@@ -46,7 +46,7 @@ cargo run -p citizen-wallet-cli -- sign-audit-record \
 cargo run -p citizen-wallet-cli -- submit \
   --entry-json "$(cat ./tmp/entry.json)" \
   --api-url http://127.0.0.1:8080 \
-  --endpoint /api/v1/entries/submit \
+  --endpoint /api/v1/envelopes/submit \
   --receipts-path ./tmp/wallet-receipts.json
 ```
 
