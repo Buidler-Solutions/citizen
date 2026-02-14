@@ -113,3 +113,14 @@ Baseline reference: `docs/DEEP_RESEARCH_ARCHITECTURE_BASELINE.md` (Phase 1 secti
 - 2026-02-13: Completed Phase 5 readiness review (`docs/PHASE5_READINESS_REVIEW.md`); Phase 5 scope validated as complete against baseline criteria.
 - 2026-02-13: Implemented Phase 5 scoped WASM runtime and standards-led interop adapters with new governance-aware namespace rules, builder-facing status endpoints, and regression test coverage.
 - Commit: see git history
+
+---
+
+## Post-Phase Operational Backlog
+### Next Priority Tasks
+- [ ] Confirm validator-node rollout readiness across target operators (keys, peer admission policy, telemetry, and runbooks).
+- [ ] Add a dedicated watcher/observer node delivery track immediately after validator readiness sign-off:
+  - explicit read-only runtime profile,
+  - no consensus voting/proposer participation,
+  - public query + verification endpoint deployment template,
+  - operator runbook for builder/public watcher onboarding.
