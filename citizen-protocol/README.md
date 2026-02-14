@@ -97,6 +97,9 @@ Current delivery includes Phase 2 identity/data ownership primitives, Phase 3 bu
      rehearsals and upgrade validation.
    - `testnets/mainnet.toml` — public mainnet manifest with governance-approved
      validator anchors.
+   - `config/futurenet/validator-alpha.toml`, `validator-beta.toml`,
+     `validator-gamma.toml` — per-operator node config templates with
+     non-conflicting API/QUIC ports and placeholder key material.
 
    Additional context is available in `docs/NETWORKS.md`.
 
