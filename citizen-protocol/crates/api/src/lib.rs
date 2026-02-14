@@ -32,6 +32,7 @@ pub struct ApiServer<S: LedgerStorage + 'static> {
 
 #[derive(Clone, Debug)]
 pub struct ApiEdgeConfig {
+    pub write_enabled: bool,
     pub auth_required: bool,
     pub max_write_requests_per_minute: usize,
     pub clients: BTreeMap<String, ApiClientProfile>,
@@ -53,6 +54,7 @@ impl ApiClientProfile {
 impl Default for ApiEdgeConfig {
     fn default() -> Self {
         Self {
+            write_enabled: true,
             auth_required: false,
             max_write_requests_per_minute: 120,
             clients: BTreeMap::new(),
@@ -795,6 +797,15 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
         headers: &HeaderMap,
         required_scope: &str,
     ) -> Result<(), (StatusCode, Json<serde_json::Value>)> {
+        if !edge.config.write_enabled {
+            return Err((
+                StatusCode::FORBIDDEN,
+                Json(
+                    serde_json::json!({"error": "write endpoints disabled for this node profile"}),
+                ),
+            ));
+        }
+
         let principal = if edge.config.auth_required {
             let Some(token) = headers.get("x-api-key") else {
                 return Err((
@@ -1701,6 +1712,7 @@ mod tests {
             ApiClientProfile::with_scopes(["entries.submit", "envelopes.submit"]),
         );
         let app = build_server_with_edge(ApiEdgeConfig {
+            write_enabled: true,
             auth_required: true,
             max_write_requests_per_minute: 10,
             clients,
@@ -1732,6 +1744,7 @@ mod tests {
             ApiClientProfile::with_scopes(["entries.submit"]),
         );
         let app = build_server_with_edge(ApiEdgeConfig {
+            write_enabled: true,
             auth_required: true,
             max_write_requests_per_minute: 10,
             clients,
@@ -1764,6 +1777,7 @@ mod tests {
             ApiClientProfile::with_scopes(["entries.submit", "envelopes.submit"]),
         );
         let app = build_server_with_edge(ApiEdgeConfig {
+            write_enabled: true,
             auth_required: true,
             max_write_requests_per_minute: 1,
             clients,
@@ -1802,5 +1816,51 @@ mod tests {
             .await
             .expect("second submit");
         assert_eq!(second.status(), StatusCode::TOO_MANY_REQUESTS);
+    }
+
+    #[tokio::test]
+    async fn write_endpoints_reject_requests_when_writes_disabled() {
+        let mut clients = BTreeMap::new();
+        clients.insert(
+            "writer-key".to_string(),
+            ApiClientProfile::with_scopes(["entries.submit", "envelopes.submit"]),
+        );
+        let server = build_server_with_edge(ApiEdgeConfig {
+            write_enabled: false,
+            auth_required: true,
+            max_write_requests_per_minute: 10,
+            clients,
+        });
+
+        let app = server.router();
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/entries/submit")
+                    .header("content-type", "application/json")
+                    .header("x-api-key", "writer-key")
+                    .body(Body::from(
+                        serde_json::to_vec(&test_envelope().payload).expect("entry body"),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+
+        let read_response = app
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri("/namespaces")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(read_response.status(), StatusCode::OK);
     }
 }
