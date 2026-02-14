@@ -2,6 +2,32 @@
 
 This file is the handoff source of truth for implementation progress.
 
+## Developer Experience Application Alignment Tracker (Blueprint Audit)
+Reference: `docs/DEVELOPER_EXPERIENCE_BLUEPRINT.md` Section 6 + Section 8.
+
+### Scope
+- [x] Review each existing application surface against the overhauled runtime contract (canonical envelope submit + deterministic receipt retrieval).
+- [x] Record per-application alignment status before remediation.
+- [x] Apply runtime-alignment fixes to any mismatched existing application.
+
+### Existing application status
+- [x] Validator Node Runtime — aligned.
+  - Canonical submit + receipt routes are active in runtime API (`POST /api/v1/envelopes/submit`, `GET /api/v1/receipts/:receipt_id`).
+- [x] Observer/Read API Node Profile — aligned.
+  - Observer role blocks writes and preserves read/verification APIs.
+- [x] Builder dApp Starter — **misaligned at audit start**, now remediated.
+  - Previous default targets and docs pointed to legacy `/api/v1/entries/submit` flow.
+  - Updated to canonical envelope submission defaults and canonical payload shape.
+- [x] Signer Keeper Browser Extension — aligned.
+  - Continues to provide account + signature authority while dApp backend submits canonical envelopes.
+- [x] Blockchain Explorer — aligned.
+  - Uses canonical receipt lookup contract and finality proof surface.
+- [x] SDK + Client Libraries (partial) — **misaligned at audit start**, now remediated for current wallet CLI submit path.
+  - Updated wallet CLI submit defaults and response parsing for canonical envelope + receipt flow.
+
+### Last Update
+- 2026-02-14: Completed blueprint application alignment audit and remediated dApp starter + wallet CLI canonical runtime mismatches (envelope submit + deterministic receipt handling).
+
 ## Update Rule (for every agent)
 After each phase-related delivery:
 1. Update the relevant phase section below.
