@@ -55,6 +55,28 @@ infrastructure.
   resulting `data/*.log` files to your log pipeline. CPU/RAM and block timing
   can be derived from these logs or external monitors.
 
+- **API edge controls (required before public writes)**: enable node-side edge
+  policy for submission endpoints using API keys, scoped authorization, and rate
+  limits:
+
+  ```toml
+  api_auth_required = true
+  api_max_write_requests_per_minute = 120
+
+  [[api_clients]]
+  api_key = "builder-ingest-key"
+  scopes = ["entries.submit", "envelopes.submit"]
+
+  [[api_clients]]
+  api_key = "ops-envelope-key"
+  scopes = ["envelopes.submit"]
+  ```
+
+  - `/api/v1/entries/submit` requires `entries.submit`.
+  - `/api/v1/envelopes/submit` requires `envelopes.submit`.
+  - Missing/invalid keys return `401`; missing scopes return `403`; over-limit
+    clients receive `429`.
+
 ## Config Reference
 
 - `config/localnet/validator-alpha.toml` – uses signing key
