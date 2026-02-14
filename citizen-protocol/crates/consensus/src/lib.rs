@@ -1,6 +1,7 @@
 use chrono::Utc;
 use citizen_crypto::{
-    aggregate_signatures, hash_block_header, quorum_threshold, sign_message, ValidatorKeypair,
+    aggregate_signatures, hash_block_header, parse_verifying_key, quorum_threshold, sign_message,
+    verify_signature, ValidatorKeypair,
 };
 use citizen_ledger::Ledger;
 use citizen_network::{BlockProposal, ConsensusMessage, Network};
@@ -14,19 +15,27 @@ use parking_lot::RwLock;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::sync::Arc;
 use tokio::time::{interval, Duration};
-use tracing::info;
+use tracing::{info, warn};
 
 pub type Result<T> = std::result::Result<T, ProtocolError>;
 
 struct PendingRound {
     proposal: Option<BlockProposal>,
-    prevotes: BTreeMap<ValidatorId, Signature>,
+    proposal_hash: Option<String>,
+    prevotes: BTreeMap<ValidatorId, SignedPreVote>,
+}
+
+#[derive(Clone)]
+struct SignedPreVote {
+    hash: String,
+    signature: Signature,
 }
 
 impl PendingRound {
     fn new() -> Self {
         Self {
             proposal: None,
+            proposal_hash: None,
             prevotes: BTreeMap::new(),
         }
     }
@@ -207,17 +216,35 @@ where
     }
 
     async fn handle_proposal(&self, proposal: BlockProposal) -> Result<()> {
+        if let Err(err) = self.validate_proposal(&proposal) {
+            warn!(height = proposal.header.height, proposer = %proposal.header.proposer, ?err, "rejecting invalid proposal");
+            return Ok(());
+        }
+
         let height = proposal.header.height;
+        let hash = hash_block_header(&proposal.header);
         {
             let mut rounds = self.rounds.write();
             let entry = rounds.entry(height).or_insert_with(PendingRound::new);
-            if entry.proposal.is_none() {
-                entry.proposal = Some(proposal.clone());
+            match entry.proposal_hash.as_deref() {
+                None => {
+                    entry.proposal = Some(proposal.clone());
+                    entry.proposal_hash = Some(hash.clone());
+                }
+                Some(existing_hash) if existing_hash != hash => {
+                    warn!(height, proposer = %proposal.header.proposer, "ignoring conflicting proposal for round");
+                    return Ok(());
+                }
+                _ => {}
             }
         }
-        let hash = hash_block_header(&proposal.header);
         let signature = sign_message(&self.signer, hash.as_bytes());
-        self.record_prevote(height, self.validator_id.clone(), signature.clone());
+        self.record_prevote(
+            height,
+            self.validator_id.clone(),
+            hash.clone(),
+            signature.clone(),
+        )?;
         self.network
             .broadcast(ConsensusMessage::PreVote {
                 height,
@@ -232,14 +259,18 @@ where
         &self,
         height: u64,
         validator: ValidatorId,
-        _hash: String,
+        hash: String,
         signature_hex: String,
     ) -> Result<()> {
         if self.committed.read().contains(&height) {
             return Ok(());
         }
         let signature = signature_from_hex(&signature_hex)?;
-        self.record_prevote(height, validator.clone(), signature.clone());
+        if !self.validate_prevote(height, &validator, &hash, &signature)? {
+            warn!(height, validator = %validator, "rejecting invalid prevote");
+            return Ok(());
+        }
+        self.record_prevote(height, validator.clone(), hash.clone(), signature.clone())?;
         let should_commit = self.has_quorum(height)?;
         if should_commit {
             if let Some(proposal) = self.get_proposal(height) {
@@ -263,10 +294,27 @@ where
         self.finalize_block(height, block).await
     }
 
-    fn record_prevote(&self, height: u64, validator: ValidatorId, signature: Signature) {
+    fn record_prevote(
+        &self,
+        height: u64,
+        validator: ValidatorId,
+        hash: String,
+        signature: Signature,
+    ) -> Result<()> {
         let mut rounds = self.rounds.write();
         let entry = rounds.entry(height).or_insert_with(PendingRound::new);
-        entry.prevotes.insert(validator, signature);
+        if let Some(existing) = entry.prevotes.get(&validator) {
+            if existing.hash != hash {
+                return Err(ProtocolError::ConsensusViolation(format!(
+                    "validator {validator} equivocated for height {height}"
+                )));
+            }
+            return Ok(());
+        }
+        entry
+            .prevotes
+            .insert(validator, SignedPreVote { hash, signature });
+        Ok(())
     }
 
     fn has_quorum(&self, height: u64) -> Result<bool> {
@@ -274,9 +322,17 @@ where
         let Some(state) = rounds.get(&height) else {
             return Ok(false);
         };
+        let Some(expected_hash) = state.proposal_hash.as_ref() else {
+            return Ok(false);
+        };
         let snapshot = self.validator_set.read();
         let quorum = quorum_threshold(snapshot.validators.len(), self.config.quorum_bps);
-        Ok(state.prevotes.len() >= quorum)
+        let votes_for_hash = state
+            .prevotes
+            .values()
+            .filter(|vote| vote.hash == *expected_hash)
+            .count();
+        Ok(votes_for_hash >= quorum)
     }
 
     fn get_proposal(&self, height: u64) -> Option<BlockProposal> {
@@ -293,7 +349,18 @@ where
             self.validator_set.read().validators.len(),
             self.config.quorum_bps,
         );
-        let proof = aggregate_signatures(&state.prevotes, quorum)?;
+        let proposal_hash = state
+            .proposal_hash
+            .clone()
+            .ok_or_else(|| ProtocolError::ConsensusViolation("missing proposal hash".into()))?;
+        let quorum_votes: BTreeMap<ValidatorId, Signature> = state
+            .prevotes
+            .iter()
+            .filter_map(|(validator, vote)| {
+                (vote.hash == proposal_hash).then_some((validator.clone(), vote.signature))
+            })
+            .collect();
+        let proof = aggregate_signatures(&quorum_votes, quorum)?;
         let mut header = proposal.header;
         header.commit_proof = proof;
         let block = Block {
@@ -302,6 +369,95 @@ where
         };
         state.proposal = None;
         Ok(block)
+    }
+
+    fn validate_proposal(&self, proposal: &BlockProposal) -> Result<()> {
+        let snapshot = self.validator_set.read();
+        let proposer_meta = snapshot
+            .validators
+            .get(&proposal.header.proposer)
+            .ok_or_else(|| ProtocolError::MissingValidator(proposal.header.proposer.clone()))?;
+        if proposer_meta.suspended {
+            return Err(ProtocolError::ConsensusViolation(format!(
+                "suspended proposer {}",
+                proposal.header.proposer
+            )));
+        }
+
+        let expected_leader = self.select_leader(proposal.header.height, &snapshot);
+        if expected_leader != proposal.header.proposer {
+            return Err(ProtocolError::ConsensusViolation(format!(
+                "unexpected proposer {}, expected {}",
+                proposal.header.proposer, expected_leader
+            )));
+        }
+
+        let latest_height = self.ledger.storage().latest_height()?;
+        if proposal.header.height != latest_height + 1 {
+            return Err(ProtocolError::ConsensusViolation(format!(
+                "proposal height {} does not extend local height {}",
+                proposal.header.height, latest_height
+            )));
+        }
+
+        let expected_prev_hash = if latest_height == 0 {
+            "GENESIS".to_string()
+        } else {
+            let previous = self
+                .ledger
+                .storage()
+                .get_block(latest_height)?
+                .ok_or_else(|| {
+                    ProtocolError::ConsensusViolation("missing previous block".into())
+                })?;
+            hash_block_header(&previous.header)
+        };
+        if proposal.header.prev_hash != expected_prev_hash {
+            return Err(ProtocolError::ConsensusViolation(format!(
+                "proposal prev_hash mismatch at height {}",
+                proposal.header.height
+            )));
+        }
+
+        let expected_entry_root = compute_entry_root(&proposal.entries);
+        if proposal.header.entry_root != expected_entry_root {
+            return Err(ProtocolError::ConsensusViolation(format!(
+                "proposal entry root mismatch at height {}",
+                proposal.header.height
+            )));
+        }
+
+        Ok(())
+    }
+
+    fn validate_prevote(
+        &self,
+        height: u64,
+        validator: &ValidatorId,
+        hash: &str,
+        signature: &Signature,
+    ) -> Result<bool> {
+        let snapshot = self.validator_set.read();
+        let Some(meta) = snapshot.validators.get(validator) else {
+            return Ok(false);
+        };
+        if meta.suspended {
+            return Ok(false);
+        }
+        let key = parse_verifying_key(&meta.public_key)?;
+        if !verify_signature(&key, hash.as_bytes(), signature) {
+            return Ok(false);
+        }
+        drop(snapshot);
+
+        let rounds = self.rounds.read();
+        let Some(round_state) = rounds.get(&height) else {
+            return Ok(false);
+        };
+        let Some(expected_hash) = round_state.proposal_hash.as_ref() else {
+            return Ok(false);
+        };
+        Ok(expected_hash == hash)
     }
 
     async fn finalize_block(&self, height: u64, block: Block) -> Result<()> {
@@ -341,4 +497,29 @@ fn signature_from_hex(hex_signature: &str) -> Result<Signature> {
         .map_err(|err| ProtocolError::crypto(format!("invalid signature hex: {err}")))?;
     Signature::from_slice(&bytes)
         .map_err(|err| ProtocolError::crypto(format!("invalid signature bytes: {err}")))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::compute_entry_root;
+    use citizen_types::LedgerEntry;
+    use serde_json::json;
+
+    #[test]
+    fn entry_root_is_deterministic_for_identical_entries() {
+        let entry: LedgerEntry = serde_json::from_value(json!({
+            "entry_id": "11111111-1111-1111-1111-111111111111",
+            "namespace": "registry.land",
+            "action": "TRANSFER_OWNERSHIP",
+            "object_id": "LOT-239-A",
+            "payload": {"from":"did:A","to":"did:B"},
+            "author": "did:A",
+            "signature": "sig",
+            "timestamp": 1736500000
+        }))
+        .expect("valid entry fixture");
+        let root_a = compute_entry_root(std::slice::from_ref(&entry));
+        let root_b = compute_entry_root(&[entry]);
+        assert_eq!(root_a, root_b);
+    }
 }
