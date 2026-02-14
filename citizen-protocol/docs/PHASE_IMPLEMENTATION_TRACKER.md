@@ -127,8 +127,9 @@ Baseline reference: `docs/DEEP_RESEARCH_ARCHITECTURE_BASELINE.md` (Phase 1 secti
 - [x] **Critical**: Make deterministic receipt retrieval durable across restarts by moving receipt storage from in-memory API state to persistent/indexed storage with replay/rebuild tooling.
   - Why now: `ApiServer` currently keeps receipts only in `Arc<RwLock<BTreeMap<Uuid, DeterministicReceipt>>>`, so a node restart can drop historical `GET /api/v1/receipts/:receipt_id` lookups.
   - 2026-02-14 update: receipt persistence was moved into the storage layer (`LedgerStorage::store_receipt` / `get_receipt`) with Memory and RocksDB implementations; API handlers now write/read receipts via ledger storage instead of in-memory API state.
-- [ ] **Critical**: Establish production API edge controls before public rollout (authn/authz profile, rate limiting, and abuse controls for write endpoints).
+- [x] **Critical**: Establish production API edge controls before public rollout (authn/authz profile, rate limiting, and abuse controls for write endpoints).
   - Why now: submission routes are directly exposed in the router (`/api/v1/entries/submit`, `/api/v1/envelopes/submit`) without an operational gateway policy defined in runbooks.
+  - 2026-02-14 update: Added API edge controls for write endpoints with optional API-key authn/authz scopes (`entries.submit`, `envelopes.submit`) and per-principal write rate limiting; node config now exposes `api_auth_required`, `api_max_write_requests_per_minute`, and `api_clients` for rollout policy wiring.
 - [ ] Add a disaster-recovery workstream for validator and observer operators:
   - scheduled RocksDB snapshot/restore drills,
   - signed backup retention policy,
