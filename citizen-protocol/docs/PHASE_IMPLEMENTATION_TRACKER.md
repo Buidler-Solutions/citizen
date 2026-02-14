@@ -113,3 +113,28 @@ Baseline reference: `docs/DEEP_RESEARCH_ARCHITECTURE_BASELINE.md` (Phase 1 secti
 - 2026-02-13: Completed Phase 5 readiness review (`docs/PHASE5_READINESS_REVIEW.md`); Phase 5 scope validated as complete against baseline criteria.
 - 2026-02-13: Implemented Phase 5 scoped WASM runtime and standards-led interop adapters with new governance-aware namespace rules, builder-facing status endpoints, and regression test coverage.
 - Commit: see git history
+
+---
+
+## Post-Phase Operational Backlog
+### Next Priority Tasks
+- [ ] Confirm validator-node rollout readiness across target operators (keys, peer admission policy, telemetry, and runbooks).
+- [ ] Add a dedicated watcher/observer node delivery track immediately after validator readiness sign-off:
+  - explicit read-only runtime profile,
+  - no consensus voting/proposer participation,
+  - public query + verification endpoint deployment template,
+  - operator runbook for builder/public watcher onboarding.
+- [ ] **Critical**: Make deterministic receipt retrieval durable across restarts by moving receipt storage from in-memory API state to persistent/indexed storage with replay/rebuild tooling.
+  - Why now: `ApiServer` currently keeps receipts only in `Arc<RwLock<BTreeMap<Uuid, DeterministicReceipt>>>`, so a node restart can drop historical `GET /api/v1/receipts/:receipt_id` lookups.
+- [ ] **Critical**: Establish production API edge controls before public rollout (authn/authz profile, rate limiting, and abuse controls for write endpoints).
+  - Why now: submission routes are directly exposed in the router (`/api/v1/entries/submit`, `/api/v1/envelopes/submit`) without an operational gateway policy defined in runbooks.
+- [ ] Add a disaster-recovery workstream for validator and observer operators:
+  - scheduled RocksDB snapshot/restore drills,
+  - signed backup retention policy,
+  - quorum-safe regional restore runbook and RTO/RPO targets.
+- [ ] Add a mandatory simulation-release gate for Section 19 coverage (50/75/100 validators and all adversarial scenarios) with artifact publication per release.
+  - Why now: the simulation runner currently defaults to a single `50-validator + Normal` config in `crates/simulation/src/bin/run.rs`, so release readiness is not yet tied to the full stress matrix.
+- [ ] Document and validate opt-in clawback flag behavior for builder-created assets (`asset.control`):
+  - publish a normative behavior matrix (enabled vs disabled clawback flags, authorization rules, and expected holder-facing outcomes),
+  - add regression coverage for flag-driven hold/release/revocation paths,
+  - expose clear wallet/explorer disclosure text so holders can understand clawback risk before opting into a trustline.
