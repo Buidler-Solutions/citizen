@@ -1,5 +1,5 @@
 use chrono::Utc;
-use citizen_types::LedgerEntry;
+use citizen_types::{LedgerEntry, SignedEnvelope};
 use clap::{Parser, Subcommand};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -99,7 +99,7 @@ enum Commands {
         entry_json: String,
         #[arg(long, default_value = "http://127.0.0.1:8080")]
         api_url: String,
-        #[arg(long, default_value = "/api/v1/entries/submit")]
+        #[arg(long, default_value = "/api/v1/envelopes/submit")]
         endpoint: String,
         #[arg(long, default_value = "wallet-receipts.json")]
         receipts_path: PathBuf,
@@ -731,29 +731,47 @@ fn submit_entry(
     entry: &LedgerEntry,
 ) -> anyhow::Result<SubmissionReceipt> {
     let url = format!("{}{}", api_url.trim_end_matches('/'), endpoint);
-    let payload = serde_json::json!({ "entry": entry });
+    let envelope = SignedEnvelope {
+        envelope_id: Uuid::new_v4(),
+        signer: entry.author.clone(),
+        signature: entry.signature.clone(),
+        submitted_at: Utc::now(),
+        payload: entry.clone(),
+    };
     let response_json: Value = reqwest::blocking::Client::new()
         .post(url)
-        .json(&payload)
+        .json(&envelope)
         .send()?
         .error_for_status()?
         .json()?;
 
+    let canonical_receipt = response_json.get("receipt");
     let tx_hash = response_json
         .get("tx_hash")
         .and_then(Value::as_str)
         .map(ToOwned::to_owned);
-    let block_height = response_json.get("block_height").and_then(Value::as_u64);
-    let status = response_json
-        .get("status")
+    let block_height = canonical_receipt
+        .and_then(|receipt| receipt.get("finality"))
+        .and_then(|finality| finality.get("block_height"))
+        .and_then(Value::as_u64)
+        .or_else(|| response_json.get("block_height").and_then(Value::as_u64));
+    let status = canonical_receipt
+        .and_then(|receipt| receipt.get("status"))
         .and_then(Value::as_str)
+        .or_else(|| response_json.get("status").and_then(Value::as_str))
         .unwrap_or("submitted")
         .to_string();
 
-    let receipt_entry_id = response_json
-        .get("entry_id")
+    let receipt_entry_id = canonical_receipt
+        .and_then(|receipt| receipt.get("entry_id"))
         .and_then(Value::as_str)
         .and_then(|raw| Uuid::parse_str(raw).ok())
+        .or_else(|| {
+            response_json
+                .get("entry_id")
+                .and_then(Value::as_str)
+                .and_then(|raw| Uuid::parse_str(raw).ok())
+        })
         .unwrap_or(entry.entry_id);
 
     let merkle_proof = response_json
