@@ -52,15 +52,15 @@ Set these in your API environment:
 - `CITIZEN_FUTURENET_SUBMIT_URL`
 - `CITIZEN_MAINNET_SUBMIT_URL`
 
-If unset, the API uses placeholder `.invalid` URLs and submissions will fail until configured.
+If unset, the API defaults to local validator trio endpoints on `127.0.0.1:8081-8083`.
 
 ### Run backend with explicit network targets
 
 ```bash
 cd citizen-protocol/dapp/apps/api
-CITIZEN_TESTNET_SUBMIT_URL=https://testnet.your-citizen-node/api/v1/entries/submit \
-CITIZEN_FUTURENET_SUBMIT_URL=https://futurenet.your-citizen-node/api/v1/entries/submit \
-CITIZEN_MAINNET_SUBMIT_URL=https://mainnet.your-citizen-node/api/v1/entries/submit \
+CITIZEN_TESTNET_SUBMIT_URL=https://testnet.your-citizen-node/api/v1/envelopes/submit \
+CITIZEN_FUTURENET_SUBMIT_URL=https://futurenet.your-citizen-node/api/v1/envelopes/submit \
+CITIZEN_MAINNET_SUBMIT_URL=https://mainnet.your-citizen-node/api/v1/envelopes/submit \
 npm run start:dev
 ```
 
@@ -81,34 +81,34 @@ The integration path is:
 2. Browser wallet extension signs challenge and returns signature to the web app
 3. Web app sends signature to DApp API (`apps/api`)
 4. DApp API verifies signature with `ethers::verifyMessage`
-5. DApp API submits a ledger payload to the configured network endpoint
+5. DApp API wraps the signed ledger entry in a canonical envelope and submits it to the configured network endpoint
 
 ### Current state of Rust node API
 
-The Rust `crates/api` service now supports direct entry submission and query routes:
+The Rust `crates/api` service now supports canonical envelope submission and query routes:
 
 - `GET /health`
 - `GET /blocks/:height`
 - `GET /namespaces`
 - `GET /entries/:namespace`
-- `POST /api/v1/entries/submit`
+- `POST /api/v1/envelopes/submit`
 
-The submit route accepts a full `LedgerEntry` JSON payload and stores it after namespace rule validation.
+The submit route accepts a canonical `SignedEnvelope<LedgerEntry>` payload and returns a deterministic receipt that can be retrieved via `GET /api/v1/receipts/:receipt_id`.
 
 ### Minimum configuration to make publish flow work against local Rust nodes
 
 Run localnet first (`scripts/run_localnet.sh`) so node APIs are available at ports `8081-8083`.
 The DApp API defaults already target those local Rust node endpoints:
 
-- `testnet` → `http://127.0.0.1:8081/api/v1/entries/submit`
-- `futurenet` → `http://127.0.0.1:8082/api/v1/entries/submit`
-- `mainnet` → `http://127.0.0.1:8083/api/v1/entries/submit`
+- `testnet` → `http://127.0.0.1:8081/api/v1/envelopes/submit`
+- `futurenet` → `http://127.0.0.1:8082/api/v1/envelopes/submit`
+- `mainnet` → `http://127.0.0.1:8083/api/v1/envelopes/submit`
 
 Optional override:
 
 ```bash
 cd citizen-protocol/dapp/apps/api
-CITIZEN_TESTNET_SUBMIT_URL=http://127.0.0.1:8081/api/v1/entries/submit CITIZEN_FUTURENET_SUBMIT_URL=http://127.0.0.1:8082/api/v1/entries/submit CITIZEN_MAINNET_SUBMIT_URL=http://127.0.0.1:8083/api/v1/entries/submit npm run start:dev
+CITIZEN_TESTNET_SUBMIT_URL=http://127.0.0.1:8081/api/v1/envelopes/submit CITIZEN_FUTURENET_SUBMIT_URL=http://127.0.0.1:8082/api/v1/envelopes/submit CITIZEN_MAINNET_SUBMIT_URL=http://127.0.0.1:8083/api/v1/envelopes/submit npm run start:dev
 ```
 
 
