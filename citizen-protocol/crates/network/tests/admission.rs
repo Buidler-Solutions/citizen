@@ -2,31 +2,51 @@ use blake3::Hasher;
 use chrono::Utc;
 use citizen_network::{AdmissionControl, HandshakeIdentity, PeerHandshake};
 use citizen_types::{ValidatorMetadata, ValidatorSetSnapshot};
-use std::collections::BTreeMap;
+use ed25519_dalek::{Signer, SigningKey};
+use serde::Serialize;
+use std::collections::{BTreeMap, HashMap};
 use std::time::Duration;
 
-fn build_snapshot() -> ValidatorSetSnapshot {
+#[derive(Serialize)]
+struct HandshakeSigningPayload<'a> {
+    validator_id: &'a str,
+    public_key: &'a str,
+    key_epoch: u64,
+    network_id: &'a str,
+    genesis_hash: &'a str,
+    manifest_digest: &'a str,
+    nonce: u64,
+    timestamp_ms: u64,
+    psk_proof: &'a Option<String>,
+}
+
+fn validator_signing_keys() -> HashMap<String, SigningKey> {
+    let mut validators = HashMap::new();
+    validators.insert(
+        "validator.a".to_string(),
+        SigningKey::from_bytes(&[1u8; 32]),
+    );
+    validators.insert(
+        "validator.b".to_string(),
+        SigningKey::from_bytes(&[2u8; 32]),
+    );
+    validators
+}
+
+fn build_snapshot(keys: &HashMap<String, SigningKey>) -> ValidatorSetSnapshot {
     let mut validators = BTreeMap::new();
-    validators.insert(
-        "validator.a".into(),
-        ValidatorMetadata {
-            validator_id: "validator.a".into(),
-            public_key: "pk_a".into(),
-            anchors: vec!["test".into()],
-            joined_at: Utc::now(),
-            suspended: false,
-        },
-    );
-    validators.insert(
-        "validator.b".into(),
-        ValidatorMetadata {
-            validator_id: "validator.b".into(),
-            public_key: "pk_b".into(),
-            anchors: vec!["test".into()],
-            joined_at: Utc::now(),
-            suspended: false,
-        },
-    );
+    for (validator_id, signing_key) in keys {
+        validators.insert(
+            validator_id.clone(),
+            ValidatorMetadata {
+                validator_id: validator_id.clone(),
+                public_key: hex::encode(signing_key.verifying_key().to_bytes()),
+                anchors: vec!["test".into()],
+                joined_at: Utc::now(),
+                suspended: false,
+            },
+        );
+    }
 
     ValidatorSetSnapshot {
         height: 1,
@@ -52,9 +72,26 @@ fn current_timestamp_ms() -> u64 {
         .as_millis() as u64
 }
 
+fn handshake_signature(handshake: &PeerHandshake, key: &SigningKey) -> String {
+    let payload = bincode::serialize(&HandshakeSigningPayload {
+        validator_id: &handshake.validator_id,
+        public_key: &handshake.public_key,
+        key_epoch: handshake.key_epoch,
+        network_id: &handshake.network_id,
+        genesis_hash: &handshake.genesis_hash,
+        manifest_digest: &handshake.manifest_digest,
+        nonce: handshake.nonce,
+        timestamp_ms: handshake.timestamp_ms,
+        psk_proof: &handshake.psk_proof,
+    })
+    .expect("handshake payload");
+    hex::encode(key.sign(&payload).to_bytes())
+}
+
 fn handshake_with_overrides(
     validator_id: &str,
     public_key: &str,
+    signing_key: &SigningKey,
     network_id: &str,
     genesis_hash: &str,
     manifest_digest: &str,
@@ -62,7 +99,7 @@ fn handshake_with_overrides(
     timestamp_ms: u64,
     psk_proof: Option<String>,
 ) -> PeerHandshake {
-    PeerHandshake {
+    let mut handshake = PeerHandshake {
         validator_id: validator_id.into(),
         public_key: public_key.into(),
         key_epoch: 0,
@@ -72,7 +109,10 @@ fn handshake_with_overrides(
         nonce,
         timestamp_ms,
         psk_proof,
-    }
+        handshake_signature: String::new(),
+    };
+    handshake.handshake_signature = handshake_signature(&handshake, signing_key);
+    handshake
 }
 
 fn derive_psk_proof(secret: &str, handshake: &PeerHandshake) -> String {
@@ -91,14 +131,18 @@ fn derive_psk_proof(secret: &str, handshake: &PeerHandshake) -> String {
 
 #[tokio::test]
 async fn admission_accepts_allowlisted_peer() {
+    let keys = validator_signing_keys();
     let admission = AdmissionControl::from_snapshot(
-        build_snapshot(),
+        build_snapshot(&keys),
         Duration::from_secs(1),
         test_identity(None),
     );
+    let key = keys.get("validator.a").unwrap();
+    let public_key = hex::encode(key.verifying_key().to_bytes());
     let handshake = handshake_with_overrides(
         "validator.a",
-        "pk_a",
+        &public_key,
+        key,
         "citizen-localnet",
         "genesis-hash",
         "manifest-digest",
@@ -112,14 +156,18 @@ async fn admission_accepts_allowlisted_peer() {
 
 #[tokio::test]
 async fn admission_rejects_unknown_peer() {
+    let keys = validator_signing_keys();
     let admission = AdmissionControl::from_snapshot(
-        build_snapshot(),
+        build_snapshot(&keys),
         Duration::from_secs(1),
         test_identity(None),
     );
+    let unknown_signing_key = SigningKey::from_bytes(&[9u8; 32]);
+    let unknown_public_key = hex::encode(unknown_signing_key.verifying_key().to_bytes());
     let handshake = handshake_with_overrides(
         "validator.unknown",
-        "pk_z",
+        &unknown_public_key,
+        &unknown_signing_key,
         "citizen-localnet",
         "genesis-hash",
         "manifest-digest",
@@ -133,8 +181,9 @@ async fn admission_rejects_unknown_peer() {
 
 #[tokio::test]
 async fn key_rotation_advances_epoch() {
+    let keys = validator_signing_keys();
     let admission = AdmissionControl::from_snapshot(
-        build_snapshot(),
+        build_snapshot(&keys),
         Duration::from_millis(10),
         test_identity(None),
     );
@@ -144,21 +193,24 @@ async fn key_rotation_advances_epoch() {
     let rotated = admission.maybe_rotate().await;
     assert!(rotated >= 1);
 
-    // Ensure subsequent calls without waiting do not double-rotate immediately
     let stable = admission.maybe_rotate().await;
     assert_eq!(rotated, stable);
 }
 
 #[tokio::test]
 async fn admission_rejects_network_mismatch() {
+    let keys = validator_signing_keys();
     let admission = AdmissionControl::from_snapshot(
-        build_snapshot(),
+        build_snapshot(&keys),
         Duration::from_secs(1),
         test_identity(None),
     );
+    let key = keys.get("validator.a").unwrap();
+    let public_key = hex::encode(key.verifying_key().to_bytes());
     let handshake = handshake_with_overrides(
         "validator.a",
-        "pk_a",
+        &public_key,
+        key,
         "citizen-othernet",
         "genesis-hash",
         "manifest-digest",
@@ -172,14 +224,18 @@ async fn admission_rejects_network_mismatch() {
 
 #[tokio::test]
 async fn admission_rejects_genesis_mismatch() {
+    let keys = validator_signing_keys();
     let admission = AdmissionControl::from_snapshot(
-        build_snapshot(),
+        build_snapshot(&keys),
         Duration::from_secs(1),
         test_identity(None),
     );
+    let key = keys.get("validator.a").unwrap();
+    let public_key = hex::encode(key.verifying_key().to_bytes());
     let handshake = handshake_with_overrides(
         "validator.a",
-        "pk_a",
+        &public_key,
+        key,
         "citizen-localnet",
         "other-genesis",
         "manifest-digest",
@@ -193,14 +249,18 @@ async fn admission_rejects_genesis_mismatch() {
 
 #[tokio::test]
 async fn admission_rejects_manifest_digest_mismatch() {
+    let keys = validator_signing_keys();
     let admission = AdmissionControl::from_snapshot(
-        build_snapshot(),
+        build_snapshot(&keys),
         Duration::from_secs(1),
         test_identity(None),
     );
+    let key = keys.get("validator.a").unwrap();
+    let public_key = hex::encode(key.verifying_key().to_bytes());
     let handshake = handshake_with_overrides(
         "validator.a",
-        "pk_a",
+        &public_key,
+        key,
         "citizen-localnet",
         "genesis-hash",
         "other-manifest",
@@ -214,14 +274,18 @@ async fn admission_rejects_manifest_digest_mismatch() {
 
 #[tokio::test]
 async fn admission_rejects_invalid_psk_proof() {
+    let keys = validator_signing_keys();
     let admission = AdmissionControl::from_snapshot(
-        build_snapshot(),
+        build_snapshot(&keys),
         Duration::from_secs(1),
         test_identity(Some("shared-secret")),
     );
+    let key = keys.get("validator.a").unwrap();
+    let public_key = hex::encode(key.verifying_key().to_bytes());
     let handshake = handshake_with_overrides(
         "validator.a",
-        "pk_a",
+        &public_key,
+        key,
         "citizen-localnet",
         "genesis-hash",
         "manifest-digest",
@@ -238,15 +302,19 @@ async fn admission_rejects_invalid_psk_proof() {
 
 #[tokio::test]
 async fn admission_rejects_replayed_nonce_timestamp() {
+    let keys = validator_signing_keys();
     let admission = AdmissionControl::from_snapshot(
-        build_snapshot(),
+        build_snapshot(&keys),
         Duration::from_secs(1),
         test_identity(Some("shared-secret")),
     );
+    let key = keys.get("validator.a").unwrap();
+    let public_key = hex::encode(key.verifying_key().to_bytes());
     let timestamp_ms = current_timestamp_ms();
     let mut handshake = handshake_with_overrides(
         "validator.a",
-        "pk_a",
+        &public_key,
+        key,
         "citizen-localnet",
         "genesis-hash",
         "manifest-digest",
@@ -255,6 +323,7 @@ async fn admission_rejects_replayed_nonce_timestamp() {
         None,
     );
     handshake.psk_proof = Some(derive_psk_proof("shared-secret", &handshake));
+    handshake.handshake_signature = handshake_signature(&handshake, key);
 
     assert!(admission.allows(&handshake).await);
     assert!(!admission.allows(&handshake).await);
@@ -266,14 +335,18 @@ async fn admission_rejects_replayed_nonce_timestamp() {
 
 #[tokio::test]
 async fn admission_rejection_metrics_track_non_psk_failures() {
+    let keys = validator_signing_keys();
     let admission = AdmissionControl::from_snapshot(
-        build_snapshot(),
+        build_snapshot(&keys),
         Duration::from_secs(1),
         test_identity(None),
     );
+    let key = keys.get("validator.a").unwrap();
+    let public_key = hex::encode(key.verifying_key().to_bytes());
     let handshake = handshake_with_overrides(
         "validator.a",
-        "pk_a",
+        &public_key,
+        key,
         "citizen-othernet",
         "genesis-hash",
         "manifest-digest",
@@ -291,13 +364,14 @@ async fn admission_rejection_metrics_track_non_psk_failures() {
 
 fn handshake_from_identity(
     validator_id: &str,
-    public_key: &str,
+    signing_key: &SigningKey,
     identity: &HandshakeIdentity,
     nonce: u64,
 ) -> PeerHandshake {
     handshake_with_overrides(
         validator_id,
-        public_key,
+        &hex::encode(signing_key.verifying_key().to_bytes()),
+        signing_key,
         &identity.network_id,
         &identity.genesis_hash,
         &identity.manifest_digest,
@@ -309,25 +383,27 @@ fn handshake_from_identity(
 
 #[tokio::test]
 async fn observer_inbound_rejects_validator_network_identity_mismatch() {
-    let snapshot = build_snapshot();
+    let keys = validator_signing_keys();
+    let snapshot = build_snapshot(&keys);
     let observer_identity = test_identity(None);
     let validator_identity = HandshakeIdentity {
         network_id: "citizen-othernet".into(),
         ..test_identity(None)
     };
-    let observer_admission = AdmissionControl::from_snapshot(
-        snapshot,
-        Duration::from_secs(1),
-        observer_identity,
-    );
+    let observer_admission =
+        AdmissionControl::from_snapshot(snapshot, Duration::from_secs(1), observer_identity);
 
-    let handshake = handshake_from_identity("validator.a", "pk_a", &validator_identity, 301);
+    let key = keys.get("validator.a").unwrap();
+    let handshake = handshake_from_identity("validator.a", key, &validator_identity, 301);
 
     let reason = observer_admission
         .check_handshake(&handshake)
         .await
         .expect_err("observer must reject network mismatch");
-    assert_eq!(reason, citizen_network::AdmissionRejectionReason::NetworkIdentityMismatch);
+    assert_eq!(
+        reason,
+        citizen_network::AdmissionRejectionReason::NetworkIdentityMismatch
+    );
 
     let metrics = observer_admission.metrics_snapshot();
     assert_eq!(metrics.handshake_reject_total, 1);
@@ -335,25 +411,27 @@ async fn observer_inbound_rejects_validator_network_identity_mismatch() {
 
 #[tokio::test]
 async fn observer_inbound_rejects_validator_manifest_digest_mismatch() {
-    let snapshot = build_snapshot();
+    let keys = validator_signing_keys();
+    let snapshot = build_snapshot(&keys);
     let observer_identity = test_identity(None);
     let validator_identity = HandshakeIdentity {
         manifest_digest: "manifest-other".into(),
         ..test_identity(None)
     };
-    let observer_admission = AdmissionControl::from_snapshot(
-        snapshot,
-        Duration::from_secs(1),
-        observer_identity,
-    );
+    let observer_admission =
+        AdmissionControl::from_snapshot(snapshot, Duration::from_secs(1), observer_identity);
 
-    let handshake = handshake_from_identity("validator.a", "pk_a", &validator_identity, 302);
+    let key = keys.get("validator.a").unwrap();
+    let handshake = handshake_from_identity("validator.a", key, &validator_identity, 302);
 
     let reason = observer_admission
         .check_handshake(&handshake)
         .await
         .expect_err("observer must reject manifest mismatch");
-    assert_eq!(reason, citizen_network::AdmissionRejectionReason::NetworkIdentityMismatch);
+    assert_eq!(
+        reason,
+        citizen_network::AdmissionRejectionReason::NetworkIdentityMismatch
+    );
 
     let metrics = observer_admission.metrics_snapshot();
     assert_eq!(metrics.handshake_reject_total, 1);
@@ -361,25 +439,60 @@ async fn observer_inbound_rejects_validator_manifest_digest_mismatch() {
 
 #[tokio::test]
 async fn validator_inbound_rejects_observer_invalid_identity_tuple() {
-    let snapshot = build_snapshot();
-    let validator_admission = AdmissionControl::from_snapshot(
-        snapshot,
-        Duration::from_secs(1),
-        test_identity(None),
-    );
+    let keys = validator_signing_keys();
+    let snapshot = build_snapshot(&keys);
+    let validator_admission =
+        AdmissionControl::from_snapshot(snapshot, Duration::from_secs(1), test_identity(None));
     let observer_identity = HandshakeIdentity {
         network_id: "citizen-observer-othernet".into(),
         ..test_identity(None)
     };
 
-    let handshake = handshake_from_identity("validator.b", "pk_b", &observer_identity, 303);
+    let key = keys.get("validator.b").unwrap();
+    let handshake = handshake_from_identity("validator.b", key, &observer_identity, 303);
 
     let reason = validator_admission
         .check_handshake(&handshake)
         .await
         .expect_err("validator must reject observer invalid identity tuple");
-    assert_eq!(reason, citizen_network::AdmissionRejectionReason::NetworkIdentityMismatch);
+    assert_eq!(
+        reason,
+        citizen_network::AdmissionRejectionReason::NetworkIdentityMismatch
+    );
 
     let metrics = validator_admission.metrics_snapshot();
     assert_eq!(metrics.handshake_reject_total, 1);
+}
+
+#[tokio::test]
+async fn admission_rejects_invalid_handshake_signature() {
+    let keys = validator_signing_keys();
+    let admission = AdmissionControl::from_snapshot(
+        build_snapshot(&keys),
+        Duration::from_secs(1),
+        test_identity(None),
+    );
+    let key = keys.get("validator.a").unwrap();
+    let public_key = hex::encode(key.verifying_key().to_bytes());
+    let mut handshake = handshake_with_overrides(
+        "validator.a",
+        &public_key,
+        key,
+        "citizen-localnet",
+        "genesis-hash",
+        "manifest-digest",
+        999,
+        current_timestamp_ms(),
+        None,
+    );
+    handshake.handshake_signature = "00".repeat(64);
+
+    let reason = admission
+        .check_handshake(&handshake)
+        .await
+        .expect_err("invalid signature must be rejected");
+    assert_eq!(
+        reason,
+        citizen_network::AdmissionRejectionReason::InvalidHandshakeSignature
+    );
 }
