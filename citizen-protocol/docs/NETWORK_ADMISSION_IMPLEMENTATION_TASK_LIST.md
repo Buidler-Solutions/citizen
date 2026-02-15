@@ -19,6 +19,12 @@ This tracker is now in active execution mode. The checklist below captures what 
 3. Extended handshake identity binding (`network_id`, `genesis_hash`, `manifest_digest`, replay/PSK proofs).
 4. Startup + handshake fail-closed telemetry and test coverage.
 
+### Progress Update (Wave 1 continuation)
+
+- Inbound handshake enforcement is now fully wired in `crates/network` (identity tuple checks, PSK proof, replay cache, fail-closed stream drops).
+- Startup preflight tests now cover valid manifests plus signature/network/genesis mismatch failures.
+- Remaining work is concentrated on observer handshake parity, rotation policy states, and startup metrics.
+
 ## 1) Architecture & Scaffolding
 
 - [x] Create `crates/node/src/admission/` module.
@@ -61,7 +67,7 @@ This tracker is now in active execution mode. The checklist below captures what 
   - [x] nonce/timestamp
   - [x] PSK challenge-response proof
 - [x] Include admission identity fields in outbound handshake construction.
-- [ ] Enforce inbound handshake checks:
+- [x] Enforce inbound handshake checks:
   - [x] validator allowlist/public key
   - [x] network ID match
   - [x] genesis hash match
@@ -69,6 +75,8 @@ This tracker is now in active execution mode. The checklist below captures what 
   - [x] PSK proof validity
   - [x] replay protection
 - [x] Drop connection immediately on mismatch.
+
+Status note: all inbound checks listed below are implemented; the parent item is now complete.
 
 ## 5) Replay Protection & Secret Proofing
 
@@ -82,6 +90,8 @@ This tracker is now in active execution mode. The checklist below captures what 
 - [x] Ensure observer nodes use the same admission preflight checks.
 - [ ] Ensure observer nodes use the same handshake admission checks.
 - [ ] Confirm no observer bypasses for network identity rules.
+
+Execution note: observer startup admission parity is complete; handshake parity remains open until observer networking is enabled with the same `AdmissionControl` gate path used by validator peers.
 
 ## 7) Key Rotation & Governance-Compatible Transitions
 
@@ -103,21 +113,25 @@ This tracker is now in active execution mode. The checklist below captures what 
   - [ ] `manifest_verification_duration_ms`
   - [x] `psk_challenge_fail_total`
 
+Execution note: metrics work should land as one atomic telemetry change set so startup/manifest timing/reason labels are introduced with consistent naming and dashboards.
+
 ## 9) Testing & Validation Matrix
 
 - [ ] Startup tests:
-  - [ ] valid manifest + matching network/genesis + valid PSK starts successfully
+  - [x] valid manifest + matching network/genesis + valid PSK starts successfully
   - [x] invalid manifest signature fails startup
   - [x] network mismatch fails startup
   - [x] genesis mismatch fails startup
   - [ ] observer mismatch fails startup
-- [ ] Handshake tests:
+- [x] Handshake tests:
   - [x] matching allowlisted peer accepted
   - [x] network mismatch rejected
   - [x] genesis mismatch rejected
   - [x] manifest digest mismatch rejected
   - [x] invalid PSK proof rejected
   - [x] replayed nonce/timestamp rejected
+
+Status note: handshake matrix items listed above are now covered; remaining matrix work is rotation plus explicit observer-role mismatch coverage.
 - [ ] Rotation tests:
   - [ ] transition window enforces old+new requirement
   - [ ] post-window old-only rejected
@@ -129,6 +143,21 @@ This tracker is now in active execution mode. The checklist below captures what 
 - [ ] Add CI checks for manifest lint/verification.
 - [ ] Document controlled fork process for network identity changes.
 - [ ] Perform staged rollout in localnet before production validator rollout.
+
+## 11) Next Execution Queue (Wave 2)
+
+1. **Observer handshake parity implementation**
+   - [ ] Bring observer nodes onto authenticated peer networking with the same `AdmissionControl` validation path.
+   - [ ] Add observer-specific integration tests that assert identity mismatch/manifest mismatch rejection behavior on inbound and outbound handshakes.
+2. **Manifest key-state transitions**
+   - [ ] Introduce `ACTIVE/TRANSITION/REVOKED` key-state evaluation in manifest verification.
+   - [ ] Add transition-window enforcement tests (old+new required, old-only rejection after cutoff).
+3. **Admission telemetry completion**
+   - [ ] Emit startup failure counters with reason labels.
+   - [ ] Record manifest verification duration histogram and connect it to rollout dashboards.
+4. **Operator readiness artifacts**
+   - [ ] Publish an admission troubleshooting runbook section with reason-code triage.
+   - [ ] Add CI manifest lint/verification checks to block unsigned or stale rollout manifests.
 
 ## Definition of Done
 
