@@ -54,32 +54,32 @@ This tracker is now in active execution mode. The checklist below captures what 
 
 ## 4) Network Handshake Admission Enforcement
 
-- [ ] Extend `PeerHandshake` identity fields:
-  - [ ] `network_id`
-  - [ ] `genesis_hash`
-  - [ ] `manifest_digest`
-  - [ ] nonce/timestamp
-  - [ ] PSK challenge-response proof
-- [ ] Include admission identity fields in outbound handshake construction.
+- [x] Extend `PeerHandshake` identity fields:
+  - [x] `network_id`
+  - [x] `genesis_hash`
+  - [x] `manifest_digest`
+  - [x] nonce/timestamp
+  - [x] PSK challenge-response proof
+- [x] Include admission identity fields in outbound handshake construction.
 - [ ] Enforce inbound handshake checks:
-  - [ ] validator allowlist/public key
-  - [ ] network ID match
-  - [ ] genesis hash match
-  - [ ] manifest digest match
-  - [ ] PSK proof validity
-  - [ ] replay protection
+  - [x] validator allowlist/public key
+  - [x] network ID match
+  - [x] genesis hash match
+  - [x] manifest digest match
+  - [x] PSK proof validity
+  - [x] replay protection
 - [ ] Drop connection immediately on mismatch.
 
 ## 5) Replay Protection & Secret Proofing
 
-- [ ] Add anti-replay cache for nonce/timestamp validation.
-- [ ] Implement challenge-response proof derivation (no static secret transmission).
-- [ ] Use constant-time comparison for proof verification.
-- [ ] Enforce startup secret validation when PSK mode is enabled.
+- [x] Add anti-replay cache for nonce/timestamp validation.
+- [x] Implement challenge-response proof derivation (no static secret transmission).
+- [x] Use constant-time comparison for proof verification.
+- [x] Enforce startup secret validation when PSK mode is enabled.
 
 ## 6) Observer/Validator Policy Parity
 
-- [ ] Ensure observer nodes use the same admission preflight checks.
+- [x] Ensure observer nodes use the same admission preflight checks.
 - [ ] Ensure observer nodes use the same handshake admission checks.
 - [ ] Confirm no observer bypasses for network identity rules.
 
