@@ -68,7 +68,7 @@ This tracker is now in active execution mode. The checklist below captures what 
   - [x] manifest digest match
   - [x] PSK proof validity
   - [x] replay protection
-- [ ] Drop connection immediately on mismatch.
+- [x] Drop connection immediately on mismatch.
 
 ## 5) Replay Protection & Secret Proofing
 
@@ -95,8 +95,8 @@ This tracker is now in active execution mode. The checklist below captures what 
 
 ## 8) Error Model, Logs, and Metrics
 
-- [ ] Implement typed admission errors (startup + handshake).
-- [ ] Add structured rejection/startup logs with reason codes and peer context.
+- [x] Implement typed admission errors (startup + handshake).
+- [x] Add structured rejection/startup logs with reason codes and peer context.
 - [ ] Add security metrics:
   - [ ] `admission_startup_fail_total{reason}`
   - [ ] `admission_handshake_reject_total{reason}`
