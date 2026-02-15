@@ -26,7 +26,7 @@ use serde::{Deserialize, Serialize};
 use std::time::Duration;
 use tokio::signal;
 
-use admission::{startup::run_preflight, AdmissionSettings};
+use admission::{startup::run_preflight, AdmissionContext, AdmissionSettings};
 use tracing_subscriber::EnvFilter;
 
 #[tokio::main]
@@ -74,13 +74,7 @@ async fn main() -> anyhow::Result<()> {
         tracing::info!("verifying_key" = %verifying_key_hex, "note" = "share this key for validator admission");
         let snapshot = config.build_validator_set(&verifying_key_hex);
         let rotation = Duration::from_secs(config.network_key_rotation_secs);
-        let admission_identity = HandshakeIdentity {
-            network_id: admission_context.network_id.clone(),
-            genesis_hash: admission_context.genesis_hash.clone(),
-            manifest_digest: admission_context.manifest_digest.clone(),
-            startup_secret: config.startup_secret.clone(),
-            max_clock_skew: Duration::from_secs(30),
-        };
+        let admission_identity = config.handshake_identity(&admission_context);
         let admission = Arc::new(AdmissionControl::from_snapshot(
             snapshot.clone(),
             rotation,
@@ -137,13 +131,7 @@ async fn main() -> anyhow::Result<()> {
         let observer_network_task = if !config.peers.is_empty() {
             let snapshot = config.build_validator_set(&config.observer_public_key());
             let rotation = Duration::from_secs(config.network_key_rotation_secs);
-            let admission_identity = HandshakeIdentity {
-                network_id: admission_context.network_id.clone(),
-                genesis_hash: admission_context.genesis_hash.clone(),
-                manifest_digest: admission_context.manifest_digest.clone(),
-                startup_secret: config.startup_secret.clone(),
-                max_clock_skew: Duration::from_secs(30),
-            };
+            let admission_identity = config.handshake_identity(&admission_context);
             let admission = Arc::new(AdmissionControl::from_snapshot(
                 snapshot,
                 rotation,
@@ -299,6 +287,16 @@ impl NodeConfig {
             manifest_enforce: self.manifest_enforce,
             startup_secret: self.startup_secret.clone(),
             expected_genesis_hash: self.expected_genesis_hash.clone(),
+        }
+    }
+
+    fn handshake_identity(&self, context: &AdmissionContext) -> HandshakeIdentity {
+        HandshakeIdentity {
+            network_id: context.network_id.clone(),
+            genesis_hash: context.genesis_hash.clone(),
+            manifest_digest: context.manifest_digest.clone(),
+            startup_secret: self.startup_secret.clone(),
+            max_clock_skew: Duration::from_secs(30),
         }
     }
 
@@ -483,5 +481,31 @@ mod tests {
         };
 
         assert_eq!(config.observer_public_key(), "observer-readonly-key");
+    }
+
+    #[test]
+    fn handshake_identity_is_role_agnostic() {
+        let context = AdmissionContext {
+            network_id: "citizen-localnet".to_string(),
+            genesis_hash: "genesis-hash".to_string(),
+            manifest_digest: "manifest-digest".to_string(),
+            manifest_version: Some(3),
+        };
+
+        let validator_config = NodeConfig {
+            node_role: NodeRole::Validator,
+            startup_secret: Some("validator-shared-secret".to_string()),
+            ..NodeConfig::default()
+        };
+        let observer_config = NodeConfig {
+            node_role: NodeRole::Observer,
+            startup_secret: Some("validator-shared-secret".to_string()),
+            ..NodeConfig::default()
+        };
+
+        assert_eq!(
+            validator_config.handshake_identity(&context),
+            observer_config.handshake_identity(&context)
+        );
     }
 }
