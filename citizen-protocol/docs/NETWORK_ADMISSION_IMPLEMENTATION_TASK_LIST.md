@@ -237,3 +237,39 @@ This avoids hard-coding `citizen-protocol/Cargo.toml` in environments where `Car
 - [ ] Run full admission matrix in CI (startup, handshake, observer parity, rotation).
 - [ ] Confirm telemetry dashboards include startup failure and handshake rejection reason distributions.
 - [ ] Collect sign-off from node, network, and governance owners before production rollout.
+
+## 13) Secure Network Admission Expansion Backlog (Wave 4)
+
+Add the following tasks to complete the remaining secure-admission hardening and governance integration work.
+
+### 13.1 Handshake robustness and abuse resistance
+
+- [ ] Add connection-level rate limits for repeated admission failures per remote identity/IP tuple.
+- [ ] Introduce adaptive backoff on repeated `admission_handshake_reject_total{reason}` spikes to reduce handshake flood impact.
+- [ ] Add explicit payload-size ceilings for handshake identity fields and reject over-limit handshakes before policy evaluation.
+- [ ] Add fuzz tests for handshake decoding + admission verification (malformed fields, truncated proofs, oversized payloads).
+
+### 13.2 Runtime safety guardrails
+
+- [ ] Enforce monotonic clock-drift thresholds in admission preflight and handshake replay validation.
+- [ ] Add startup blocking checks that prevent boot when manifest trust roots are missing or duplicated.
+- [ ] Add checksum validation for local allowlist/admission config sources before startup preflight passes.
+- [ ] Add deterministic startup self-test output artifact that records the exact admission inputs accepted at boot.
+
+### 13.3 Governance-coupled admission updates
+
+- [ ] Define governance proposal schema for network-admission parameter changes (`network_id`, manifest key set, transition window).
+- [ ] Require governance receipt reference in operator runbooks for all admission-impacting manifest rotations.
+- [ ] Add automated verification that manifest signer sets align with most recent approved governance state.
+- [ ] Add replayable localnet scenario test for governance-approved manifest/key transition with no admission bypass.
+
+### 13.4 Observability and SLO readiness
+
+- [ ] Publish admission SLOs (startup pass rate, handshake reject ratio by reason, verification latency p95/p99).
+- [ ] Add dashboard panels for reject-reason trend deltas and role-based parity (validator vs observer).
+- [ ] Add alert rules for sustained PSK proof failures and network/genesis mismatch bursts.
+- [ ] Capture baseline metrics from a 50-node localnet run and store as rollout reference artifact.
+
+### 13.5 Release gate
+
+- [ ] Mark secure admission GA-ready only after Wave 4 tasks have linked artifacts (tests, dashboards, runbooks, governance receipts).
