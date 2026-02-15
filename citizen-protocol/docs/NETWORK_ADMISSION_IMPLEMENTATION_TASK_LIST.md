@@ -139,7 +139,7 @@ Status note: handshake matrix items listed above are now covered; remaining matr
 
 ## 10) Rollout Readiness
 
-- [ ] Add operator runbook section for admission troubleshooting.
+- [x] Add operator runbook section for admission troubleshooting.
 - [ ] Add CI checks for manifest lint/verification.
 - [ ] Document controlled fork process for network identity changes.
 - [ ] Perform staged rollout in localnet before production validator rollout.
@@ -156,7 +156,8 @@ Status note: handshake matrix items listed above are now covered; remaining matr
    - [x] Emit startup failure counters with reason labels.
    - [x] Record manifest verification duration histogram and connect it to rollout dashboards.
 4. **Operator readiness artifacts**
-   - [ ] Publish an admission troubleshooting runbook section with reason-code triage.
+   - 2026-02-15 update: published `docs/NETWORK_ADMISSION_TROUBLESHOOTING_RUNBOOK.md` with startup/handshake reason-code triage and escalation checklist.
+   - [x] Publish an admission troubleshooting runbook section with reason-code triage.
    - [ ] Add CI manifest lint/verification checks to block unsigned or stale rollout manifests.
 
 ## Definition of Done

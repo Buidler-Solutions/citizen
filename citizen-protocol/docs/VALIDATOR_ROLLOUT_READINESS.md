@@ -83,6 +83,7 @@ Each operator must execute and attest to these runbooks:
 - `docs/LOCALNET_RUNBOOK.md` (bootstrap and config adaptation).
 - `docs/OPERATOR_DISASTER_RECOVERY_RUNBOOK.md` (snapshot/restore drill).
 - `docs/OBSERVER_NODE_RUNBOOK.md` (role separation validation for paired observers).
+- `docs/NETWORK_ADMISSION_TROUBLESHOOTING_RUNBOOK.md` (startup/handshake admission reason-code triage).
 
 Pass criteria:
 
