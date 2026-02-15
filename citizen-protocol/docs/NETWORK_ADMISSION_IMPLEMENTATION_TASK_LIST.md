@@ -135,7 +135,7 @@ Status note: handshake matrix items listed above are now covered; remaining matr
 - [ ] Rotation tests:
   - [x] transition window enforces old+new requirement
   - [x] post-window old-only rejected
-  - [ ] revoked-key signature rejected
+  - [x] revoked-key signature rejected
 
 ## 10) Rollout Readiness
 
@@ -193,7 +193,7 @@ This section extends the execution tracker with the next concrete delivery slice
 - [ ] **Rotation regression tests**
   - [x] Add test: during transition window, old+new signature requirement enforced.
   - [x] Add test: after transition window, old-only signature set is rejected.
-  - [ ] Add test: revoked key signatures fail regardless of transition status.
+  - [x] Add test: revoked key signatures fail regardless of transition status.
 
 ### 12.3 CI manifest guardrails
 
