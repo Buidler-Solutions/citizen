@@ -49,7 +49,7 @@ This tracker is now in active execution mode. The checklist below captures what 
 - [x] Define deterministic manifest schema and canonical payload encoding.
 - [x] Implement signature envelope verification against trusted runtime keys.
 - [x] Enforce signature algorithm allowlist.
-- [ ] Enforce manifest freshness/expiry policy.
+- [x] Enforce manifest freshness/expiry policy.
 - [x] Compute canonical `manifest_digest` for handshake identity binding.
 
 ## 4) Network Handshake Admission Enforcement
@@ -108,7 +108,7 @@ This tracker is now in active execution mode. The checklist below captures what 
 - [ ] Startup tests:
   - [ ] valid manifest + matching network/genesis + valid PSK starts successfully
   - [ ] invalid manifest signature fails startup
-  - [ ] network mismatch fails startup
+  - [x] network mismatch fails startup
   - [ ] genesis mismatch fails startup
   - [ ] observer mismatch fails startup
 - [ ] Handshake tests:
