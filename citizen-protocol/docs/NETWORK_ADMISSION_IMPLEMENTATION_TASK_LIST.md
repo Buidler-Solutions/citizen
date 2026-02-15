@@ -147,7 +147,7 @@ Status note: handshake matrix items listed above are now covered; remaining matr
 ## 11) Next Execution Queue (Wave 2)
 
 1. **Observer handshake parity implementation**
-   - [ ] Bring observer nodes onto authenticated peer networking with the same `AdmissionControl` validation path.
+   - [x] Bring observer nodes onto authenticated peer networking with the same `AdmissionControl` validation path.
    - [ ] Add observer-specific integration tests that assert identity mismatch/manifest mismatch rejection behavior on inbound and outbound handshakes.
 2. **Manifest key-state transitions**
    - 2026-02-15 update: manifest transition cutoff enforcement now returns typed errors (`ManifestTransitionSignatureRequired`, `ManifestOldSignatureAfterCutoff`) and includes focused regression tests for transition-window and post-cutoff behavior.
@@ -176,8 +176,9 @@ This section extends the execution tracker with the next concrete delivery slice
 ### 12.1 Close observer handshake parity (highest priority)
 
 - [ ] **Networking path parity**
-  - [ ] Route observer outbound and inbound peer handshakes through the same `AdmissionControl::verify` entrypoint used by validators.
-  - [ ] Remove any observer-only fast path that skips `network_id`, `genesis_hash`, `manifest_digest`, PSK, or replay checks.
+  - [x] Route observer outbound and inbound peer handshakes through the same `AdmissionControl::verify` entrypoint used by validators.
+  - [x] Remove any observer-only fast path that skips `network_id`, `genesis_hash`, `manifest_digest`, PSK, or replay checks.
+  - 2026-02-15 update: observer nodes now initialize QUIC admission networking with the shared `AdmissionControl` policy path used by validators, while remaining read-only for consensus.
 - [ ] **Observer integration coverage**
   - [ ] Add integration test: observer rejects validator handshake with mismatched `network_id`.
   - [ ] Add integration test: observer rejects validator handshake with mismatched `manifest_digest`.
