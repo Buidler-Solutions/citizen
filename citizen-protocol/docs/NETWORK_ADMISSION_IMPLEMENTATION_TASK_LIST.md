@@ -185,7 +185,8 @@ This section extends the execution tracker with the next concrete delivery slice
   - [x] Add integration test: observer rejects validator handshake with mismatched `manifest_digest`.
   - [x] Add integration test: validator rejects observer handshake when observer identity tuple is invalid.
 - [ ] **Acceptance check**
-  - [ ] Produce a test matrix artifact showing observer and validator rejection reasons are identical for equivalent bad inputs.
+  - [x] Produce a test matrix artifact showing observer and validator rejection reasons are identical for equivalent bad inputs.
+  - 2026-02-15 update: `crates/network/tests/admission.rs::observer_and_validator_share_identity_mismatch_rejection_matrix` now codifies a role-parity matrix across `network_id`, `genesis_hash`, and `manifest_digest` mismatch cases and asserts identical `AdmissionRejectionReason` outcomes for observer and validator inbound admission paths.
 
 
 ### 12.1.1 Command reference (path-safe)
