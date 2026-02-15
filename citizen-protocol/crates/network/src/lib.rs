@@ -8,6 +8,7 @@ use rand::Rng;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::net::SocketAddr;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::{Duration as StdDuration, Instant, SystemTime, UNIX_EPOCH};
 use tokio::sync::{broadcast, mpsc, RwLock};
@@ -68,6 +69,19 @@ pub struct AdmissionControl {
     last_rotation: Arc<RwLock<Instant>>,
     identity: HandshakeIdentity,
     replay_cache: Arc<RwLock<HashMap<String, u64>>>,
+    metrics: Arc<AdmissionMetrics>,
+}
+
+#[derive(Default)]
+struct AdmissionMetrics {
+    handshake_reject_total: AtomicU64,
+    psk_challenge_fail_total: AtomicU64,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct AdmissionMetricsSnapshot {
+    pub handshake_reject_total: u64,
+    pub psk_challenge_fail_total: u64,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -109,6 +123,7 @@ impl AdmissionControl {
             last_rotation: Arc::new(RwLock::new(Instant::now())),
             identity,
             replay_cache: Arc::new(RwLock::new(HashMap::new())),
+            metrics: Arc::new(AdmissionMetrics::default()),
         }
     }
 
@@ -133,15 +148,15 @@ impl AdmissionControl {
     ) -> std::result::Result<(), AdmissionRejectionReason> {
         let allowed = self.allowed.read().await;
         let Some(expected_key) = allowed.get(&handshake.validator_id) else {
-            return Err(AdmissionRejectionReason::UnknownValidator);
+            return Err(self.reject(AdmissionRejectionReason::UnknownValidator));
         };
         if expected_key != &handshake.public_key {
-            return Err(AdmissionRejectionReason::PublicKeyMismatch);
+            return Err(self.reject(AdmissionRejectionReason::PublicKeyMismatch));
         }
 
         let epoch = self.current_epoch.read().await;
         if handshake.key_epoch < *epoch {
-            return Err(AdmissionRejectionReason::StaleKeyEpoch);
+            return Err(self.reject(AdmissionRejectionReason::StaleKeyEpoch));
         }
         drop(epoch);
 
@@ -149,18 +164,18 @@ impl AdmissionControl {
             || handshake.genesis_hash != self.identity.genesis_hash
             || handshake.manifest_digest != self.identity.manifest_digest
         {
-            return Err(AdmissionRejectionReason::NetworkIdentityMismatch);
+            return Err(self.reject(AdmissionRejectionReason::NetworkIdentityMismatch));
         }
 
         let now_ms = match SystemTime::now().duration_since(UNIX_EPOCH) {
             Ok(duration) => duration.as_millis() as u64,
-            Err(_) => return Err(AdmissionRejectionReason::InvalidSystemTime),
+            Err(_) => return Err(self.reject(AdmissionRejectionReason::InvalidSystemTime)),
         };
         let skew_ms = self.identity.max_clock_skew.as_millis() as u64;
         if handshake.timestamp_ms.saturating_add(skew_ms) < now_ms
             || now_ms.saturating_add(skew_ms) < handshake.timestamp_ms
         {
-            return Err(AdmissionRejectionReason::ClockSkewExceeded);
+            return Err(self.reject(AdmissionRejectionReason::ClockSkewExceeded));
         }
 
         let replay_key = format!(
@@ -170,17 +185,17 @@ impl AdmissionControl {
         {
             let replay_cache = self.replay_cache.read().await;
             if replay_cache.contains_key(&replay_key) {
-                return Err(AdmissionRejectionReason::ReplayDetected);
+                return Err(self.reject(AdmissionRejectionReason::ReplayDetected));
             }
         }
 
         if let Some(secret) = &self.identity.startup_secret {
             let Some(psk_proof) = &handshake.psk_proof else {
-                return Err(AdmissionRejectionReason::MissingPskProof);
+                return Err(self.reject(AdmissionRejectionReason::MissingPskProof));
             };
             let expected = derive_psk_proof(secret, handshake);
             if !constant_time_eq(expected.as_bytes(), psk_proof.as_bytes()) {
-                return Err(AdmissionRejectionReason::InvalidPskProof);
+                return Err(self.reject(AdmissionRejectionReason::InvalidPskProof));
             }
         }
 
@@ -208,6 +223,31 @@ impl AdmissionControl {
 
     pub fn identity(&self) -> HandshakeIdentity {
         self.identity.clone()
+    }
+
+    pub fn metrics_snapshot(&self) -> AdmissionMetricsSnapshot {
+        AdmissionMetricsSnapshot {
+            handshake_reject_total: self.metrics.handshake_reject_total.load(Ordering::Relaxed),
+            psk_challenge_fail_total: self
+                .metrics
+                .psk_challenge_fail_total
+                .load(Ordering::Relaxed),
+        }
+    }
+
+    fn reject(&self, reason: AdmissionRejectionReason) -> AdmissionRejectionReason {
+        self.metrics
+            .handshake_reject_total
+            .fetch_add(1, Ordering::Relaxed);
+        if matches!(
+            reason,
+            AdmissionRejectionReason::MissingPskProof | AdmissionRejectionReason::InvalidPskProof
+        ) {
+            self.metrics
+                .psk_challenge_fail_total
+                .fetch_add(1, Ordering::Relaxed);
+        }
+        reason
     }
 }
 
