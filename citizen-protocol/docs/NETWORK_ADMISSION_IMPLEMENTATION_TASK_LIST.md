@@ -100,7 +100,7 @@ Execution note: observer startup admission parity is complete; handshake parity 
   - [x] `TRANSITION_KEYS`
   - [x] `REVOKED_KEYS`
 - [x] Enforce transition policy (e.g., old+new signature threshold during window).
-- [ ] Reject old-only signatures after transition window closes.
+- [x] Reject old-only signatures after transition window closes.
 - [x] Reject revoked keys at all times.
 
 ## 8) Error Model, Logs, and Metrics
@@ -133,8 +133,8 @@ Execution note: metrics work should land as one atomic telemetry change set so s
 
 Status note: handshake matrix items listed above are now covered; remaining matrix work is rotation plus explicit observer-role mismatch coverage.
 - [ ] Rotation tests:
-  - [ ] transition window enforces old+new requirement
-  - [ ] post-window old-only rejected
+  - [x] transition window enforces old+new requirement
+  - [x] post-window old-only rejected
   - [ ] revoked-key signature rejected
 
 ## 10) Rollout Readiness
@@ -150,9 +150,10 @@ Status note: handshake matrix items listed above are now covered; remaining matr
    - [ ] Bring observer nodes onto authenticated peer networking with the same `AdmissionControl` validation path.
    - [ ] Add observer-specific integration tests that assert identity mismatch/manifest mismatch rejection behavior on inbound and outbound handshakes.
 2. **Manifest key-state transitions**
+   - 2026-02-15 update: manifest transition cutoff enforcement now returns typed errors (`ManifestTransitionSignatureRequired`, `ManifestOldSignatureAfterCutoff`) and includes focused regression tests for transition-window and post-cutoff behavior.
    - [x] Introduce `ACTIVE/TRANSITION/REVOKED` key-state evaluation in manifest verification.
    - 2026-02-15 update: manifest verification now enforces ACTIVE-key signatures, optional dual-signature transition policy, and immediate rejection for revoked keys.
-   - [ ] Add transition-window enforcement tests (old+new required, old-only rejection after cutoff).
+   - [x] Add transition-window enforcement tests (old+new required, old-only rejection after cutoff).
 3. **Admission telemetry completion**
    - [x] Emit startup failure counters with reason labels.
    - [x] Record manifest verification duration histogram and connect it to rollout dashboards.
@@ -187,11 +188,11 @@ This section extends the execution tracker with the next concrete delivery slice
 ### 12.2 Finalize key-transition cutoff behavior
 
 - [ ] **Transition window cutoff enforcement**
-  - [ ] Implement explicit cutoff evaluation (timestamp or block-height based) so old-only signature sets are rejected once the transition closes.
-  - [ ] Ensure failure reason maps to a stable typed admission error code for telemetry consistency.
+  - [x] Implement explicit cutoff evaluation (timestamp or block-height based) so old-only signature sets are rejected once the transition closes.
+  - [x] Ensure failure reason maps to a stable typed admission error code for telemetry consistency.
 - [ ] **Rotation regression tests**
-  - [ ] Add test: during transition window, old+new signature requirement enforced.
-  - [ ] Add test: after transition window, old-only signature set is rejected.
+  - [x] Add test: during transition window, old+new signature requirement enforced.
+  - [x] Add test: after transition window, old-only signature set is rejected.
   - [ ] Add test: revoked key signatures fail regardless of transition status.
 
 ### 12.3 CI manifest guardrails
