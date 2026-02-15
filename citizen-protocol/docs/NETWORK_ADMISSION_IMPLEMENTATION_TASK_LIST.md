@@ -167,3 +167,53 @@ Status note: handshake matrix items listed above are now covered; remaining matr
 - [ ] Validators and observers share the same network identity enforcement path.
 - [ ] Key rotation and replay protection are covered by automated tests.
 - [ ] Admission failures are auditable through logs and metrics.
+
+## 12) Continued Implementation Task List (Wave 3)
+
+This section extends the execution tracker with the next concrete delivery slices needed to close all remaining Wave 1/Wave 2 gaps.
+
+### 12.1 Close observer handshake parity (highest priority)
+
+- [ ] **Networking path parity**
+  - [ ] Route observer outbound and inbound peer handshakes through the same `AdmissionControl::verify` entrypoint used by validators.
+  - [ ] Remove any observer-only fast path that skips `network_id`, `genesis_hash`, `manifest_digest`, PSK, or replay checks.
+- [ ] **Observer integration coverage**
+  - [ ] Add integration test: observer rejects validator handshake with mismatched `network_id`.
+  - [ ] Add integration test: observer rejects validator handshake with mismatched `manifest_digest`.
+  - [ ] Add integration test: validator rejects observer handshake when observer identity tuple is invalid.
+- [ ] **Acceptance check**
+  - [ ] Produce a test matrix artifact showing observer and validator rejection reasons are identical for equivalent bad inputs.
+
+### 12.2 Finalize key-transition cutoff behavior
+
+- [ ] **Transition window cutoff enforcement**
+  - [ ] Implement explicit cutoff evaluation (timestamp or block-height based) so old-only signature sets are rejected once the transition closes.
+  - [ ] Ensure failure reason maps to a stable typed admission error code for telemetry consistency.
+- [ ] **Rotation regression tests**
+  - [ ] Add test: during transition window, old+new signature requirement enforced.
+  - [ ] Add test: after transition window, old-only signature set is rejected.
+  - [ ] Add test: revoked key signatures fail regardless of transition status.
+
+### 12.3 CI manifest guardrails
+
+- [ ] **Static lint and verification gates**
+  - [ ] Add CI job that validates manifest schema/canonicalization.
+  - [ ] Add CI job that verifies trusted signature presence and algorithm allowlist.
+  - [ ] Add CI check that fails stale manifests (`expires_at` policy threshold) before merge.
+- [ ] **Policy documentation**
+  - [ ] Document CI failure remediation steps in `NETWORK_ADMISSION_TROUBLESHOOTING_RUNBOOK.md`.
+
+### 12.4 Controlled network-identity change process
+
+- [ ] **Fork/change procedure doc**
+  - [ ] Specify operator/governance steps for planned `network_id` or `genesis_hash` changes.
+  - [ ] Define rollout sequencing and rollback/abort checkpoints.
+  - [ ] Add explicit signer/quorum requirements for manifest updates tied to identity changes.
+- [ ] **Dry-run validation**
+  - [ ] Execute and record a localnet rehearsal for identity transition with zero admission bypasses.
+
+### 12.5 Rollout completion checklist
+
+- [ ] Run full admission matrix in CI (startup, handshake, observer parity, rotation).
+- [ ] Confirm telemetry dashboards include startup failure and handshake rejection reason distributions.
+- [ ] Collect sign-off from node, network, and governance owners before production rollout.
