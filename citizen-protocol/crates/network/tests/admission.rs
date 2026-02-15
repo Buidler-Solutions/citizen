@@ -231,6 +231,9 @@ async fn admission_rejects_invalid_psk_proof() {
     );
 
     assert!(!admission.allows(&handshake).await);
+    let metrics = admission.metrics_snapshot();
+    assert_eq!(metrics.handshake_reject_total, 1);
+    assert_eq!(metrics.psk_challenge_fail_total, 1);
 }
 
 #[tokio::test]
@@ -255,4 +258,33 @@ async fn admission_rejects_replayed_nonce_timestamp() {
 
     assert!(admission.allows(&handshake).await);
     assert!(!admission.allows(&handshake).await);
+
+    let metrics = admission.metrics_snapshot();
+    assert_eq!(metrics.handshake_reject_total, 1);
+    assert_eq!(metrics.psk_challenge_fail_total, 0);
+}
+
+#[tokio::test]
+async fn admission_rejection_metrics_track_non_psk_failures() {
+    let admission = AdmissionControl::from_snapshot(
+        build_snapshot(),
+        Duration::from_secs(1),
+        test_identity(None),
+    );
+    let handshake = handshake_with_overrides(
+        "validator.a",
+        "pk_a",
+        "citizen-othernet",
+        "genesis-hash",
+        "manifest-digest",
+        88,
+        current_timestamp_ms(),
+        None,
+    );
+
+    assert!(!admission.allows(&handshake).await);
+
+    let metrics = admission.metrics_snapshot();
+    assert_eq!(metrics.handshake_reject_total, 1);
+    assert_eq!(metrics.psk_challenge_fail_total, 0);
 }
