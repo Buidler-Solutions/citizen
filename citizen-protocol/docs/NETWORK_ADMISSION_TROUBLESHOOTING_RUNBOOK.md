@@ -57,6 +57,17 @@ validate the following matrix:
 | Replay detected | Nonce+timestamp tuple reused (duplicate or replay). | Inspect transport retries and potential replay attempts; restart affected connection path. |
 | Missing/invalid PSK proof | Peer omitted proof or used wrong secret. | Verify PSK distribution and staged rotation; confirm both peers use current secret. |
 
+
+## CI Admission Guardrail Failure Remediation
+
+When the `Network Admission Guardrails` workflow fails:
+
+1. Reproduce locally with `./citizen-protocol/scripts/run_admission_tests.sh` (nested layout) or `./scripts/run_admission_tests.sh` (direct layout).
+2. If manifest canonicalization/digest tests fail, regenerate manifests from the release pipeline instead of hand-editing JSON payload fields.
+3. If signature allowlist tests fail, ensure manifests are signed with governance-approved Ed25519 keys and that no unsupported algorithms are present.
+4. If freshness/staleness tests fail, issue a new manifest with a current `issued_at` timestamp and redeploy before merging.
+5. Re-run the script and include command output in the PR discussion for reviewer verification.
+
 ## Escalation & Evidence Bundle
 
 If triage does not resolve within one on-call window:
