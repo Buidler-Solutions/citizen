@@ -88,10 +88,10 @@ Status note: all inbound checks listed below are implemented; the parent item is
 ## 6) Observer/Validator Policy Parity
 
 - [x] Ensure observer nodes use the same admission preflight checks.
-- [ ] Ensure observer nodes use the same handshake admission checks.
-- [ ] Confirm no observer bypasses for network identity rules.
+- [x] Ensure observer nodes use the same handshake admission checks.
+- [x] Confirm no observer bypasses for network identity rules.
 
-Execution note: observer startup admission parity is complete; handshake parity remains open until observer networking is enabled with the same `AdmissionControl` gate path used by validator peers.
+Execution note: observer startup and handshake admission parity are now enforced through a shared `NodeConfig::handshake_identity` path in `crates/node/src/main.rs`, so observer and validator peers inherit the same identity tuple + PSK settings.
 
 ## 7) Key Rotation & Governance-Compatible Transitions
 
@@ -179,12 +179,12 @@ This section extends the execution tracker with the next concrete delivery slice
   - [x] Route observer outbound and inbound peer handshakes through the same `AdmissionControl::verify` entrypoint used by validators.
   - [x] Remove any observer-only fast path that skips `network_id`, `genesis_hash`, `manifest_digest`, PSK, or replay checks.
   - 2026-02-15 update: observer nodes now initialize QUIC admission networking with the shared `AdmissionControl` policy path used by validators, while remaining read-only for consensus.
-- [ ] **Observer integration coverage**
+- [x] **Observer integration coverage**
   - 2026-02-15 update: added cross-role admission coverage in `crates/network/tests/admission.rs` for observer inbound (`network_id` mismatch, `manifest_digest` mismatch) and validator inbound rejection of invalid observer identity tuples.
   - [x] Add integration test: observer rejects validator handshake with mismatched `network_id`.
   - [x] Add integration test: observer rejects validator handshake with mismatched `manifest_digest`.
   - [x] Add integration test: validator rejects observer handshake when observer identity tuple is invalid.
-- [ ] **Acceptance check**
+- [x] **Acceptance check**
   - [x] Produce a test matrix artifact showing observer and validator rejection reasons are identical for equivalent bad inputs.
   - 2026-02-15 update: `crates/network/tests/admission.rs::observer_and_validator_share_identity_mismatch_rejection_matrix` now codifies a role-parity matrix across `network_id`, `genesis_hash`, and `manifest_digest` mismatch cases and asserts identical `AdmissionRejectionReason` outcomes for observer and validator inbound admission paths.
 
