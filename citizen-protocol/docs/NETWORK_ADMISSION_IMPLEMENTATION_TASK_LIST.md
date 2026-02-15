@@ -140,7 +140,7 @@ Status note: handshake matrix items listed above are now covered; remaining matr
 ## 10) Rollout Readiness
 
 - [x] Add operator runbook section for admission troubleshooting.
-- [ ] Add CI checks for manifest lint/verification.
+- [x] Add CI checks for manifest lint/verification.
 - [ ] Document controlled fork process for network identity changes.
 - [ ] Perform staged rollout in localnet before production validator rollout.
 
@@ -160,7 +160,7 @@ Status note: handshake matrix items listed above are now covered; remaining matr
 4. **Operator readiness artifacts**
    - 2026-02-15 update: published `docs/NETWORK_ADMISSION_TROUBLESHOOTING_RUNBOOK.md` with startup/handshake reason-code triage and escalation checklist.
    - [x] Publish an admission troubleshooting runbook section with reason-code triage.
-   - [ ] Add CI manifest lint/verification checks to block unsigned or stale rollout manifests.
+   - [x] Add CI manifest lint/verification checks to block unsigned or stale rollout manifests.
 
 ## Definition of Done
 
@@ -191,19 +191,16 @@ This section extends the execution tracker with the next concrete delivery slice
 
 ### 12.1.1 Command reference (path-safe)
 
-Preferred command (works from any directory):
+Preferred command (works from any directory and both repo layouts):
 
-- `./citizen-protocol/scripts/run_admission_tests.sh`
+- `./citizen-protocol/scripts/run_admission_tests.sh` (nested layout)
+- `./scripts/run_admission_tests.sh` (direct layout)
 
-Manual equivalents:
+Path-safe manual equivalent:
 
-- From repo root (`/workspace/citizen`):
-  - `cargo test -p citizen-network --test admission --manifest-path citizen-protocol/Cargo.toml`
-- From crate workspace root (`/workspace/citizen/citizen-protocol`):
-  - `cargo test -p citizen-network --test admission --manifest-path Cargo.toml`
-  - or simply `cargo test -p citizen-network --test admission`
+- `cargo test -p citizen-network --test admission --manifest-path "$(test -f citizen-protocol/Cargo.toml && echo citizen-protocol/Cargo.toml || echo Cargo.toml)"`
 
-Do not combine `cd citizen-protocol` with `--manifest-path citizen-protocol/Cargo.toml`, because that resolves to `citizen-protocol/citizen-protocol/Cargo.toml` and fails.
+This avoids hard-coding `citizen-protocol/Cargo.toml` in environments where `Cargo.toml` is at the repository root.
 
 ### 12.2 Finalize key-transition cutoff behavior
 
@@ -217,12 +214,13 @@ Do not combine `cd citizen-protocol` with `--manifest-path citizen-protocol/Carg
 
 ### 12.3 CI manifest guardrails
 
-- [ ] **Static lint and verification gates**
-  - [ ] Add CI job that validates manifest schema/canonicalization.
-  - [ ] Add CI job that verifies trusted signature presence and algorithm allowlist.
-  - [ ] Add CI check that fails stale manifests (`expires_at` policy threshold) before merge.
-- [ ] **Policy documentation**
-  - [ ] Document CI failure remediation steps in `NETWORK_ADMISSION_TROUBLESHOOTING_RUNBOOK.md`.
+- 2026-02-16 update: added `citizen-protocol/.github/workflows/network-admission-guardrails.yml` and `citizen-protocol/scripts/run_admission_tests.sh` to enforce admission startup/manifest/network test gates in CI.
+- [x] **Static lint and verification gates**
+  - [x] Add CI job that validates manifest schema/canonicalization.
+  - [x] Add CI job that verifies trusted signature presence and algorithm allowlist.
+  - [x] Add CI check that fails stale manifests (`expires_at` policy threshold) before merge.
+- [x] **Policy documentation**
+  - [x] Document CI failure remediation steps in `NETWORK_ADMISSION_TROUBLESHOOTING_RUNBOOK.md`.
 
 ### 12.4 Controlled network-identity change process
 
