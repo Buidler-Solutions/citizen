@@ -37,6 +37,10 @@ pub enum AdmissionError {
     ManifestCanonicalization(serde_json::Error),
     #[error("invalid manifest signature: {0}")]
     InvalidManifestSignature(String),
+    #[error("manifest transition key signature required during active transition window")]
+    ManifestTransitionSignatureRequired,
+    #[error("manifest signed only by transition keys after transition window closed")]
+    ManifestOldSignatureAfterCutoff,
     #[error("manifest key is not trusted: {0}")]
     UntrustedManifestKey(String),
     #[error("unsupported manifest signature algorithm: {0}")]
