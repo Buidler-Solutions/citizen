@@ -107,17 +107,17 @@ This tracker is now in active execution mode. The checklist below captures what 
 
 - [ ] Startup tests:
   - [ ] valid manifest + matching network/genesis + valid PSK starts successfully
-  - [ ] invalid manifest signature fails startup
+  - [x] invalid manifest signature fails startup
   - [x] network mismatch fails startup
-  - [ ] genesis mismatch fails startup
+  - [x] genesis mismatch fails startup
   - [ ] observer mismatch fails startup
 - [ ] Handshake tests:
-  - [ ] matching allowlisted peer accepted
-  - [ ] network mismatch rejected
-  - [ ] genesis mismatch rejected
-  - [ ] manifest digest mismatch rejected
-  - [ ] invalid PSK proof rejected
-  - [ ] replayed nonce/timestamp rejected
+  - [x] matching allowlisted peer accepted
+  - [x] network mismatch rejected
+  - [x] genesis mismatch rejected
+  - [x] manifest digest mismatch rejected
+  - [x] invalid PSK proof rejected
+  - [x] replayed nonce/timestamp rejected
 - [ ] Rotation tests:
   - [ ] transition window enforces old+new requirement
   - [ ] post-window old-only rejected
