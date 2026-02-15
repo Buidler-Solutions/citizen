@@ -4,6 +4,7 @@ use citizen_types::{
     Block, BlockHeader, GovernanceProposal, GovernanceVote, LedgerEntry, ProtocolError,
     ValidatorId, ValidatorSetSnapshot,
 };
+use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey, PUBLIC_KEY_LENGTH};
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -44,6 +45,7 @@ pub struct PeerHandshake {
     pub nonce: u64,
     pub timestamp_ms: u64,
     pub psk_proof: Option<String>,
+    pub handshake_signature: String,
 }
 
 #[derive(Clone, Debug)]
@@ -59,6 +61,19 @@ pub struct HandshakeIdentity {
 struct WireMessage {
     handshake: PeerHandshake,
     message: ConsensusMessage,
+}
+
+#[derive(Serialize)]
+struct HandshakeSigningPayload<'a> {
+    validator_id: &'a str,
+    public_key: &'a str,
+    key_epoch: u64,
+    network_id: &'a str,
+    genesis_hash: &'a str,
+    manifest_digest: &'a str,
+    nonce: u64,
+    timestamp_ms: u64,
+    psk_proof: &'a Option<String>,
 }
 
 #[derive(Clone)]
@@ -95,6 +110,7 @@ pub enum AdmissionRejectionReason {
     ReplayDetected,
     MissingPskProof,
     InvalidPskProof,
+    InvalidHandshakeSignature,
 }
 
 impl AdmissionControl {
@@ -176,6 +192,10 @@ impl AdmissionControl {
             || now_ms.saturating_add(skew_ms) < handshake.timestamp_ms
         {
             return Err(self.reject(AdmissionRejectionReason::ClockSkewExceeded));
+        }
+
+        if !verify_handshake_signature(handshake) {
+            return Err(self.reject(AdmissionRejectionReason::InvalidHandshakeSignature));
         }
 
         let replay_key = format!(
@@ -263,6 +283,50 @@ fn derive_psk_proof(secret: &str, handshake: &PeerHandshake) -> String {
     hasher.update(&handshake.nonce.to_le_bytes());
     hasher.update(&handshake.timestamp_ms.to_le_bytes());
     hasher.finalize().to_hex().to_string()
+}
+
+fn handshake_signing_payload(handshake: &PeerHandshake) -> Vec<u8> {
+    bincode::serialize(&HandshakeSigningPayload {
+        validator_id: &handshake.validator_id,
+        public_key: &handshake.public_key,
+        key_epoch: handshake.key_epoch,
+        network_id: &handshake.network_id,
+        genesis_hash: &handshake.genesis_hash,
+        manifest_digest: &handshake.manifest_digest,
+        nonce: handshake.nonce,
+        timestamp_ms: handshake.timestamp_ms,
+        psk_proof: &handshake.psk_proof,
+    })
+    .unwrap_or_default()
+}
+
+fn sign_handshake(signing_key: &SigningKey, handshake: &PeerHandshake) -> String {
+    let payload = handshake_signing_payload(handshake);
+    let signature = signing_key.sign(&payload);
+    hex::encode(signature.to_bytes())
+}
+
+fn verify_handshake_signature(handshake: &PeerHandshake) -> bool {
+    let pk_bytes = match hex::decode(&handshake.public_key) {
+        Ok(bytes) if bytes.len() == PUBLIC_KEY_LENGTH => bytes,
+        _ => return false,
+    };
+    let mut pk_array = [0u8; PUBLIC_KEY_LENGTH];
+    pk_array.copy_from_slice(&pk_bytes);
+    let verifying_key = match VerifyingKey::from_bytes(&pk_array) {
+        Ok(key) => key,
+        Err(_) => return false,
+    };
+    let signature_bytes = match hex::decode(&handshake.handshake_signature) {
+        Ok(bytes) => bytes,
+        Err(_) => return false,
+    };
+    let signature = match Signature::from_slice(&signature_bytes) {
+        Ok(signature) => signature,
+        Err(_) => return false,
+    };
+    let payload = handshake_signing_payload(handshake);
+    verifying_key.verify(&payload, &signature).is_ok()
 }
 
 fn constant_time_eq(left: &[u8], right: &[u8]) -> bool {
@@ -585,6 +649,7 @@ pub struct QuicNetwork {
     admission: Arc<AdmissionControl>,
     local_validator_id: ValidatorId,
     local_public_key: String,
+    local_signing_key: Option<Arc<SigningKey>>,
 }
 
 impl QuicNetwork {
@@ -594,6 +659,7 @@ impl QuicNetwork {
         admission: Arc<AdmissionControl>,
         local_validator_id: ValidatorId,
         local_public_key: String,
+        local_signing_key: Option<Arc<SigningKey>>,
     ) -> Result<Self> {
         let cert = generate_simple_self_signed(["citizen.local".into()])
             .map_err(ProtocolError::storage)?;
@@ -618,6 +684,7 @@ impl QuicNetwork {
             admission,
             local_validator_id,
             local_public_key,
+            local_signing_key,
         };
         network.spawn_accept_loop();
         Ok(network)
@@ -738,9 +805,13 @@ impl Network for QuicNetwork {
                     nonce,
                     timestamp_ms,
                     psk_proof: None,
+                    handshake_signature: String::new(),
                 };
                 if let Some(secret) = identity.startup_secret {
                     handshake.psk_proof = Some(derive_psk_proof(&secret, &handshake));
+                }
+                if let Some(signing_key) = &self.local_signing_key {
+                    handshake.handshake_signature = sign_handshake(signing_key, &handshake);
                 }
                 handshake
             },

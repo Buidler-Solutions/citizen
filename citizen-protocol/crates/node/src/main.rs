@@ -104,6 +104,7 @@ async fn main() -> anyhow::Result<()> {
                 admission,
                 config.validator_id.clone(),
                 verifying_key_hex,
+                Some(keypair.signing_key()),
             )?))
         } else {
             Arc::new(NodeNetwork::Mock(MockNetwork::new(NetworkLatency {
@@ -164,6 +165,7 @@ async fn main() -> anyhow::Result<()> {
                 admission,
                 config.validator_id.clone(),
                 config.observer_public_key(),
+                None,
             )?));
             Some(tokio::spawn(async move {
                 match network.subscribe().await {

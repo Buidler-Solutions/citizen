@@ -25,6 +25,8 @@ futures = { workspace = true }
 blake3 = { workspace = true }
 libp2p = { workspace = true, optional = true }
 rustls = "0.23"
+ed25519-dalek = { workspace = true }
+hex = { workspace = true }
 
 [dev-dependencies]
 chrono = { workspace = true }
