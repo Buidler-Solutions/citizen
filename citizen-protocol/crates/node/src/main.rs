@@ -1,3 +1,5 @@
+mod admission;
+
 use std::collections::BTreeMap;
 use std::env;
 use std::fs;
@@ -22,6 +24,8 @@ use citizen_types::{
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 use tokio::signal;
+
+use admission::{startup::run_preflight, AdmissionSettings};
 use tracing_subscriber::EnvFilter;
 
 #[tokio::main]
@@ -44,6 +48,16 @@ async fn main() -> anyhow::Result<()> {
         .clone()
         .unwrap_or_else(|| PathBuf::from("data"));
     let storage = Arc::new(RocksDbStorage::open(storage_path)?);
+    let admission_settings = config.admission_settings();
+    let admission_context = run_preflight(&admission_settings, storage.as_ref())
+        .map_err(|err| anyhow::anyhow!("admission preflight failed: {err}"))?;
+    tracing::info!(
+        network_id = %admission_context.network_id,
+        genesis_hash = %admission_context.genesis_hash,
+        manifest_digest = %admission_context.manifest_digest,
+        manifest_version = ?admission_context.manifest_version,
+        "admission preflight passed"
+    );
     let key_registry = KeyRegistry::new();
     let ledger = Arc::new(Ledger::new(storage.clone(), key_registry));
     ledger.bootstrap_namespaces(config.namespaces.clone());
@@ -160,6 +174,16 @@ struct NodeConfig {
     peers: Vec<PeerConfig>,
     #[serde(default = "default_rotation_secs")]
     network_key_rotation_secs: u64,
+    #[serde(default = "default_network_id")]
+    network_id: String,
+    #[serde(default)]
+    manifest_path: Option<PathBuf>,
+    #[serde(default = "default_manifest_enforce")]
+    manifest_enforce: bool,
+    #[serde(default)]
+    startup_secret: Option<String>,
+    #[serde(default)]
+    expected_genesis_hash: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -200,6 +224,16 @@ impl NodeConfig {
             auth_required: self.api_auth_required,
             max_write_requests_per_minute: self.api_max_write_requests_per_minute,
             clients,
+        }
+    }
+
+    fn admission_settings(&self) -> AdmissionSettings {
+        AdmissionSettings {
+            network_id: self.network_id.clone(),
+            manifest_path: self.manifest_path.clone(),
+            manifest_enforce: self.manifest_enforce,
+            startup_secret: self.startup_secret.clone(),
+            expected_genesis_hash: self.expected_genesis_hash.clone(),
         }
     }
 
@@ -268,6 +302,11 @@ impl Default for NodeConfig {
             validators: Vec::new(),
             peers: Vec::new(),
             network_key_rotation_secs: default_rotation_secs(),
+            network_id: default_network_id(),
+            manifest_path: None,
+            manifest_enforce: default_manifest_enforce(),
+            startup_secret: None,
+            expected_genesis_hash: None,
         }
     }
 }
@@ -298,6 +337,14 @@ fn default_api_port() -> u16 {
 
 fn default_rotation_secs() -> u64 {
     3600
+}
+
+fn default_network_id() -> String {
+    "citizen-localnet".to_string()
+}
+
+fn default_manifest_enforce() -> bool {
+    true
 }
 
 fn default_bind() -> SocketAddr {
