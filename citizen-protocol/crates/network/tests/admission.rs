@@ -465,6 +465,76 @@ async fn validator_inbound_rejects_observer_invalid_identity_tuple() {
 }
 
 #[tokio::test]
+async fn observer_and_validator_share_identity_mismatch_rejection_matrix() {
+    let keys = validator_signing_keys();
+    let snapshot = build_snapshot(&keys);
+    let observer_admission = AdmissionControl::from_snapshot(
+        snapshot.clone(),
+        Duration::from_secs(1),
+        test_identity(None),
+    );
+    let validator_admission =
+        AdmissionControl::from_snapshot(snapshot, Duration::from_secs(1), test_identity(None));
+
+    let signer = keys.get("validator.a").expect("validator signing key");
+    let cases = [
+        (
+            "network_id mismatch",
+            HandshakeIdentity {
+                network_id: "citizen-othernet".into(),
+                ..test_identity(None)
+            },
+            citizen_network::AdmissionRejectionReason::NetworkIdentityMismatch,
+        ),
+        (
+            "genesis_hash mismatch",
+            HandshakeIdentity {
+                genesis_hash: "other-genesis".into(),
+                ..test_identity(None)
+            },
+            citizen_network::AdmissionRejectionReason::NetworkIdentityMismatch,
+        ),
+        (
+            "manifest_digest mismatch",
+            HandshakeIdentity {
+                manifest_digest: "manifest-other".into(),
+                ..test_identity(None)
+            },
+            citizen_network::AdmissionRejectionReason::NetworkIdentityMismatch,
+        ),
+    ];
+
+    for (index, (label, identity, expected_reason)) in cases.into_iter().enumerate() {
+        let observer_handshake =
+            handshake_from_identity("validator.a", signer, &identity, 400 + index as u64);
+        let observer_reason = observer_admission
+            .check_handshake(&observer_handshake)
+            .await
+            .expect_err("observer should reject mismatched identity");
+
+        let validator_handshake =
+            handshake_from_identity("validator.a", signer, &identity, 500 + index as u64);
+        let validator_reason = validator_admission
+            .check_handshake(&validator_handshake)
+            .await
+            .expect_err("validator should reject mismatched identity");
+
+        assert_eq!(
+            observer_reason, expected_reason,
+            "observer reason mismatch for {label}"
+        );
+        assert_eq!(
+            validator_reason, expected_reason,
+            "validator reason mismatch for {label}"
+        );
+        assert_eq!(
+            observer_reason, validator_reason,
+            "roles diverged on rejection reason for {label}"
+        );
+    }
+}
+
+#[tokio::test]
 async fn admission_rejects_invalid_handshake_signature() {
     let keys = validator_signing_keys();
     let admission = AdmissionControl::from_snapshot(
