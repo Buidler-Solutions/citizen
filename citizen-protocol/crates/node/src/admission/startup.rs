@@ -83,11 +83,11 @@ fn run_preflight_inner<S: LedgerStorage>(
         let manifest = SignedManifest::load(path)?;
         if settings.manifest_enforce {
             let verify_started = Instant::now();
-            manifest.verify_signatures()?;
             let now_unix_secs = std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .map(|duration| duration.as_secs() as i64)
                 .unwrap_or_default();
+            manifest.verify_signatures_at(now_unix_secs)?;
             manifest.verify_freshness(
                 now_unix_secs,
                 MANIFEST_MAX_AGE_SECS,
@@ -185,6 +185,10 @@ fn reason_code(err: &AdmissionError) -> &'static str {
         AdmissionError::ManifestParse(_) => "manifest_parse",
         AdmissionError::ManifestCanonicalization(_) => "manifest_canonicalization",
         AdmissionError::InvalidManifestSignature(_) => "invalid_manifest_signature",
+        AdmissionError::ManifestTransitionSignatureRequired => {
+            "manifest_transition_signature_required"
+        }
+        AdmissionError::ManifestOldSignatureAfterCutoff => "manifest_old_signature_after_cutoff",
         AdmissionError::UntrustedManifestKey(_) => "untrusted_manifest_key",
         AdmissionError::UnsupportedManifestAlgorithm(_) => "unsupported_manifest_algorithm",
         AdmissionError::ManifestIssuedInFuture { .. } => "manifest_issued_in_future",
