@@ -154,7 +154,7 @@ Status note: handshake matrix items listed above are now covered; remaining matr
    - [ ] Add transition-window enforcement tests (old+new required, old-only rejection after cutoff).
 3. **Admission telemetry completion**
    - [x] Emit startup failure counters with reason labels.
-   - [ ] Record manifest verification duration histogram and connect it to rollout dashboards.
+   - [x] Record manifest verification duration histogram and connect it to rollout dashboards.
 4. **Operator readiness artifacts**
    - [ ] Publish an admission troubleshooting runbook section with reason-code triage.
    - [ ] Add CI manifest lint/verification checks to block unsigned or stale rollout manifests.
