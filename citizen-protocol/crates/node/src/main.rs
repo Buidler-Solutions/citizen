@@ -133,11 +133,54 @@ async fn main() -> anyhow::Result<()> {
             }
         }))
     } else {
+        let observer_network_task = if !config.peers.is_empty() {
+            let snapshot = config.build_validator_set(&config.observer_public_key());
+            let rotation = Duration::from_secs(config.network_key_rotation_secs);
+            let admission_identity = HandshakeIdentity {
+                network_id: admission_context.network_id.clone(),
+                genesis_hash: admission_context.genesis_hash.clone(),
+                manifest_digest: admission_context.manifest_digest.clone(),
+                startup_secret: config.startup_secret.clone(),
+                max_clock_skew: Duration::from_secs(30),
+            };
+            let admission = Arc::new(AdmissionControl::from_snapshot(
+                snapshot,
+                rotation,
+                admission_identity,
+            ));
+            let peers = config
+                .peers
+                .iter()
+                .filter_map(|p| {
+                    p.address
+                        .parse()
+                        .ok()
+                        .map(|addr| (p.validator_id.clone(), addr))
+                })
+                .collect();
+            let network = Arc::new(NodeNetwork::Quic(QuicNetwork::new(
+                config.bind_addr.unwrap_or(default_bind()),
+                peers,
+                admission,
+                config.validator_id.clone(),
+                config.observer_public_key(),
+            )?));
+            Some(tokio::spawn(async move {
+                match network.subscribe().await {
+                    Ok(mut receiver) => while receiver.recv().await.is_some() {},
+                    Err(err) => {
+                        tracing::error!(?err, "observer failed to subscribe to network");
+                    }
+                }
+            }))
+        } else {
+            None
+        };
         tracing::info!(
             "mode" = "observer",
             "msg" = "consensus disabled; read-only API profile active"
         );
-        None
+        observer_network_task
     };
 
     tracing::info!("msg" = "node running", "api_port" = config.api_port);
@@ -220,6 +263,14 @@ struct ApiClientConfig {
 }
 
 impl NodeConfig {
+    fn observer_public_key(&self) -> String {
+        self.validators
+            .iter()
+            .find(|validator| validator.validator_id == self.validator_id)
+            .map(|validator| validator.public_key.clone())
+            .unwrap_or_else(|| "observer-readonly-key".to_string())
+    }
+
     fn api_edge_config(&self) -> ApiEdgeConfig {
         let clients = self
             .api_clients
@@ -395,5 +446,40 @@ impl Network for NodeNetwork {
             NodeNetwork::Mock(inner) => inner.subscribe().await,
             NodeNetwork::Quic(inner) => inner.subscribe().await,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn observer_public_key_prefers_configured_validator_key() {
+        let config = NodeConfig {
+            validator_id: "observer-1".to_string(),
+            validators: vec![ConfigValidator {
+                validator_id: "observer-1".to_string(),
+                public_key: "observer-public-key".to_string(),
+                anchors: vec![],
+            }],
+            ..NodeConfig::default()
+        };
+
+        assert_eq!(config.observer_public_key(), "observer-public-key");
+    }
+
+    #[test]
+    fn observer_public_key_falls_back_when_missing_from_validator_set() {
+        let config = NodeConfig {
+            validator_id: "observer-2".to_string(),
+            validators: vec![ConfigValidator {
+                validator_id: "validator-1".to_string(),
+                public_key: "validator-public-key".to_string(),
+                anchors: vec![],
+            }],
+            ..NodeConfig::default()
+        };
+
+        assert_eq!(config.observer_public_key(), "observer-readonly-key");
     }
 }
