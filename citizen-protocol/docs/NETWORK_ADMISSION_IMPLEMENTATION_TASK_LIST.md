@@ -95,19 +95,19 @@ Execution note: observer startup admission parity is complete; handshake parity 
 
 ## 7) Key Rotation & Governance-Compatible Transitions
 
-- [ ] Implement manifest key states:
-  - [ ] `ACTIVE_KEYS`
-  - [ ] `TRANSITION_KEYS`
-  - [ ] `REVOKED_KEYS`
-- [ ] Enforce transition policy (e.g., old+new signature threshold during window).
+- [x] Implement manifest key states:
+  - [x] `ACTIVE_KEYS`
+  - [x] `TRANSITION_KEYS`
+  - [x] `REVOKED_KEYS`
+- [x] Enforce transition policy (e.g., old+new signature threshold during window).
 - [ ] Reject old-only signatures after transition window closes.
-- [ ] Reject revoked keys at all times.
+- [x] Reject revoked keys at all times.
 
 ## 8) Error Model, Logs, and Metrics
 
 - [x] Implement typed admission errors (startup + handshake).
 - [x] Add structured rejection/startup logs with reason codes and peer context.
-- [ ] Add security metrics:
+- [x] Add security metrics:
   - [x] `admission_startup_fail_total{reason}`
   - [x] `admission_handshake_reject_total{reason}`
   - [x] `manifest_verification_duration_ms`
@@ -150,7 +150,8 @@ Status note: handshake matrix items listed above are now covered; remaining matr
    - [ ] Bring observer nodes onto authenticated peer networking with the same `AdmissionControl` validation path.
    - [ ] Add observer-specific integration tests that assert identity mismatch/manifest mismatch rejection behavior on inbound and outbound handshakes.
 2. **Manifest key-state transitions**
-   - [ ] Introduce `ACTIVE/TRANSITION/REVOKED` key-state evaluation in manifest verification.
+   - [x] Introduce `ACTIVE/TRANSITION/REVOKED` key-state evaluation in manifest verification.
+   - 2026-02-15 update: manifest verification now enforces ACTIVE-key signatures, optional dual-signature transition policy, and immediate rejection for revoked keys.
    - [ ] Add transition-window enforcement tests (old+new required, old-only rejection after cutoff).
 3. **Admission telemetry completion**
    - [x] Emit startup failure counters with reason labels.
