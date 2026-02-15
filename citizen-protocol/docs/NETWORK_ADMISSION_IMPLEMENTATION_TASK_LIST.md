@@ -99,9 +99,9 @@ This tracker is now in active execution mode. The checklist below captures what 
 - [x] Add structured rejection/startup logs with reason codes and peer context.
 - [ ] Add security metrics:
   - [ ] `admission_startup_fail_total{reason}`
-  - [ ] `admission_handshake_reject_total{reason}`
+  - [x] `admission_handshake_reject_total{reason}`
   - [ ] `manifest_verification_duration_ms`
-  - [ ] `psk_challenge_fail_total`
+  - [x] `psk_challenge_fail_total`
 
 ## 9) Testing & Validation Matrix
 
