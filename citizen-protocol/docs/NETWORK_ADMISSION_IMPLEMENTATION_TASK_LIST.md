@@ -159,12 +159,13 @@ Status note: handshake matrix items listed above are now covered; remaining matr
    - [x] Record manifest verification duration histogram and connect it to rollout dashboards.
 4. **Operator readiness artifacts**
    - 2026-02-15 update: published `docs/NETWORK_ADMISSION_TROUBLESHOOTING_RUNBOOK.md` with startup/handshake reason-code triage and escalation checklist.
+   - 2026-02-16 update: startup preflight now hard-fails manifests with missing/duplicate validator allowlist entries, and node admission snapshots now default to the signed manifest allowlist for handshake enforcement.
    - [x] Publish an admission troubleshooting runbook section with reason-code triage.
    - [x] Add CI manifest lint/verification checks to block unsigned or stale rollout manifests.
 
 ## Definition of Done
 
-- [ ] All startup and handshake admission checks are enforced by default.
+- [x] All startup and handshake admission checks are enforced by default.
 - [ ] Validators and observers share the same network identity enforcement path.
 - [ ] Key rotation and replay protection are covered by automated tests.
 - [ ] Admission failures are auditable through logs and metrics.
@@ -201,6 +202,16 @@ Path-safe manual equivalent:
 - `cargo test -p citizen-network --test admission --manifest-path "$(test -f citizen-protocol/Cargo.toml && echo citizen-protocol/Cargo.toml || echo Cargo.toml)"`
 
 This avoids hard-coding `citizen-protocol/Cargo.toml` in environments where `Cargo.toml` is at the repository root.
+
+
+Targeted startup-test execution (multiple exact tests):
+
+- `./citizen-protocol/scripts/run_node_startup_admission_tests.sh admission::startup::tests::preflight_rejects_manifest_with_empty_allowlist admission::startup::tests::preflight_accepts_fresh_manifest`
+- `./scripts/run_node_startup_admission_tests.sh admission::startup::tests::preflight_rejects_manifest_with_empty_allowlist admission::startup::tests::preflight_accepts_fresh_manifest`
+
+Equivalent single-command filter (regex accepted by Cargo as one test expression):
+
+- `cargo test -p citizen-node "admission::startup::tests::(preflight_rejects_manifest_with_empty_allowlist|preflight_accepts_fresh_manifest)" --manifest-path "$(test -f citizen-protocol/Cargo.toml && echo citizen-protocol/Cargo.toml || echo Cargo.toml)" -- --nocapture`
 
 ### 12.2 Finalize key-transition cutoff behavior
 

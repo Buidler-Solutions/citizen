@@ -5,7 +5,7 @@ use super::runtime_identity::{
 use super::{AdmissionContext, AdmissionError, AdmissionSettings};
 use citizen_crypto::hash_block_header;
 use citizen_storage::LedgerStorage;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::sync::{Mutex, OnceLock};
 use std::time::Instant;
 
@@ -94,6 +94,21 @@ fn run_preflight_inner<S: LedgerStorage>(
                 MANIFEST_MAX_FUTURE_SKEW_SECS,
             )?;
             observe_manifest_verification_duration(verify_started.elapsed().as_millis() as u64);
+            if manifest.payload.validator_allowlist.is_empty() {
+                return Err(AdmissionError::ManifestAllowlistRequired);
+            }
+        }
+
+        let mut validator_allowlist = BTreeMap::new();
+        for validator in &manifest.payload.validator_allowlist {
+            if validator_allowlist
+                .insert(validator.validator_id.clone(), validator.public_key.clone())
+                .is_some()
+            {
+                return Err(AdmissionError::ManifestDuplicateValidator(
+                    validator.validator_id.clone(),
+                ));
+            }
         }
 
         if manifest.payload.network_id != settings.network_id {
@@ -122,6 +137,7 @@ fn run_preflight_inner<S: LedgerStorage>(
             genesis_hash: expected_genesis.clone(),
             manifest_digest: manifest.digest_hex()?,
             manifest_version: Some(manifest.payload.version),
+            validator_allowlist,
         });
     }
 
@@ -141,6 +157,7 @@ fn run_preflight_inner<S: LedgerStorage>(
         genesis_hash: expected_genesis.clone(),
         manifest_digest: String::from("manifest-not-enforced"),
         manifest_version: None,
+        validator_allowlist: BTreeMap::new(),
     })
 }
 
@@ -195,6 +212,8 @@ fn reason_code(err: &AdmissionError) -> &'static str {
         AdmissionError::ManifestExpired { .. } => "manifest_expired",
         AdmissionError::ManifestNetworkMismatch { .. } => "manifest_network_mismatch",
         AdmissionError::ManifestGenesisMismatch { .. } => "manifest_genesis_mismatch",
+        AdmissionError::ManifestDuplicateValidator(_) => "manifest_duplicate_validator",
+        AdmissionError::ManifestAllowlistRequired => "manifest_allowlist_required",
         AdmissionError::RuntimeNetworkMismatch { .. } => "runtime_network_mismatch",
         AdmissionError::PskVerificationFailed(_) => "psk_verification_failed",
         AdmissionError::LocalGenesisMismatch { .. } => "local_genesis_mismatch",
@@ -281,6 +300,7 @@ mod tests {
         let context = run_preflight(&settings, &storage).expect("preflight should pass");
         assert_eq!(context.network_id, "citizen-localnet");
         assert_eq!(context.manifest_digest, "manifest-not-enforced");
+        assert!(context.validator_allowlist.is_empty());
     }
     #[test]
     fn preflight_rejects_expired_manifest() {
@@ -317,6 +337,25 @@ mod tests {
         let result = run_preflight(&settings, &storage);
         std::fs::remove_file(path).ok();
         assert!(result.is_ok());
+    }
+
+    #[test]
+    fn preflight_rejects_manifest_with_empty_allowlist() {
+        reset_metrics();
+        let storage = MemoryStorage::new();
+        let genesis_hash = compute_local_genesis_hash(&storage).expect("genesis hash");
+        let path = write_signed_manifest_with_allowlist(unix_now(), &genesis_hash, vec![]);
+
+        let mut settings = base_settings();
+        settings.manifest_enforce = true;
+        settings.manifest_path = Some(path.clone());
+
+        let result = run_preflight(&settings, &storage);
+        std::fs::remove_file(path).ok();
+        assert!(matches!(
+            result,
+            Err(AdmissionError::ManifestAllowlistRequired)
+        ));
     }
 
     #[test]
@@ -451,10 +490,8 @@ mod tests {
     }
 
     fn write_signed_manifest(issued_at: i64, genesis_hash: &str) -> std::path::PathBuf {
-        use crate::admission::manifest::{
-            ManifestPayload, ManifestSignature, ManifestValidator, SignedManifest,
-        };
-        use ed25519_dalek::{Signer, SigningKey};
+        use crate::admission::manifest::{ManifestPayload, ManifestValidator, SignedManifest};
+        use ed25519_dalek::SigningKey;
 
         let seed = blake3::hash(format!("manifest-seed-{issued_at}-{genesis_hash}").as_bytes());
         let signing_key = SigningKey::from_bytes(seed.as_bytes());
@@ -475,6 +512,45 @@ mod tests {
             },
             signatures: vec![],
         };
+
+        write_manifest_with_signer(manifest, signing_key, key_id)
+    }
+
+    fn write_signed_manifest_with_allowlist(
+        issued_at: i64,
+        genesis_hash: &str,
+        validator_allowlist: Vec<crate::admission::manifest::ManifestValidator>,
+    ) -> std::path::PathBuf {
+        use crate::admission::manifest::{ManifestPayload, SignedManifest};
+        use ed25519_dalek::SigningKey;
+
+        let seed = blake3::hash(format!("manifest-seed-{issued_at}-{genesis_hash}").as_bytes());
+        let signing_key = SigningKey::from_bytes(seed.as_bytes());
+        let key_id = hex::encode(signing_key.verifying_key().to_bytes());
+
+        let manifest = SignedManifest {
+            payload: ManifestPayload {
+                network_id: "citizen-localnet".to_string(),
+                genesis_hash: genesis_hash.to_string(),
+                boot_nodes: vec!["127.0.0.1:9000".to_string()],
+                validator_allowlist,
+                issued_at,
+                version: 1,
+                manifest_id: "manifest-test".to_string(),
+            },
+            signatures: vec![],
+        };
+
+        write_manifest_with_signer(manifest, signing_key, key_id)
+    }
+
+    fn write_manifest_with_signer(
+        manifest: SignedManifest,
+        signing_key: ed25519_dalek::SigningKey,
+        key_id: String,
+    ) -> std::path::PathBuf {
+        use crate::admission::manifest::ManifestSignature;
+        use ed25519_dalek::Signer;
 
         let payload = serde_json::to_vec(&manifest.payload).expect("canonical payload");
         let signature = signing_key.sign(&payload);
