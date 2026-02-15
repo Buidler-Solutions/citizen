@@ -1,5 +1,5 @@
-use chrono::Utc;
 use blake3::Hasher;
+use chrono::Utc;
 use citizen_network::{AdmissionControl, HandshakeIdentity, PeerHandshake};
 use citizen_types::{ValidatorMetadata, ValidatorSetSnapshot};
 use std::collections::BTreeMap;

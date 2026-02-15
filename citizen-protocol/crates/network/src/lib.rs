@@ -70,6 +70,19 @@ pub struct AdmissionControl {
     replay_cache: Arc<RwLock<HashMap<String, u64>>>,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum AdmissionRejectionReason {
+    UnknownValidator,
+    PublicKeyMismatch,
+    StaleKeyEpoch,
+    NetworkIdentityMismatch,
+    InvalidSystemTime,
+    ClockSkewExceeded,
+    ReplayDetected,
+    MissingPskProof,
+    InvalidPskProof,
+}
+
 impl AdmissionControl {
     pub fn from_snapshot(
         snapshot: ValidatorSetSnapshot,
@@ -111,17 +124,24 @@ impl AdmissionControl {
     }
 
     pub async fn allows(&self, handshake: &PeerHandshake) -> bool {
+        self.check_handshake(handshake).await.is_ok()
+    }
+
+    pub async fn check_handshake(
+        &self,
+        handshake: &PeerHandshake,
+    ) -> std::result::Result<(), AdmissionRejectionReason> {
         let allowed = self.allowed.read().await;
         let Some(expected_key) = allowed.get(&handshake.validator_id) else {
-            return false;
+            return Err(AdmissionRejectionReason::UnknownValidator);
         };
         if expected_key != &handshake.public_key {
-            return false;
+            return Err(AdmissionRejectionReason::PublicKeyMismatch);
         }
 
         let epoch = self.current_epoch.read().await;
         if handshake.key_epoch < *epoch {
-            return false;
+            return Err(AdmissionRejectionReason::StaleKeyEpoch);
         }
         drop(epoch);
 
@@ -129,18 +149,18 @@ impl AdmissionControl {
             || handshake.genesis_hash != self.identity.genesis_hash
             || handshake.manifest_digest != self.identity.manifest_digest
         {
-            return false;
+            return Err(AdmissionRejectionReason::NetworkIdentityMismatch);
         }
 
         let now_ms = match SystemTime::now().duration_since(UNIX_EPOCH) {
             Ok(duration) => duration.as_millis() as u64,
-            Err(_) => return false,
+            Err(_) => return Err(AdmissionRejectionReason::InvalidSystemTime),
         };
         let skew_ms = self.identity.max_clock_skew.as_millis() as u64;
         if handshake.timestamp_ms.saturating_add(skew_ms) < now_ms
             || now_ms.saturating_add(skew_ms) < handshake.timestamp_ms
         {
-            return false;
+            return Err(AdmissionRejectionReason::ClockSkewExceeded);
         }
 
         let replay_key = format!(
@@ -150,17 +170,17 @@ impl AdmissionControl {
         {
             let replay_cache = self.replay_cache.read().await;
             if replay_cache.contains_key(&replay_key) {
-                return false;
+                return Err(AdmissionRejectionReason::ReplayDetected);
             }
         }
 
         if let Some(secret) = &self.identity.startup_secret {
             let Some(psk_proof) = &handshake.psk_proof else {
-                return false;
+                return Err(AdmissionRejectionReason::MissingPskProof);
             };
             let expected = derive_psk_proof(secret, handshake);
             if !constant_time_eq(expected.as_bytes(), psk_proof.as_bytes()) {
-                return false;
+                return Err(AdmissionRejectionReason::InvalidPskProof);
             }
         }
 
@@ -169,7 +189,7 @@ impl AdmissionControl {
         if replay_cache.len() > 4096 {
             replay_cache.retain(|_, observed_ms| now_ms.saturating_sub(*observed_ms) <= skew_ms);
         }
-        true
+        Ok(())
     }
 
     pub async fn maybe_rotate(&self) -> u64 {
@@ -607,13 +627,18 @@ impl QuicNetwork {
                             break;
                         }
                         if let Ok(wire) = bincode::deserialize::<WireMessage>(&data) {
-                            if admission.allows(&wire.handshake).await {
-                                let _ = tx.send(wire.message);
-                            } else {
-                                warn!(
-                                    validator = %wire.handshake.validator_id,
-                                    "quic message rejected by admission policy"
-                                );
+                            match admission.check_handshake(&wire.handshake).await {
+                                Ok(()) => {
+                                    let _ = tx.send(wire.message);
+                                }
+                                Err(reason) => {
+                                    warn!(
+                                        validator = %wire.handshake.validator_id,
+                                        ?reason,
+                                        "quic message rejected by admission policy; closing stream"
+                                    );
+                                    break;
+                                }
                             }
                         }
                     }
