@@ -17,7 +17,7 @@ enabled, deterministic keys).
 - **Purpose:** Multi-operator staging network to exercise upgrades, governance
   flows, and namespace validation with remote peers.
 - **Artifacts:** `testnets/futurenet.toml` manifest plus per-operator `node.toml`
-  derived from it.
+  derived from it (starter templates: `config/futurenet/validator-*.toml`).
 - **Operators:** Small, invite-only group of development validators and
   observers.
 - **Admission:** Pre-approved validator IDs and verifying keys; new entrants go
