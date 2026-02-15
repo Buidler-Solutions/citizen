@@ -181,6 +181,73 @@ mod tests {
         assert!(result.is_ok());
     }
 
+    #[test]
+    fn preflight_rejects_invalid_manifest_signature() {
+        let storage = MemoryStorage::new();
+        let genesis_hash = compute_local_genesis_hash(&storage).expect("genesis hash");
+        let issued_at = unix_now();
+        let path = write_signed_manifest(issued_at, &genesis_hash);
+
+        let mut manifest: SignedManifest =
+            serde_json::from_slice(&std::fs::read(&path).expect("read manifest"))
+                .expect("parse manifest");
+        manifest.signatures[0].signature = "00".repeat(64);
+        std::fs::write(
+            &path,
+            serde_json::to_vec(&manifest).expect("serialize broken manifest"),
+        )
+        .expect("write broken manifest");
+
+        let mut settings = base_settings();
+        settings.manifest_enforce = true;
+        settings.manifest_path = Some(path.clone());
+
+        let result = run_preflight(&settings, &storage);
+        std::fs::remove_file(path).ok();
+        assert!(matches!(
+            result,
+            Err(AdmissionError::InvalidManifestSignature(_))
+        ));
+    }
+
+    #[test]
+    fn preflight_rejects_manifest_genesis_mismatch() {
+        let storage = MemoryStorage::new();
+        let issued_at = unix_now();
+        let path = write_signed_manifest(issued_at, "different-genesis");
+
+        let mut settings = base_settings();
+        settings.manifest_enforce = true;
+        settings.manifest_path = Some(path.clone());
+
+        let result = run_preflight(&settings, &storage);
+        std::fs::remove_file(path).ok();
+        assert!(matches!(
+            result,
+            Err(AdmissionError::ManifestGenesisMismatch { .. })
+        ));
+    }
+
+    #[test]
+    fn preflight_rejects_local_genesis_mismatch() {
+        let storage = MemoryStorage::new();
+        let issued_at = unix_now();
+        let expected_genesis = "manually-overridden-genesis";
+        let path = write_signed_manifest(issued_at, expected_genesis);
+
+        let mut settings = base_settings();
+        settings.manifest_enforce = true;
+        settings.expected_genesis_hash = Some(expected_genesis.to_string());
+        settings.manifest_path = Some(path.clone());
+
+        let result = run_preflight(&settings, &storage);
+        std::fs::remove_file(path).ok();
+        assert!(matches!(
+            result,
+            Err(AdmissionError::LocalGenesisMismatch { .. })
+        ));
+    }
+
     fn write_signed_manifest(issued_at: i64, genesis_hash: &str) -> std::path::PathBuf {
         use crate::admission::manifest::{
             ManifestPayload, ManifestSignature, ManifestValidator, SignedManifest,
