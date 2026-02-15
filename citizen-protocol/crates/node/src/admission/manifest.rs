@@ -54,6 +54,30 @@ impl SignedManifest {
         Ok(blake3::hash(&payload).to_hex().to_string())
     }
 
+    pub fn verify_freshness(
+        &self,
+        now_unix_secs: i64,
+        max_age_secs: i64,
+        max_future_skew_secs: i64,
+    ) -> Result<(), AdmissionError> {
+        if self.payload.issued_at > now_unix_secs + max_future_skew_secs {
+            return Err(AdmissionError::ManifestIssuedInFuture {
+                issued_at: self.payload.issued_at,
+                now: now_unix_secs,
+            });
+        }
+
+        if now_unix_secs - self.payload.issued_at > max_age_secs {
+            return Err(AdmissionError::ManifestExpired {
+                issued_at: self.payload.issued_at,
+                now: now_unix_secs,
+                max_age_secs,
+            });
+        }
+
+        Ok(())
+    }
+
     pub fn verify_signatures(&self) -> Result<(), AdmissionError> {
         if self.signatures.is_empty() {
             return Err(AdmissionError::InvalidManifestSignature(

@@ -41,6 +41,14 @@ pub enum AdmissionError {
     UntrustedManifestKey(String),
     #[error("unsupported manifest signature algorithm: {0}")]
     UnsupportedManifestAlgorithm(String),
+    #[error("manifest issued_at is too far in the future: issued_at={issued_at}, now={now}")]
+    ManifestIssuedInFuture { issued_at: i64, now: i64 },
+    #[error("manifest is expired by policy: issued_at={issued_at}, now={now}, max_age_secs={max_age_secs}")]
+    ManifestExpired {
+        issued_at: i64,
+        now: i64,
+        max_age_secs: i64,
+    },
     #[error("manifest network mismatch: manifest={manifest}, configured={configured}")]
     ManifestNetworkMismatch {
         manifest: String,
