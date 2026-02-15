@@ -180,11 +180,29 @@ This section extends the execution tracker with the next concrete delivery slice
   - [x] Remove any observer-only fast path that skips `network_id`, `genesis_hash`, `manifest_digest`, PSK, or replay checks.
   - 2026-02-15 update: observer nodes now initialize QUIC admission networking with the shared `AdmissionControl` policy path used by validators, while remaining read-only for consensus.
 - [ ] **Observer integration coverage**
-  - [ ] Add integration test: observer rejects validator handshake with mismatched `network_id`.
-  - [ ] Add integration test: observer rejects validator handshake with mismatched `manifest_digest`.
-  - [ ] Add integration test: validator rejects observer handshake when observer identity tuple is invalid.
+  - 2026-02-15 update: added cross-role admission coverage in `crates/network/tests/admission.rs` for observer inbound (`network_id` mismatch, `manifest_digest` mismatch) and validator inbound rejection of invalid observer identity tuples.
+  - [x] Add integration test: observer rejects validator handshake with mismatched `network_id`.
+  - [x] Add integration test: observer rejects validator handshake with mismatched `manifest_digest`.
+  - [x] Add integration test: validator rejects observer handshake when observer identity tuple is invalid.
 - [ ] **Acceptance check**
   - [ ] Produce a test matrix artifact showing observer and validator rejection reasons are identical for equivalent bad inputs.
+
+
+### 12.1.1 Command reference (path-safe)
+
+Preferred command (works from any directory):
+
+- `./citizen-protocol/scripts/run_admission_tests.sh`
+
+Manual equivalents:
+
+- From repo root (`/workspace/citizen`):
+  - `cargo test -p citizen-network --test admission --manifest-path citizen-protocol/Cargo.toml`
+- From crate workspace root (`/workspace/citizen/citizen-protocol`):
+  - `cargo test -p citizen-network --test admission --manifest-path Cargo.toml`
+  - or simply `cargo test -p citizen-network --test admission`
+
+Do not combine `cd citizen-protocol` with `--manifest-path citizen-protocol/Cargo.toml`, because that resolves to `citizen-protocol/citizen-protocol/Cargo.toml` and fails.
 
 ### 12.2 Finalize key-transition cutoff behavior
 

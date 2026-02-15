@@ -288,3 +288,98 @@ async fn admission_rejection_metrics_track_non_psk_failures() {
     assert_eq!(metrics.handshake_reject_total, 1);
     assert_eq!(metrics.psk_challenge_fail_total, 0);
 }
+
+fn handshake_from_identity(
+    validator_id: &str,
+    public_key: &str,
+    identity: &HandshakeIdentity,
+    nonce: u64,
+) -> PeerHandshake {
+    handshake_with_overrides(
+        validator_id,
+        public_key,
+        &identity.network_id,
+        &identity.genesis_hash,
+        &identity.manifest_digest,
+        nonce,
+        current_timestamp_ms(),
+        None,
+    )
+}
+
+#[tokio::test]
+async fn observer_inbound_rejects_validator_network_identity_mismatch() {
+    let snapshot = build_snapshot();
+    let observer_identity = test_identity(None);
+    let validator_identity = HandshakeIdentity {
+        network_id: "citizen-othernet".into(),
+        ..test_identity(None)
+    };
+    let observer_admission = AdmissionControl::from_snapshot(
+        snapshot,
+        Duration::from_secs(1),
+        observer_identity,
+    );
+
+    let handshake = handshake_from_identity("validator.a", "pk_a", &validator_identity, 301);
+
+    let reason = observer_admission
+        .check_handshake(&handshake)
+        .await
+        .expect_err("observer must reject network mismatch");
+    assert_eq!(reason, citizen_network::AdmissionRejectionReason::NetworkIdentityMismatch);
+
+    let metrics = observer_admission.metrics_snapshot();
+    assert_eq!(metrics.handshake_reject_total, 1);
+}
+
+#[tokio::test]
+async fn observer_inbound_rejects_validator_manifest_digest_mismatch() {
+    let snapshot = build_snapshot();
+    let observer_identity = test_identity(None);
+    let validator_identity = HandshakeIdentity {
+        manifest_digest: "manifest-other".into(),
+        ..test_identity(None)
+    };
+    let observer_admission = AdmissionControl::from_snapshot(
+        snapshot,
+        Duration::from_secs(1),
+        observer_identity,
+    );
+
+    let handshake = handshake_from_identity("validator.a", "pk_a", &validator_identity, 302);
+
+    let reason = observer_admission
+        .check_handshake(&handshake)
+        .await
+        .expect_err("observer must reject manifest mismatch");
+    assert_eq!(reason, citizen_network::AdmissionRejectionReason::NetworkIdentityMismatch);
+
+    let metrics = observer_admission.metrics_snapshot();
+    assert_eq!(metrics.handshake_reject_total, 1);
+}
+
+#[tokio::test]
+async fn validator_inbound_rejects_observer_invalid_identity_tuple() {
+    let snapshot = build_snapshot();
+    let validator_admission = AdmissionControl::from_snapshot(
+        snapshot,
+        Duration::from_secs(1),
+        test_identity(None),
+    );
+    let observer_identity = HandshakeIdentity {
+        network_id: "citizen-observer-othernet".into(),
+        ..test_identity(None)
+    };
+
+    let handshake = handshake_from_identity("validator.b", "pk_b", &observer_identity, 303);
+
+    let reason = validator_admission
+        .check_handshake(&handshake)
+        .await
+        .expect_err("validator must reject observer invalid identity tuple");
+    assert_eq!(reason, citizen_network::AdmissionRejectionReason::NetworkIdentityMismatch);
+
+    let metrics = validator_admission.metrics_snapshot();
+    assert_eq!(metrics.handshake_reject_total, 1);
+}
