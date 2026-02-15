@@ -5,8 +5,49 @@ use super::runtime_identity::{
 use super::{AdmissionContext, AdmissionError, AdmissionSettings};
 use citizen_crypto::hash_block_header;
 use citizen_storage::LedgerStorage;
+use std::collections::HashMap;
+use std::sync::{Mutex, OnceLock};
+use std::time::Instant;
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct StartupAdmissionMetricsSnapshot {
+    pub startup_fail_total: HashMap<&'static str, u64>,
+    pub manifest_verification_duration_ms: Vec<u64>,
+}
+
+static STARTUP_FAIL_TOTAL: OnceLock<Mutex<HashMap<&'static str, u64>>> = OnceLock::new();
+static MANIFEST_VERIFICATION_DURATION_MS: OnceLock<Mutex<Vec<u64>>> = OnceLock::new();
 
 pub fn run_preflight<S: LedgerStorage>(
+    settings: &AdmissionSettings,
+    storage: &S,
+) -> Result<AdmissionContext, AdmissionError> {
+    let result = run_preflight_inner(settings, storage);
+    if let Err(err) = &result {
+        increment_startup_failure(reason_code(err));
+    }
+    result
+}
+
+pub fn startup_metrics_snapshot() -> StartupAdmissionMetricsSnapshot {
+    let startup_fail_total = STARTUP_FAIL_TOTAL
+        .get_or_init(|| Mutex::new(HashMap::new()))
+        .lock()
+        .expect("startup failure metrics lock poisoned")
+        .clone();
+    let manifest_verification_duration_ms = MANIFEST_VERIFICATION_DURATION_MS
+        .get_or_init(|| Mutex::new(Vec::new()))
+        .lock()
+        .expect("manifest verification metrics lock poisoned")
+        .clone();
+
+    StartupAdmissionMetricsSnapshot {
+        startup_fail_total,
+        manifest_verification_duration_ms,
+    }
+}
+
+fn run_preflight_inner<S: LedgerStorage>(
     settings: &AdmissionSettings,
     storage: &S,
 ) -> Result<AdmissionContext, AdmissionError> {
@@ -32,6 +73,7 @@ pub fn run_preflight<S: LedgerStorage>(
     if let Some(path) = &settings.manifest_path {
         let manifest = SignedManifest::load(path)?;
         if settings.manifest_enforce {
+            let verify_started = Instant::now();
             manifest.verify_signatures()?;
             let now_unix_secs = std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
@@ -42,6 +84,7 @@ pub fn run_preflight<S: LedgerStorage>(
                 MANIFEST_MAX_AGE_SECS,
                 MANIFEST_MAX_FUTURE_SKEW_SECS,
             )?;
+            observe_manifest_verification_duration(verify_started.elapsed().as_millis() as u64);
         }
 
         if manifest.payload.network_id != settings.network_id {
@@ -92,6 +135,42 @@ pub fn run_preflight<S: LedgerStorage>(
     })
 }
 
+fn increment_startup_failure(reason: &'static str) {
+    let mut counters = STARTUP_FAIL_TOTAL
+        .get_or_init(|| Mutex::new(HashMap::new()))
+        .lock()
+        .expect("startup failure metrics lock poisoned");
+    *counters.entry(reason).or_insert(0) += 1;
+}
+
+fn observe_manifest_verification_duration(duration_ms: u64) {
+    MANIFEST_VERIFICATION_DURATION_MS
+        .get_or_init(|| Mutex::new(Vec::new()))
+        .lock()
+        .expect("manifest verification metrics lock poisoned")
+        .push(duration_ms);
+}
+
+fn reason_code(err: &AdmissionError) -> &'static str {
+    match err {
+        AdmissionError::ManifestRequired => "manifest_required",
+        AdmissionError::ManifestRead { .. } => "manifest_read",
+        AdmissionError::ManifestParse(_) => "manifest_parse",
+        AdmissionError::ManifestCanonicalization(_) => "manifest_canonicalization",
+        AdmissionError::InvalidManifestSignature(_) => "invalid_manifest_signature",
+        AdmissionError::UntrustedManifestKey(_) => "untrusted_manifest_key",
+        AdmissionError::UnsupportedManifestAlgorithm(_) => "unsupported_manifest_algorithm",
+        AdmissionError::ManifestIssuedInFuture { .. } => "manifest_issued_in_future",
+        AdmissionError::ManifestExpired { .. } => "manifest_expired",
+        AdmissionError::ManifestNetworkMismatch { .. } => "manifest_network_mismatch",
+        AdmissionError::ManifestGenesisMismatch { .. } => "manifest_genesis_mismatch",
+        AdmissionError::RuntimeNetworkMismatch { .. } => "runtime_network_mismatch",
+        AdmissionError::PskVerificationFailed(_) => "psk_verification_failed",
+        AdmissionError::LocalGenesisMismatch { .. } => "local_genesis_mismatch",
+        AdmissionError::Storage(_) => "storage",
+    }
+}
+
 fn compute_local_genesis_hash<S: LedgerStorage>(storage: &S) -> Result<String, AdmissionError> {
     match storage.get_block(1).map_err(AdmissionError::Storage)? {
         Some(block) => Ok(hash_block_header(&block.header)),
@@ -103,6 +182,21 @@ fn compute_local_genesis_hash<S: LedgerStorage>(storage: &S) -> Result<String, A
 mod tests {
     use super::*;
     use citizen_storage::MemoryStorage;
+
+    fn reset_metrics() {
+        if let Some(startup_fail_total) = STARTUP_FAIL_TOTAL.get() {
+            startup_fail_total
+                .lock()
+                .expect("startup failure metrics lock poisoned")
+                .clear();
+        }
+        if let Some(manifest_verification_duration_ms) = MANIFEST_VERIFICATION_DURATION_MS.get() {
+            manifest_verification_duration_ms
+                .lock()
+                .expect("manifest verification metrics lock poisoned")
+                .clear();
+        }
+    }
 
     fn base_settings() -> AdmissionSettings {
         AdmissionSettings {
@@ -116,6 +210,7 @@ mod tests {
 
     #[test]
     fn preflight_rejects_runtime_network_mismatch() {
+        reset_metrics();
         let storage = MemoryStorage::new();
         let mut settings = base_settings();
         settings.network_id = "citizen-othernet".to_string();
@@ -129,6 +224,7 @@ mod tests {
 
     #[test]
     fn preflight_requires_manifest_when_enforced() {
+        reset_metrics();
         let storage = MemoryStorage::new();
         let mut settings = base_settings();
         settings.manifest_enforce = true;
@@ -139,6 +235,7 @@ mod tests {
 
     #[test]
     fn preflight_allows_no_manifest_when_not_enforced() {
+        reset_metrics();
         let storage = MemoryStorage::new();
         let settings = base_settings();
 
@@ -148,6 +245,7 @@ mod tests {
     }
     #[test]
     fn preflight_rejects_expired_manifest() {
+        reset_metrics();
         let storage = MemoryStorage::new();
         let genesis_hash = compute_local_genesis_hash(&storage).expect("genesis hash");
         let issued_at = unix_now() - MANIFEST_MAX_AGE_SECS - 10;
@@ -167,6 +265,7 @@ mod tests {
 
     #[test]
     fn preflight_accepts_fresh_manifest() {
+        reset_metrics();
         let storage = MemoryStorage::new();
         let genesis_hash = compute_local_genesis_hash(&storage).expect("genesis hash");
         let issued_at = unix_now();
@@ -183,6 +282,7 @@ mod tests {
 
     #[test]
     fn preflight_rejects_invalid_manifest_signature() {
+        reset_metrics();
         let storage = MemoryStorage::new();
         let genesis_hash = compute_local_genesis_hash(&storage).expect("genesis hash");
         let issued_at = unix_now();
@@ -212,6 +312,7 @@ mod tests {
 
     #[test]
     fn preflight_rejects_manifest_genesis_mismatch() {
+        reset_metrics();
         let storage = MemoryStorage::new();
         let issued_at = unix_now();
         let path = write_signed_manifest(issued_at, "different-genesis");
@@ -230,6 +331,7 @@ mod tests {
 
     #[test]
     fn preflight_rejects_local_genesis_mismatch() {
+        reset_metrics();
         let storage = MemoryStorage::new();
         let issued_at = unix_now();
         let expected_genesis = "manually-overridden-genesis";
@@ -246,6 +348,59 @@ mod tests {
             result,
             Err(AdmissionError::LocalGenesisMismatch { .. })
         ));
+    }
+
+    #[test]
+    fn preflight_records_startup_failure_reason_metric() {
+        reset_metrics();
+        let storage = MemoryStorage::new();
+        let mut settings = base_settings();
+        settings.manifest_enforce = true;
+
+        let baseline = startup_metrics_snapshot()
+            .startup_fail_total
+            .get("manifest_required")
+            .copied()
+            .unwrap_or(0);
+
+        let result = run_preflight(&settings, &storage);
+        assert!(matches!(result, Err(AdmissionError::ManifestRequired)));
+
+        let metrics = startup_metrics_snapshot();
+        assert!(
+            metrics
+                .startup_fail_total
+                .get("manifest_required")
+                .copied()
+                .unwrap_or(0)
+                >= baseline + 1,
+            "expected manifest_required counter to increment"
+        );
+    }
+
+    #[test]
+    fn preflight_records_manifest_verification_duration_metric() {
+        reset_metrics();
+        let storage = MemoryStorage::new();
+        let genesis_hash = compute_local_genesis_hash(&storage).expect("genesis hash");
+        let path = write_signed_manifest(unix_now(), &genesis_hash);
+
+        let mut settings = base_settings();
+        settings.manifest_enforce = true;
+        settings.manifest_path = Some(path.clone());
+
+        let baseline = startup_metrics_snapshot()
+            .manifest_verification_duration_ms
+            .len();
+
+        run_preflight(&settings, &storage).expect("preflight should pass");
+        std::fs::remove_file(path).ok();
+
+        let metrics = startup_metrics_snapshot();
+        assert!(
+            metrics.manifest_verification_duration_ms.len() >= baseline + 1,
+            "expected at least one additional manifest verification duration sample"
+        );
     }
 
     fn write_signed_manifest(issued_at: i64, genesis_hash: &str) -> std::path::PathBuf {
