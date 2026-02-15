@@ -26,7 +26,7 @@ use serde::{Deserialize, Serialize};
 use std::time::Duration;
 use tokio::signal;
 
-use admission::{startup::run_preflight, AdmissionContext, AdmissionSettings};
+use admission::{startup::run_preflight, AdmissionContext, AdmissionError, AdmissionSettings};
 use tracing_subscriber::EnvFilter;
 
 #[tokio::main]
@@ -452,6 +452,7 @@ impl Network for NodeNetwork {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use citizen_storage::MemoryStorage;
 
     #[test]
     fn observer_public_key_prefers_configured_validator_key() {
@@ -507,5 +508,33 @@ mod tests {
             validator_config.handshake_identity(&context),
             observer_config.handshake_identity(&context)
         );
+    }
+
+    #[test]
+    fn startup_preflight_rejects_network_mismatch_for_validator_and_observer() {
+        let storage = MemoryStorage::new();
+
+        let validator_config = NodeConfig {
+            node_role: NodeRole::Validator,
+            network_id: "citizen-othernet".to_string(),
+            ..NodeConfig::default()
+        };
+        let observer_config = NodeConfig {
+            node_role: NodeRole::Observer,
+            network_id: "citizen-othernet".to_string(),
+            ..NodeConfig::default()
+        };
+
+        let validator_result = run_preflight(&validator_config.admission_settings(), &storage);
+        let observer_result = run_preflight(&observer_config.admission_settings(), &storage);
+
+        assert!(matches!(
+            validator_result,
+            Err(AdmissionError::RuntimeNetworkMismatch { .. })
+        ));
+        assert!(matches!(
+            observer_result,
+            Err(AdmissionError::RuntimeNetworkMismatch { .. })
+        ));
     }
 }
