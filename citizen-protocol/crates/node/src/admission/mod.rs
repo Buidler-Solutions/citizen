@@ -3,6 +3,7 @@ pub mod runtime_identity;
 pub mod startup;
 
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 use std::path::PathBuf;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -20,6 +21,7 @@ pub struct AdmissionContext {
     pub genesis_hash: String,
     pub manifest_digest: String,
     pub manifest_version: Option<u64>,
+    pub validator_allowlist: BTreeMap<String, String>,
 }
 
 #[derive(thiserror::Error, Debug)]
@@ -60,6 +62,10 @@ pub enum AdmissionError {
     },
     #[error("manifest genesis mismatch: manifest={manifest}, expected={expected}")]
     ManifestGenesisMismatch { manifest: String, expected: String },
+    #[error("manifest validator allowlist contains duplicate validator_id: {0}")]
+    ManifestDuplicateValidator(String),
+    #[error("manifest validator allowlist is required when manifest_enforce=true")]
+    ManifestAllowlistRequired,
     #[error("runtime network mismatch: runtime={runtime}, configured={configured}")]
     RuntimeNetworkMismatch { runtime: String, configured: String },
     #[error("psk verification failed: {0}")]

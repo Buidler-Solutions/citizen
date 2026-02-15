@@ -72,7 +72,7 @@ async fn main() -> anyhow::Result<()> {
         let keypair = config.load_or_generate_keypair()?;
         let verifying_key_hex = verifying_key_to_string(keypair.verifying_key());
         tracing::info!("verifying_key" = %verifying_key_hex, "note" = "share this key for validator admission");
-        let snapshot = config.build_validator_set(&verifying_key_hex);
+        let snapshot = config.build_admission_snapshot(&verifying_key_hex, &admission_context)?;
         let rotation = Duration::from_secs(config.network_key_rotation_secs);
         let admission_identity = config.handshake_identity(&admission_context);
         let admission = Arc::new(AdmissionControl::from_snapshot(
@@ -129,7 +129,8 @@ async fn main() -> anyhow::Result<()> {
         }))
     } else {
         let observer_network_task = if !config.peers.is_empty() {
-            let snapshot = config.build_validator_set(&config.observer_public_key());
+            let snapshot = config
+                .build_admission_snapshot(&config.observer_public_key(), &admission_context)?;
             let rotation = Duration::from_secs(config.network_key_rotation_secs);
             let admission_identity = config.handshake_identity(&admission_context);
             let admission = Arc::new(AdmissionControl::from_snapshot(
@@ -345,6 +346,55 @@ impl NodeConfig {
             quorum_bps: self.quorum_bps,
         }
     }
+
+    fn build_admission_snapshot(
+        &self,
+        self_public_key: &str,
+        admission_context: &AdmissionContext,
+    ) -> anyhow::Result<ValidatorSetSnapshot> {
+        if admission_context.validator_allowlist.is_empty() {
+            return Ok(self.build_validator_set(self_public_key));
+        }
+
+        let Some(allowlisted_public_key) = admission_context
+            .validator_allowlist
+            .get(&self.validator_id)
+        else {
+            anyhow::bail!(
+                "local validator_id is not present in signed manifest allowlist: {}",
+                self.validator_id
+            );
+        };
+        if allowlisted_public_key != self_public_key {
+            anyhow::bail!(
+                "local public key does not match signed manifest allowlist for {}",
+                self.validator_id
+            );
+        }
+
+        let validators = admission_context
+            .validator_allowlist
+            .iter()
+            .map(|(validator_id, public_key)| {
+                (
+                    validator_id.clone(),
+                    ValidatorMetadata {
+                        validator_id: validator_id.clone(),
+                        public_key: public_key.clone(),
+                        anchors: vec!["manifest-allowlist".to_string()],
+                        joined_at: Utc::now(),
+                        suspended: false,
+                    },
+                )
+            })
+            .collect();
+
+        Ok(ValidatorSetSnapshot {
+            height: 0,
+            validators,
+            quorum_bps: self.quorum_bps,
+        })
+    }
 }
 
 impl Default for NodeConfig {
@@ -491,6 +541,7 @@ mod tests {
             genesis_hash: "genesis-hash".to_string(),
             manifest_digest: "manifest-digest".to_string(),
             manifest_version: Some(3),
+            validator_allowlist: BTreeMap::new(),
         };
 
         let validator_config = NodeConfig {
@@ -536,5 +587,57 @@ mod tests {
             observer_result,
             Err(AdmissionError::RuntimeNetworkMismatch { .. })
         ));
+    }
+
+    #[test]
+    fn admission_snapshot_uses_manifest_allowlist_when_present() {
+        let config = NodeConfig {
+            validator_id: "validator-alpha".to_string(),
+            quorum_bps: 8_000,
+            ..NodeConfig::default()
+        };
+        let mut allowlist = BTreeMap::new();
+        allowlist.insert("validator-alpha".to_string(), "alpha-pubkey".to_string());
+        allowlist.insert("validator-beta".to_string(), "beta-pubkey".to_string());
+        let context = AdmissionContext {
+            network_id: "citizen-localnet".to_string(),
+            genesis_hash: "genesis-hash".to_string(),
+            manifest_digest: "manifest-digest".to_string(),
+            manifest_version: Some(3),
+            validator_allowlist: allowlist,
+        };
+
+        let snapshot = config
+            .build_admission_snapshot("alpha-pubkey", &context)
+            .expect("manifest allowlist should be used");
+        assert_eq!(snapshot.validators.len(), 2);
+        assert_eq!(
+            snapshot
+                .validators
+                .get("validator-beta")
+                .expect("beta should exist")
+                .public_key,
+            "beta-pubkey"
+        );
+    }
+
+    #[test]
+    fn admission_snapshot_rejects_local_key_mismatch_against_manifest_allowlist() {
+        let config = NodeConfig {
+            validator_id: "validator-alpha".to_string(),
+            ..NodeConfig::default()
+        };
+        let mut allowlist = BTreeMap::new();
+        allowlist.insert("validator-alpha".to_string(), "alpha-pubkey".to_string());
+        let context = AdmissionContext {
+            network_id: "citizen-localnet".to_string(),
+            genesis_hash: "genesis-hash".to_string(),
+            manifest_digest: "manifest-digest".to_string(),
+            manifest_version: Some(3),
+            validator_allowlist: allowlist,
+        };
+
+        let result = config.build_admission_snapshot("different-pubkey", &context);
+        assert!(result.is_err());
     }
 }
