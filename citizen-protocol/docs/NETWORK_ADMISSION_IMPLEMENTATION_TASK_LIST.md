@@ -108,9 +108,9 @@ Execution note: observer startup admission parity is complete; handshake parity 
 - [x] Implement typed admission errors (startup + handshake).
 - [x] Add structured rejection/startup logs with reason codes and peer context.
 - [ ] Add security metrics:
-  - [ ] `admission_startup_fail_total{reason}`
+  - [x] `admission_startup_fail_total{reason}`
   - [x] `admission_handshake_reject_total{reason}`
-  - [ ] `manifest_verification_duration_ms`
+  - [x] `manifest_verification_duration_ms`
   - [x] `psk_challenge_fail_total`
 
 Execution note: metrics work should land as one atomic telemetry change set so startup/manifest timing/reason labels are introduced with consistent naming and dashboards.
@@ -153,7 +153,7 @@ Status note: handshake matrix items listed above are now covered; remaining matr
    - [ ] Introduce `ACTIVE/TRANSITION/REVOKED` key-state evaluation in manifest verification.
    - [ ] Add transition-window enforcement tests (old+new required, old-only rejection after cutoff).
 3. **Admission telemetry completion**
-   - [ ] Emit startup failure counters with reason labels.
+   - [x] Emit startup failure counters with reason labels.
    - [ ] Record manifest verification duration histogram and connect it to rollout dashboards.
 4. **Operator readiness artifacts**
    - [ ] Publish an admission troubleshooting runbook section with reason-code triage.
