@@ -122,7 +122,7 @@ Execution note: metrics work should land as one atomic telemetry change set so s
   - [x] invalid manifest signature fails startup
   - [x] network mismatch fails startup
   - [x] genesis mismatch fails startup
-  - [ ] observer mismatch fails startup
+  - [x] observer mismatch fails startup
 - [x] Handshake tests:
   - [x] matching allowlisted peer accepted
   - [x] network mismatch rejected
@@ -141,14 +141,14 @@ Status note: handshake matrix items listed above are now covered; remaining matr
 
 - [x] Add operator runbook section for admission troubleshooting.
 - [x] Add CI checks for manifest lint/verification.
-- [ ] Document controlled fork process for network identity changes.
+- [x] Document controlled fork process for network identity changes.
 - [ ] Perform staged rollout in localnet before production validator rollout.
 
 ## 11) Next Execution Queue (Wave 2)
 
 1. **Observer handshake parity implementation**
    - [x] Bring observer nodes onto authenticated peer networking with the same `AdmissionControl` validation path.
-   - [ ] Add observer-specific integration tests that assert identity mismatch/manifest mismatch rejection behavior on inbound and outbound handshakes.
+   - [x] Add observer-specific integration tests that assert identity mismatch/manifest mismatch rejection behavior on inbound and outbound handshakes.
 2. **Manifest key-state transitions**
    - 2026-02-15 update: manifest transition cutoff enforcement now returns typed errors (`ManifestTransitionSignatureRequired`, `ManifestOldSignatureAfterCutoff`) and includes focused regression tests for transition-window and post-cutoff behavior.
    - [x] Introduce `ACTIVE/TRANSITION/REVOKED` key-state evaluation in manifest verification.
@@ -225,11 +225,13 @@ This avoids hard-coding `citizen-protocol/Cargo.toml` in environments where `Car
 ### 12.4 Controlled network-identity change process
 
 - [ ] **Fork/change procedure doc**
-  - [ ] Specify operator/governance steps for planned `network_id` or `genesis_hash` changes.
-  - [ ] Define rollout sequencing and rollback/abort checkpoints.
-  - [ ] Add explicit signer/quorum requirements for manifest updates tied to identity changes.
+  - [x] Specify operator/governance steps for planned `network_id` or `genesis_hash` changes.
+  - [x] Define rollout sequencing and rollback/abort checkpoints.
+  - [x] Add explicit signer/quorum requirements for manifest updates tied to identity changes.
 - [ ] **Dry-run validation**
   - [ ] Execute and record a localnet rehearsal for identity transition with zero admission bypasses.
+
+Execution note: added `docs/NETWORK_IDENTITY_CHANGE_RUNBOOK.md` documenting governance/signer quorum, rollout sequencing, rollback checkpoints, and a reusable localnet dry-run record template.
 
 ### 12.5 Rollout completion checklist
 
