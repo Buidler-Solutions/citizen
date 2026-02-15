@@ -48,7 +48,7 @@ pub struct PeerHandshake {
     pub handshake_signature: String,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct HandshakeIdentity {
     pub network_id: String,
     pub genesis_hash: String,
