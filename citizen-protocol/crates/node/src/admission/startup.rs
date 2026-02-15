@@ -87,7 +87,7 @@ fn run_preflight_inner<S: LedgerStorage>(
                 .duration_since(std::time::UNIX_EPOCH)
                 .map(|duration| duration.as_secs() as i64)
                 .unwrap_or_default();
-            manifest.verify_signatures_at(now_unix_secs)?;
+            manifest.verify_signatures()?;
             manifest.verify_freshness(
                 now_unix_secs,
                 MANIFEST_MAX_AGE_SECS,

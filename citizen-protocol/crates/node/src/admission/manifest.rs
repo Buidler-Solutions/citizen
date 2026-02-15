@@ -251,6 +251,27 @@ mod tests {
         ));
     }
 
+    #[test]
+    fn revoked_key_signature_rejected_even_during_transition_window() {
+        let (_, active_key_id) = test_keypair("active");
+        let (transition_signer, transition_key_id) = test_keypair("transition");
+        let manifest = signed_manifest(vec![(transition_signer, transition_key_id.clone())]);
+        let now = 150;
+        let policy = ManifestKeyPolicy {
+            active: vec![active_key_id.as_str()].into_iter().collect(),
+            transition: vec![transition_key_id.as_str()].into_iter().collect(),
+            revoked: vec![transition_key_id.as_str()].into_iter().collect(),
+            require_dual_signature_during_transition: true,
+            dual_signature_until_unix_secs: Some(200),
+        };
+
+        let result = manifest.verify_signatures_with_policy(&policy, now);
+        assert!(matches!(
+            result,
+            Err(AdmissionError::UntrustedManifestKey(key_id)) if key_id == transition_key_id
+        ));
+    }
+
     fn policy<'a>(
         active: Vec<&'a str>,
         transition: Vec<&'a str>,
