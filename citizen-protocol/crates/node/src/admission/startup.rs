@@ -13,10 +13,13 @@ use std::time::Instant;
 pub struct StartupAdmissionMetricsSnapshot {
     pub startup_fail_total: HashMap<&'static str, u64>,
     pub manifest_verification_duration_ms: Vec<u64>,
+    pub manifest_verification_duration_histogram: HashMap<&'static str, u64>,
 }
 
 static STARTUP_FAIL_TOTAL: OnceLock<Mutex<HashMap<&'static str, u64>>> = OnceLock::new();
 static MANIFEST_VERIFICATION_DURATION_MS: OnceLock<Mutex<Vec<u64>>> = OnceLock::new();
+static MANIFEST_VERIFICATION_DURATION_HISTOGRAM: OnceLock<Mutex<HashMap<&'static str, u64>>> =
+    OnceLock::new();
 
 pub fn run_preflight<S: LedgerStorage>(
     settings: &AdmissionSettings,
@@ -40,10 +43,16 @@ pub fn startup_metrics_snapshot() -> StartupAdmissionMetricsSnapshot {
         .lock()
         .expect("manifest verification metrics lock poisoned")
         .clone();
+    let manifest_verification_duration_histogram = MANIFEST_VERIFICATION_DURATION_HISTOGRAM
+        .get_or_init(|| Mutex::new(HashMap::new()))
+        .lock()
+        .expect("manifest verification histogram metrics lock poisoned")
+        .clone();
 
     StartupAdmissionMetricsSnapshot {
         startup_fail_total,
         manifest_verification_duration_ms,
+        manifest_verification_duration_histogram,
     }
 }
 
@@ -149,6 +158,24 @@ fn observe_manifest_verification_duration(duration_ms: u64) {
         .lock()
         .expect("manifest verification metrics lock poisoned")
         .push(duration_ms);
+
+    let mut histogram = MANIFEST_VERIFICATION_DURATION_HISTOGRAM
+        .get_or_init(|| Mutex::new(HashMap::new()))
+        .lock()
+        .expect("manifest verification histogram metrics lock poisoned");
+    let bucket = manifest_duration_bucket_label(duration_ms);
+    *histogram.entry(bucket).or_insert(0) += 1;
+}
+
+fn manifest_duration_bucket_label(duration_ms: u64) -> &'static str {
+    match duration_ms {
+        0..=9 => "0_9ms",
+        10..=49 => "10_49ms",
+        50..=99 => "50_99ms",
+        100..=249 => "100_249ms",
+        250..=499 => "250_499ms",
+        _ => "500ms_plus",
+    }
 }
 
 fn reason_code(err: &AdmissionError) -> &'static str {
@@ -194,6 +221,14 @@ mod tests {
             manifest_verification_duration_ms
                 .lock()
                 .expect("manifest verification metrics lock poisoned")
+                .clear();
+        }
+        if let Some(manifest_verification_duration_histogram) =
+            MANIFEST_VERIFICATION_DURATION_HISTOGRAM.get()
+        {
+            manifest_verification_duration_histogram
+                .lock()
+                .expect("manifest verification histogram metrics lock poisoned")
                 .clear();
         }
     }
@@ -400,6 +435,14 @@ mod tests {
         assert!(
             metrics.manifest_verification_duration_ms.len() >= baseline + 1,
             "expected at least one additional manifest verification duration sample"
+        );
+        let histogram_total: u64 = metrics
+            .manifest_verification_duration_histogram
+            .values()
+            .sum();
+        assert!(
+            histogram_total >= 1,
+            "expected at least one histogram bucket sample"
         );
     }
 
