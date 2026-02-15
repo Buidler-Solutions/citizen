@@ -214,6 +214,60 @@ mod tests {
     use ed25519_dalek::{Signer, SigningKey};
 
     #[test]
+    fn canonical_payload_encoding_is_deterministic() {
+        let (active_signer, active_key_id) = test_keypair("active");
+        let manifest = signed_manifest(vec![(active_signer, active_key_id)]);
+
+        let bytes_a = manifest
+            .canonical_payload_bytes()
+            .expect("canonical payload bytes should encode");
+        let bytes_b = manifest
+            .canonical_payload_bytes()
+            .expect("canonical payload bytes should encode");
+
+        assert_eq!(bytes_a, bytes_b);
+        assert_eq!(
+            blake3::hash(&bytes_a).to_hex().to_string(),
+            manifest.digest_hex().expect("digest should compute")
+        );
+    }
+
+    #[test]
+    fn rejects_unsigned_manifest() {
+        let manifest = SignedManifest {
+            payload: ManifestPayload {
+                network_id: "citizen-localnet".into(),
+                genesis_hash: "genesis".into(),
+                boot_nodes: vec![],
+                validator_allowlist: vec![],
+                issued_at: 100,
+                version: 1,
+                manifest_id: "manifest".into(),
+            },
+            signatures: vec![],
+        };
+
+        let result = manifest.verify_signatures_at(100);
+        assert!(matches!(
+            result,
+            Err(AdmissionError::InvalidManifestSignature(message)) if message.contains("no signatures")
+        ));
+    }
+
+    #[test]
+    fn rejects_manifest_with_unsupported_signature_algorithm() {
+        let (active_signer, active_key_id) = test_keypair("active");
+        let mut manifest = signed_manifest(vec![(active_signer, active_key_id)]);
+        manifest.signatures[0].algorithm = "rsa-pss".to_string();
+
+        let result = manifest.verify_signatures_at(100);
+        assert!(matches!(
+            result,
+            Err(AdmissionError::UnsupportedManifestAlgorithm(algorithm)) if algorithm == "rsa-pss"
+        ));
+    }
+
+    #[test]
     fn transition_window_requires_transition_signature() {
         let (active_signer, active_key_id) = test_keypair("active");
         let (_, transition_key_id) = test_keypair("transition");
