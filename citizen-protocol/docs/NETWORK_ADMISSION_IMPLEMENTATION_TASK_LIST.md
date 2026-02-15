@@ -2,38 +2,55 @@
 
 This task list converts the guidance in `docs/NETWORK_ADMISSION_CONTROL_PLAN.md` into an execution checklist for implementation tracking.
 
+## Kickoff Status (Implementation Start)
+
+This tracker is now in active execution mode. The checklist below captures what is already present in the codebase and what remains to deliver the full secure admission design.
+
+### Baseline already implemented
+
+- [x] Validator allowlist admission exists for handshake identity (`validator_id` + `public_key`) in `crates/network`.
+- [x] Time-based key epoch rotation support exists in admission control (`key_epoch`, rotation interval).
+- [x] Baseline admission tests exist (allowlisted peer accepted, unknown peer rejected, rotation epoch advances).
+
+### Current implementation focus (Wave 1)
+
+1. Node admission module and startup preflight.
+2. Signed manifest verification and canonical digesting.
+3. Extended handshake identity binding (`network_id`, `genesis_hash`, `manifest_digest`, replay/PSK proofs).
+4. Startup + handshake fail-closed telemetry and test coverage.
+
 ## 1) Architecture & Scaffolding
 
-- [ ] Create `crates/node/src/admission/` module.
-- [ ] Add `runtime_identity.rs` for compile-time constants:
-  - [ ] `RUNTIME_NETWORK_ID`
-  - [ ] `RUNTIME_PSK_HASH` (or equivalent root key fingerprint)
-  - [ ] trusted manifest signing key set
-- [ ] Add `manifest.rs` for canonicalization and signature verification.
-- [ ] Add `startup.rs` for preflight validation and typed startup errors.
-- [ ] Define shared `AdmissionContext` and `AdmissionError` types.
+- [x] Create `crates/node/src/admission/` module.
+- [x] Add `runtime_identity.rs` for compile-time constants:
+  - [x] `RUNTIME_NETWORK_ID`
+  - [x] `RUNTIME_PSK_HASH` (or equivalent root key fingerprint)
+  - [x] trusted manifest signing key set
+- [x] Add `manifest.rs` for canonicalization and signature verification.
+- [x] Add `startup.rs` for preflight validation and typed startup errors.
+- [x] Define shared `AdmissionContext` and `AdmissionError` types.
 
 ## 2) Node Config & Startup Preflight
 
-- [ ] Extend node config with admission inputs:
-  - [ ] `network_id`
-  - [ ] `manifest_path`
-  - [ ] `manifest_enforce`
-  - [ ] `startup_secret` (when PSK mode is enabled)
-  - [ ] optional controlled `expected_genesis_hash` override for migration tooling
-- [ ] Run admission preflight before networking/consensus startup.
-- [ ] Load and verify signed manifest during startup.
-- [ ] Compute local genesis hash from canonical ledger source.
-- [ ] Verify equality between runtime constants, config, manifest, and local genesis digest.
-- [ ] Fail closed on admission failure with explicit non-zero exit behavior.
+- [x] Extend node config with admission inputs:
+  - [x] `network_id`
+  - [x] `manifest_path`
+  - [x] `manifest_enforce`
+  - [x] `startup_secret` (when PSK mode is enabled)
+  - [x] optional controlled `expected_genesis_hash` override for migration tooling
+- [x] Run admission preflight before networking/consensus startup.
+- [x] Load and verify signed manifest during startup.
+- [x] Compute local genesis hash from canonical ledger source.
+- [x] Verify equality between runtime constants, config, manifest, and local genesis digest.
+- [x] Fail closed on admission failure with explicit non-zero exit behavior.
 
 ## 3) Signed Manifest Verification
 
-- [ ] Define deterministic manifest schema and canonical payload encoding.
-- [ ] Implement signature envelope verification against trusted runtime keys.
-- [ ] Enforce signature algorithm allowlist.
+- [x] Define deterministic manifest schema and canonical payload encoding.
+- [x] Implement signature envelope verification against trusted runtime keys.
+- [x] Enforce signature algorithm allowlist.
 - [ ] Enforce manifest freshness/expiry policy.
-- [ ] Compute canonical `manifest_digest` for handshake identity binding.
+- [x] Compute canonical `manifest_digest` for handshake identity binding.
 
 ## 4) Network Handshake Admission Enforcement
 
