@@ -1,4 +1,7 @@
-use super::runtime_identity::TRUSTED_MANIFEST_KEYS;
+use super::runtime_identity::{
+    ACTIVE_MANIFEST_KEYS, REQUIRE_DUAL_SIGNATURE_DURING_TRANSITION, REVOKED_MANIFEST_KEYS,
+    TRANSITION_MANIFEST_KEYS,
+};
 use super::AdmissionError;
 use citizen_crypto::{parse_verifying_key, verify_signature};
 use ed25519_dalek::Signature;
@@ -85,9 +88,15 @@ impl SignedManifest {
             ));
         }
 
-        let trusted: HashSet<&str> = TRUSTED_MANIFEST_KEYS.iter().copied().collect();
+        let active: HashSet<&str> = ACTIVE_MANIFEST_KEYS.iter().copied().collect();
+        let transition: HashSet<&str> = TRANSITION_MANIFEST_KEYS.iter().copied().collect();
+        let revoked: HashSet<&str> = REVOKED_MANIFEST_KEYS.iter().copied().collect();
+        let enforce_key_policy =
+            !active.is_empty() || !transition.is_empty() || !revoked.is_empty();
         let payload = self.canonical_payload_bytes()?;
         let mut valid = 0usize;
+        let mut valid_active = 0usize;
+        let mut valid_transition = 0usize;
 
         for signature in &self.signatures {
             if signature.algorithm != "ed25519" {
@@ -96,7 +105,16 @@ impl SignedManifest {
                 ));
             }
 
-            if !trusted.is_empty() && !trusted.contains(signature.key_id.as_str()) {
+            if revoked.contains(signature.key_id.as_str()) {
+                return Err(AdmissionError::UntrustedManifestKey(
+                    signature.key_id.clone(),
+                ));
+            }
+
+            if enforce_key_policy
+                && !active.contains(signature.key_id.as_str())
+                && !transition.contains(signature.key_id.as_str())
+            {
                 return Err(AdmissionError::UntrustedManifestKey(
                     signature.key_id.clone(),
                 ));
@@ -111,12 +129,33 @@ impl SignedManifest {
 
             if verify_signature(&verifying_key, &payload, &parsed_sig) {
                 valid += 1;
+                if active.contains(signature.key_id.as_str()) {
+                    valid_active += 1;
+                }
+                if transition.contains(signature.key_id.as_str()) {
+                    valid_transition += 1;
+                }
             }
         }
 
         if valid == 0 {
             return Err(AdmissionError::InvalidManifestSignature(
                 "no valid signatures over canonical payload".into(),
+            ));
+        }
+
+        if enforce_key_policy && valid_active == 0 {
+            return Err(AdmissionError::InvalidManifestSignature(
+                "manifest is missing a valid active-key signature".into(),
+            ));
+        }
+
+        if !transition.is_empty()
+            && REQUIRE_DUAL_SIGNATURE_DURING_TRANSITION
+            && valid_transition == 0
+        {
+            return Err(AdmissionError::InvalidManifestSignature(
+                "manifest is missing a valid transition-key signature".into(),
             ));
         }
 
