@@ -1,4 +1,5 @@
 use async_trait::async_trait;
+use blake3::Hasher;
 use citizen_types::{
     Block, BlockHeader, GovernanceProposal, GovernanceVote, LedgerEntry, ProtocolError,
     ValidatorId, ValidatorSetSnapshot,
@@ -8,15 +9,13 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
-use std::time::{Duration as StdDuration, Instant};
+use std::time::{Duration as StdDuration, Instant, SystemTime, UNIX_EPOCH};
 use tokio::sync::{broadcast, mpsc, RwLock};
 use tokio::time::{sleep, Duration};
 #[cfg(feature = "libp2p")]
 use tracing::info;
 use tracing::warn;
 
-#[cfg(feature = "libp2p")]
-use blake3;
 #[cfg(feature = "libp2p")]
 use futures::StreamExt;
 #[cfg(feature = "libp2p")]
@@ -38,6 +37,21 @@ pub struct PeerHandshake {
     pub validator_id: ValidatorId,
     pub public_key: String,
     pub key_epoch: u64,
+    pub network_id: String,
+    pub genesis_hash: String,
+    pub manifest_digest: String,
+    pub nonce: u64,
+    pub timestamp_ms: u64,
+    pub psk_proof: Option<String>,
+}
+
+#[derive(Clone, Debug)]
+pub struct HandshakeIdentity {
+    pub network_id: String,
+    pub genesis_hash: String,
+    pub manifest_digest: String,
+    pub startup_secret: Option<String>,
+    pub max_clock_skew: StdDuration,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -52,27 +66,36 @@ pub struct AdmissionControl {
     rotation_interval: StdDuration,
     current_epoch: Arc<RwLock<u64>>,
     last_rotation: Arc<RwLock<Instant>>,
+    identity: HandshakeIdentity,
+    replay_cache: Arc<RwLock<HashMap<String, u64>>>,
 }
 
 impl AdmissionControl {
-    pub fn from_snapshot(snapshot: ValidatorSetSnapshot, rotation_interval: StdDuration) -> Self {
+    pub fn from_snapshot(
+        snapshot: ValidatorSetSnapshot,
+        rotation_interval: StdDuration,
+        identity: HandshakeIdentity,
+    ) -> Self {
         let allowed = snapshot
             .validators
             .iter()
             .map(|(id, meta)| (id.clone(), meta.public_key.clone()))
             .collect();
-        Self::new_with_allowlist(allowed, rotation_interval)
+        Self::new_with_allowlist(allowed, rotation_interval, identity)
     }
 
     pub fn new_with_allowlist(
         allowed: HashMap<ValidatorId, String>,
         rotation_interval: StdDuration,
+        identity: HandshakeIdentity,
     ) -> Self {
         Self {
             allowed: Arc::new(RwLock::new(allowed)),
             rotation_interval,
             current_epoch: Arc::new(RwLock::new(0)),
             last_rotation: Arc::new(RwLock::new(Instant::now())),
+            identity,
+            replay_cache: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 
@@ -97,7 +120,56 @@ impl AdmissionControl {
         }
 
         let epoch = self.current_epoch.read().await;
-        handshake.key_epoch >= *epoch
+        if handshake.key_epoch < *epoch {
+            return false;
+        }
+        drop(epoch);
+
+        if handshake.network_id != self.identity.network_id
+            || handshake.genesis_hash != self.identity.genesis_hash
+            || handshake.manifest_digest != self.identity.manifest_digest
+        {
+            return false;
+        }
+
+        let now_ms = match SystemTime::now().duration_since(UNIX_EPOCH) {
+            Ok(duration) => duration.as_millis() as u64,
+            Err(_) => return false,
+        };
+        let skew_ms = self.identity.max_clock_skew.as_millis() as u64;
+        if handshake.timestamp_ms.saturating_add(skew_ms) < now_ms
+            || now_ms.saturating_add(skew_ms) < handshake.timestamp_ms
+        {
+            return false;
+        }
+
+        let replay_key = format!(
+            "{}:{}:{}",
+            handshake.validator_id, handshake.nonce, handshake.timestamp_ms
+        );
+        {
+            let replay_cache = self.replay_cache.read().await;
+            if replay_cache.contains_key(&replay_key) {
+                return false;
+            }
+        }
+
+        if let Some(secret) = &self.identity.startup_secret {
+            let Some(psk_proof) = &handshake.psk_proof else {
+                return false;
+            };
+            let expected = derive_psk_proof(secret, handshake);
+            if !constant_time_eq(expected.as_bytes(), psk_proof.as_bytes()) {
+                return false;
+            }
+        }
+
+        let mut replay_cache = self.replay_cache.write().await;
+        replay_cache.insert(replay_key, now_ms);
+        if replay_cache.len() > 4096 {
+            replay_cache.retain(|_, observed_ms| now_ms.saturating_sub(*observed_ms) <= skew_ms);
+        }
+        true
     }
 
     pub async fn maybe_rotate(&self) -> u64 {
@@ -113,6 +185,35 @@ impl AdmissionControl {
     pub async fn current_epoch(&self) -> u64 {
         *self.current_epoch.read().await
     }
+
+    pub fn identity(&self) -> HandshakeIdentity {
+        self.identity.clone()
+    }
+}
+
+fn derive_psk_proof(secret: &str, handshake: &PeerHandshake) -> String {
+    let mut hasher = Hasher::new();
+    hasher.update(secret.as_bytes());
+    hasher.update(handshake.validator_id.as_bytes());
+    hasher.update(handshake.public_key.as_bytes());
+    hasher.update(handshake.network_id.as_bytes());
+    hasher.update(handshake.genesis_hash.as_bytes());
+    hasher.update(handshake.manifest_digest.as_bytes());
+    hasher.update(&handshake.key_epoch.to_le_bytes());
+    hasher.update(&handshake.nonce.to_le_bytes());
+    hasher.update(&handshake.timestamp_ms.to_le_bytes());
+    hasher.finalize().to_hex().to_string()
+}
+
+fn constant_time_eq(left: &[u8], right: &[u8]) -> bool {
+    if left.len() != right.len() {
+        return false;
+    }
+    let mut diff = 0u8;
+    for (l, r) in left.iter().zip(right.iter()) {
+        diff |= l ^ r;
+    }
+    diff == 0
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -555,10 +656,28 @@ impl Network for QuicNetwork {
         let (mut send, _) = self.connection(target).await?;
         let epoch = self.admission.maybe_rotate().await;
         let wire = WireMessage {
-            handshake: PeerHandshake {
-                validator_id: self.local_validator_id.clone(),
-                public_key: self.local_public_key.clone(),
-                key_epoch: epoch,
+            handshake: {
+                let identity = self.admission.identity();
+                let nonce = rand::thread_rng().gen();
+                let timestamp_ms = SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .map(|duration| duration.as_millis() as u64)
+                    .unwrap_or_default();
+                let mut handshake = PeerHandshake {
+                    validator_id: self.local_validator_id.clone(),
+                    public_key: self.local_public_key.clone(),
+                    key_epoch: epoch,
+                    network_id: identity.network_id,
+                    genesis_hash: identity.genesis_hash,
+                    manifest_digest: identity.manifest_digest,
+                    nonce,
+                    timestamp_ms,
+                    psk_proof: None,
+                };
+                if let Some(secret) = identity.startup_secret {
+                    handshake.psk_proof = Some(derive_psk_proof(&secret, &handshake));
+                }
+                handshake
             },
             message,
         };

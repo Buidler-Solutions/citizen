@@ -14,7 +14,8 @@ use citizen_consensus::ConsensusEngine;
 use citizen_crypto::{verifying_key_to_string, KeyRegistry, ValidatorKeypair};
 use citizen_ledger::Ledger;
 use citizen_network::{
-    AdmissionControl, ConsensusMessage, MockNetwork, Network, NetworkLatency, QuicNetwork,
+    AdmissionControl, ConsensusMessage, HandshakeIdentity, MockNetwork, Network, NetworkLatency,
+    QuicNetwork,
 };
 use citizen_storage::RocksDbStorage;
 use citizen_types::{
@@ -73,7 +74,18 @@ async fn main() -> anyhow::Result<()> {
         tracing::info!("verifying_key" = %verifying_key_hex, "note" = "share this key for validator admission");
         let snapshot = config.build_validator_set(&verifying_key_hex);
         let rotation = Duration::from_secs(config.network_key_rotation_secs);
-        let admission = Arc::new(AdmissionControl::from_snapshot(snapshot.clone(), rotation));
+        let admission_identity = HandshakeIdentity {
+            network_id: admission_context.network_id.clone(),
+            genesis_hash: admission_context.genesis_hash.clone(),
+            manifest_digest: admission_context.manifest_digest.clone(),
+            startup_secret: config.startup_secret.clone(),
+            max_clock_skew: Duration::from_secs(30),
+        };
+        let admission = Arc::new(AdmissionControl::from_snapshot(
+            snapshot.clone(),
+            rotation,
+            admission_identity,
+        ));
 
         let network = if !config.peers.is_empty() {
             let peers = config
