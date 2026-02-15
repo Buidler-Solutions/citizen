@@ -37,6 +37,8 @@ Map `admission_startup_fail_total{reason}` to remediation:
 | `manifest_expired` | Manifest age exceeds policy max age. | Issue a fresh manifest and restart nodes. |
 | `manifest_network_mismatch` | Manifest `network_id` differs from node config/runtime identity. | Align manifest + node config to same network (`citizen-localnet`/target network). |
 | `manifest_genesis_mismatch` | Manifest genesis hash differs from expected local/network genesis. | Validate genesis artifact provenance; update manifest or re-bootstrap from correct genesis state. |
+| `manifest_duplicate_validator` | Manifest allowlist repeats the same `validator_id` more than once. | Regenerate manifest with unique validator IDs; avoid manual merges that duplicate entries. |
+| `manifest_allowlist_required` | Manifest enforcement is on but allowlist is empty. | Publish a signed manifest containing the complete validator allowlist before startup. |
 | `runtime_network_mismatch` | Configured network ID differs from compile-time runtime network ID. | Correct `network_id` in config or deploy binary built for the intended network. |
 | `psk_verification_failed` | Startup secret required but missing/invalid under PSK mode. | Provide `startup_secret` from approved secret store; verify secret rotation rollout order. |
 | `local_genesis_mismatch` | Local storage genesis differs from expected genesis hash. | Quarantine node state, restore from trusted snapshot, rerun startup. |
@@ -57,6 +59,16 @@ validate the following matrix:
 | Replay detected | Nonce+timestamp tuple reused (duplicate or replay). | Inspect transport retries and potential replay attempts; restart affected connection path. |
 | Missing/invalid PSK proof | Peer omitted proof or used wrong secret. | Verify PSK distribution and staged rotation; confirm both peers use current secret. |
 
+
+
+## Running Multiple Targeted Startup Tests
+
+Cargo accepts only one positional `TESTNAME` filter. For multiple startup tests, either:
+
+1. Use one regex filter expression:
+   - `cargo test -p citizen-node "admission::startup::tests::(preflight_rejects_manifest_with_empty_allowlist|preflight_accepts_fresh_manifest)" -- --nocapture`
+2. Or run each exact test sequentially with the helper script:
+   - `./citizen-protocol/scripts/run_node_startup_admission_tests.sh admission::startup::tests::preflight_rejects_manifest_with_empty_allowlist admission::startup::tests::preflight_accepts_fresh_manifest`
 
 ## CI Admission Guardrail Failure Remediation
 
