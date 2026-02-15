@@ -1,4 +1,5 @@
 use chrono::Utc;
+use blake3::Hasher;
 use citizen_network::{AdmissionControl, HandshakeIdentity, PeerHandshake};
 use citizen_types::{ValidatorMetadata, ValidatorSetSnapshot};
 use std::collections::BTreeMap;
@@ -43,6 +44,51 @@ fn test_identity(startup_secret: Option<&str>) -> HandshakeIdentity {
         max_clock_skew: Duration::from_secs(30),
     }
 }
+
+fn current_timestamp_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .expect("clock")
+        .as_millis() as u64
+}
+
+fn handshake_with_overrides(
+    validator_id: &str,
+    public_key: &str,
+    network_id: &str,
+    genesis_hash: &str,
+    manifest_digest: &str,
+    nonce: u64,
+    timestamp_ms: u64,
+    psk_proof: Option<String>,
+) -> PeerHandshake {
+    PeerHandshake {
+        validator_id: validator_id.into(),
+        public_key: public_key.into(),
+        key_epoch: 0,
+        network_id: network_id.into(),
+        genesis_hash: genesis_hash.into(),
+        manifest_digest: manifest_digest.into(),
+        nonce,
+        timestamp_ms,
+        psk_proof,
+    }
+}
+
+fn derive_psk_proof(secret: &str, handshake: &PeerHandshake) -> String {
+    let mut hasher = Hasher::new();
+    hasher.update(secret.as_bytes());
+    hasher.update(handshake.validator_id.as_bytes());
+    hasher.update(handshake.public_key.as_bytes());
+    hasher.update(handshake.network_id.as_bytes());
+    hasher.update(handshake.genesis_hash.as_bytes());
+    hasher.update(handshake.manifest_digest.as_bytes());
+    hasher.update(&handshake.key_epoch.to_le_bytes());
+    hasher.update(&handshake.nonce.to_le_bytes());
+    hasher.update(&handshake.timestamp_ms.to_le_bytes());
+    hasher.finalize().to_hex().to_string()
+}
+
 #[tokio::test]
 async fn admission_accepts_allowlisted_peer() {
     let admission = AdmissionControl::from_snapshot(
@@ -50,20 +96,16 @@ async fn admission_accepts_allowlisted_peer() {
         Duration::from_secs(1),
         test_identity(None),
     );
-    let handshake = PeerHandshake {
-        validator_id: "validator.a".into(),
-        public_key: "pk_a".into(),
-        key_epoch: 0,
-        network_id: "citizen-localnet".into(),
-        genesis_hash: "genesis-hash".into(),
-        manifest_digest: "manifest-digest".into(),
-        nonce: 7,
-        timestamp_ms: std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_millis() as u64,
-        psk_proof: None,
-    };
+    let handshake = handshake_with_overrides(
+        "validator.a",
+        "pk_a",
+        "citizen-localnet",
+        "genesis-hash",
+        "manifest-digest",
+        7,
+        current_timestamp_ms(),
+        None,
+    );
 
     assert!(admission.allows(&handshake).await);
 }
@@ -75,20 +117,16 @@ async fn admission_rejects_unknown_peer() {
         Duration::from_secs(1),
         test_identity(None),
     );
-    let handshake = PeerHandshake {
-        validator_id: "validator.unknown".into(),
-        public_key: "pk_z".into(),
-        key_epoch: 0,
-        network_id: "citizen-localnet".into(),
-        genesis_hash: "genesis-hash".into(),
-        manifest_digest: "manifest-digest".into(),
-        nonce: 7,
-        timestamp_ms: std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_millis() as u64,
-        psk_proof: None,
-    };
+    let handshake = handshake_with_overrides(
+        "validator.unknown",
+        "pk_z",
+        "citizen-localnet",
+        "genesis-hash",
+        "manifest-digest",
+        7,
+        current_timestamp_ms(),
+        None,
+    );
 
     assert!(!admission.allows(&handshake).await);
 }
@@ -109,4 +147,112 @@ async fn key_rotation_advances_epoch() {
     // Ensure subsequent calls without waiting do not double-rotate immediately
     let stable = admission.maybe_rotate().await;
     assert_eq!(rotated, stable);
+}
+
+#[tokio::test]
+async fn admission_rejects_network_mismatch() {
+    let admission = AdmissionControl::from_snapshot(
+        build_snapshot(),
+        Duration::from_secs(1),
+        test_identity(None),
+    );
+    let handshake = handshake_with_overrides(
+        "validator.a",
+        "pk_a",
+        "citizen-othernet",
+        "genesis-hash",
+        "manifest-digest",
+        9,
+        current_timestamp_ms(),
+        None,
+    );
+
+    assert!(!admission.allows(&handshake).await);
+}
+
+#[tokio::test]
+async fn admission_rejects_genesis_mismatch() {
+    let admission = AdmissionControl::from_snapshot(
+        build_snapshot(),
+        Duration::from_secs(1),
+        test_identity(None),
+    );
+    let handshake = handshake_with_overrides(
+        "validator.a",
+        "pk_a",
+        "citizen-localnet",
+        "other-genesis",
+        "manifest-digest",
+        10,
+        current_timestamp_ms(),
+        None,
+    );
+
+    assert!(!admission.allows(&handshake).await);
+}
+
+#[tokio::test]
+async fn admission_rejects_manifest_digest_mismatch() {
+    let admission = AdmissionControl::from_snapshot(
+        build_snapshot(),
+        Duration::from_secs(1),
+        test_identity(None),
+    );
+    let handshake = handshake_with_overrides(
+        "validator.a",
+        "pk_a",
+        "citizen-localnet",
+        "genesis-hash",
+        "other-manifest",
+        11,
+        current_timestamp_ms(),
+        None,
+    );
+
+    assert!(!admission.allows(&handshake).await);
+}
+
+#[tokio::test]
+async fn admission_rejects_invalid_psk_proof() {
+    let admission = AdmissionControl::from_snapshot(
+        build_snapshot(),
+        Duration::from_secs(1),
+        test_identity(Some("shared-secret")),
+    );
+    let handshake = handshake_with_overrides(
+        "validator.a",
+        "pk_a",
+        "citizen-localnet",
+        "genesis-hash",
+        "manifest-digest",
+        12,
+        current_timestamp_ms(),
+        Some("invalid-proof".to_string()),
+    );
+
+    assert!(!admission.allows(&handshake).await);
+}
+
+#[tokio::test]
+async fn admission_rejects_replayed_nonce_timestamp() {
+    let admission = AdmissionControl::from_snapshot(
+        build_snapshot(),
+        Duration::from_secs(1),
+        test_identity(Some("shared-secret")),
+    );
+    let timestamp_ms = current_timestamp_ms();
+    let mut handshake = handshake_with_overrides(
+        "validator.a",
+        "pk_a",
+        "citizen-localnet",
+        "genesis-hash",
+        "manifest-digest",
+        13,
+        timestamp_ms,
+        None,
+    );
+    handshake.psk_proof = Some(derive_psk_proof("shared-secret", &handshake));
+
+    assert!(admission.allows(&handshake).await);
+    assert!(!admission.allows(&handshake).await);
 }
