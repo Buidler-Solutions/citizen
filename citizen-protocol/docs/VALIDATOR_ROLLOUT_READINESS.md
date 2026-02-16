@@ -45,13 +45,21 @@ validator snapshot.
 Validation checklist:
 
 - `[[validators]]` includes only governance-approved peers.
+- Governance manifest allowlist is non-empty and sized for active+standby operation
+  (target: 200% of active consensus seats).
+- Runtime split is deterministic: `ActiveSize = ceil(N/2)`, `StandbySize = N - ActiveSize`.
 - Unknown peers are denied at authenticated handshake.
-- `quorum_bps` remains `8000` unless explicitly changed by governance proposal.
+- `quorum_bps` remains `8000` unless explicitly changed by governance proposal,
+  and is applied to the active set only (`ceil(0.8 * |V_active|)`).
+- Epoch rotation controls are configured and reviewed: `epoch_length_blocks`
+  and `promotion_limit`.
 - API write edge controls are configured (`api_auth_required = true`, scoped API keys, rate limits).
 
 Pass criteria:
 
 - Admission policy replay test confirms only allowlisted peers connect.
+- Rotation dry-run confirms deterministic promotion from standby at epoch
+  boundary with identical active/standby results on all sampled nodes.
 - Config diff review against approved manifest has no unauthorized validators.
 - Write endpoint authz scopes are documented for operational clients.
 
