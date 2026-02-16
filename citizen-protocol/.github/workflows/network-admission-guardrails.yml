@@ -1,0 +1,52 @@
+name: Network Admission Guardrails
+
+on:
+  pull_request:
+    paths:
+      - "citizen-protocol/crates/network/**"
+      - "citizen-protocol/crates/node/src/admission/**"
+      - "citizen-protocol/scripts/run_admission_tests.sh"
+      - "citizen-protocol/docs/NETWORK_ADMISSION_IMPLEMENTATION_TASK_LIST.md"
+      - "citizen-protocol/docs/NETWORK_ADMISSION_TROUBLESHOOTING_RUNBOOK.md"
+      - "crates/network/**"
+      - "crates/node/src/admission/**"
+      - "scripts/run_admission_tests.sh"
+      - "docs/NETWORK_ADMISSION_IMPLEMENTATION_TASK_LIST.md"
+      - "docs/NETWORK_ADMISSION_TROUBLESHOOTING_RUNBOOK.md"
+  push:
+    branches: ["main"]
+    paths:
+      - "citizen-protocol/crates/network/**"
+      - "citizen-protocol/crates/node/src/admission/**"
+      - "citizen-protocol/scripts/run_admission_tests.sh"
+      - "crates/network/**"
+      - "crates/node/src/admission/**"
+      - "scripts/run_admission_tests.sh"
+
+jobs:
+  admission-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+            citizen-protocol/target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Run secure admission test matrix
+        run: |
+          if [ -x ./citizen-protocol/scripts/run_admission_tests.sh ]; then
+            ./citizen-protocol/scripts/run_admission_tests.sh
+          else
+            ./scripts/run_admission_tests.sh
+          fi

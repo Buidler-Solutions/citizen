@@ -14,7 +14,8 @@ use citizen_consensus::ConsensusEngine;
 use citizen_crypto::{verifying_key_to_string, KeyRegistry, ValidatorKeypair};
 use citizen_ledger::Ledger;
 use citizen_network::{
-    AdmissionControl, ConsensusMessage, MockNetwork, Network, NetworkLatency, QuicNetwork,
+    AdmissionControl, ConsensusMessage, HandshakeIdentity, MockNetwork, Network, NetworkLatency,
+    QuicNetwork,
 };
 use citizen_storage::RocksDbStorage;
 use citizen_types::{
@@ -25,7 +26,7 @@ use serde::{Deserialize, Serialize};
 use std::time::Duration;
 use tokio::signal;
 
-use admission::{startup::run_preflight, AdmissionSettings};
+use admission::{startup::run_preflight, AdmissionContext, AdmissionError, AdmissionSettings};
 use tracing_subscriber::EnvFilter;
 
 #[tokio::main]
@@ -71,9 +72,14 @@ async fn main() -> anyhow::Result<()> {
         let keypair = config.load_or_generate_keypair()?;
         let verifying_key_hex = verifying_key_to_string(keypair.verifying_key());
         tracing::info!("verifying_key" = %verifying_key_hex, "note" = "share this key for validator admission");
-        let snapshot = config.build_validator_set(&verifying_key_hex);
+        let snapshot = config.build_admission_snapshot(&verifying_key_hex, &admission_context)?;
         let rotation = Duration::from_secs(config.network_key_rotation_secs);
-        let admission = Arc::new(AdmissionControl::from_snapshot(snapshot.clone(), rotation));
+        let admission_identity = config.handshake_identity(&admission_context);
+        let admission = Arc::new(AdmissionControl::from_snapshot(
+            snapshot.clone(),
+            rotation,
+            admission_identity,
+        ));
 
         let network = if !config.peers.is_empty() {
             let peers = config
@@ -92,6 +98,7 @@ async fn main() -> anyhow::Result<()> {
                 admission,
                 config.validator_id.clone(),
                 verifying_key_hex,
+                Some(keypair.signing_key()),
             )?))
         } else {
             Arc::new(NodeNetwork::Mock(MockNetwork::new(NetworkLatency {
@@ -121,11 +128,50 @@ async fn main() -> anyhow::Result<()> {
             }
         }))
     } else {
+        let observer_network_task = if !config.peers.is_empty() {
+            let snapshot = config
+                .build_admission_snapshot(&config.observer_public_key(), &admission_context)?;
+            let rotation = Duration::from_secs(config.network_key_rotation_secs);
+            let admission_identity = config.handshake_identity(&admission_context);
+            let admission = Arc::new(AdmissionControl::from_snapshot(
+                snapshot,
+                rotation,
+                admission_identity,
+            ));
+            let peers = config
+                .peers
+                .iter()
+                .filter_map(|p| {
+                    p.address
+                        .parse()
+                        .ok()
+                        .map(|addr| (p.validator_id.clone(), addr))
+                })
+                .collect();
+            let network = Arc::new(NodeNetwork::Quic(QuicNetwork::new(
+                config.bind_addr.unwrap_or(default_bind()),
+                peers,
+                admission,
+                config.validator_id.clone(),
+                config.observer_public_key(),
+                None,
+            )?));
+            Some(tokio::spawn(async move {
+                match network.subscribe().await {
+                    Ok(mut receiver) => while receiver.recv().await.is_some() {},
+                    Err(err) => {
+                        tracing::error!(?err, "observer failed to subscribe to network");
+                    }
+                }
+            }))
+        } else {
+            None
+        };
         tracing::info!(
             "mode" = "observer",
             "msg" = "consensus disabled; read-only API profile active"
         );
-        None
+        observer_network_task
     };
 
     tracing::info!("msg" = "node running", "api_port" = config.api_port);
@@ -208,6 +254,14 @@ struct ApiClientConfig {
 }
 
 impl NodeConfig {
+    fn observer_public_key(&self) -> String {
+        self.validators
+            .iter()
+            .find(|validator| validator.validator_id == self.validator_id)
+            .map(|validator| validator.public_key.clone())
+            .unwrap_or_else(|| "observer-readonly-key".to_string())
+    }
+
     fn api_edge_config(&self) -> ApiEdgeConfig {
         let clients = self
             .api_clients
@@ -234,6 +288,16 @@ impl NodeConfig {
             manifest_enforce: self.manifest_enforce,
             startup_secret: self.startup_secret.clone(),
             expected_genesis_hash: self.expected_genesis_hash.clone(),
+        }
+    }
+
+    fn handshake_identity(&self, context: &AdmissionContext) -> HandshakeIdentity {
+        HandshakeIdentity {
+            network_id: context.network_id.clone(),
+            genesis_hash: context.genesis_hash.clone(),
+            manifest_digest: context.manifest_digest.clone(),
+            startup_secret: self.startup_secret.clone(),
+            max_clock_skew: Duration::from_secs(30),
         }
     }
 
@@ -281,6 +345,55 @@ impl NodeConfig {
             validators,
             quorum_bps: self.quorum_bps,
         }
+    }
+
+    fn build_admission_snapshot(
+        &self,
+        self_public_key: &str,
+        admission_context: &AdmissionContext,
+    ) -> anyhow::Result<ValidatorSetSnapshot> {
+        if admission_context.validator_allowlist.is_empty() {
+            return Ok(self.build_validator_set(self_public_key));
+        }
+
+        let Some(allowlisted_public_key) = admission_context
+            .validator_allowlist
+            .get(&self.validator_id)
+        else {
+            anyhow::bail!(
+                "local validator_id is not present in signed manifest allowlist: {}",
+                self.validator_id
+            );
+        };
+        if allowlisted_public_key != self_public_key {
+            anyhow::bail!(
+                "local public key does not match signed manifest allowlist for {}",
+                self.validator_id
+            );
+        }
+
+        let validators = admission_context
+            .validator_allowlist
+            .iter()
+            .map(|(validator_id, public_key)| {
+                (
+                    validator_id.clone(),
+                    ValidatorMetadata {
+                        validator_id: validator_id.clone(),
+                        public_key: public_key.clone(),
+                        anchors: vec!["manifest-allowlist".to_string()],
+                        joined_at: Utc::now(),
+                        suspended: false,
+                    },
+                )
+            })
+            .collect();
+
+        Ok(ValidatorSetSnapshot {
+            height: 0,
+            validators,
+            quorum_bps: self.quorum_bps,
+        })
     }
 }
 
@@ -383,5 +496,148 @@ impl Network for NodeNetwork {
             NodeNetwork::Mock(inner) => inner.subscribe().await,
             NodeNetwork::Quic(inner) => inner.subscribe().await,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use citizen_storage::MemoryStorage;
+
+    #[test]
+    fn observer_public_key_prefers_configured_validator_key() {
+        let config = NodeConfig {
+            validator_id: "observer-1".to_string(),
+            validators: vec![ConfigValidator {
+                validator_id: "observer-1".to_string(),
+                public_key: "observer-public-key".to_string(),
+                anchors: vec![],
+            }],
+            ..NodeConfig::default()
+        };
+
+        assert_eq!(config.observer_public_key(), "observer-public-key");
+    }
+
+    #[test]
+    fn observer_public_key_falls_back_when_missing_from_validator_set() {
+        let config = NodeConfig {
+            validator_id: "observer-2".to_string(),
+            validators: vec![ConfigValidator {
+                validator_id: "validator-1".to_string(),
+                public_key: "validator-public-key".to_string(),
+                anchors: vec![],
+            }],
+            ..NodeConfig::default()
+        };
+
+        assert_eq!(config.observer_public_key(), "observer-readonly-key");
+    }
+
+    #[test]
+    fn handshake_identity_is_role_agnostic() {
+        let context = AdmissionContext {
+            network_id: "citizen-localnet".to_string(),
+            genesis_hash: "genesis-hash".to_string(),
+            manifest_digest: "manifest-digest".to_string(),
+            manifest_version: Some(3),
+            validator_allowlist: BTreeMap::new(),
+        };
+
+        let validator_config = NodeConfig {
+            node_role: NodeRole::Validator,
+            startup_secret: Some("validator-shared-secret".to_string()),
+            ..NodeConfig::default()
+        };
+        let observer_config = NodeConfig {
+            node_role: NodeRole::Observer,
+            startup_secret: Some("validator-shared-secret".to_string()),
+            ..NodeConfig::default()
+        };
+
+        assert_eq!(
+            validator_config.handshake_identity(&context),
+            observer_config.handshake_identity(&context)
+        );
+    }
+
+    #[test]
+    fn startup_preflight_rejects_network_mismatch_for_validator_and_observer() {
+        let storage = MemoryStorage::new();
+
+        let validator_config = NodeConfig {
+            node_role: NodeRole::Validator,
+            network_id: "citizen-othernet".to_string(),
+            ..NodeConfig::default()
+        };
+        let observer_config = NodeConfig {
+            node_role: NodeRole::Observer,
+            network_id: "citizen-othernet".to_string(),
+            ..NodeConfig::default()
+        };
+
+        let validator_result = run_preflight(&validator_config.admission_settings(), &storage);
+        let observer_result = run_preflight(&observer_config.admission_settings(), &storage);
+
+        assert!(matches!(
+            validator_result,
+            Err(AdmissionError::RuntimeNetworkMismatch { .. })
+        ));
+        assert!(matches!(
+            observer_result,
+            Err(AdmissionError::RuntimeNetworkMismatch { .. })
+        ));
+    }
+
+    #[test]
+    fn admission_snapshot_uses_manifest_allowlist_when_present() {
+        let config = NodeConfig {
+            validator_id: "validator-alpha".to_string(),
+            quorum_bps: 8_000,
+            ..NodeConfig::default()
+        };
+        let mut allowlist = BTreeMap::new();
+        allowlist.insert("validator-alpha".to_string(), "alpha-pubkey".to_string());
+        allowlist.insert("validator-beta".to_string(), "beta-pubkey".to_string());
+        let context = AdmissionContext {
+            network_id: "citizen-localnet".to_string(),
+            genesis_hash: "genesis-hash".to_string(),
+            manifest_digest: "manifest-digest".to_string(),
+            manifest_version: Some(3),
+            validator_allowlist: allowlist,
+        };
+
+        let snapshot = config
+            .build_admission_snapshot("alpha-pubkey", &context)
+            .expect("manifest allowlist should be used");
+        assert_eq!(snapshot.validators.len(), 2);
+        assert_eq!(
+            snapshot
+                .validators
+                .get("validator-beta")
+                .expect("beta should exist")
+                .public_key,
+            "beta-pubkey"
+        );
+    }
+
+    #[test]
+    fn admission_snapshot_rejects_local_key_mismatch_against_manifest_allowlist() {
+        let config = NodeConfig {
+            validator_id: "validator-alpha".to_string(),
+            ..NodeConfig::default()
+        };
+        let mut allowlist = BTreeMap::new();
+        allowlist.insert("validator-alpha".to_string(), "alpha-pubkey".to_string());
+        let context = AdmissionContext {
+            network_id: "citizen-localnet".to_string(),
+            genesis_hash: "genesis-hash".to_string(),
+            manifest_digest: "manifest-digest".to_string(),
+            manifest_version: Some(3),
+            validator_allowlist: allowlist,
+        };
+
+        let result = config.build_admission_snapshot("different-pubkey", &context);
+        assert!(result.is_err());
     }
 }
