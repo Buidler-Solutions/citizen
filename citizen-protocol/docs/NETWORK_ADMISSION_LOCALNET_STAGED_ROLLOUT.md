@@ -28,12 +28,14 @@ Outcome:
 
 ### Stage 2 — Production rollout gate
 
-Production rollout remains blocked until all of the following are complete:
+Production rollout gate inputs are now complete:
 - full admission CI matrix publication,
 - telemetry dashboard confirmation,
 - node/network/governance sign-off.
 
+Completion evidence is recorded in `docs/NETWORK_ADMISSION_ROLLOUT_COMPLETION.md`.
+
 ## Approval Summary
 
 - Localnet staged rollout gate: **Completed**
-- Production validator rollout gate: **Pending final sign-offs**
+- Production validator rollout gate: **Approved**
