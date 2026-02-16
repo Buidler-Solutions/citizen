@@ -54,7 +54,7 @@ where
     S: LedgerStorage + 'static,
 {
     pub validator_id: ValidatorId,
-    config: ConsensusConfig,
+    config: RwLock<ConsensusConfig>,
     network: Arc<N>,
     ledger: Arc<Ledger<S>>,
     validator_set: RwLock<ValidatorSetSnapshot>,
@@ -80,7 +80,7 @@ where
         ledger.update_validator_set(validator_set.clone())?;
         Ok(Self {
             validator_id,
-            config,
+            config: RwLock::new(config),
             network,
             ledger,
             validator_set: RwLock::new(validator_set),
@@ -92,9 +92,10 @@ where
     }
 
     pub async fn run(self: Arc<Self>) -> Result<()> {
-        let mut ticker = interval(Duration::from_millis(self.config.block_time_millis));
+        let config = self.config.read().clone();
+        let mut ticker = interval(Duration::from_millis(config.block_time_millis));
         let mut heartbeat_ticker =
-            interval(Duration::from_millis(self.config.heartbeat_interval_millis));
+            interval(Duration::from_millis(config.heartbeat_interval_millis));
         let mut inbox = self.network.subscribe().await?;
 
         loop {
@@ -245,8 +246,14 @@ where
             ConsensusMessage::Commit { height, block } => self.handle_commit(height, block).await,
             ConsensusMessage::GovernanceProposal(proposal) => {
                 info!(id = %proposal.proposal_id, "received governance proposal");
-                if let GovernanceAction::RotateValidators(rotation) = &proposal.proposal_type {
-                    self.apply_rotation_action(rotation)?;
+                match &proposal.proposal_type {
+                    GovernanceAction::RotateValidators(rotation) => {
+                        self.apply_rotation_action(rotation)?;
+                    }
+                    GovernanceAction::UpdateParameter(name, value) => {
+                        self.apply_runtime_parameter(name, value)?;
+                    }
+                    _ => {}
                 }
                 self.ledger.track_governance(proposal)?;
                 Ok(())
@@ -386,7 +393,7 @@ where
         let snapshot = self.validator_set.read();
         let quorum = quorum_threshold(
             self.active_validator_ids(&snapshot).len(),
-            snapshot.quorum_bps,
+            self.config.read().quorum_bps,
         );
         let votes_for_hash = state
             .prevotes
@@ -409,7 +416,7 @@ where
         let snapshot = self.validator_set.read();
         let quorum = quorum_threshold(
             self.active_validator_ids(&snapshot).len(),
-            snapshot.quorum_bps,
+            self.config.read().quorum_bps,
         );
         let proposal_hash = state
             .proposal_hash
@@ -536,19 +543,19 @@ where
 
     async fn maybe_roll_epoch(&self, height: u64, block: &Block) -> Result<()> {
         let snapshot = self.validator_set.read().clone();
-        if snapshot.epoch_state.epoch_length_blocks == 0
-            || height % snapshot.epoch_state.epoch_length_blocks != 0
-        {
+        let epoch_length_blocks = self.config.read().epoch_length_blocks;
+        if epoch_length_blocks == 0 || height % epoch_length_blocks != 0 {
             return Ok(());
         }
 
         let active_ids = self.active_validator_ids(&snapshot);
         let standby_ids = self.standby_validator_ids(&snapshot);
         let seed_material = format!(
-            "{}:{}:{}",
+            "{}:{}:{}:{}",
             hash_block_header(&block.header),
             snapshot.epoch_state.epoch + 1,
-            snapshot.validators.len()
+            snapshot.validators.len(),
+            snapshot.epoch_state.manifest_digest
         );
 
         if active_ids.is_empty() || standby_ids.is_empty() {
@@ -557,7 +564,7 @@ where
         }
 
         let mut failed_active = self.failed_active_validators(&active_ids);
-        failed_active.truncate(snapshot.epoch_state.promotion_limit);
+        failed_active.truncate(self.config.read().promotion_limit);
         if failed_active.is_empty() {
             self.advance_epoch_without_rotation(snapshot, seed_material)?;
             return Ok(());
@@ -637,6 +644,8 @@ where
         seed_material: String,
     ) -> Result<()> {
         snapshot.epoch_state.epoch += 1;
+        snapshot.epoch_state.epoch_length_blocks = self.config.read().epoch_length_blocks;
+        snapshot.epoch_state.promotion_limit = self.config.read().promotion_limit;
         snapshot.epoch_state.last_seed = seed_material;
         self.ledger.update_validator_set(snapshot.clone())?;
         *self.validator_set.write() = snapshot;
@@ -654,10 +663,51 @@ where
                     .get(*id)
                     .copied()
                     .unwrap_or_default()
-                    >= self.config.liveness_missed_prevote_threshold
+                    >= self.config.read().liveness_missed_prevote_threshold
             })
             .cloned()
             .collect()
+    }
+
+    fn apply_runtime_parameter(&self, name: &str, value: &serde_json::Value) -> Result<()> {
+        match name {
+            "epoch_length_blocks" => {
+                let parsed = value.as_u64().ok_or_else(|| {
+                    ProtocolError::GovernanceError(
+                        "epoch_length_blocks update requires an unsigned integer".into(),
+                    )
+                })?;
+                self.config.write().epoch_length_blocks = parsed;
+                let mut snapshot = self.validator_set.write();
+                snapshot.epoch_state.epoch_length_blocks = parsed;
+                self.ledger.update_validator_set(snapshot.clone())?;
+            }
+            "promotion_limit" => {
+                let parsed = value.as_u64().ok_or_else(|| {
+                    ProtocolError::GovernanceError(
+                        "promotion_limit update requires an unsigned integer".into(),
+                    )
+                })? as usize;
+                self.config.write().promotion_limit = parsed;
+                let mut snapshot = self.validator_set.write();
+                snapshot.epoch_state.promotion_limit = parsed;
+                self.ledger.update_validator_set(snapshot.clone())?;
+            }
+            "quorum_bps" => {
+                let parsed = value.as_u64().ok_or_else(|| {
+                    ProtocolError::GovernanceError(
+                        "quorum_bps update requires an unsigned integer".into(),
+                    )
+                })? as u32;
+                self.config.write().quorum_bps = parsed;
+                let mut snapshot = self.validator_set.write();
+                snapshot.quorum_bps = parsed;
+                self.ledger.update_validator_set(snapshot.clone())?;
+            }
+            _ => {}
+        }
+
+        Ok(())
     }
 
     fn apply_rotation_action(&self, rotation: &ValidatorRotation) -> Result<()> {
@@ -676,6 +726,8 @@ where
             }
         }
         snapshot.epoch_state.epoch = rotation.epoch;
+        snapshot.epoch_state.epoch_length_blocks = self.config.read().epoch_length_blocks;
+        snapshot.epoch_state.promotion_limit = self.config.read().promotion_limit;
         snapshot.epoch_state.last_seed = rotation.seed.clone();
         self.ledger.update_validator_set(snapshot.clone())?;
         Ok(())

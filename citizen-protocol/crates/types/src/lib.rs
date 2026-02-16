@@ -186,6 +186,7 @@ pub struct EpochState {
     pub epoch_length_blocks: u64,
     pub promotion_limit: usize,
     pub pending_replacements: Vec<PendingReplacement>,
+    pub manifest_digest: String,
     pub last_seed: String,
 }
 
