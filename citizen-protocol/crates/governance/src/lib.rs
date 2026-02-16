@@ -209,8 +209,8 @@ mod tests {
     use super::{GovernanceEngine, NamespaceDecision, NamespaceReadiness, NamespaceTestReport};
     use citizen_storage::MemoryStorage;
     use citizen_types::{
-        NamespaceDescriptor, NamespaceRule, NamespaceRuleset, ValidatorMetadata,
-        ValidatorSetSnapshot,
+        EpochState, NamespaceDescriptor, NamespaceRule, NamespaceRuleset, ValidatorMetadata,
+        ValidatorPerformance, ValidatorSetSnapshot, ValidatorStatus,
     };
     use std::collections::{BTreeMap, BTreeSet};
     use std::sync::Arc;
@@ -250,7 +250,11 @@ mod tests {
                 public_key: "pk-a".into(),
                 anchors: vec!["anchor-a".into()],
                 joined_at: chrono::Utc::now(),
-                suspended: false,
+                status: ValidatorStatus::Active,
+                performance: ValidatorPerformance {
+                    uptime_bps: 10_000,
+                    missed_prevotes: 0,
+                },
             },
         );
         validators.insert(
@@ -260,13 +264,26 @@ mod tests {
                 public_key: "pk-b".into(),
                 anchors: vec!["anchor-b".into()],
                 joined_at: chrono::Utc::now(),
-                suspended: false,
+                status: ValidatorStatus::Active,
+                performance: ValidatorPerformance {
+                    uptime_bps: 10_000,
+                    missed_prevotes: 0,
+                },
             },
         );
         ValidatorSetSnapshot {
             height: 10,
             validators,
             quorum_bps: 8_000,
+            epoch_state: EpochState {
+                epoch: 0,
+                epoch_length_blocks: 100,
+                promotion_limit: 10,
+                pending_replacements: Vec::new(),
+                scheduled_rotation: None,
+                manifest_digest: "manifest-digest".into(),
+                last_seed: "genesis".into(),
+            },
         }
     }
 
