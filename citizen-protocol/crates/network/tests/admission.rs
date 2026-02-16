@@ -1,7 +1,9 @@
 use blake3::Hasher;
 use chrono::Utc;
 use citizen_network::{AdmissionControl, HandshakeIdentity, PeerHandshake};
-use citizen_types::{ValidatorMetadata, ValidatorSetSnapshot};
+use citizen_types::{
+    EpochState, ValidatorMetadata, ValidatorPerformance, ValidatorSetSnapshot, ValidatorStatus,
+};
 use ed25519_dalek::{Signer, SigningKey};
 use serde::Serialize;
 use std::collections::{BTreeMap, HashMap};
@@ -43,7 +45,11 @@ fn build_snapshot(keys: &HashMap<String, SigningKey>) -> ValidatorSetSnapshot {
                 public_key: hex::encode(signing_key.verifying_key().to_bytes()),
                 anchors: vec!["test".into()],
                 joined_at: Utc::now(),
-                suspended: false,
+                status: ValidatorStatus::Active,
+                performance: ValidatorPerformance {
+                    uptime_bps: 10_000,
+                    missed_prevotes: 0,
+                },
             },
         );
     }
@@ -52,6 +58,13 @@ fn build_snapshot(keys: &HashMap<String, SigningKey>) -> ValidatorSetSnapshot {
         height: 1,
         validators,
         quorum_bps: 8000,
+        epoch_state: EpochState {
+            epoch: 0,
+            epoch_length_blocks: 100,
+            promotion_limit: 10,
+            pending_replacements: Vec::new(),
+            last_seed: "genesis".into(),
+        },
     }
 }
 
