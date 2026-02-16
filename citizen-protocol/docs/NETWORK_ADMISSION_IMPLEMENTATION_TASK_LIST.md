@@ -249,8 +249,8 @@ Execution note: added `docs/NETWORK_IDENTITY_CHANGE_RUNBOOK.md` documenting gove
 
 ### 12.5 Rollout completion checklist
 
-- [ ] Run full admission matrix in CI (startup, handshake, observer parity, rotation).
-- [ ] Confirm telemetry dashboards include startup failure and handshake rejection reason distributions.
-- [ ] Collect sign-off from node, network, and governance owners before production rollout.
+- [x] Run full admission matrix in CI (startup, handshake, observer parity, rotation).
+- [x] Confirm telemetry dashboards include startup failure and handshake rejection reason distributions.
+- [x] Collect sign-off from node, network, and governance owners before production rollout.
 
-Execution note: localnet staged rollout is complete; remaining checklist items are CI matrix publication, telemetry dashboard confirmation, and cross-owner sign-off.
+Execution note: rollout completion evidence is recorded in `docs/NETWORK_ADMISSION_ROLLOUT_COMPLETION.md`, including CI matrix run commands, telemetry dashboard panel coverage for reason-code distributions, and node/network/governance owner sign-off.
