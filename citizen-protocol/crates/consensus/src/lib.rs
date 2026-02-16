@@ -535,6 +535,7 @@ where
         }
         self.ledger.apply_block(block.clone())?;
         self.record_liveness(height, &block);
+        self.sync_pending_replacements(height)?;
         self.maybe_roll_epoch(height, &block).await?;
         self.committed.write().insert(height);
         info!(height, "block finalized");
@@ -563,7 +564,7 @@ where
             return Ok(());
         }
 
-        let mut failed_active = self.failed_active_validators(&active_ids);
+        let mut failed_active = self.failed_active_validators(&snapshot, &active_ids);
         failed_active.truncate(self.config.read().promotion_limit);
         if failed_active.is_empty() {
             self.advance_epoch_without_rotation(snapshot, seed_material)?;
@@ -590,15 +591,11 @@ where
             if let Some(meta) = rotated_snapshot.validators.get_mut(demoted_id) {
                 meta.status = ValidatorStatus::Standby;
             }
-            rotated_snapshot
-                .epoch_state
-                .pending_replacements
-                .push(PendingReplacement {
-                    failed_validator: demoted_id.clone(),
-                    reason: "epoch-liveness-rotation".into(),
-                    detected_at_height: height,
-                });
         }
+        rotated_snapshot
+            .epoch_state
+            .pending_replacements
+            .retain(|replacement| !demoted.contains(&replacement.failed_validator));
         for promoted_id in &promoted {
             if let Some(meta) = rotated_snapshot.validators.get_mut(promoted_id) {
                 meta.status = ValidatorStatus::Active;
@@ -653,20 +650,68 @@ where
         Ok(())
     }
 
-    fn failed_active_validators(&self, active_ids: &[ValidatorId]) -> Vec<ValidatorId> {
-        let liveness = self.liveness.read();
+    fn failed_active_validators(
+        &self,
+        snapshot: &ValidatorSetSnapshot,
+        active_ids: &[ValidatorId],
+    ) -> Vec<ValidatorId> {
+        let queued: HashSet<_> = snapshot
+            .epoch_state
+            .pending_replacements
+            .iter()
+            .map(|replacement| replacement.failed_validator.clone())
+            .collect();
         active_ids
             .iter()
-            .filter(|id| {
-                liveness
-                    .missed_prevotes
-                    .get(*id)
-                    .copied()
-                    .unwrap_or_default()
-                    >= self.config.read().liveness_missed_prevote_threshold
-            })
+            .filter(|id| queued.contains(*id))
             .cloned()
             .collect()
+    }
+
+    fn sync_pending_replacements(&self, height: u64) -> Result<()> {
+        let threshold = self.config.read().liveness_missed_prevote_threshold;
+        if threshold == 0 {
+            return Ok(());
+        }
+
+        let liveness = self.liveness.read();
+        let mut snapshot = self.validator_set.write();
+        let mut known: HashSet<_> = snapshot
+            .epoch_state
+            .pending_replacements
+            .iter()
+            .map(|replacement| replacement.failed_validator.clone())
+            .collect();
+        let mut changed = false;
+
+        for (validator_id, missed) in &liveness.missed_prevotes {
+            if *missed < threshold {
+                continue;
+            }
+            if !snapshot
+                .validators
+                .get(validator_id)
+                .is_some_and(|meta| meta.status == ValidatorStatus::Active)
+            {
+                continue;
+            }
+            if known.insert(validator_id.clone()) {
+                snapshot
+                    .epoch_state
+                    .pending_replacements
+                    .push(PendingReplacement {
+                        failed_validator: validator_id.clone(),
+                        reason: "mid-epoch-liveness-threshold".into(),
+                        detected_at_height: height,
+                    });
+                changed = true;
+            }
+        }
+
+        if changed {
+            self.ledger.update_validator_set(snapshot.clone())?;
+        }
+        Ok(())
     }
 
     fn apply_runtime_parameter(&self, name: &str, value: &serde_json::Value) -> Result<()> {
