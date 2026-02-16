@@ -8,8 +8,8 @@ use citizen_network::{BlockProposal, ConsensusMessage, Network};
 use citizen_storage::LedgerStorage;
 use citizen_types::{
     Block, BlockHeader, CommitProof, ConsensusConfig, GovernanceAction, GovernanceProposal,
-    LedgerEntry, PendingReplacement, ProtocolError, ValidatorId, ValidatorRotation,
-    ValidatorSetSnapshot, ValidatorStatus,
+    LedgerEntry, PendingReplacement, ProtocolError, ScheduledRotation, ValidatorId,
+    ValidatorRotation, ValidatorSetSnapshot, ValidatorStatus,
 };
 use ed25519_dalek::Signature;
 use parking_lot::RwLock;
@@ -247,9 +247,7 @@ where
             ConsensusMessage::GovernanceProposal(proposal) => {
                 info!(id = %proposal.proposal_id, "received governance proposal");
                 match &proposal.proposal_type {
-                    GovernanceAction::RotateValidators(rotation) => {
-                        self.apply_rotation_action(rotation)?;
-                    }
+                    GovernanceAction::RotateValidators(_rotation) => {}
                     GovernanceAction::UpdateParameter(name, value) => {
                         self.apply_runtime_parameter(name, value)?;
                     }
@@ -537,6 +535,7 @@ where
         self.record_liveness(height, &block);
         self.sync_pending_replacements(height)?;
         self.maybe_roll_epoch(height, &block).await?;
+        self.apply_scheduled_rotation(height)?;
         self.committed.write().insert(height);
         info!(height, "block finalized");
         Ok(())
@@ -617,6 +616,7 @@ where
             author: block.header.proposer.clone(),
             payload: serde_json::json!({
                 "height": height,
+                "apply_at_height": height + 1,
                 "demoted": demoted,
                 "promoted": promoted,
             }),
@@ -624,7 +624,16 @@ where
             voting_period_secs: 0,
         };
 
-        self.apply_rotation_action(&rotation)?;
+        let mut scheduled_snapshot = snapshot.clone();
+        scheduled_snapshot.epoch_state.scheduled_rotation = Some(ScheduledRotation {
+            decided_at_height: height,
+            apply_at_height: height + 1,
+            rotation,
+        });
+        self.ledger
+            .update_validator_set(scheduled_snapshot.clone())?;
+        *self.validator_set.write() = scheduled_snapshot;
+
         self.ledger.track_governance(proposal.clone())?;
         if block.header.proposer == self.validator_id {
             self.network
@@ -644,6 +653,7 @@ where
         snapshot.epoch_state.epoch_length_blocks = self.config.read().epoch_length_blocks;
         snapshot.epoch_state.promotion_limit = self.config.read().promotion_limit;
         snapshot.epoch_state.last_seed = seed_material;
+        snapshot.epoch_state.scheduled_rotation = None;
         self.ledger.update_validator_set(snapshot.clone())?;
         *self.validator_set.write() = snapshot;
         self.liveness.write().missed_prevotes.clear();
@@ -714,6 +724,22 @@ where
         Ok(())
     }
 
+    fn apply_scheduled_rotation(&self, height: u64) -> Result<()> {
+        let scheduled = self
+            .validator_set
+            .read()
+            .epoch_state
+            .scheduled_rotation
+            .clone();
+        let Some(scheduled) = scheduled else {
+            return Ok(());
+        };
+        if height < scheduled.apply_at_height {
+            return Ok(());
+        }
+        self.apply_rotation_action(&scheduled.rotation)
+    }
+
     fn apply_runtime_parameter(&self, name: &str, value: &serde_json::Value) -> Result<()> {
         match name {
             "epoch_length_blocks" => {
@@ -774,6 +800,7 @@ where
         snapshot.epoch_state.epoch_length_blocks = self.config.read().epoch_length_blocks;
         snapshot.epoch_state.promotion_limit = self.config.read().promotion_limit;
         snapshot.epoch_state.last_seed = rotation.seed.clone();
+        snapshot.epoch_state.scheduled_rotation = None;
         self.ledger.update_validator_set(snapshot.clone())?;
         Ok(())
     }
