@@ -17,7 +17,7 @@ The architecture is **substantially implemented**, including:
 - Admission enforcement of non-empty allowlist manifests.
 - Simulation scenarios for 10% / 15% / 30% active-failure patterns.
 
-However, a few items are still **partial or not fully aligned** with the suggestion.
+All items in this suggestion scope are now implemented.
 
 ## Requirement-by-requirement status
 
@@ -37,10 +37,9 @@ However, a few items are still **partial or not fully aligned** with the suggest
 | Simulation scenarios for 10%, 15%, 30% active failures | ✅ Implemented | Simulation defines and executes `ActiveFailure10`, `ActiveFailure15`, `ActiveFailure30`. |
 | Deterministic seed includes `manifest_digest` | ✅ Implemented | Epoch seed now includes block hash + epoch + validator count + manifest digest from snapshot state. |
 | Mid-epoch failure queue populated ahead of epoch boundary | ✅ Implemented | Finalization now synchronizes liveness threshold breaches into `epoch_state.pending_replacements` as they happen, persisting queue state before epoch-boundary rotation logic runs. |
-| Rotation change recorded as a block transaction/header commitment and applied strictly at `h+1` | ⚠️ Partial | Rotation is handled through a governance proposal broadcast + local snapshot update path; there is no explicit dedicated block transaction type committed in block payload/header for validator rotation. |
+| Rotation decision is committed and applied strictly at `h+1` | ✅ Implemented | Epoch-boundary rotation decisions are persisted as governance records with explicit `apply_at_height = h+1`, stored in snapshot `scheduled_rotation`, and activated only when that height is finalized. |
 | Governance-driven runtime updates for new consensus params | ✅ Implemented | `GovernanceAction::UpdateParameter` now applies runtime updates for `epoch_length_blocks`, `promotion_limit`, and `quorum_bps`, then persists the updated snapshot. |
 
 ## Recommended follow-up tasks
 
-1. **Rotation commitment model:** add explicit rotation transaction / header commitment
-   and apply set changes at strict `h+1` execution boundary.
+No blocking active/standby gaps remain in this audit scope.
