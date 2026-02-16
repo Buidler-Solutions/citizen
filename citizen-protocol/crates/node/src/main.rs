@@ -19,8 +19,8 @@ use citizen_network::{
 };
 use citizen_storage::RocksDbStorage;
 use citizen_types::{
-    ConsensusConfig, NamespaceRuleset, ProtocolError, ValidatorId, ValidatorMetadata,
-    ValidatorSetSnapshot,
+    ConsensusConfig, EpochState, NamespaceRuleset, ProtocolError, ValidatorId, ValidatorMetadata,
+    ValidatorPerformance, ValidatorSetSnapshot, ValidatorStatus,
 };
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
@@ -116,6 +116,8 @@ async fn main() -> anyhow::Result<()> {
                 block_time_millis: config.block_time_millis,
                 max_entries_per_block: 1024,
                 quorum_bps: config.quorum_bps,
+                epoch_length_blocks: config.epoch_length_blocks,
+                promotion_limit: config.promotion_limit,
             },
             network,
             ledger,
@@ -198,6 +200,12 @@ struct NodeConfig {
     quorum_bps: u32,
     #[serde(default = "default_block_time")]
     block_time_millis: u64,
+    #[serde(default = "default_epoch_length")]
+    epoch_length_blocks: u64,
+    #[serde(default = "default_promotion_limit")]
+    promotion_limit: usize,
+    #[serde(default)]
+    standby_only: bool,
     #[serde(default)]
     signing_key_hex: Option<String>,
     #[serde(default = "default_api_port")]
@@ -326,7 +334,11 @@ impl NodeConfig {
                     public_key: config.public_key.clone(),
                     anchors: config.anchors.clone(),
                     joined_at: Utc::now(),
-                    suspended: false,
+                    status: ValidatorStatus::Active,
+                    performance: ValidatorPerformance {
+                        uptime_bps: 10_000,
+                        missed_prevotes: 0,
+                    },
                 },
             );
         }
@@ -337,13 +349,32 @@ impl NodeConfig {
                 public_key: self_public_key.to_string(),
                 anchors: vec!["self-configured".into()],
                 joined_at: Utc::now(),
-                suspended: false,
+                status: ValidatorStatus::Active,
+                performance: ValidatorPerformance {
+                    uptime_bps: 10_000,
+                    missed_prevotes: 0,
+                },
             },
         );
+        let active_size = validators.len().div_ceil(2);
+        for (index, metadata) in validators.values_mut().enumerate() {
+            metadata.status = if index < active_size {
+                ValidatorStatus::Active
+            } else {
+                ValidatorStatus::Standby
+            };
+        }
         ValidatorSetSnapshot {
             height: 0,
             validators,
             quorum_bps: self.quorum_bps,
+            epoch_state: EpochState {
+                epoch: 0,
+                epoch_length_blocks: self.epoch_length_blocks,
+                promotion_limit: self.promotion_limit,
+                pending_replacements: Vec::new(),
+                last_seed: "genesis".into(),
+            },
         }
     }
 
@@ -372,10 +403,12 @@ impl NodeConfig {
             );
         }
 
+        let active_size = admission_context.validator_allowlist.len().div_ceil(2);
         let validators = admission_context
             .validator_allowlist
             .iter()
-            .map(|(validator_id, public_key)| {
+            .enumerate()
+            .map(|(index, (validator_id, public_key))| {
                 (
                     validator_id.clone(),
                     ValidatorMetadata {
@@ -383,7 +416,15 @@ impl NodeConfig {
                         public_key: public_key.clone(),
                         anchors: vec!["manifest-allowlist".to_string()],
                         joined_at: Utc::now(),
-                        suspended: false,
+                        status: if index < active_size {
+                            ValidatorStatus::Active
+                        } else {
+                            ValidatorStatus::Standby
+                        },
+                        performance: ValidatorPerformance {
+                            uptime_bps: 10_000,
+                            missed_prevotes: 0,
+                        },
                     },
                 )
             })
@@ -393,6 +434,13 @@ impl NodeConfig {
             height: 0,
             validators,
             quorum_bps: self.quorum_bps,
+            epoch_state: EpochState {
+                epoch: 0,
+                epoch_length_blocks: self.epoch_length_blocks,
+                promotion_limit: self.promotion_limit,
+                pending_replacements: Vec::new(),
+                last_seed: admission_context.manifest_digest.clone(),
+            },
         })
     }
 }
@@ -404,6 +452,9 @@ impl Default for NodeConfig {
             validator_id: "validator.local".into(),
             quorum_bps: default_quorum(),
             block_time_millis: default_block_time(),
+            epoch_length_blocks: default_epoch_length(),
+            promotion_limit: default_promotion_limit(),
+            standby_only: false,
             signing_key_hex: None,
             api_port: default_api_port(),
             api_auth_required: false,
@@ -438,6 +489,14 @@ fn default_quorum() -> u32 {
 
 fn default_block_time() -> u64 {
     1_000
+}
+
+fn default_epoch_length() -> u64 {
+    100
+}
+
+fn default_promotion_limit() -> usize {
+    10
 }
 
 fn default_api_write_rpm() -> usize {

@@ -72,6 +72,9 @@ async fn run_release_matrix(options: &CliOptions) {
     let scenarios = [
         SimulationScenario::Normal,
         SimulationScenario::PartialFailure,
+        SimulationScenario::ActiveFailure10,
+        SimulationScenario::ActiveFailure15,
+        SimulationScenario::ActiveFailure30,
         SimulationScenario::QuorumLoss,
         SimulationScenario::MaliciousLeader,
         SimulationScenario::ByzantineSubset,
@@ -162,6 +165,9 @@ fn scenario_label(scenario: &SimulationScenario) -> &'static str {
     match scenario {
         SimulationScenario::Normal => "normal",
         SimulationScenario::PartialFailure => "partial_failure",
+        SimulationScenario::ActiveFailure10 => "active_failure_10",
+        SimulationScenario::ActiveFailure15 => "active_failure_15",
+        SimulationScenario::ActiveFailure30 => "active_failure_30",
         SimulationScenario::QuorumLoss => "quorum_loss",
         SimulationScenario::MaliciousLeader => "malicious_leader",
         SimulationScenario::ByzantineSubset => "byzantine_subset",
@@ -253,12 +259,15 @@ fn parse_scenario_arg(args: &[String], idx: usize) -> SimulationScenario {
     match required_arg(args, idx, "--scenario") {
         "normal" => SimulationScenario::Normal,
         "partial_failure" => SimulationScenario::PartialFailure,
+        "active_failure_10" => SimulationScenario::ActiveFailure10,
+        "active_failure_15" => SimulationScenario::ActiveFailure15,
+        "active_failure_30" => SimulationScenario::ActiveFailure30,
         "quorum_loss" => SimulationScenario::QuorumLoss,
         "malicious_leader" => SimulationScenario::MaliciousLeader,
         "byzantine_subset" => SimulationScenario::ByzantineSubset,
         "network_partition" => SimulationScenario::NetworkPartition,
         value => panic!(
-            "unsupported scenario '{value}'. Expected one of: normal, partial_failure, quorum_loss, malicious_leader, byzantine_subset, network_partition"
+            "unsupported scenario '{value}'. Expected one of: normal, partial_failure, active_failure_10, active_failure_15, active_failure_30, quorum_loss, malicious_leader, byzantine_subset, network_partition"
         ),
     }
 }
@@ -286,7 +295,7 @@ fn print_help_and_exit() -> ! {
         "citizen-simulation run options:\n\
          --matrix                         Run mandatory release gate matrix (50/75/100 x all scenarios)\n\
          --validators <n>                 Validator count for single simulation run (default: 50)\n\
-         --scenario <name>                Scenario for single run: normal | partial_failure | quorum_loss | malicious_leader | byzantine_subset | network_partition\n\
+         --scenario <name>                Scenario for single run: normal | partial_failure | active_failure_10 | active_failure_15 | active_failure_30 | quorum_loss | malicious_leader | byzantine_subset | network_partition\n\
          --duration-secs <n>              Simulation duration in seconds (default: 10)\n\
          --out-dir <path>                 Output directory for release matrix report (default: reports/releases)\n\
          -h, --help                       Show this help"
