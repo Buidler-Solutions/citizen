@@ -26,7 +26,7 @@ use serde::{Deserialize, Serialize};
 use std::time::Duration;
 use tokio::signal;
 
-use admission::{startup::run_preflight, AdmissionContext, AdmissionError, AdmissionSettings};
+use admission::{startup::run_preflight, AdmissionContext, AdmissionSettings};
 use tracing_subscriber::EnvFilter;
 
 #[tokio::main]
@@ -589,6 +589,7 @@ impl Network for NodeNetwork {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::admission::AdmissionError;
     use citizen_storage::MemoryStorage;
 
     #[test]
