@@ -3,6 +3,7 @@ pub mod runtime_identity;
 pub mod startup;
 
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 use std::path::PathBuf;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -20,6 +21,7 @@ pub struct AdmissionContext {
     pub genesis_hash: String,
     pub manifest_digest: String,
     pub manifest_version: Option<u64>,
+    pub validator_allowlist: BTreeMap<String, String>,
 }
 
 #[derive(thiserror::Error, Debug)]
@@ -37,10 +39,22 @@ pub enum AdmissionError {
     ManifestCanonicalization(serde_json::Error),
     #[error("invalid manifest signature: {0}")]
     InvalidManifestSignature(String),
+    #[error("manifest transition key signature required during active transition window")]
+    ManifestTransitionSignatureRequired,
+    #[error("manifest signed only by transition keys after transition window closed")]
+    ManifestOldSignatureAfterCutoff,
     #[error("manifest key is not trusted: {0}")]
     UntrustedManifestKey(String),
     #[error("unsupported manifest signature algorithm: {0}")]
     UnsupportedManifestAlgorithm(String),
+    #[error("manifest issued_at is too far in the future: issued_at={issued_at}, now={now}")]
+    ManifestIssuedInFuture { issued_at: i64, now: i64 },
+    #[error("manifest is expired by policy: issued_at={issued_at}, now={now}, max_age_secs={max_age_secs}")]
+    ManifestExpired {
+        issued_at: i64,
+        now: i64,
+        max_age_secs: i64,
+    },
     #[error("manifest network mismatch: manifest={manifest}, configured={configured}")]
     ManifestNetworkMismatch {
         manifest: String,
@@ -48,6 +62,10 @@ pub enum AdmissionError {
     },
     #[error("manifest genesis mismatch: manifest={manifest}, expected={expected}")]
     ManifestGenesisMismatch { manifest: String, expected: String },
+    #[error("manifest validator allowlist contains duplicate validator_id: {0}")]
+    ManifestDuplicateValidator(String),
+    #[error("manifest validator allowlist is required when manifest_enforce=true")]
+    ManifestAllowlistRequired,
     #[error("runtime network mismatch: runtime={runtime}, configured={configured}")]
     RuntimeNetworkMismatch { runtime: String, configured: String },
     #[error("psk verification failed: {0}")]
