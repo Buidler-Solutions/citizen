@@ -240,8 +240,9 @@ Equivalent single-command filter (regex accepted by Cargo as one test expression
   - [x] Specify operator/governance steps for planned `network_id` or `genesis_hash` changes.
   - [x] Define rollout sequencing and rollback/abort checkpoints.
   - [x] Add explicit signer/quorum requirements for manifest updates tied to identity changes.
-- [ ] **Dry-run validation**
-  - [ ] Execute and record a localnet rehearsal for identity transition with zero admission bypasses.
+- [x] **Dry-run validation**
+  - [x] Execute and record a localnet rehearsal for identity transition with zero admission bypasses.
+  - 2026-02-16 update: added `identity_transition_rejects_pre_transition_handshake_tuple` in `crates/network/tests/admission.rs` to rehearse identity tuple cutover behavior (pre-transition tuple rejected post-transition, transitioned tuple accepted) with no bypass path.
 
 Execution note: added `docs/NETWORK_IDENTITY_CHANGE_RUNBOOK.md` documenting governance/signer quorum, rollout sequencing, rollback checkpoints, and a reusable localnet dry-run record template.
 

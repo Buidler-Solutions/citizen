@@ -605,3 +605,65 @@ async fn admission_rejects_invalid_handshake_signature() {
         Some(&1)
     );
 }
+
+#[tokio::test]
+async fn identity_transition_rejects_pre_transition_handshake_tuple() {
+    let keys = validator_signing_keys();
+    let snapshot = build_snapshot(&keys);
+    let signer = keys.get("validator.a").expect("validator signing key");
+
+    let old_identity = HandshakeIdentity {
+        network_id: "citizen-localnet-v1".into(),
+        genesis_hash: "genesis-v1".into(),
+        manifest_digest: "manifest-v1".into(),
+        startup_secret: None,
+        max_clock_skew: Duration::from_secs(30),
+    };
+    let transitioned_identity = HandshakeIdentity {
+        network_id: "citizen-localnet-v2".into(),
+        genesis_hash: "genesis-v2".into(),
+        manifest_digest: "manifest-v2".into(),
+        startup_secret: None,
+        max_clock_skew: Duration::from_secs(30),
+    };
+
+    let admission_before_transition = AdmissionControl::from_snapshot(
+        snapshot.clone(),
+        Duration::from_secs(1),
+        old_identity.clone(),
+    );
+    let admission_after_transition = AdmissionControl::from_snapshot(
+        snapshot,
+        Duration::from_secs(1),
+        transitioned_identity.clone(),
+    );
+
+    let old_handshake = handshake_from_identity("validator.a", signer, &old_identity, 6_001);
+    assert!(admission_before_transition.allows(&old_handshake).await);
+
+    let post_transition_reason = admission_after_transition
+        .check_handshake(&old_handshake)
+        .await
+        .expect_err("post-transition peers must reject pre-transition identity tuple");
+    assert_eq!(
+        post_transition_reason,
+        citizen_network::AdmissionRejectionReason::NetworkIdentityMismatch
+    );
+
+    let transitioned_handshake =
+        handshake_from_identity("validator.a", signer, &transitioned_identity, 6_002);
+    assert!(
+        admission_after_transition
+            .allows(&transitioned_handshake)
+            .await
+    );
+
+    let metrics = admission_after_transition.metrics_snapshot();
+    assert_eq!(metrics.handshake_reject_total, 1);
+    assert_eq!(
+        metrics
+            .handshake_reject_total_by_reason
+            .get("network_identity_mismatch"),
+        Some(&1)
+    );
+}
