@@ -1,7 +1,9 @@
 use blake3::Hasher;
 use chrono::Utc;
 use citizen_network::{AdmissionControl, HandshakeIdentity, PeerHandshake};
-use citizen_types::{ValidatorMetadata, ValidatorSetSnapshot};
+use citizen_types::{
+    EpochState, ValidatorMetadata, ValidatorPerformance, ValidatorSetSnapshot, ValidatorStatus,
+};
 use ed25519_dalek::{Signer, SigningKey};
 use serde::Serialize;
 use std::collections::{BTreeMap, HashMap};
@@ -43,7 +45,11 @@ fn build_snapshot(keys: &HashMap<String, SigningKey>) -> ValidatorSetSnapshot {
                 public_key: hex::encode(signing_key.verifying_key().to_bytes()),
                 anchors: vec!["test".into()],
                 joined_at: Utc::now(),
-                suspended: false,
+                status: ValidatorStatus::Active,
+                performance: ValidatorPerformance {
+                    uptime_bps: 10_000,
+                    missed_prevotes: 0,
+                },
             },
         );
     }
@@ -52,6 +58,15 @@ fn build_snapshot(keys: &HashMap<String, SigningKey>) -> ValidatorSetSnapshot {
         height: 1,
         validators,
         quorum_bps: 8000,
+        epoch_state: EpochState {
+            epoch: 0,
+            epoch_length_blocks: 100,
+            promotion_limit: 10,
+            pending_replacements: Vec::new(),
+            scheduled_rotation: None,
+            manifest_digest: "manifest-digest".into(),
+            last_seed: "genesis".into(),
+        },
     }
 }
 
@@ -177,6 +192,45 @@ async fn admission_rejects_unknown_peer() {
     );
 
     assert!(!admission.allows(&handshake).await);
+}
+
+#[tokio::test]
+async fn admission_rejects_allowlisted_peer_with_public_key_mismatch() {
+    let keys = validator_signing_keys();
+    let admission = AdmissionControl::from_snapshot(
+        build_snapshot(&keys),
+        Duration::from_secs(1),
+        test_identity(None),
+    );
+    let key = keys.get("validator.a").unwrap();
+    let wrong_public_key = hex::encode(
+        SigningKey::from_bytes(&[7u8; 32])
+            .verifying_key()
+            .to_bytes(),
+    );
+    let handshake = handshake_with_overrides(
+        "validator.a",
+        &wrong_public_key,
+        key,
+        "citizen-localnet",
+        "genesis-hash",
+        "manifest-digest",
+        8,
+        current_timestamp_ms(),
+        None,
+    );
+
+    assert!(!admission.allows(&handshake).await);
+
+    let metrics = admission.metrics_snapshot();
+    assert_eq!(metrics.handshake_reject_total, 1);
+    assert_eq!(metrics.psk_challenge_fail_total, 0);
+    assert_eq!(
+        metrics
+            .handshake_reject_total_by_reason
+            .get("public_key_mismatch"),
+        Some(&1)
+    );
 }
 
 #[tokio::test]

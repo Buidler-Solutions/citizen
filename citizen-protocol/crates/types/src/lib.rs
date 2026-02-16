@@ -66,7 +66,21 @@ pub struct ValidatorMetadata {
     pub public_key: String,
     pub anchors: Vec<String>,
     pub joined_at: DateTime<Utc>,
-    pub suspended: bool,
+    pub status: ValidatorStatus,
+    pub performance: ValidatorPerformance,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub enum ValidatorStatus {
+    Active,
+    Standby,
+    Suspended,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ValidatorPerformance {
+    pub uptime_bps: u16,
+    pub missed_prevotes: u64,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
@@ -119,6 +133,15 @@ pub enum GovernanceAction {
     UpdateNamespace(NamespaceDescriptor),
     Emergency(EmergencyAction),
     UpdateParameter(String, Value),
+    RotateValidators(ValidatorRotation),
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ValidatorRotation {
+    pub epoch: u64,
+    pub seed: String,
+    pub active: Vec<ValidatorId>,
+    pub standby: Vec<ValidatorId>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
@@ -154,6 +177,32 @@ pub struct ValidatorSetSnapshot {
     pub height: BlockHeight,
     pub validators: BTreeMap<ValidatorId, ValidatorMetadata>,
     pub quorum_bps: u32,
+    pub epoch_state: EpochState,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct EpochState {
+    pub epoch: u64,
+    pub epoch_length_blocks: u64,
+    pub promotion_limit: usize,
+    pub pending_replacements: Vec<PendingReplacement>,
+    pub scheduled_rotation: Option<ScheduledRotation>,
+    pub manifest_digest: String,
+    pub last_seed: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ScheduledRotation {
+    pub decided_at_height: BlockHeight,
+    pub apply_at_height: BlockHeight,
+    pub rotation: ValidatorRotation,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct PendingReplacement {
+    pub failed_validator: ValidatorId,
+    pub reason: String,
+    pub detected_at_height: BlockHeight,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
@@ -161,6 +210,10 @@ pub struct ConsensusConfig {
     pub block_time_millis: u64,
     pub max_entries_per_block: usize,
     pub quorum_bps: u32,
+    pub epoch_length_blocks: u64,
+    pub promotion_limit: usize,
+    pub heartbeat_interval_millis: u64,
+    pub liveness_missed_prevote_threshold: u64,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
@@ -279,6 +332,9 @@ pub struct SimulationConfig {
 pub enum SimulationScenario {
     Normal,
     PartialFailure,
+    ActiveFailure10,
+    ActiveFailure15,
+    ActiveFailure30,
     QuorumLoss,
     MaliciousLeader,
     ByzantineSubset,

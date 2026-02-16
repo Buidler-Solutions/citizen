@@ -9,8 +9,8 @@ use citizen_ledger::Ledger;
 use citizen_network::{MessageCounters, MockNetwork, NetworkLatency};
 use citizen_storage::{LedgerStorage, MemoryStorage};
 use citizen_types::{
-    ConsensusConfig, NetworkModel, ProtocolError, SimulationConfig, SimulationScenario,
-    ValidatorMetadata, ValidatorSetSnapshot,
+    ConsensusConfig, EpochState, NetworkModel, ProtocolError, SimulationConfig, SimulationScenario,
+    ValidatorMetadata, ValidatorPerformance, ValidatorSetSnapshot, ValidatorStatus,
 };
 use rand::seq::SliceRandom;
 use tokio::task::JoinHandle;
@@ -55,6 +55,10 @@ impl SimulationHarness {
             block_time_millis: 1_000,
             max_entries_per_block: 512,
             quorum_bps: 8_000,
+            epoch_length_blocks: 100,
+            promotion_limit: 12,
+            heartbeat_interval_millis: 500,
+            liveness_missed_prevote_threshold: 3,
         };
         let network = Arc::new(MockNetwork::new(latency_from_model(&config.network)));
         let (validators, snapshot) = build_validator_set(config.validators);
@@ -119,6 +123,15 @@ impl SimulationHarness {
                     handle.abort();
                 }
                 sleep(duration / 2).await;
+            }
+            SimulationScenario::ActiveFailure10 => {
+                simulate_active_failures(&mut handles, 0.10, duration).await;
+            }
+            SimulationScenario::ActiveFailure15 => {
+                simulate_active_failures(&mut handles, 0.15, duration).await;
+            }
+            SimulationScenario::ActiveFailure30 => {
+                simulate_active_failures(&mut handles, 0.30, duration).await;
             }
             SimulationScenario::QuorumLoss => {
                 info!(
@@ -225,7 +238,15 @@ fn build_validator_set(count: usize) -> (Vec<(String, ValidatorKeypair)>, Valida
                 public_key: verifying_key_to_string(keypair.verifying_key()),
                 anchors: vec![format!("simulation-node-{idx}")],
                 joined_at: Utc::now(),
-                suspended: false,
+                status: if idx < count.div_ceil(2) {
+                    ValidatorStatus::Active
+                } else {
+                    ValidatorStatus::Standby
+                },
+                performance: ValidatorPerformance {
+                    uptime_bps: 10_000,
+                    missed_prevotes: 0,
+                },
             },
         );
         validators.push((id, keypair));
@@ -234,12 +255,44 @@ fn build_validator_set(count: usize) -> (Vec<(String, ValidatorKeypair)>, Valida
         height: 0,
         validators: metadata,
         quorum_bps: 8_000,
+        epoch_state: EpochState {
+            epoch: 0,
+            epoch_length_blocks: 100,
+            promotion_limit: count.div_ceil(8),
+            pending_replacements: Vec::new(),
+            scheduled_rotation: None,
+            manifest_digest: "simulation-manifest".into(),
+            last_seed: "genesis".into(),
+        },
     };
     (validators, snapshot)
 }
 
 fn quorum_count(total: usize, quorum_bps: u32) -> usize {
     ((total * quorum_bps as usize) + 9_999) / 10_000
+}
+
+async fn simulate_active_failures(
+    handles: &mut [(String, JoinHandle<()>)],
+    ratio: f32,
+    duration: Duration,
+) {
+    let failure_count = std::cmp::max(1, (handles.len() as f32 * ratio).ceil() as usize);
+    info!(
+        "scenario" = "active_failure",
+        failure_count,
+        ratio,
+        "note" = "dropping validators mid-epoch"
+    );
+    sleep(duration / 2).await;
+    let mut rng = rand::thread_rng();
+    let mut victims: Vec<_> = handles.iter_mut().collect();
+    victims.shuffle(&mut rng);
+    for (id, handle) in victims.into_iter().take(failure_count) {
+        warn!("validator" = %id, "action" = "abort", "reason" = "simulated active failure");
+        handle.abort();
+    }
+    sleep(duration / 2).await;
 }
 
 fn percentile_summary(samples: Vec<u64>) -> LatencySummary {

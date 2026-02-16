@@ -7,8 +7,9 @@ use citizen_ledger::Ledger;
 use citizen_network::{BlockProposal, ConsensusMessage, Network};
 use citizen_storage::LedgerStorage;
 use citizen_types::{
-    Block, BlockHeader, CommitProof, ConsensusConfig, GovernanceAction, LedgerEntry, ProtocolError,
-    ValidatorId, ValidatorSetSnapshot,
+    Block, BlockHeader, CommitProof, ConsensusConfig, GovernanceAction, GovernanceProposal,
+    LedgerEntry, PendingReplacement, ProtocolError, ScheduledRotation, ValidatorId,
+    ValidatorRotation, ValidatorSetSnapshot, ValidatorStatus,
 };
 use ed25519_dalek::Signature;
 use parking_lot::RwLock;
@@ -23,6 +24,12 @@ struct PendingRound {
     proposal: Option<BlockProposal>,
     proposal_hash: Option<String>,
     prevotes: BTreeMap<ValidatorId, SignedPreVote>,
+}
+
+#[derive(Default)]
+struct LivenessMonitor {
+    missed_prevotes: BTreeMap<ValidatorId, u64>,
+    last_heartbeat_height: BTreeMap<ValidatorId, u64>,
 }
 
 #[derive(Clone)]
@@ -47,13 +54,14 @@ where
     S: LedgerStorage + 'static,
 {
     pub validator_id: ValidatorId,
-    config: ConsensusConfig,
+    config: RwLock<ConsensusConfig>,
     network: Arc<N>,
     ledger: Arc<Ledger<S>>,
     validator_set: RwLock<ValidatorSetSnapshot>,
     signer: ValidatorKeypair,
     rounds: RwLock<HashMap<u64, PendingRound>>,
     committed: RwLock<HashSet<u64>>,
+    liveness: RwLock<LivenessMonitor>,
 }
 
 impl<N, S> ConsensusEngine<N, S>
@@ -72,24 +80,31 @@ where
         ledger.update_validator_set(validator_set.clone())?;
         Ok(Self {
             validator_id,
-            config,
+            config: RwLock::new(config),
             network,
             ledger,
             validator_set: RwLock::new(validator_set),
             signer,
             rounds: RwLock::new(HashMap::new()),
             committed: RwLock::new(HashSet::new()),
+            liveness: RwLock::new(LivenessMonitor::default()),
         })
     }
 
     pub async fn run(self: Arc<Self>) -> Result<()> {
-        let mut ticker = interval(Duration::from_millis(self.config.block_time_millis));
+        let config = self.config.read().clone();
+        let mut ticker = interval(Duration::from_millis(config.block_time_millis));
+        let mut heartbeat_ticker =
+            interval(Duration::from_millis(config.heartbeat_interval_millis));
         let mut inbox = self.network.subscribe().await?;
 
         loop {
             tokio::select! {
                 _ = ticker.tick() => {
                     self.try_propose().await?;
+                }
+                _ = heartbeat_ticker.tick() => {
+                    self.broadcast_heartbeat().await?;
                 }
                 maybe_msg = inbox.recv() => {
                     if let Some(message) = maybe_msg {
@@ -105,7 +120,7 @@ where
 
     async fn try_propose(&self) -> Result<()> {
         let snapshot = self.validator_set.read().clone();
-        let total = snapshot.validators.len();
+        let total = self.active_validator_ids(&snapshot).len();
         if total == 0 {
             return Ok(());
         }
@@ -155,7 +170,7 @@ where
     }
 
     fn select_leader(&self, height: u64, snapshot: &ValidatorSetSnapshot) -> ValidatorId {
-        let mut ids: Vec<_> = snapshot.validators.keys().cloned().collect();
+        let mut ids = self.active_validator_ids(snapshot);
         ids.sort();
         let index = (height as usize) % ids.len();
         ids[index].clone()
@@ -175,9 +190,50 @@ where
         self.handle_proposal(proposal).await
     }
 
+    async fn broadcast_heartbeat(&self) -> Result<()> {
+        let snapshot = self.validator_set.read();
+        let Some(meta) = snapshot.validators.get(&self.validator_id) else {
+            return Ok(());
+        };
+        if meta.status != ValidatorStatus::Active {
+            return Ok(());
+        }
+        drop(snapshot);
+        let observed_height = self.ledger.storage().latest_height()?;
+        self.network
+            .broadcast(ConsensusMessage::Heartbeat {
+                validator: self.validator_id.clone(),
+                observed_height,
+            })
+            .await
+    }
+
+    fn handle_heartbeat(&self, validator: ValidatorId, observed_height: u64) {
+        let snapshot = self.validator_set.read();
+        if !snapshot
+            .validators
+            .get(&validator)
+            .is_some_and(|meta| meta.status == ValidatorStatus::Active)
+        {
+            return;
+        }
+        drop(snapshot);
+        self.liveness
+            .write()
+            .last_heartbeat_height
+            .insert(validator, observed_height);
+    }
+
     async fn handle_message(&self, message: ConsensusMessage) -> Result<()> {
         match message {
             ConsensusMessage::Propose(proposal) => self.handle_proposal(proposal).await,
+            ConsensusMessage::Heartbeat {
+                validator,
+                observed_height,
+            } => {
+                self.handle_heartbeat(validator, observed_height);
+                Ok(())
+            }
             ConsensusMessage::PreVote {
                 height,
                 validator,
@@ -190,6 +246,13 @@ where
             ConsensusMessage::Commit { height, block } => self.handle_commit(height, block).await,
             ConsensusMessage::GovernanceProposal(proposal) => {
                 info!(id = %proposal.proposal_id, "received governance proposal");
+                match &proposal.proposal_type {
+                    GovernanceAction::RotateValidators(_rotation) => {}
+                    GovernanceAction::UpdateParameter(name, value) => {
+                        self.apply_runtime_parameter(name, value)?;
+                    }
+                    _ => {}
+                }
                 self.ledger.track_governance(proposal)?;
                 Ok(())
             }
@@ -326,7 +389,10 @@ where
             return Ok(false);
         };
         let snapshot = self.validator_set.read();
-        let quorum = quorum_threshold(snapshot.validators.len(), self.config.quorum_bps);
+        let quorum = quorum_threshold(
+            self.active_validator_ids(&snapshot).len(),
+            self.config.read().quorum_bps,
+        );
         let votes_for_hash = state
             .prevotes
             .values()
@@ -345,9 +411,10 @@ where
         let state = rounds
             .get_mut(&height)
             .ok_or_else(|| ProtocolError::ConsensusViolation("missing round state".into()))?;
+        let snapshot = self.validator_set.read();
         let quorum = quorum_threshold(
-            self.validator_set.read().validators.len(),
-            self.config.quorum_bps,
+            self.active_validator_ids(&snapshot).len(),
+            self.config.read().quorum_bps,
         );
         let proposal_hash = state
             .proposal_hash
@@ -377,9 +444,9 @@ where
             .validators
             .get(&proposal.header.proposer)
             .ok_or_else(|| ProtocolError::MissingValidator(proposal.header.proposer.clone()))?;
-        if proposer_meta.suspended {
+        if proposer_meta.status != ValidatorStatus::Active {
             return Err(ProtocolError::ConsensusViolation(format!(
-                "suspended proposer {}",
+                "non-active proposer {}",
                 proposal.header.proposer
             )));
         }
@@ -441,7 +508,7 @@ where
         let Some(meta) = snapshot.validators.get(validator) else {
             return Ok(false);
         };
-        if meta.suspended {
+        if meta.status != ValidatorStatus::Active {
             return Ok(false);
         }
         let key = parse_verifying_key(&meta.public_key)?;
@@ -465,9 +532,312 @@ where
             return Ok(());
         }
         self.ledger.apply_block(block.clone())?;
+        self.record_liveness(height, &block);
+        self.sync_pending_replacements(height)?;
+        self.maybe_roll_epoch(height, &block).await?;
+        self.apply_scheduled_rotation(height)?;
         self.committed.write().insert(height);
         info!(height, "block finalized");
         Ok(())
+    }
+
+    async fn maybe_roll_epoch(&self, height: u64, block: &Block) -> Result<()> {
+        let snapshot = self.validator_set.read().clone();
+        let epoch_length_blocks = self.config.read().epoch_length_blocks;
+        if epoch_length_blocks == 0 || height % epoch_length_blocks != 0 {
+            return Ok(());
+        }
+
+        let active_ids = self.active_validator_ids(&snapshot);
+        let standby_ids = self.standby_validator_ids(&snapshot);
+        let seed_material = format!(
+            "{}:{}:{}:{}",
+            hash_block_header(&block.header),
+            snapshot.epoch_state.epoch + 1,
+            snapshot.validators.len(),
+            snapshot.epoch_state.manifest_digest
+        );
+
+        if active_ids.is_empty() || standby_ids.is_empty() {
+            self.advance_epoch_without_rotation(snapshot, seed_material)?;
+            return Ok(());
+        }
+
+        let mut failed_active = self.failed_active_validators(&snapshot, &active_ids);
+        failed_active.truncate(self.config.read().promotion_limit);
+        if failed_active.is_empty() {
+            self.advance_epoch_without_rotation(snapshot, seed_material)?;
+            return Ok(());
+        }
+
+        let mut standby = standby_ids;
+        standby.sort_by_key(|id| {
+            let mut hasher = blake3::Hasher::new();
+            hasher.update(seed_material.as_bytes());
+            hasher.update(id.as_bytes());
+            hasher.finalize().to_hex().to_string()
+        });
+        let promote_count = failed_active.len().min(standby.len());
+        if promote_count == 0 {
+            self.advance_epoch_without_rotation(snapshot, seed_material)?;
+            return Ok(());
+        }
+
+        let promoted: Vec<_> = standby.into_iter().take(promote_count).collect();
+        let demoted: Vec<_> = failed_active.into_iter().take(promote_count).collect();
+        let mut rotated_snapshot = snapshot.clone();
+        for demoted_id in &demoted {
+            if let Some(meta) = rotated_snapshot.validators.get_mut(demoted_id) {
+                meta.status = ValidatorStatus::Standby;
+            }
+        }
+        rotated_snapshot
+            .epoch_state
+            .pending_replacements
+            .retain(|replacement| !demoted.contains(&replacement.failed_validator));
+        for promoted_id in &promoted {
+            if let Some(meta) = rotated_snapshot.validators.get_mut(promoted_id) {
+                meta.status = ValidatorStatus::Active;
+            }
+        }
+        rotated_snapshot.epoch_state.epoch += 1;
+        rotated_snapshot.epoch_state.last_seed = seed_material.clone();
+
+        let rotation = ValidatorRotation {
+            epoch: rotated_snapshot.epoch_state.epoch,
+            seed: seed_material,
+            active: self.active_validator_ids(&rotated_snapshot),
+            standby: self.standby_validator_ids(&rotated_snapshot),
+        };
+
+        let proposal = GovernanceProposal {
+            proposal_id: format!("rotation-epoch-{}", rotation.epoch),
+            proposal_type: GovernanceAction::RotateValidators(rotation.clone()),
+            author: block.header.proposer.clone(),
+            payload: serde_json::json!({
+                "height": height,
+                "apply_at_height": height + 1,
+                "demoted": demoted,
+                "promoted": promoted,
+            }),
+            submitted_at: Utc::now(),
+            voting_period_secs: 0,
+        };
+
+        let mut scheduled_snapshot = snapshot.clone();
+        scheduled_snapshot.epoch_state.scheduled_rotation = Some(ScheduledRotation {
+            decided_at_height: height,
+            apply_at_height: height + 1,
+            rotation,
+        });
+        self.ledger
+            .update_validator_set(scheduled_snapshot.clone())?;
+        *self.validator_set.write() = scheduled_snapshot;
+
+        self.ledger.track_governance(proposal.clone())?;
+        if block.header.proposer == self.validator_id {
+            self.network
+                .broadcast(ConsensusMessage::GovernanceProposal(proposal))
+                .await?;
+        }
+        self.liveness.write().missed_prevotes.clear();
+        Ok(())
+    }
+
+    fn advance_epoch_without_rotation(
+        &self,
+        mut snapshot: ValidatorSetSnapshot,
+        seed_material: String,
+    ) -> Result<()> {
+        snapshot.epoch_state.epoch += 1;
+        snapshot.epoch_state.epoch_length_blocks = self.config.read().epoch_length_blocks;
+        snapshot.epoch_state.promotion_limit = self.config.read().promotion_limit;
+        snapshot.epoch_state.last_seed = seed_material;
+        snapshot.epoch_state.scheduled_rotation = None;
+        self.ledger.update_validator_set(snapshot.clone())?;
+        *self.validator_set.write() = snapshot;
+        self.liveness.write().missed_prevotes.clear();
+        Ok(())
+    }
+
+    fn failed_active_validators(
+        &self,
+        snapshot: &ValidatorSetSnapshot,
+        active_ids: &[ValidatorId],
+    ) -> Vec<ValidatorId> {
+        let queued: HashSet<_> = snapshot
+            .epoch_state
+            .pending_replacements
+            .iter()
+            .map(|replacement| replacement.failed_validator.clone())
+            .collect();
+        active_ids
+            .iter()
+            .filter(|id| queued.contains(*id))
+            .cloned()
+            .collect()
+    }
+
+    fn sync_pending_replacements(&self, height: u64) -> Result<()> {
+        let threshold = self.config.read().liveness_missed_prevote_threshold;
+        if threshold == 0 {
+            return Ok(());
+        }
+
+        let liveness = self.liveness.read();
+        let mut snapshot = self.validator_set.write();
+        let mut known: HashSet<_> = snapshot
+            .epoch_state
+            .pending_replacements
+            .iter()
+            .map(|replacement| replacement.failed_validator.clone())
+            .collect();
+        let mut changed = false;
+
+        for (validator_id, missed) in &liveness.missed_prevotes {
+            if *missed < threshold {
+                continue;
+            }
+            if !snapshot
+                .validators
+                .get(validator_id)
+                .is_some_and(|meta| meta.status == ValidatorStatus::Active)
+            {
+                continue;
+            }
+            if known.insert(validator_id.clone()) {
+                snapshot
+                    .epoch_state
+                    .pending_replacements
+                    .push(PendingReplacement {
+                        failed_validator: validator_id.clone(),
+                        reason: "mid-epoch-liveness-threshold".into(),
+                        detected_at_height: height,
+                    });
+                changed = true;
+            }
+        }
+
+        if changed {
+            self.ledger.update_validator_set(snapshot.clone())?;
+        }
+        Ok(())
+    }
+
+    fn apply_scheduled_rotation(&self, height: u64) -> Result<()> {
+        let scheduled = self
+            .validator_set
+            .read()
+            .epoch_state
+            .scheduled_rotation
+            .clone();
+        let Some(scheduled) = scheduled else {
+            return Ok(());
+        };
+        if height < scheduled.apply_at_height {
+            return Ok(());
+        }
+        self.apply_rotation_action(&scheduled.rotation)
+    }
+
+    fn apply_runtime_parameter(&self, name: &str, value: &serde_json::Value) -> Result<()> {
+        match name {
+            "epoch_length_blocks" => {
+                let parsed = value.as_u64().ok_or_else(|| {
+                    ProtocolError::GovernanceError(
+                        "epoch_length_blocks update requires an unsigned integer".into(),
+                    )
+                })?;
+                self.config.write().epoch_length_blocks = parsed;
+                let mut snapshot = self.validator_set.write();
+                snapshot.epoch_state.epoch_length_blocks = parsed;
+                self.ledger.update_validator_set(snapshot.clone())?;
+            }
+            "promotion_limit" => {
+                let parsed = value.as_u64().ok_or_else(|| {
+                    ProtocolError::GovernanceError(
+                        "promotion_limit update requires an unsigned integer".into(),
+                    )
+                })? as usize;
+                self.config.write().promotion_limit = parsed;
+                let mut snapshot = self.validator_set.write();
+                snapshot.epoch_state.promotion_limit = parsed;
+                self.ledger.update_validator_set(snapshot.clone())?;
+            }
+            "quorum_bps" => {
+                let parsed = value.as_u64().ok_or_else(|| {
+                    ProtocolError::GovernanceError(
+                        "quorum_bps update requires an unsigned integer".into(),
+                    )
+                })? as u32;
+                self.config.write().quorum_bps = parsed;
+                let mut snapshot = self.validator_set.write();
+                snapshot.quorum_bps = parsed;
+                self.ledger.update_validator_set(snapshot.clone())?;
+            }
+            _ => {}
+        }
+
+        Ok(())
+    }
+
+    fn apply_rotation_action(&self, rotation: &ValidatorRotation) -> Result<()> {
+        let mut snapshot = self.validator_set.write();
+        if rotation.epoch <= snapshot.epoch_state.epoch {
+            return Ok(());
+        }
+
+        let active: HashSet<_> = rotation.active.iter().cloned().collect();
+        let standby: HashSet<_> = rotation.standby.iter().cloned().collect();
+        for (id, meta) in snapshot.validators.iter_mut() {
+            if active.contains(id) {
+                meta.status = ValidatorStatus::Active;
+            } else if standby.contains(id) {
+                meta.status = ValidatorStatus::Standby;
+            }
+        }
+        snapshot.epoch_state.epoch = rotation.epoch;
+        snapshot.epoch_state.epoch_length_blocks = self.config.read().epoch_length_blocks;
+        snapshot.epoch_state.promotion_limit = self.config.read().promotion_limit;
+        snapshot.epoch_state.last_seed = rotation.seed.clone();
+        snapshot.epoch_state.scheduled_rotation = None;
+        self.ledger.update_validator_set(snapshot.clone())?;
+        Ok(())
+    }
+
+    fn record_liveness(&self, _height: u64, block: &Block) {
+        let snapshot = self.validator_set.read();
+        let active = self.active_validator_ids(&snapshot);
+        drop(snapshot);
+
+        let participants = &block.header.commit_proof.participant_ids;
+        let mut liveness = self.liveness.write();
+        for validator_id in active {
+            if participants.contains(&validator_id) {
+                liveness.missed_prevotes.insert(validator_id, 0);
+            } else {
+                let missed = liveness.missed_prevotes.entry(validator_id).or_default();
+                *missed += 1;
+            }
+        }
+    }
+
+    fn active_validator_ids(&self, snapshot: &ValidatorSetSnapshot) -> Vec<ValidatorId> {
+        snapshot
+            .validators
+            .iter()
+            .filter_map(|(id, meta)| (meta.status == ValidatorStatus::Active).then_some(id.clone()))
+            .collect()
+    }
+
+    fn standby_validator_ids(&self, snapshot: &ValidatorSetSnapshot) -> Vec<ValidatorId> {
+        snapshot
+            .validators
+            .iter()
+            .filter_map(|(id, meta)| {
+                (meta.status == ValidatorStatus::Standby).then_some(id.clone())
+            })
+            .collect()
     }
 
     async fn collect_entries(&self) -> Result<Vec<LedgerEntry>> {

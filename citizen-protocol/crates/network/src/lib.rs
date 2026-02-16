@@ -373,6 +373,10 @@ fn constant_time_eq(left: &[u8], right: &[u8]) -> bool {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum ConsensusMessage {
     Propose(BlockProposal),
+    Heartbeat {
+        validator: ValidatorId,
+        observed_height: u64,
+    },
     PreVote {
         height: u64,
         validator: ValidatorId,
