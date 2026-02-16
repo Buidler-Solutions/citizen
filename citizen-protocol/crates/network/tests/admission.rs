@@ -298,6 +298,12 @@ async fn admission_rejects_invalid_psk_proof() {
     let metrics = admission.metrics_snapshot();
     assert_eq!(metrics.handshake_reject_total, 1);
     assert_eq!(metrics.psk_challenge_fail_total, 1);
+    assert_eq!(
+        metrics
+            .handshake_reject_total_by_reason
+            .get("invalid_psk_proof"),
+        Some(&1)
+    );
 }
 
 #[tokio::test]
@@ -331,6 +337,12 @@ async fn admission_rejects_replayed_nonce_timestamp() {
     let metrics = admission.metrics_snapshot();
     assert_eq!(metrics.handshake_reject_total, 1);
     assert_eq!(metrics.psk_challenge_fail_total, 0);
+    assert_eq!(
+        metrics
+            .handshake_reject_total_by_reason
+            .get("replay_detected"),
+        Some(&1)
+    );
 }
 
 #[tokio::test]
@@ -360,6 +372,12 @@ async fn admission_rejection_metrics_track_non_psk_failures() {
     let metrics = admission.metrics_snapshot();
     assert_eq!(metrics.handshake_reject_total, 1);
     assert_eq!(metrics.psk_challenge_fail_total, 0);
+    assert_eq!(
+        metrics
+            .handshake_reject_total_by_reason
+            .get("network_identity_mismatch"),
+        Some(&1)
+    );
 }
 
 fn handshake_from_identity(
@@ -407,6 +425,12 @@ async fn observer_inbound_rejects_validator_network_identity_mismatch() {
 
     let metrics = observer_admission.metrics_snapshot();
     assert_eq!(metrics.handshake_reject_total, 1);
+    assert_eq!(
+        metrics
+            .handshake_reject_total_by_reason
+            .get("network_identity_mismatch"),
+        Some(&1)
+    );
 }
 
 #[tokio::test]
@@ -435,6 +459,12 @@ async fn observer_inbound_rejects_validator_manifest_digest_mismatch() {
 
     let metrics = observer_admission.metrics_snapshot();
     assert_eq!(metrics.handshake_reject_total, 1);
+    assert_eq!(
+        metrics
+            .handshake_reject_total_by_reason
+            .get("network_identity_mismatch"),
+        Some(&1)
+    );
 }
 
 #[tokio::test]
@@ -564,5 +594,14 @@ async fn admission_rejects_invalid_handshake_signature() {
     assert_eq!(
         reason,
         citizen_network::AdmissionRejectionReason::InvalidHandshakeSignature
+    );
+
+    let metrics = admission.metrics_snapshot();
+    assert_eq!(metrics.handshake_reject_total, 1);
+    assert_eq!(
+        metrics
+            .handshake_reject_total_by_reason
+            .get("invalid_handshake_signature"),
+        Some(&1)
     );
 }
