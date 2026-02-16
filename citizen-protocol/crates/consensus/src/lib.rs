@@ -7,8 +7,9 @@ use citizen_ledger::Ledger;
 use citizen_network::{BlockProposal, ConsensusMessage, Network};
 use citizen_storage::LedgerStorage;
 use citizen_types::{
-    Block, BlockHeader, CommitProof, ConsensusConfig, GovernanceAction, LedgerEntry,
-    PendingReplacement, ProtocolError, ValidatorId, ValidatorSetSnapshot, ValidatorStatus,
+    Block, BlockHeader, CommitProof, ConsensusConfig, GovernanceAction, GovernanceProposal,
+    LedgerEntry, PendingReplacement, ProtocolError, ValidatorId, ValidatorRotation,
+    ValidatorSetSnapshot, ValidatorStatus,
 };
 use ed25519_dalek::Signature;
 use parking_lot::RwLock;
@@ -23,6 +24,12 @@ struct PendingRound {
     proposal: Option<BlockProposal>,
     proposal_hash: Option<String>,
     prevotes: BTreeMap<ValidatorId, SignedPreVote>,
+}
+
+#[derive(Default)]
+struct LivenessMonitor {
+    missed_prevotes: BTreeMap<ValidatorId, u64>,
+    last_heartbeat_height: BTreeMap<ValidatorId, u64>,
 }
 
 #[derive(Clone)]
@@ -54,6 +61,7 @@ where
     signer: ValidatorKeypair,
     rounds: RwLock<HashMap<u64, PendingRound>>,
     committed: RwLock<HashSet<u64>>,
+    liveness: RwLock<LivenessMonitor>,
 }
 
 impl<N, S> ConsensusEngine<N, S>
@@ -79,17 +87,23 @@ where
             signer,
             rounds: RwLock::new(HashMap::new()),
             committed: RwLock::new(HashSet::new()),
+            liveness: RwLock::new(LivenessMonitor::default()),
         })
     }
 
     pub async fn run(self: Arc<Self>) -> Result<()> {
         let mut ticker = interval(Duration::from_millis(self.config.block_time_millis));
+        let mut heartbeat_ticker =
+            interval(Duration::from_millis(self.config.heartbeat_interval_millis));
         let mut inbox = self.network.subscribe().await?;
 
         loop {
             tokio::select! {
                 _ = ticker.tick() => {
                     self.try_propose().await?;
+                }
+                _ = heartbeat_ticker.tick() => {
+                    self.broadcast_heartbeat().await?;
                 }
                 maybe_msg = inbox.recv() => {
                     if let Some(message) = maybe_msg {
@@ -175,9 +189,50 @@ where
         self.handle_proposal(proposal).await
     }
 
+    async fn broadcast_heartbeat(&self) -> Result<()> {
+        let snapshot = self.validator_set.read();
+        let Some(meta) = snapshot.validators.get(&self.validator_id) else {
+            return Ok(());
+        };
+        if meta.status != ValidatorStatus::Active {
+            return Ok(());
+        }
+        drop(snapshot);
+        let observed_height = self.ledger.storage().latest_height()?;
+        self.network
+            .broadcast(ConsensusMessage::Heartbeat {
+                validator: self.validator_id.clone(),
+                observed_height,
+            })
+            .await
+    }
+
+    fn handle_heartbeat(&self, validator: ValidatorId, observed_height: u64) {
+        let snapshot = self.validator_set.read();
+        if !snapshot
+            .validators
+            .get(&validator)
+            .is_some_and(|meta| meta.status == ValidatorStatus::Active)
+        {
+            return;
+        }
+        drop(snapshot);
+        self.liveness
+            .write()
+            .last_heartbeat_height
+            .insert(validator, observed_height);
+    }
+
     async fn handle_message(&self, message: ConsensusMessage) -> Result<()> {
         match message {
             ConsensusMessage::Propose(proposal) => self.handle_proposal(proposal).await,
+            ConsensusMessage::Heartbeat {
+                validator,
+                observed_height,
+            } => {
+                self.handle_heartbeat(validator, observed_height);
+                Ok(())
+            }
             ConsensusMessage::PreVote {
                 height,
                 validator,
@@ -190,6 +245,9 @@ where
             ConsensusMessage::Commit { height, block } => self.handle_commit(height, block).await,
             ConsensusMessage::GovernanceProposal(proposal) => {
                 info!(id = %proposal.proposal_id, "received governance proposal");
+                if let GovernanceAction::RotateValidators(rotation) = &proposal.proposal_type {
+                    self.apply_rotation_action(rotation)?;
+                }
                 self.ledger.track_governance(proposal)?;
                 Ok(())
             }
@@ -469,14 +527,15 @@ where
             return Ok(());
         }
         self.ledger.apply_block(block.clone())?;
-        self.maybe_roll_epoch(height, &block)?;
+        self.record_liveness(height, &block);
+        self.maybe_roll_epoch(height, &block).await?;
         self.committed.write().insert(height);
         info!(height, "block finalized");
         Ok(())
     }
 
-    fn maybe_roll_epoch(&self, height: u64, block: &Block) -> Result<()> {
-        let mut snapshot = self.validator_set.write();
+    async fn maybe_roll_epoch(&self, height: u64, block: &Block) -> Result<()> {
+        let snapshot = self.validator_set.read().clone();
         if snapshot.epoch_state.epoch_length_blocks == 0
             || height % snapshot.epoch_state.epoch_length_blocks != 0
         {
@@ -485,38 +544,25 @@ where
 
         let active_ids = self.active_validator_ids(&snapshot);
         let standby_ids = self.standby_validator_ids(&snapshot);
-        if active_ids.is_empty() || standby_ids.is_empty() {
-            snapshot.epoch_state.epoch += 1;
-            snapshot.epoch_state.last_seed = hash_block_header(&block.header);
-            self.ledger.update_validator_set(snapshot.clone())?;
-            return Ok(());
-        }
-
-        let mut failed_active: Vec<_> = active_ids
-            .iter()
-            .filter(|id| {
-                snapshot
-                    .validators
-                    .get(*id)
-                    .is_some_and(|meta| meta.status == ValidatorStatus::Suspended)
-            })
-            .cloned()
-            .collect();
-        failed_active.truncate(snapshot.epoch_state.promotion_limit);
-
-        if failed_active.is_empty() {
-            snapshot.epoch_state.epoch += 1;
-            snapshot.epoch_state.last_seed = hash_block_header(&block.header);
-            self.ledger.update_validator_set(snapshot.clone())?;
-            return Ok(());
-        }
-
         let seed_material = format!(
             "{}:{}:{}",
             hash_block_header(&block.header),
             snapshot.epoch_state.epoch + 1,
             snapshot.validators.len()
         );
+
+        if active_ids.is_empty() || standby_ids.is_empty() {
+            self.advance_epoch_without_rotation(snapshot, seed_material)?;
+            return Ok(());
+        }
+
+        let mut failed_active = self.failed_active_validators(&active_ids);
+        failed_active.truncate(snapshot.epoch_state.promotion_limit);
+        if failed_active.is_empty() {
+            self.advance_epoch_without_rotation(snapshot, seed_material)?;
+            return Ok(());
+        }
+
         let mut standby = standby_ids;
         standby.sort_by_key(|id| {
             let mut hasher = blake3::Hasher::new();
@@ -525,30 +571,131 @@ where
             hasher.finalize().to_hex().to_string()
         });
         let promote_count = failed_active.len().min(standby.len());
-        let promoted: Vec<_> = standby.into_iter().take(promote_count).collect();
+        if promote_count == 0 {
+            self.advance_epoch_without_rotation(snapshot, seed_material)?;
+            return Ok(());
+        }
 
-        for demoted in failed_active.into_iter().take(promote_count) {
-            if let Some(meta) = snapshot.validators.get_mut(&demoted) {
+        let promoted: Vec<_> = standby.into_iter().take(promote_count).collect();
+        let demoted: Vec<_> = failed_active.into_iter().take(promote_count).collect();
+        let mut rotated_snapshot = snapshot.clone();
+        for demoted_id in &demoted {
+            if let Some(meta) = rotated_snapshot.validators.get_mut(demoted_id) {
                 meta.status = ValidatorStatus::Standby;
             }
-            snapshot
+            rotated_snapshot
                 .epoch_state
                 .pending_replacements
                 .push(PendingReplacement {
-                    failed_validator: demoted,
+                    failed_validator: demoted_id.clone(),
                     reason: "epoch-liveness-rotation".into(),
                     detected_at_height: height,
                 });
         }
-        for promoted_id in promoted {
-            if let Some(meta) = snapshot.validators.get_mut(&promoted_id) {
+        for promoted_id in &promoted {
+            if let Some(meta) = rotated_snapshot.validators.get_mut(promoted_id) {
                 meta.status = ValidatorStatus::Active;
             }
         }
+        rotated_snapshot.epoch_state.epoch += 1;
+        rotated_snapshot.epoch_state.last_seed = seed_material.clone();
+
+        let rotation = ValidatorRotation {
+            epoch: rotated_snapshot.epoch_state.epoch,
+            seed: seed_material,
+            active: self.active_validator_ids(&rotated_snapshot),
+            standby: self.standby_validator_ids(&rotated_snapshot),
+        };
+
+        let proposal = GovernanceProposal {
+            proposal_id: format!("rotation-epoch-{}", rotation.epoch),
+            proposal_type: GovernanceAction::RotateValidators(rotation.clone()),
+            author: block.header.proposer.clone(),
+            payload: serde_json::json!({
+                "height": height,
+                "demoted": demoted,
+                "promoted": promoted,
+            }),
+            submitted_at: Utc::now(),
+            voting_period_secs: 0,
+        };
+
+        self.apply_rotation_action(&rotation)?;
+        self.ledger.track_governance(proposal.clone())?;
+        if block.header.proposer == self.validator_id {
+            self.network
+                .broadcast(ConsensusMessage::GovernanceProposal(proposal))
+                .await?;
+        }
+        self.liveness.write().missed_prevotes.clear();
+        Ok(())
+    }
+
+    fn advance_epoch_without_rotation(
+        &self,
+        mut snapshot: ValidatorSetSnapshot,
+        seed_material: String,
+    ) -> Result<()> {
         snapshot.epoch_state.epoch += 1;
         snapshot.epoch_state.last_seed = seed_material;
         self.ledger.update_validator_set(snapshot.clone())?;
+        *self.validator_set.write() = snapshot;
+        self.liveness.write().missed_prevotes.clear();
         Ok(())
+    }
+
+    fn failed_active_validators(&self, active_ids: &[ValidatorId]) -> Vec<ValidatorId> {
+        let liveness = self.liveness.read();
+        active_ids
+            .iter()
+            .filter(|id| {
+                liveness
+                    .missed_prevotes
+                    .get(*id)
+                    .copied()
+                    .unwrap_or_default()
+                    >= self.config.liveness_missed_prevote_threshold
+            })
+            .cloned()
+            .collect()
+    }
+
+    fn apply_rotation_action(&self, rotation: &ValidatorRotation) -> Result<()> {
+        let mut snapshot = self.validator_set.write();
+        if rotation.epoch <= snapshot.epoch_state.epoch {
+            return Ok(());
+        }
+
+        let active: HashSet<_> = rotation.active.iter().cloned().collect();
+        let standby: HashSet<_> = rotation.standby.iter().cloned().collect();
+        for (id, meta) in snapshot.validators.iter_mut() {
+            if active.contains(id) {
+                meta.status = ValidatorStatus::Active;
+            } else if standby.contains(id) {
+                meta.status = ValidatorStatus::Standby;
+            }
+        }
+        snapshot.epoch_state.epoch = rotation.epoch;
+        snapshot.epoch_state.last_seed = rotation.seed.clone();
+        self.ledger.update_validator_set(snapshot.clone())?;
+        Ok(())
+    }
+
+    fn record_liveness(&self, _height: u64, block: &Block) {
+        let snapshot = self.validator_set.read();
+        let active = self.active_validator_ids(&snapshot);
+        drop(snapshot);
+
+        let participants = &block.header.commit_proof.participant_ids;
+        let mut liveness = self.liveness.write();
+        for validator_id in active {
+            if participants.contains(&validator_id) {
+                liveness.missed_prevotes.insert(validator_id, 0);
+            } else {
+                let missed = liveness.missed_prevotes.entry(validator_id).or_default();
+                *missed += 1;
+            }
+        }
     }
 
     fn active_validator_ids(&self, snapshot: &ValidatorSetSnapshot) -> Vec<ValidatorId> {
