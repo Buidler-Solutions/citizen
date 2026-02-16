@@ -93,13 +93,19 @@ Current delivery includes Phase 2 identity/data ownership primitives, Phase 3 bu
 5. When promoting deployments beyond a single host, use the staged network
    manifests:
 
+   - `testnets/testnet.toml` — shared integration testnet manifest for partner
+     QA and compatibility validation.
    - `testnets/futurenet.toml` — developer-stage futurenet for governance
      rehearsals and upgrade validation.
    - `testnets/mainnet.toml` — public mainnet manifest with governance-approved
      validator anchors.
-   - `config/futurenet/validator-alpha.toml`, `validator-beta.toml`,
-     `validator-gamma.toml` — per-operator node config templates with
-     non-conflicting API/QUIC ports and placeholder key material.
+   - `config/testnet/validator-sample.toml` — sample per-operator testnet
+     configuration template.
+   - `config/futurenet/validator-sample.toml` — sample per-operator futurenet
+     configuration template (existing `validator-alpha/beta/gamma` files remain
+     available for deterministic staged setups).
+   - `config/miannet/validator-sample.toml` — sample mainnet-like ("miannet")
+     operator configuration template.
 
    Additional context is available in `docs/NETWORKS.md`.
 
