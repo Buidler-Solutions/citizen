@@ -193,6 +193,45 @@ async fn admission_rejects_unknown_peer() {
 }
 
 #[tokio::test]
+async fn admission_rejects_allowlisted_peer_with_public_key_mismatch() {
+    let keys = validator_signing_keys();
+    let admission = AdmissionControl::from_snapshot(
+        build_snapshot(&keys),
+        Duration::from_secs(1),
+        test_identity(None),
+    );
+    let key = keys.get("validator.a").unwrap();
+    let wrong_public_key = hex::encode(
+        SigningKey::from_bytes(&[7u8; 32])
+            .verifying_key()
+            .to_bytes(),
+    );
+    let handshake = handshake_with_overrides(
+        "validator.a",
+        &wrong_public_key,
+        key,
+        "citizen-localnet",
+        "genesis-hash",
+        "manifest-digest",
+        8,
+        current_timestamp_ms(),
+        None,
+    );
+
+    assert!(!admission.allows(&handshake).await);
+
+    let metrics = admission.metrics_snapshot();
+    assert_eq!(metrics.handshake_reject_total, 1);
+    assert_eq!(metrics.psk_challenge_fail_total, 0);
+    assert_eq!(
+        metrics
+            .handshake_reject_total_by_reason
+            .get("public_key_mismatch"),
+        Some(&1)
+    );
+}
+
+#[tokio::test]
 async fn key_rotation_advances_epoch() {
     let keys = validator_signing_keys();
     let admission = AdmissionControl::from_snapshot(
