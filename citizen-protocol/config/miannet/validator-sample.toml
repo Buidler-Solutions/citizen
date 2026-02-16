@@ -1,0 +1,84 @@
+# Sample operator config for Citizen "miannet" profile (mainnet-like production profile).
+# Copy this file, replace all REPLACE_* placeholders, and run:
+# cargo run -p citizen-node -- <path-to-your-config>
+
+node_role = "validator"
+validator_id = "miannet-validator-alpha"
+network_id = "citizen-mainnet"
+block_time_millis = 1000
+quorum_bps = 8000
+signing_key_hex = "REPLACE_WITH_32_BYTE_SECRET_HEX_FROM_HSM_EXPORT"
+api_port = 8481
+api_auth_required = true
+api_max_write_requests_per_minute = 60
+data_dir = "data/miannet-validator-alpha"
+bind_addr = "0.0.0.0:9500"
+network_key_rotation_secs = 1800
+manifest_enforce = true
+manifest_path = "testnets/mainnet.toml"
+startup_secret = "REPLACE_WITH_MAINNET_STARTUP_SECRET"
+
+[[api_clients]]
+api_key = "REPLACE_WITH_MAINNET_BUILDER_KEY"
+scopes = ["entries.submit", "envelopes.submit"]
+
+[[namespaces]]
+descriptor.namespace = "identity.citizen"
+descriptor.version = 1
+descriptor.rules_hash = "sha256:identity-mainnet-v1"
+descriptor.governed_by = "governance.vote"
+writers = ["registry.identity"]
+[[namespaces.validators]]
+name = "require_signature"
+config = {}
+
+[[namespaces]]
+descriptor.namespace = "registry.land"
+descriptor.version = 1
+descriptor.rules_hash = "sha256:land-mainnet-v1"
+descriptor.governed_by = "governance.vote"
+writers = ["registry.land"]
+[[namespaces.validators]]
+name = "require_signature"
+config = {}
+[[namespaces.validators]]
+name = "prevent_double_transfer"
+config.object_id = "object_id"
+
+[[namespaces]]
+descriptor.namespace = "audit.procurement"
+descriptor.version = 1
+descriptor.rules_hash = "sha256:audit-mainnet-v1"
+descriptor.governed_by = "governance.vote"
+writers = ["audit.procurement"]
+[[namespaces.validators]]
+name = "require_signature"
+config = {}
+
+[[namespaces]]
+descriptor.namespace = "governance.vote"
+descriptor.version = 1
+descriptor.rules_hash = "sha256:governance-mainnet-v1"
+descriptor.governed_by = "governance.vote"
+writers = ["governance.vote"]
+[[namespaces.validators]]
+name = "require_signature"
+config = {}
+
+[[validators]]
+validator_id = "miannet-validator-beta"
+public_key = "REPLACE_WITH_BETA_VERIFYING_KEY_HEX"
+anchors = ["org:beta-institution"]
+
+[[validators]]
+validator_id = "miannet-validator-gamma"
+public_key = "REPLACE_WITH_GAMMA_VERIFYING_KEY_HEX"
+anchors = ["org:gamma-institution"]
+
+[[peers]]
+validator_id = "miannet-validator-beta"
+address = "beta.mainnet.citizen.example:9501"
+
+[[peers]]
+validator_id = "miannet-validator-gamma"
+address = "gamma.mainnet.citizen.example:9502"
