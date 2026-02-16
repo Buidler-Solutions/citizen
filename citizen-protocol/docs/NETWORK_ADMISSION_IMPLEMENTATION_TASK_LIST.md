@@ -142,7 +142,8 @@ Status note: handshake matrix items listed above are now covered; remaining matr
 - [x] Add operator runbook section for admission troubleshooting.
 - [x] Add CI checks for manifest lint/verification.
 - [x] Document controlled fork process for network identity changes.
-- [ ] Perform staged rollout in localnet before production validator rollout.
+- [x] Perform staged rollout in localnet before production validator rollout.
+  - 2026-02-16 update: completed staged localnet rollout rehearsal documented in `docs/NETWORK_ADMISSION_LOCALNET_STAGED_ROLLOUT.md`, including preflight matrix pass, canary startup validation, and validator-batch expansion checkpoints.
 
 ## 11) Next Execution Queue (Wave 2)
 
@@ -251,3 +252,5 @@ Execution note: added `docs/NETWORK_IDENTITY_CHANGE_RUNBOOK.md` documenting gove
 - [ ] Run full admission matrix in CI (startup, handshake, observer parity, rotation).
 - [ ] Confirm telemetry dashboards include startup failure and handshake rejection reason distributions.
 - [ ] Collect sign-off from node, network, and governance owners before production rollout.
+
+Execution note: localnet staged rollout is complete; remaining checklist items are CI matrix publication, telemetry dashboard confirmation, and cross-owner sign-off.
