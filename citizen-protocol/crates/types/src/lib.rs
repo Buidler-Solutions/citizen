@@ -203,6 +203,8 @@ pub struct ConsensusConfig {
     pub quorum_bps: u32,
     pub epoch_length_blocks: u64,
     pub promotion_limit: usize,
+    pub heartbeat_interval_millis: u64,
+    pub liveness_missed_prevote_threshold: u64,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]

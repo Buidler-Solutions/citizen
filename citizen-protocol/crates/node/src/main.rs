@@ -68,7 +68,7 @@ async fn main() -> anyhow::Result<()> {
         .serve(SocketAddr::from((Ipv4Addr::LOCALHOST, config.api_port)))
         .await;
 
-    let consensus_task = if config.node_role == NodeRole::Validator {
+    let consensus_task = if config.node_role == NodeRole::Validator && !config.standby_only {
         let keypair = config.load_or_generate_keypair()?;
         let verifying_key_hex = verifying_key_to_string(keypair.verifying_key());
         tracing::info!("verifying_key" = %verifying_key_hex, "note" = "share this key for validator admission");
@@ -118,6 +118,8 @@ async fn main() -> anyhow::Result<()> {
                 quorum_bps: config.quorum_bps,
                 epoch_length_blocks: config.epoch_length_blocks,
                 promotion_limit: config.promotion_limit,
+                heartbeat_interval_millis: config.heartbeat_interval_millis,
+                liveness_missed_prevote_threshold: config.liveness_missed_prevote_threshold,
             },
             network,
             ledger,
@@ -130,50 +132,58 @@ async fn main() -> anyhow::Result<()> {
             }
         }))
     } else {
-        let observer_network_task = if !config.peers.is_empty() {
-            let snapshot = config
-                .build_admission_snapshot(&config.observer_public_key(), &admission_context)?;
-            let rotation = Duration::from_secs(config.network_key_rotation_secs);
-            let admission_identity = config.handshake_identity(&admission_context);
-            let admission = Arc::new(AdmissionControl::from_snapshot(
-                snapshot,
-                rotation,
-                admission_identity,
-            ));
-            let peers = config
-                .peers
-                .iter()
-                .filter_map(|p| {
-                    p.address
-                        .parse()
-                        .ok()
-                        .map(|addr| (p.validator_id.clone(), addr))
-                })
-                .collect();
-            let network = Arc::new(NodeNetwork::Quic(QuicNetwork::new(
-                config.bind_addr.unwrap_or(default_bind()),
-                peers,
-                admission,
-                config.validator_id.clone(),
-                config.observer_public_key(),
-                None,
-            )?));
-            Some(tokio::spawn(async move {
-                match network.subscribe().await {
-                    Ok(mut receiver) => while receiver.recv().await.is_some() {},
-                    Err(err) => {
-                        tracing::error!(?err, "observer failed to subscribe to network");
-                    }
-                }
-            }))
-        } else {
+        if config.node_role == NodeRole::Validator && config.standby_only {
+            tracing::info!(
+                "mode" = "validator-standby",
+                "msg" = "consensus disabled by standby_only configuration"
+            );
             None
-        };
-        tracing::info!(
-            "mode" = "observer",
-            "msg" = "consensus disabled; read-only API profile active"
-        );
-        observer_network_task
+        } else {
+            let observer_network_task = if !config.peers.is_empty() {
+                let snapshot = config
+                    .build_admission_snapshot(&config.observer_public_key(), &admission_context)?;
+                let rotation = Duration::from_secs(config.network_key_rotation_secs);
+                let admission_identity = config.handshake_identity(&admission_context);
+                let admission = Arc::new(AdmissionControl::from_snapshot(
+                    snapshot,
+                    rotation,
+                    admission_identity,
+                ));
+                let peers = config
+                    .peers
+                    .iter()
+                    .filter_map(|p| {
+                        p.address
+                            .parse()
+                            .ok()
+                            .map(|addr| (p.validator_id.clone(), addr))
+                    })
+                    .collect();
+                let network = Arc::new(NodeNetwork::Quic(QuicNetwork::new(
+                    config.bind_addr.unwrap_or(default_bind()),
+                    peers,
+                    admission,
+                    config.validator_id.clone(),
+                    config.observer_public_key(),
+                    None,
+                )?));
+                Some(tokio::spawn(async move {
+                    match network.subscribe().await {
+                        Ok(mut receiver) => while receiver.recv().await.is_some() {},
+                        Err(err) => {
+                            tracing::error!(?err, "observer failed to subscribe to network");
+                        }
+                    }
+                }))
+            } else {
+                None
+            };
+            tracing::info!(
+                "mode" = "observer",
+                "msg" = "consensus disabled; read-only API profile active"
+            );
+            observer_network_task
+        }
     };
 
     tracing::info!("msg" = "node running", "api_port" = config.api_port);
@@ -204,6 +214,10 @@ struct NodeConfig {
     epoch_length_blocks: u64,
     #[serde(default = "default_promotion_limit")]
     promotion_limit: usize,
+    #[serde(default = "default_heartbeat_interval")]
+    heartbeat_interval_millis: u64,
+    #[serde(default = "default_liveness_threshold")]
+    liveness_missed_prevote_threshold: u64,
     #[serde(default)]
     standby_only: bool,
     #[serde(default)]
@@ -454,6 +468,8 @@ impl Default for NodeConfig {
             block_time_millis: default_block_time(),
             epoch_length_blocks: default_epoch_length(),
             promotion_limit: default_promotion_limit(),
+            heartbeat_interval_millis: default_heartbeat_interval(),
+            liveness_missed_prevote_threshold: default_liveness_threshold(),
             standby_only: false,
             signing_key_hex: None,
             api_port: default_api_port(),
@@ -497,6 +513,14 @@ fn default_epoch_length() -> u64 {
 
 fn default_promotion_limit() -> usize {
     10
+}
+
+fn default_heartbeat_interval() -> u64 {
+    500
+}
+
+fn default_liveness_threshold() -> u64 {
+    3
 }
 
 fn default_api_write_rpm() -> usize {
