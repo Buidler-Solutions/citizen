@@ -91,12 +91,14 @@ pub struct AdmissionControl {
 struct AdmissionMetrics {
     handshake_reject_total: AtomicU64,
     psk_challenge_fail_total: AtomicU64,
+    handshake_reject_total_by_reason: parking_lot::Mutex<HashMap<&'static str, u64>>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct AdmissionMetricsSnapshot {
     pub handshake_reject_total: u64,
     pub psk_challenge_fail_total: u64,
+    pub handshake_reject_total_by_reason: HashMap<&'static str, u64>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -252,6 +254,11 @@ impl AdmissionControl {
                 .metrics
                 .psk_challenge_fail_total
                 .load(Ordering::Relaxed),
+            handshake_reject_total_by_reason: self
+                .metrics
+                .handshake_reject_total_by_reason
+                .lock()
+                .clone(),
         }
     }
 
@@ -259,6 +266,12 @@ impl AdmissionControl {
         self.metrics
             .handshake_reject_total
             .fetch_add(1, Ordering::Relaxed);
+        *self
+            .metrics
+            .handshake_reject_total_by_reason
+            .lock()
+            .entry(reason.as_metric_label())
+            .or_insert(0) += 1;
         if matches!(
             reason,
             AdmissionRejectionReason::MissingPskProof | AdmissionRejectionReason::InvalidPskProof
@@ -268,6 +281,23 @@ impl AdmissionControl {
                 .fetch_add(1, Ordering::Relaxed);
         }
         reason
+    }
+}
+
+impl AdmissionRejectionReason {
+    fn as_metric_label(&self) -> &'static str {
+        match self {
+            AdmissionRejectionReason::UnknownValidator => "unknown_validator",
+            AdmissionRejectionReason::PublicKeyMismatch => "public_key_mismatch",
+            AdmissionRejectionReason::StaleKeyEpoch => "stale_key_epoch",
+            AdmissionRejectionReason::NetworkIdentityMismatch => "network_identity_mismatch",
+            AdmissionRejectionReason::InvalidSystemTime => "invalid_system_time",
+            AdmissionRejectionReason::ClockSkewExceeded => "clock_skew_exceeded",
+            AdmissionRejectionReason::ReplayDetected => "replay_detected",
+            AdmissionRejectionReason::MissingPskProof => "missing_psk_proof",
+            AdmissionRejectionReason::InvalidPskProof => "invalid_psk_proof",
+            AdmissionRejectionReason::InvalidHandshakeSignature => "invalid_handshake_signature",
+        }
     }
 }
 

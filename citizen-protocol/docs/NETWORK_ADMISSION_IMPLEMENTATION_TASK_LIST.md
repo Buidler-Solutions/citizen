@@ -117,7 +117,7 @@ Execution note: metrics work should land as one atomic telemetry change set so s
 
 ## 9) Testing & Validation Matrix
 
-- [ ] Startup tests:
+- [x] Startup tests:
   - [x] valid manifest + matching network/genesis + valid PSK starts successfully
   - [x] invalid manifest signature fails startup
   - [x] network mismatch fails startup
@@ -132,7 +132,7 @@ Execution note: metrics work should land as one atomic telemetry change set so s
   - [x] replayed nonce/timestamp rejected
 
 Status note: handshake matrix items listed above are now covered; remaining matrix work is rotation plus explicit observer-role mismatch coverage.
-- [ ] Rotation tests:
+- [x] Rotation tests:
   - [x] transition window enforces old+new requirement
   - [x] post-window old-only rejected
   - [x] revoked-key signature rejected
@@ -155,6 +155,7 @@ Status note: handshake matrix items listed above are now covered; remaining matr
    - 2026-02-15 update: manifest verification now enforces ACTIVE-key signatures, optional dual-signature transition policy, and immediate rejection for revoked keys.
    - [x] Add transition-window enforcement tests (old+new required, old-only rejection after cutoff).
 3. **Admission telemetry completion**
+- 2026-02-16 update: handshake rejection telemetry now records stable reason labels (`admission_handshake_reject_total{reason}` semantics) alongside aggregate counters, with regression assertions in `crates/network/tests/admission.rs`.
    - [x] Emit startup failure counters with reason labels.
    - [x] Record manifest verification duration histogram and connect it to rollout dashboards.
 4. **Operator readiness artifacts**
@@ -166,9 +167,9 @@ Status note: handshake matrix items listed above are now covered; remaining matr
 ## Definition of Done
 
 - [x] All startup and handshake admission checks are enforced by default.
-- [ ] Validators and observers share the same network identity enforcement path.
-- [ ] Key rotation and replay protection are covered by automated tests.
-- [ ] Admission failures are auditable through logs and metrics.
+- [x] Validators and observers share the same network identity enforcement path.
+- [x] Key rotation and replay protection are covered by automated tests.
+- [x] Admission failures are auditable through logs and metrics.
 
 ## 12) Continued Implementation Task List (Wave 3)
 
@@ -176,7 +177,7 @@ This section extends the execution tracker with the next concrete delivery slice
 
 ### 12.1 Close observer handshake parity (highest priority)
 
-- [ ] **Networking path parity**
+- [x] **Networking path parity**
   - [x] Route observer outbound and inbound peer handshakes through the same `AdmissionControl::verify` entrypoint used by validators.
   - [x] Remove any observer-only fast path that skips `network_id`, `genesis_hash`, `manifest_digest`, PSK, or replay checks.
   - 2026-02-15 update: observer nodes now initialize QUIC admission networking with the shared `AdmissionControl` policy path used by validators, while remaining read-only for consensus.
@@ -215,10 +216,10 @@ Equivalent single-command filter (regex accepted by Cargo as one test expression
 
 ### 12.2 Finalize key-transition cutoff behavior
 
-- [ ] **Transition window cutoff enforcement**
+- [x] **Transition window cutoff enforcement**
   - [x] Implement explicit cutoff evaluation (timestamp or block-height based) so old-only signature sets are rejected once the transition closes.
   - [x] Ensure failure reason maps to a stable typed admission error code for telemetry consistency.
-- [ ] **Rotation regression tests**
+- [x] **Rotation regression tests**
   - [x] Add test: during transition window, old+new signature requirement enforced.
   - [x] Add test: after transition window, old-only signature set is rejected.
   - [x] Add test: revoked key signatures fail regardless of transition status.
@@ -235,7 +236,7 @@ Equivalent single-command filter (regex accepted by Cargo as one test expression
 
 ### 12.4 Controlled network-identity change process
 
-- [ ] **Fork/change procedure doc**
+- [x] **Fork/change procedure doc**
   - [x] Specify operator/governance steps for planned `network_id` or `genesis_hash` changes.
   - [x] Define rollout sequencing and rollback/abort checkpoints.
   - [x] Add explicit signer/quorum requirements for manifest updates tied to identity changes.
