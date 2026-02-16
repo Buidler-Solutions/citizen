@@ -9,6 +9,7 @@ use std::collections::{BTreeMap, HashMap};
 use std::sync::{Mutex, OnceLock};
 use std::time::Instant;
 
+#[cfg(test)]
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct StartupAdmissionMetricsSnapshot {
     pub startup_fail_total: HashMap<&'static str, u64>,
@@ -32,6 +33,7 @@ pub fn run_preflight<S: LedgerStorage>(
     result
 }
 
+#[cfg(test)]
 pub fn startup_metrics_snapshot() -> StartupAdmissionMetricsSnapshot {
     let startup_fail_total = STARTUP_FAIL_TOTAL
         .get_or_init(|| Mutex::new(HashMap::new()))

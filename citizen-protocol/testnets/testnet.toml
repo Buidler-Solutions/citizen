@@ -1,0 +1,27 @@
+name = "testnet"
+description = "Citizen shared integration testnet for partner QA and pre-futurenet verification"
+block_time_millis = 1000
+quorum_bps = 8000
+
+[namespaces]
+identity = "identity.citizen"
+land = "registry.land"
+audit = "audit.procurement"
+governance = "governance.vote"
+
+# Shared integration validator cohort. Replace placeholder keys with approved
+# operator verifying keys before publishing the manifest.
+[[validators]]
+validator_id = "testnet-alpha"
+public_key = "..."
+anchors = ["org:alpha-test-partner"]
+
+[[validators]]
+validator_id = "testnet-beta"
+public_key = "..."
+anchors = ["org:beta-test-partner"]
+
+[[validators]]
+validator_id = "testnet-gamma"
+public_key = "..."
+anchors = ["org:gamma-test-partner"]

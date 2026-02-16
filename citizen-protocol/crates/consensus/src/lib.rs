@@ -191,14 +191,16 @@ where
     }
 
     async fn broadcast_heartbeat(&self) -> Result<()> {
-        let snapshot = self.validator_set.read();
-        let Some(meta) = snapshot.validators.get(&self.validator_id) else {
-            return Ok(());
+        let is_active = {
+            let snapshot = self.validator_set.read();
+            snapshot
+                .validators
+                .get(&self.validator_id)
+                .is_some_and(|meta| meta.status == ValidatorStatus::Active)
         };
-        if meta.status != ValidatorStatus::Active {
+        if !is_active {
             return Ok(());
         }
-        drop(snapshot);
         let observed_height = self.ledger.storage().latest_height()?;
         self.network
             .broadcast(ConsensusMessage::Heartbeat {
