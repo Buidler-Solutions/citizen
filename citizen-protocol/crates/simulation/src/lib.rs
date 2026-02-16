@@ -260,6 +260,7 @@ fn build_validator_set(count: usize) -> (Vec<(String, ValidatorKeypair)>, Valida
             epoch_length_blocks: 100,
             promotion_limit: count.div_ceil(8),
             pending_replacements: Vec::new(),
+            manifest_digest: "simulation-manifest".into(),
             last_seed: "genesis".into(),
         },
     };

@@ -387,6 +387,7 @@ impl NodeConfig {
                 epoch_length_blocks: self.epoch_length_blocks,
                 promotion_limit: self.promotion_limit,
                 pending_replacements: Vec::new(),
+                manifest_digest: "manifest-not-enforced".into(),
                 last_seed: "genesis".into(),
             },
         }
@@ -453,6 +454,7 @@ impl NodeConfig {
                 epoch_length_blocks: self.epoch_length_blocks,
                 promotion_limit: self.promotion_limit,
                 pending_replacements: Vec::new(),
+                manifest_digest: admission_context.manifest_digest.clone(),
                 last_seed: admission_context.manifest_digest.clone(),
             },
         })
