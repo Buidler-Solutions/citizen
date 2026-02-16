@@ -186,8 +186,16 @@ pub struct EpochState {
     pub epoch_length_blocks: u64,
     pub promotion_limit: usize,
     pub pending_replacements: Vec<PendingReplacement>,
+    pub scheduled_rotation: Option<ScheduledRotation>,
     pub manifest_digest: String,
     pub last_seed: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ScheduledRotation {
+    pub decided_at_height: BlockHeight,
+    pub apply_at_height: BlockHeight,
+    pub rotation: ValidatorRotation,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
