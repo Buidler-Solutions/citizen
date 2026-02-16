@@ -57,6 +57,8 @@ impl SimulationHarness {
             quorum_bps: 8_000,
             epoch_length_blocks: 100,
             promotion_limit: 12,
+            heartbeat_interval_millis: 500,
+            liveness_missed_prevote_threshold: 3,
         };
         let network = Arc::new(MockNetwork::new(latency_from_model(&config.network)));
         let (validators, snapshot) = build_validator_set(config.validators);
