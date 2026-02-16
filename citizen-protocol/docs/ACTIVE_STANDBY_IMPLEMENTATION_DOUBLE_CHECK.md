@@ -35,18 +35,14 @@ However, a few items are still **partial or not fully aligned** with the suggest
 | Standby-only runtime flag | ✅ Implemented | `standby_only` in node config disables consensus participation. |
 | Manifest allowlist required / unknown peer denial | ✅ Implemented | Startup admission returns `ManifestAllowlistRequired` when enforced manifest has empty allowlist; admission control continues to reject unknown peers at handshake. |
 | Simulation scenarios for 10%, 15%, 30% active failures | ✅ Implemented | Simulation defines and executes `ActiveFailure10`, `ActiveFailure15`, `ActiveFailure30`. |
-| Deterministic seed includes `manifest_digest` | ⚠️ Partial | Seed currently uses block hash + epoch + validator count. It does not currently include manifest digest directly. |
+| Deterministic seed includes `manifest_digest` | ✅ Implemented | Epoch seed now includes block hash + epoch + validator count + manifest digest from snapshot state. |
 | Mid-epoch failure queue populated ahead of epoch boundary | ⚠️ Partial | Liveness tracking exists, but pending replacements are materialized during epoch rotation instead of explicit mid-epoch queueing from a dedicated monitor task + telemetry endpoint integration. |
 | Rotation change recorded as a block transaction/header commitment and applied strictly at `h+1` | ⚠️ Partial | Rotation is handled through a governance proposal broadcast + local snapshot update path; there is no explicit dedicated block transaction type committed in block payload/header for validator rotation. |
-| Governance-driven runtime updates for new consensus params | ⚠️ Partial | `UpdateParameter` exists as a type, but dynamic runtime application of `epoch_length_blocks` / `promotion_limit` via governance execution is not fully wired end-to-end. |
+| Governance-driven runtime updates for new consensus params | ✅ Implemented | `GovernanceAction::UpdateParameter` now applies runtime updates for `epoch_length_blocks`, `promotion_limit`, and `quorum_bps`, then persists the updated snapshot. |
 
 ## Recommended follow-up tasks
 
-1. **Seed hardening:** include `manifest_digest` in epoch seed derivation
-   (`blake3(prev_block_hash || epoch || manifest_digest)`).
-2. **Rotation commitment model:** add explicit rotation transaction / header commitment
+1. **Rotation commitment model:** add explicit rotation transaction / header commitment
    and apply set changes at strict `h+1` execution boundary.
-3. **Operational liveness queue:** add dedicated monitor pipeline that queues failures
+2. **Operational liveness queue:** add dedicated monitor pipeline that queues failures
    mid-epoch and persists queue state before boundary processing.
-4. **Governance parameter application:** wire executed `UpdateParameter` proposals into
-   live `ConsensusConfig` updates and persisted snapshots.
