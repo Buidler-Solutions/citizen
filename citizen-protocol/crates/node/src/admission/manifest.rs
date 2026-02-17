@@ -9,6 +9,8 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::path::Path;
 
+const SAMPLE_MANIFEST_PATH_PLACEHOLDER: &str = "REPLACE_WITH_SIGNED_MANIFEST_JSON_PATH";
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ManifestPayload {
     pub network_id: String,
@@ -50,6 +52,12 @@ struct ManifestKeyPolicy<'a> {
 
 impl SignedManifest {
     pub fn load(path: &Path) -> Result<Self, AdmissionError> {
+        if uses_sample_manifest_placeholder(path) {
+            return Err(AdmissionError::ManifestPathPlaceholder {
+                path: path.to_path_buf(),
+            });
+        }
+
         let bytes = std::fs::read(path).map_err(|source| AdmissionError::ManifestRead {
             path: path.to_path_buf(),
             source,
@@ -191,6 +199,12 @@ impl SignedManifest {
     }
 }
 
+fn uses_sample_manifest_placeholder(path: &Path) -> bool {
+    path.file_name()
+        .and_then(|component| component.to_str())
+        .is_some_and(|component| component == SAMPLE_MANIFEST_PATH_PLACEHOLDER)
+}
+
 fn transition_window_closed(policy: &ManifestKeyPolicy<'_>, now_unix_secs: i64) -> bool {
     policy
         .dual_signature_until_unix_secs
@@ -265,6 +279,19 @@ mod tests {
             result,
             Err(AdmissionError::UnsupportedManifestAlgorithm(algorithm)) if algorithm == "rsa-pss"
         ));
+    }
+
+    #[test]
+    fn placeholder_detection_matches_full_path_component_only() {
+        assert!(uses_sample_manifest_placeholder(Path::new(
+            "REPLACE_WITH_SIGNED_MANIFEST_JSON_PATH"
+        )));
+        assert!(uses_sample_manifest_placeholder(Path::new(
+            "/tmp/REPLACE_WITH_SIGNED_MANIFEST_JSON_PATH"
+        )));
+        assert!(!uses_sample_manifest_placeholder(Path::new(
+            "/tmp/prefix_REPLACE_WITH_SIGNED_MANIFEST_JSON_PATH.json"
+        )));
     }
 
     #[test]
