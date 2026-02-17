@@ -440,6 +440,31 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
         ledger: Arc<Ledger<S>>,
         builder_id: String,
     ) -> (StatusCode, Json<serde_json::Value>) {
+        let policy_metadata = ledger
+            .namespace_ruleset("builder.credits")
+            .and_then(|ruleset| {
+                ruleset
+                    .validators
+                    .iter()
+                    .find(|rule| rule.name == "builder_credit_policy")
+                    .map(|rule| {
+                        serde_json::json!({
+                            "namespace_version": ruleset.descriptor.version,
+                            "rules_hash": ruleset.descriptor.rules_hash,
+                            "rule": rule.name,
+                            "max_daily_spend": rule.config.get("max_daily_spend").cloned().unwrap_or(serde_json::Value::Null),
+                        })
+                    })
+            })
+            .unwrap_or_else(|| {
+                serde_json::json!({
+                    "namespace_version": serde_json::Value::Null,
+                    "rules_hash": serde_json::Value::Null,
+                    "rule": serde_json::Value::Null,
+                    "max_daily_spend": serde_json::Value::Null,
+                })
+            });
+
         let entries = ledger
             .storage()
             .namespace_entries(&"builder.credits".to_string())
@@ -485,6 +510,7 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
                 "credited": credited,
                 "sponsored": sponsored,
                 "available": credited.saturating_sub(sponsored),
+                "policy": policy_metadata,
                 "instrumentation": {
                     "unique_sponsorship_count": unique_sponsorship_count
                 }
@@ -1442,6 +1468,10 @@ mod tests {
         assert_eq!(payload["credited"], 100);
         assert_eq!(payload["sponsored"], 30);
         assert_eq!(payload["available"], 70);
+        assert_eq!(payload["policy"]["namespace_version"], 1);
+        assert_eq!(payload["policy"]["rules_hash"], "builder-credits-v1");
+        assert_eq!(payload["policy"]["rule"], "builder_credit_policy");
+        assert_eq!(payload["policy"]["max_daily_spend"], 10_000);
         assert_eq!(payload["instrumentation"]["unique_sponsorship_count"], 1);
     }
 

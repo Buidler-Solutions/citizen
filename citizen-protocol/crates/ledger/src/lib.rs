@@ -46,6 +46,10 @@ impl<S: LedgerStorage + 'static> Ledger<S> {
         }
     }
 
+    pub fn namespace_ruleset(&self, namespace: &str) -> Option<NamespaceRuleset> {
+        self.namespace_rules.read().get(namespace).cloned()
+    }
+
     pub fn apply_block(&self, block: Block) -> Result<()> {
         self.validate_block(&block)?;
         for entry in &block.entries {
