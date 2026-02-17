@@ -1,61 +1,52 @@
-# Citizen Demo dApp: Blog Article Publishing on a Local Blockchain
+# Citizen Demo Blog: Wallet + Real Node Runtime Publishing
 
-This demo is a standalone dApp under `demo/` that implements article publishing with blockchain anchoring.
+This demo under `demo/` now runs as a **real node-runtime client**:
 
-> Note: this is a JavaScript demo node used by the DApp publish flow. The Rust validator localnet is run via `scripts/run_localnet.sh` (see `docs/LOCALNET_RUNBOOK.md`).
+- Browser wallet signs challenge messages.
+- Demo backend verifies signatures.
+- Backend submits signed envelopes to the Rust node runtime (`/api/v1/envelopes/submit`).
+- Reads published content from runtime namespace entries (`/entries/content.article`).
 
-## What it demonstrates
-- Article composition and publishing in a web UI.
-- Deterministic article content hashing (`SHA-256`).
-- Append-only blockchain ledger with linked block hashes.
-- **Node-side wallet signature verification before anchoring transactions.**
-- Block receipt returned immediately after publication.
+## Prerequisites
+
+1. Run the validator runtime first (for localnet use `scripts/run_localnet.sh`).
+2. Ensure the target node API is reachable.
 
 ## Run locally
 
 ```bash
 cd citizen-protocol/demo
 npm install
-npm run start
+CITIZEN_NODE_URL=http://127.0.0.1:8081 CITIZEN_CONTENT_NAMESPACE=content.article npm run start
 ```
 
 Server starts at:
+
 - `http://localhost:4300`
 
-## API quick examples
+## Runtime-backed API endpoints
 
-Publish an article (node validates wallet signature + signed message before writing block):
+- `GET /api/health` — reports runtime URL and runtime health (`ok`/`unreachable`).
+- `GET /api/articles` — loads published article entries from runtime namespace.
+- `GET /api/chain` — runtime summary (`/health`, `/namespaces`, `/blocks/0`).
+- `POST /api/wallet/challenge` — creates wallet signing challenge.
+- `POST /api/articles` — verifies signature and submits envelope to runtime.
+
+## End-to-end flow
+
+1. Open `http://localhost:4300`.
+2. Connect the browser wallet extension.
+3. Publish article draft (client asks `/api/wallet/challenge`).
+4. Sign challenge with wallet (`personal_sign`).
+5. Demo backend verifies signature and calls node runtime envelope submit.
+6. UI reloads from node runtime entries.
+
+## Quick runtime verification
 
 ```bash
-curl -X POST http://localhost:4300/api/articles \
-  -H 'Content-Type: application/json' \
-  -d '{
-    "author":"0x0000000000000000000000000000000000000000",
-    "title":"Procurement dashboard now fully auditable",
-    "tags":["audit","governance"],
-    "content":"This is a long article body with at least one hundred characters so it can be accepted by the validation layer in the demo API.",
-    "signedMessage":"Citizen DApp Article Publish\\nChallenge: ...\\nWallet: 0x0000000000000000000000000000000000000000\\nTitle: Procurement dashboard now fully auditable\\nContent Hash: ...\\nIssued At: ...\\nExpires At: ...",
-    "walletSignature":"0x..."
-  }'
-```
-
-Read chain state:
-
-```bash
+curl http://localhost:4300/api/health
+curl http://localhost:4300/api/articles
 curl http://localhost:4300/api/chain
+curl http://127.0.0.1:8081/entries/content.article
 ```
 
-## Validation rules for `POST /api/articles`
-
-The node rejects (`422 wallet_validation_failed`) when any of these checks fail:
-- `author` is not a valid 20-byte hex wallet address.
-- `signedMessage` / `walletSignature` are missing.
-- Signed message wallet does not match `author`.
-- Signed message content hash does not match submitted content.
-- Signature recovery does not resolve back to `author`.
-
-## Files
-- `server.js` — HTTP API + static hosting + blockchain append logic.
-- `public/` — Browser dApp UI.
-- `data/chain.json` — persisted demo blockchain.
-- `DESIGN.md` — architecture and design choices.
