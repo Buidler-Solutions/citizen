@@ -121,7 +121,41 @@ Current delivery includes Phase 2 identity/data ownership primitives, Phase 3 bu
 
    - `docs/VALIDATOR_ROLLOUT_READINESS.md`
 
-6. For a consolidated builder + user enablement guide (validator setup, dApp
+### Running a compiled node binary in production
+
+If you already compiled the runtime, you can run the binary directly without
+`cargo run`:
+
+1. Build a release binary once on your build host:
+
+   ```bash
+   cargo build --release -p citizen-node
+   ```
+
+2. Copy `target/release/citizen-node` and your vetted operator config onto the
+   production node (for example, a copy of
+   `config/miannet/validator-sample.toml` with all placeholders replaced).
+
+3. Start the process by pointing the binary at your config file:
+
+   ```bash
+   ./citizen-node /etc/citizen/node.toml
+   ```
+
+4. Set `RUST_LOG=info` (or stricter) and run under a process supervisor
+   (`systemd`, `supervisord`, or container orchestrator) for restart-on-failure
+   behavior and centralized logs.
+
+5. Keep `manifest_enforce = true`, configure production `[[validators]]` and
+   `[[peers]]` allowlists, and rotate network keys via
+   `network_key_rotation_secs` according to governance policy.
+
+6. Validate operational readiness using:
+   - `docs/VALIDATOR_ROLLOUT_READINESS.md`
+   - `docs/OPERATOR_DISASTER_RECOVERY_RUNBOOK.md`
+   - `docs/NETWORK_ADMISSION_TROUBLESHOOTING_RUNBOOK.md`
+
+7. For a consolidated builder + user enablement guide (validator setup, dApp
    flow, signer keeper usage, explorer verification, and Laboratory app plan),
    read:
 
