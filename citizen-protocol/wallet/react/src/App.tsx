@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { walletStorage } from './lib/storage';
-import type { DraftEntry, GovernanceProposal, Submission, WalletKey } from './types';
+import type { AssetDisclosurePosition, DraftEntry, GovernanceProposal, Submission, WalletKey } from './types';
 
 const apiDefaults = {
   baseUrl: 'http://127.0.0.1:8080',
@@ -10,6 +10,27 @@ const apiDefaults = {
 function randomHex(length: number): string {
   return Array.from({ length }, () => Math.floor(Math.random() * 16).toString(16)).join('');
 }
+
+const assetDisclosureSamples: AssetDisclosurePosition[] = [
+  {
+    issuer: 'did:ledger:issuer:builder-a',
+    assetCode: 'BUILD_CREDIT',
+    heldAmount: 120,
+    trustlineStatus: 'active',
+    disclosureMode: 'hashed',
+    clawbackEnabled: true,
+    holderNotice: 'Issuer clawback is ENABLED for this trustline. Issuer may revoke held units according to policy.',
+  },
+  {
+    issuer: 'did:ledger:issuer:builder-b',
+    assetCode: 'SPONSORED_TX',
+    heldAmount: 40,
+    trustlineStatus: 'active',
+    disclosureMode: 'public',
+    clawbackEnabled: false,
+    holderNotice: 'Issuer clawback is DISABLED for this trustline. Only holder-initiated releases reduce holdings.',
+  },
+];
 
 export function App() {
   const [keys, setKeys] = useState<WalletKey[]>(() => walletStorage.keys());
@@ -171,6 +192,25 @@ export function App() {
                 {proposal.id} · {proposal.kind} · {proposal.status}
                 {proposal.status === 'open' && <button onClick={() => finalizeProposal(proposal.id)}>Finalize</button>}
                 {proposal.finalityHeight && <span> · height {proposal.finalityHeight}</span>}
+              </li>
+            ))}
+          </ul>
+        </article>
+
+        <article className="card">
+          <h2>Builder-Issued Asset Disclosure</h2>
+          <p className="notice">Parity checkpoint: wallet UI now renders the same holder notice text exposed by <code>GET /api/v1/assets/:account_id</code>.</p>
+          <ul>
+            {assetDisclosureSamples.map((position) => (
+              <li key={`${position.issuer}-${position.assetCode}`}>
+                <strong>{position.assetCode}</strong> · {position.heldAmount} units
+                <div className="asset-meta">
+                  <span>Issuer: <code>{position.issuer}</code></span>
+                  <span>Trustline: {position.trustlineStatus}</span>
+                  <span>Disclosure mode: {position.disclosureMode}</span>
+                  <span>Policy flag clawback_enabled: {position.clawbackEnabled ? 'true' : 'false'}</span>
+                </div>
+                <p className="policy-note">{position.holderNotice}</p>
               </li>
             ))}
           </ul>

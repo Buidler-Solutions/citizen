@@ -2,15 +2,20 @@ use citizen_types::{
     Block, BlockHeight, DeterministicReceipt, GovernanceProposal, LedgerEntry, NamespaceDescriptor,
     NamespaceId, ProtocolError, ValidatorId, ValidatorSetSnapshot,
 };
+#[cfg(feature = "rocksdb-backend")]
 use lru::LruCache;
 use parking_lot::RwLock;
 use std::collections::{BTreeMap, BTreeSet};
+#[cfg(feature = "rocksdb-backend")]
 use std::env;
+#[cfg(feature = "rocksdb-backend")]
 use std::num::NonZeroUsize;
+#[cfg(feature = "rocksdb-backend")]
 use std::str::FromStr;
 use std::sync::Arc;
 use uuid::Uuid;
 
+#[cfg(feature = "rocksdb-backend")]
 use rocksdb::{ColumnFamilyDescriptor, DBCompactionStyle, Options, WriteBatch, DB};
 
 pub type Result<T> = std::result::Result<T, ProtocolError>;
@@ -31,10 +36,12 @@ pub trait LedgerStorage: Send + Sync {
     fn get_receipt(&self, receipt_id: Uuid) -> Result<Option<DeterministicReceipt>>;
 }
 
+#[cfg(feature = "rocksdb-backend")]
 fn serialize<T: serde::Serialize>(value: &T) -> Result<Vec<u8>> {
     serde_json::to_vec(value).map_err(ProtocolError::storage)
 }
 
+#[cfg(feature = "rocksdb-backend")]
 fn deserialize<T: for<'de> serde::Deserialize<'de>>(bytes: &[u8]) -> Result<T> {
     serde_json::from_slice(bytes).map_err(ProtocolError::storage)
 }
@@ -168,19 +175,27 @@ impl LedgerStorage for MemoryStorage {
     }
 }
 
+#[cfg(feature = "rocksdb-backend")]
 #[derive(Clone)]
 pub struct RocksDbStorage {
     db: Arc<DB>,
     block_cache: Arc<RwLock<LruCache<BlockHeight, Block>>>,
 }
 
+#[cfg(feature = "rocksdb-backend")]
 const CF_BLOCKS: &str = "blocks";
+#[cfg(feature = "rocksdb-backend")]
 const CF_ENTRIES: &str = "entries";
+#[cfg(feature = "rocksdb-backend")]
 const CF_NAMESPACES: &str = "namespaces";
+#[cfg(feature = "rocksdb-backend")]
 const CF_VALIDATORS: &str = "validators";
+#[cfg(feature = "rocksdb-backend")]
 const CF_GOVERNANCE: &str = "governance";
+#[cfg(feature = "rocksdb-backend")]
 const CF_RECEIPTS: &str = "receipts";
 
+#[cfg(feature = "rocksdb-backend")]
 fn parse_env<T>(key: &str) -> Option<T>
 where
     T: FromStr,
@@ -197,6 +212,7 @@ where
     }
 }
 
+#[cfg(feature = "rocksdb-backend")]
 fn apply_env_overrides(opts: &mut Options) {
     if let Ok(style_raw) = env::var("ROCKSDB_COMPACTION_STYLE") {
         let style = style_raw.to_ascii_lowercase();
@@ -242,6 +258,7 @@ fn apply_env_overrides(opts: &mut Options) {
     }
 }
 
+#[cfg(feature = "rocksdb-backend")]
 impl RocksDbStorage {
     pub fn open(path: impl AsRef<std::path::Path>) -> Result<Self> {
         let mut opts = Options::default();
@@ -324,10 +341,12 @@ impl RocksDbStorage {
     }
 }
 
+#[cfg(feature = "rocksdb-backend")]
 fn height_key(height: BlockHeight) -> [u8; 8] {
     height.to_be_bytes()
 }
 
+#[cfg(feature = "rocksdb-backend")]
 fn block_cache_capacity() -> NonZeroUsize {
     const DEFAULT_CAPACITY: usize = 1_024;
     let fallback = NonZeroUsize::new(DEFAULT_CAPACITY).expect("DEFAULT_CAPACITY must be non-zero");
@@ -347,6 +366,7 @@ fn block_cache_capacity() -> NonZeroUsize {
     }
 }
 
+#[cfg(feature = "rocksdb-backend")]
 fn namespaced_entry_key(namespace: &NamespaceId, entry: &LedgerEntry) -> Vec<u8> {
     let mut key = namespace.as_bytes().to_vec();
     key.push(0x1f);
@@ -354,6 +374,7 @@ fn namespaced_entry_key(namespace: &NamespaceId, entry: &LedgerEntry) -> Vec<u8>
     key
 }
 
+#[cfg(feature = "rocksdb-backend")]
 impl LedgerStorage for RocksDbStorage {
     fn store_block(&self, block: Block) -> Result<()> {
         let height = block.header.height;
