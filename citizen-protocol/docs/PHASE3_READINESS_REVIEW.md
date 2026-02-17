@@ -27,7 +27,6 @@ Status: **Complete**.
 
 ## Risks / Notes
 
-- Current builder-credit summary endpoint reads directly from finalized `builder.credits` namespace entries and does not currently expose policy metadata (for example active `max_daily_spend` source-of-truth) in the response payload.
 - Phase 4 planning should keep asset controls isolated from builder credits to preserve non-transferable economics and prevent cross-namespace privilege leakage.
 
 ## Go/No-Go Recommendation
