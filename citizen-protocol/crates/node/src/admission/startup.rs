@@ -203,6 +203,7 @@ fn reason_code(err: &AdmissionError) -> &'static str {
     match err {
         AdmissionError::ManifestRequired => "manifest_required",
         AdmissionError::ManifestRead { .. } => "manifest_read",
+        AdmissionError::ManifestPathPlaceholder { .. } => "manifest_path_placeholder",
         AdmissionError::ManifestParse(_) => "manifest_parse",
         AdmissionError::ManifestCanonicalization(_) => "manifest_canonicalization",
         AdmissionError::InvalidManifestSignature(_) => "invalid_manifest_signature",
@@ -297,6 +298,21 @@ mod tests {
 
         let result = run_preflight(&settings, &storage);
         assert!(matches!(result, Err(AdmissionError::ManifestRequired)));
+    }
+
+    #[test]
+    fn preflight_rejects_placeholder_manifest_path() {
+        reset_metrics();
+        let storage = MemoryStorage::new();
+        let mut settings = base_settings();
+        settings.manifest_enforce = true;
+        settings.manifest_path = Some("REPLACE_WITH_SIGNED_MANIFEST_JSON_PATH".into());
+
+        let result = run_preflight(&settings, &storage);
+        assert!(matches!(
+            result,
+            Err(AdmissionError::ManifestPathPlaceholder { .. })
+        ));
     }
 
     #[test]
