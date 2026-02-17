@@ -5,3 +5,4 @@ citizen-protocol/.tmp-wallet-e2e/
 *.tsbuildinfo
 
 citizen-protocol/data/
+compilation/
