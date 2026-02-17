@@ -129,10 +129,7 @@ When you make code changes, click **Reload** on the extension card after the wat
 
 ## 5) End-to-end testing flow
 
-This stack currently has **two complementary flows**:
-
-- **Validator runtime flow**: validates the real Rust node APIs + explorer proxy.
-- **Demo wallet flow**: validates wallet signing UX against the demo app’s local chain.
+This stack now runs a **single integrated flow** where the wallet, demo blog, and explorer all read/write against the real Rust node runtime.
 
 ### A) Validator runtime flow (Rust node + explorer)
 
@@ -156,20 +153,20 @@ curl http://127.0.0.1:4010/entries/content.article
 
 4. Open explorer UI at `http://127.0.0.1:4020` and confirm latest block/entries panels render.
 
-### B) Demo wallet flow (demo app + extension)
+### B) Demo wallet flow (demo app + extension + node runtime)
 
 1. Open `http://localhost:4300` (Terminal B output confirms server start).
 2. Open the wallet extension popup and create/unlock a wallet.
 3. In the demo blog, compose and publish an article.
 4. Approve signing in the wallet extension.
-5. Verify demo-chain updates:
+5. Verify runtime-backed updates:
 
 ```bash
 curl http://localhost:4300/api/health
+curl http://localhost:4300/api/articles
 curl http://localhost:4300/api/chain
+curl http://127.0.0.1:8081/entries/content.article
 ```
-
-> Note: the demo app maintains its own local JSON-backed chain for UX testing. It does not directly submit content to the Rust validator runtime.
 
 ### C) Optional smoke runner for all stack services
 
@@ -204,6 +201,7 @@ Press `Ctrl+C` once to stop all spawned processes.
 ## 7) Troubleshooting
 
 - **Port 4300 already in use**: stop existing Node process or change demo server port logic.
+- **Demo reports `runtimeHealth: unreachable`**: verify localnet is running and `CITIZEN_NODE_URL` points at a live node API endpoint (for localnet use `http://127.0.0.1:8081`).
 - **`/health` check fails on `8081`**: localnet may still be compiling on first run; wait for logs to stabilize.
 - **`/blocks/0` returns null block**: no finalized block at height 0 from that node instance yet; allow startup to complete and retry.
 - **Extension fails to load**: ensure `wallet/browser/dist/manifest.json` exists (run build first).

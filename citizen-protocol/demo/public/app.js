@@ -72,24 +72,17 @@ function renderArticles(articles) {
 }
 
 function renderChain(chain) {
-  const latest = chain.blocks[chain.blocks.length - 1];
-  chainMeta.textContent = `Network ${chain.network} · Namespace ${chain.namespace} · Height ${chain.height} · Latest block hash ${latest.blockHash.slice(0, 18)}...`;
-
-  const lightweight = chain.blocks
-    .slice()
-    .reverse()
-    .slice(0, 6)
-    .map((block) => ({
-      height: block.height,
-      timestamp: block.timestamp,
-      previousHash: block.previousHash,
-      merkleRoot: block.merkleRoot,
-      blockHash: block.blockHash,
-      txCount: block.transactions.length,
-      articleTitle: block.transactions[0]?.title ?? null
-    }));
-
-  chainBlocks.textContent = JSON.stringify(lightweight, null, 2);
+  const namespaceCount = Array.isArray(chain.namespaces) ? chain.namespaces.length : 0;
+  chainMeta.textContent = `Network ${chain.network} · Runtime ${chain.nodeRuntimeUrl} · Namespace ${chain.namespace} · Namespaces registered ${namespaceCount}`;
+  chainBlocks.textContent = JSON.stringify(
+    {
+      health: chain.health,
+      genesis: chain.genesis,
+      namespaces: chain.namespaces
+    },
+    null,
+    2
+  );
 }
 
 async function fetchJson(path, options = {}) {
