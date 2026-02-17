@@ -701,7 +701,7 @@ mod tests {
     }
 
     #[test]
-    fn startup_preflight_rejects_network_mismatch_for_validator_and_observer() {
+    fn startup_preflight_runtime_policy_is_role_agnostic() {
         let storage = MemoryStorage::new();
 
         let validator_config = NodeConfig {
@@ -718,14 +718,19 @@ mod tests {
         let validator_result = run_preflight(&validator_config.admission_settings(), &storage);
         let observer_result = run_preflight(&observer_config.admission_settings(), &storage);
 
-        assert!(matches!(
-            validator_result,
-            Err(AdmissionError::RuntimeNetworkMismatch { .. })
-        ));
-        assert!(matches!(
-            observer_result,
-            Err(AdmissionError::RuntimeNetworkMismatch { .. })
-        ));
+        if crate::admission::runtime_identity::RUNTIME_NETWORK_ID.is_some() {
+            assert!(matches!(
+                validator_result,
+                Err(AdmissionError::RuntimeNetworkMismatch { .. })
+            ));
+            assert!(matches!(
+                observer_result,
+                Err(AdmissionError::RuntimeNetworkMismatch { .. })
+            ));
+        } else {
+            assert!(validator_result.is_ok());
+            assert!(observer_result.is_ok());
+        }
     }
 
     #[test]

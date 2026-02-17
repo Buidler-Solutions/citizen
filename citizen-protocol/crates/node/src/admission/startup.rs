@@ -62,11 +62,13 @@ fn run_preflight_inner<S: LedgerStorage>(
     settings: &AdmissionSettings,
     storage: &S,
 ) -> Result<AdmissionContext, AdmissionError> {
-    if settings.network_id != RUNTIME_NETWORK_ID {
-        return Err(AdmissionError::RuntimeNetworkMismatch {
-            runtime: RUNTIME_NETWORK_ID.to_string(),
-            configured: settings.network_id.clone(),
-        });
+    if let Some(runtime_network_id) = RUNTIME_NETWORK_ID {
+        if settings.network_id != runtime_network_id {
+            return Err(AdmissionError::RuntimeNetworkMismatch {
+                runtime: runtime_network_id.to_string(),
+                configured: settings.network_id.clone(),
+            });
+        }
     }
 
     if RUNTIME_PSK_HASH.is_some() && settings.startup_secret.is_none() {
@@ -269,17 +271,21 @@ mod tests {
     }
 
     #[test]
-    fn preflight_rejects_runtime_network_mismatch() {
+    fn preflight_runtime_network_policy_depends_on_baked_identity() {
         reset_metrics();
         let storage = MemoryStorage::new();
         let mut settings = base_settings();
         settings.network_id = "citizen-othernet".to_string();
 
         let result = run_preflight(&settings, &storage);
-        assert!(matches!(
-            result,
-            Err(AdmissionError::RuntimeNetworkMismatch { .. })
-        ));
+        if RUNTIME_NETWORK_ID.is_some() {
+            assert!(matches!(
+                result,
+                Err(AdmissionError::RuntimeNetworkMismatch { .. })
+            ));
+        } else {
+            assert!(result.is_ok());
+        }
     }
 
     #[test]
