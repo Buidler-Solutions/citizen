@@ -124,3 +124,10 @@ h1 {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+.policy-note {
+  margin: 10px 0 0;
+  font-size: 13px;
+  color: #44526b;
+  line-height: 1.4;
+}

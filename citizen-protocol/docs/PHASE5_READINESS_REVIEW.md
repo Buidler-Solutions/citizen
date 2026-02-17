@@ -39,7 +39,7 @@ Status: **Complete**.
 
 ## Risks / Notes
 
-- Automated test execution in this environment is currently bottlenecked by long native `librocksdb-sys` compilation in the shared workspace build cache; verification for this review is based on code-path and test-coverage inspection.
+- Added a dedicated parity check script (`scripts/run_builder_asset_parity_checks.sh`) that validates builder-issued asset controls without traversing the slow RocksDB compile path: focused ledger policy regression + wallet UI tests + explorer UI lint checks.
 
 ## Go/No-Go Recommendation
 
