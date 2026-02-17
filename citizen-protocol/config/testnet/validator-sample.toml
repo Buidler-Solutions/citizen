@@ -15,7 +15,8 @@ data_dir = "data/testnet-validator-alpha"
 bind_addr = "0.0.0.0:9300"
 network_key_rotation_secs = 3600
 manifest_enforce = true
-manifest_path = "testnets/testnet.toml"
+# Must point to a signed admission manifest JSON artifact (not testnets/*.toml).
+manifest_path = "REPLACE_WITH_SIGNED_MANIFEST_JSON_PATH"
 startup_secret = "REPLACE_WITH_NETWORK_STARTUP_SECRET"
 
 [[api_clients]]
