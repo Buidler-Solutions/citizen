@@ -111,6 +111,48 @@ Current delivery includes Phase 2 identity/data ownership primitives, Phase 3 bu
 
    Additional context is available in `docs/NETWORKS.md`.
 
+### Network runtime one-liners (from repository root)
+
+If your node startup command fails in admission mode, the most common missing
+piece is the config file argument after `--` (and, from the monorepo root, the
+workspace `--manifest-path`). Use these one-liners with your operator config
+that has real keys/secrets populated:
+
+- **Testnet**
+
+  ```bash
+  RUST_LOG=info cargo run --release -p citizen-node --manifest-path citizen-protocol/Cargo.toml -- citizen-protocol/config/testnet/validator-sample.toml
+  ```
+
+- **Futurenet**
+
+  ```bash
+  RUST_LOG=info cargo run --release -p citizen-node --manifest-path citizen-protocol/Cargo.toml -- citizen-protocol/config/futurenet/validator-alpha.toml
+  ```
+
+- **Mainnet profile**
+
+  ```bash
+  RUST_LOG=info cargo run --release -p citizen-node --manifest-path citizen-protocol/Cargo.toml -- citizen-protocol/config/miannet/validator-sample.toml
+  ```
+
+For production hosts running a prebuilt binary, the equivalent form is:
+
+```bash
+RUST_LOG=info ./citizen-node /etc/citizen/node.toml
+```
+
+If you isolate the runtime outside this monorepo (for example, `citizen-node`
+and `node.toml` in the same deployment folder), **you do not need**
+`--manifest-path` because that flag is only for Cargo workspace discovery. Run:
+
+```bash
+RUST_LOG=info ./citizen-node ./node.toml
+```
+
+If your `node.toml` references `manifest_path`, keep that path valid relative to
+where the process starts (or use an absolute path).
+
    Operator disaster-recovery procedures (snapshot/restore drills, signed retention, quorum-safe regional restore) are documented in:
 
    - `docs/OPERATOR_DISASTER_RECOVERY_RUNBOOK.md`
