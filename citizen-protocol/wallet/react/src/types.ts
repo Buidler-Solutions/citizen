@@ -30,3 +30,13 @@ export type GovernanceProposal = {
   status: 'open' | 'finalized';
   finalityHeight?: number;
 };
+
+export type AssetDisclosurePosition = {
+  issuer: string;
+  assetCode: string;
+  heldAmount: number;
+  trustlineStatus: 'active' | 'closed';
+  disclosureMode: 'public' | 'hashed';
+  clawbackEnabled: boolean;
+  holderNotice: string;
+};

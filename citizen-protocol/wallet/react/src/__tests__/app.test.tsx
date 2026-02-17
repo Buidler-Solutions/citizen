@@ -15,6 +15,16 @@ describe('wallet app', () => {
     expect(screen.getByRole('button', { name: 'Submit signed entry' })).toBeEnabled();
   });
 
+
+
+  it('renders builder-issued asset disclosure parity notices', () => {
+    render(<App />);
+    expect(screen.getAllByText(/Builder-Issued Asset Disclosure/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/clawback_enabled: true/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Issuer clawback is ENABLED/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Issuer clawback is DISABLED/).length).toBeGreaterThan(0);
+  });
+
   it('has no obvious accessibility violations', async () => {
     const { container } = render(<App />);
     const results = await axe(container, {
