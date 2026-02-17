@@ -153,6 +153,21 @@ RUST_LOG=info ./citizen-node ./node.toml
 If your `node.toml` references `manifest_path`, keep that path valid relative to
 where the process starts (or use an absolute path).
 
+### About `manifest_path` in `validator-sample.toml`
+
+`config/*/validator-sample.toml` files intentionally keep
+`manifest_path = "REPLACE_WITH_SIGNED_MANIFEST_JSON_PATH"` so operators do not
+accidentally boot a shared network with an unsigned or stale allowlist.
+
+- On **testnet/futurenet/mainnet**, replace this with the signed admission
+  manifest JSON published by release/governance operations for that network.
+- On **local development only**, you can disable enforcement by setting
+  `manifest_enforce = false` and removing `manifest_path` from your copied
+  config.
+
+If you leave the placeholder untouched, startup fails by design with
+`manifest_path_placeholder` during admission preflight.
+
    Operator disaster-recovery procedures (snapshot/restore drills, signed retention, quorum-safe regional restore) are documented in:
 
    - `docs/OPERATOR_DISASTER_RECOVERY_RUNBOOK.md`
