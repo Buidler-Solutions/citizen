@@ -49,7 +49,7 @@ Current delivery includes Phase 2 identity/data ownership primitives, Phase 3 bu
 - Resolver endpoint: `GET /api/v1/identity/:did` for latest DID status (`Active`/`Revoked`).
 - Consent receipt namespace policy enforcement (`consent.receipt`) and API policy checks via `POST /api/v1/consent/check`.
 - Builder fee credit namespace policy enforcement (`builder.credits`) with non-transferability, sponsorship balance checks, and anti-abuse controls (`sponsorship_id` uniqueness + daily spend cap).
-- Builder credit reporting endpoint: `GET /api/v1/builder-credits/:builder_id` for deterministic credited/sponsored/available accounting and instrumentation.
+- Builder credit reporting endpoint: `GET /api/v1/builder-credits/:builder_id` for deterministic credited/sponsored/available accounting, active policy metadata (including `max_daily_spend`), and sponsorship instrumentation.
 - Governed asset control namespace policy (`asset.control`) enforcing trustline activation, issuer-authorized holds, holder-authorized releases, and governance-scoped policy flags/disclosure commitments.
 - Asset disclosure endpoint: `GET /api/v1/assets/:account_id` for trustline status, controlled policy flags, held balance, and available trustline capacity.
 - Scoped WASM runtime namespace policy (`execution.module`) enforcing audit artifact requirements, governance-gated activation thresholds, and deterministic execution receipt commitments.
