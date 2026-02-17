@@ -90,6 +90,8 @@ Current delivery includes Phase 2 identity/data ownership primitives, Phase 3 bu
    wallet extension, and blockchain explorer (backend + frontend), follow
    `docs/STACK_TESTING_GUIDE.md`.
 
+   For a production-like real-runtime integration checklist where demo blog, wallet, and explorer all target the same node runtime, use `docs/REAL_NODE_RUNTIME_RUNBOOK.md`.
+
 5. When promoting deployments beyond a single host, use the staged network
    manifests:
 

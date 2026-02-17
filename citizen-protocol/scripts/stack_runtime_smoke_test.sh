@@ -32,6 +32,8 @@ probe_json "node namespaces" "$NODE_URL/namespaces"
 
 probe_json "demo health" "$DEMO_URL/api/health"
 probe_json "demo chain" "$DEMO_URL/api/chain"
+probe_json "demo articles" "$DEMO_URL/api/articles"
+probe_json "node content entries" "$NODE_URL/entries/content.article"
 
 probe_json "explorer backend health" "$EXPLORER_API_URL/health"
 probe_json "explorer backend status" "$EXPLORER_API_URL/status"
