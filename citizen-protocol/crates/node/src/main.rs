@@ -31,15 +31,27 @@ use tracing_subscriber::EnvFilter;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+    match parse_cli_args(env::args()) {
+        CliDirective::PrintHelp => {
+            print_help();
+            return Ok(());
+        }
+        CliDirective::PrintVersion => {
+            println!("citizen-node {}", env!("CARGO_PKG_VERSION"));
+            return Ok(());
+        }
+        CliDirective::Run { .. } => {}
+    }
+
     tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::from_default_env())
         .with_target(false)
         .init();
 
-    let config_path = env::args()
-        .nth(1)
-        .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from("node.toml"));
+    let config_path = match parse_cli_args(env::args()) {
+        CliDirective::Run { config_path } => config_path,
+        CliDirective::PrintHelp | CliDirective::PrintVersion => unreachable!(),
+    };
     let config = NodeConfig::load(&config_path).unwrap_or_default();
 
     tracing::info!("validator_id" = %config.validator_id, "block_time_ms" = config.block_time_millis, "quorum_bps" = config.quorum_bps, "loaded_config" = %config_path.display());
@@ -199,6 +211,45 @@ async fn main() -> anyhow::Result<()> {
     api_handle.abort();
 
     Ok(())
+}
+
+#[derive(Debug, PartialEq, Eq)]
+enum CliDirective {
+    Run { config_path: PathBuf },
+    PrintHelp,
+    PrintVersion,
+}
+
+fn parse_cli_args<I>(args: I) -> CliDirective
+where
+    I: IntoIterator<Item = String>,
+{
+    let mut args = args.into_iter();
+    let _ = args.next();
+    match args.next().as_deref() {
+        None => CliDirective::Run {
+            config_path: PathBuf::from("node.toml"),
+        },
+        Some("-h") | Some("--help") | Some("help") => CliDirective::PrintHelp,
+        Some("-V") | Some("--version") | Some("version") => CliDirective::PrintVersion,
+        Some(config_path) => CliDirective::Run {
+            config_path: PathBuf::from(config_path),
+        },
+    }
+}
+
+fn print_help() {
+    println!(
+        "citizen-node {version}\n\
+Usage: citizen-node [CONFIG_PATH]\n\
+\n\
+Starts a CITIZEN node using CONFIG_PATH (default: node.toml).\n\
+\n\
+Options:\n\
+  -h, --help       Show this help message\n\
+  -V, --version    Show version",
+        version = env!("CARGO_PKG_VERSION")
+    );
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -727,5 +778,44 @@ mod tests {
 
         let result = config.build_admission_snapshot("different-pubkey", &context);
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn parse_cli_args_defaults_to_node_toml() {
+        let directive = parse_cli_args(vec!["citizen-node".to_string()]);
+
+        assert_eq!(
+            directive,
+            CliDirective::Run {
+                config_path: PathBuf::from("node.toml")
+            }
+        );
+    }
+
+    #[test]
+    fn parse_cli_args_handles_help_flags() {
+        assert_eq!(
+            parse_cli_args(vec!["citizen-node".to_string(), "--help".to_string()]),
+            CliDirective::PrintHelp
+        );
+        assert_eq!(
+            parse_cli_args(vec!["citizen-node".to_string(), "-h".to_string()]),
+            CliDirective::PrintHelp
+        );
+    }
+
+    #[test]
+    fn parse_cli_args_treats_non_flag_as_config_path() {
+        let directive = parse_cli_args(vec![
+            "citizen-node".to_string(),
+            "config/testnet/validator.toml".to_string(),
+        ]);
+
+        assert_eq!(
+            directive,
+            CliDirective::Run {
+                config_path: PathBuf::from("config/testnet/validator.toml")
+            }
+        );
     }
 }
