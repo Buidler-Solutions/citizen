@@ -171,3 +171,4 @@ Baseline reference: `docs/DEEP_RESEARCH_ARCHITECTURE_BASELINE.md` (Phase 1 secti
   - add regression coverage for flag-driven hold/release/revocation paths,
   - expose clear wallet/explorer disclosure text so holders can understand clawback risk before opting into a trustline.
   - 2026-02-14 update: added `docs/ASSET_CLAWBACK_BEHAVIOR_MATRIX.md` with a normative enable/disable behavior matrix, added ledger/API regression coverage for `ASSET_REVOKE` clawback paths, and exposed holder-facing clawback risk notice text via `GET /api/v1/assets/:account_id`.
+  - 2026-02-17 update: closed remaining caveats by adding wallet/explorer disclosure rendering parity for builder-issued assets and a dedicated non-RocksDB validation path via `scripts/run_builder_asset_parity_checks.sh`.

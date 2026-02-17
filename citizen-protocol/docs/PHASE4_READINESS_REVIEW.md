@@ -33,7 +33,7 @@ Status: **Complete**.
 
 ## Risks / Notes
 
-- The Phase 4 implementation enforces policy/disclosure controls at the ledger layer and surfaces them via a read API, but UI-level wallet/explorer rendering parity should remain an explicit integration checkpoint during Phase 5 delivery.
+- UI-level wallet/explorer disclosure parity is now implemented as an explicit checkpoint: wallet and explorer both render holder-facing clawback notices and disclosure metadata from the `GET /api/v1/assets/:account_id` contract.
 
 ## Go/No-Go Recommendation
 

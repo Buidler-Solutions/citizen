@@ -60,10 +60,29 @@ type ReceiptResponse = {
   };
 };
 
+type AssetPositionsResponse = {
+  source: string;
+  data: {
+    account_id: string;
+    positions: {
+      issuer: string;
+      asset_code: string;
+      held_amount: number;
+      holder_notice: string;
+      trustline: {
+        status: string;
+        policy_flags: string[];
+        disclosure: { mode: string; commitment?: string };
+      };
+    }[];
+  };
+};
+
 const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:3001';
 const blockHeight = Number(process.env.NEXT_PUBLIC_BLOCK_HEIGHT ?? '1');
 const namespace = process.env.NEXT_PUBLIC_NAMESPACE ?? 'governance.vote';
 const receiptId = process.env.NEXT_PUBLIC_RECEIPT_ID;
+const assetAccountId = process.env.NEXT_PUBLIC_ASSET_ACCOUNT_ID ?? 'did:ledger:alice';
 
 async function loadBlock(): Promise<BlockResponse> {
   const response = await fetch(`${apiBase}/blocks/${blockHeight}`, {
@@ -95,11 +114,22 @@ async function loadReceipt(id: string): Promise<ReceiptResponse> {
   return response.json();
 }
 
+async function loadAssetPositions(accountId: string): Promise<AssetPositionsResponse | null> {
+  const response = await fetch(`${apiBase}/assets/${encodeURIComponent(accountId)}`, {
+    next: { revalidate: 5 },
+  });
+  if (!response.ok) {
+    return null;
+  }
+  return response.json();
+}
+
 export default async function HomePage() {
-  const [block, entries, receipt] = await Promise.all([
+  const [block, entries, receipt, assetPositions] = await Promise.all([
     loadBlock(),
     loadEntries(),
     receiptId ? loadReceipt(receiptId) : Promise.resolve(null),
+    loadAssetPositions(assetAccountId),
   ]);
 
   return (
@@ -109,7 +139,7 @@ export default async function HomePage() {
           <p className="eyebrow">Citizen Protocol</p>
           <h1>Citizen Explorer</h1>
           <p className="subtitle">
-            Canonical API explorer for deterministic receipts and finality proofs.
+            Canonical API explorer for deterministic receipts, finality proofs, and builder-issued asset policy disclosures.
           </p>
         </div>
         <div className="meta">
@@ -197,6 +227,46 @@ export default async function HomePage() {
           ) : (
             <p>
               Set <code>NEXT_PUBLIC_RECEIPT_ID</code> to inspect canonical receipt finality proofs.
+            </p>
+          )}
+        </div>
+
+        <div className="card">
+          <h2>Builder-Issued Asset Policy Disclosure</h2>
+          {assetPositions ? (
+            <>
+              <p className="subtitle">Account: <code>{assetPositions.data.account_id}</code></p>
+              <ul>
+                {assetPositions.data.positions.map((position) => (
+                  <li key={`${position.issuer}-${position.asset_code}`}>
+                    <div className="row">
+                      <span>Asset</span>
+                      <strong>{position.asset_code}</strong>
+                    </div>
+                    <div className="row">
+                      <span>Issuer</span>
+                      <strong className="mono">{position.issuer}</strong>
+                    </div>
+                    <div className="row">
+                      <span>Trustline</span>
+                      <strong>{position.trustline.status}</strong>
+                    </div>
+                    <div className="row">
+                      <span>Disclosure mode</span>
+                      <strong>{position.trustline.disclosure.mode}</strong>
+                    </div>
+                    <div className="row">
+                      <span>Held amount</span>
+                      <strong>{position.held_amount}</strong>
+                    </div>
+                    <p className="policy-note">{position.holder_notice}</p>
+                  </li>
+                ))}
+              </ul>
+            </>
+          ) : (
+            <p>
+              No asset disclosure data loaded. Confirm <code>/assets/:account_id</code> is exposed by the API.
             </p>
           )}
         </div>
