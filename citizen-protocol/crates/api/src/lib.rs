@@ -485,7 +485,9 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
                 .and_then(|value| value.as_u64())
                 .unwrap_or_default();
             match entry.action.as_str() {
-                "CREDIT_GRANT" => credited = credited.saturating_add(amount),
+                "CREDIT_GRANT" | "MULTISIG_CREDIT_GRANT" => {
+                    credited = credited.saturating_add(amount)
+                }
                 "SPONSOR_USAGE" => {
                     sponsored = sponsored.saturating_add(amount);
                     if let Some(sponsorship_id) = entry
@@ -903,7 +905,7 @@ mod tests {
     use super::{ApiClientProfile, ApiEdgeConfig, ApiServer};
     use axum::body::Body;
     use axum::http::{Request, StatusCode};
-    use citizen_crypto::KeyRegistry;
+    use citizen_crypto::{sign_message, verifying_key_to_string, KeyRegistry, ValidatorKeypair};
     use citizen_ledger::Ledger;
     use citizen_storage::MemoryStorage;
     use citizen_types::{
@@ -984,7 +986,7 @@ mod tests {
             writers: BTreeSet::new(),
             validators: vec![NamespaceRule {
                 name: "builder_credit_policy".to_string(),
-                config: json!({"max_daily_spend": 10_000}),
+                config: json!({"max_daily_spend": 10_000, "enforce_dedicated_grant_opcode": true, "required_grant_approvals": 3, "grant_approvers": ["grant:ops-1", "grant:ops-2", "grant:ops-3", "grant:ops-4", "grant:ops-5"]}),
             }],
         }]);
         ledger.bootstrap_namespaces(vec![NamespaceRuleset {
@@ -1051,6 +1053,39 @@ mod tests {
         ApiServer::with_edge_config(ledger, edge)
     }
 
+    fn attach_multisig_proofs(entry: &mut LedgerEntry, approvers: &[&str]) {
+        let amount = entry
+            .payload
+            .get("amount")
+            .and_then(serde_json::Value::as_u64)
+            .expect("multisig grant amount");
+
+        let proofs: Vec<serde_json::Value> = approvers
+            .iter()
+            .map(|approver| {
+                let keypair = ValidatorKeypair::generate((*approver).to_string());
+                let message = serde_json::to_string(&json!({
+                    "entry_id": entry.entry_id,
+                    "namespace": entry.namespace,
+                    "action": entry.action,
+                    "object_id": entry.object_id,
+                    "author": entry.author,
+                    "amount": amount,
+                    "timestamp": entry.timestamp,
+                    "approver": approver
+                }))
+                .expect("serialize signing message");
+                let signature = sign_message(&keypair, message.as_bytes());
+                json!({
+                    "approver": approver,
+                    "public_key": verifying_key_to_string(keypair.verifying_key()),
+                    "signature": hex::encode(signature.to_bytes())
+                })
+            })
+            .collect();
+
+        entry.payload = json!({"amount": amount, "multisig_proofs": proofs});
+    }
     fn test_envelope() -> SignedEnvelope<LedgerEntry> {
         SignedEnvelope {
             envelope_id: Uuid::new_v4(),
@@ -1412,16 +1447,21 @@ mod tests {
     async fn builder_credit_endpoint_returns_available_balance_and_instrumentation() {
         let app = build_server().router();
         let now = chrono::Utc::now().timestamp();
-        let grant_entry = LedgerEntry {
+        let mut grant_entry = LedgerEntry {
             entry_id: Uuid::new_v4(),
             namespace: "builder.credits".to_string(),
-            action: "CREDIT_GRANT".to_string(),
+            action: "MULTISIG_CREDIT_GRANT".to_string(),
             object_id: "builder:alpha".to_string(),
             payload: json!({"amount": 100_u64}),
             author: "governance:ops".to_string(),
             signature: "sig".to_string(),
             timestamp: now,
         };
+        attach_multisig_proofs(
+            &mut grant_entry,
+            &["grant:ops-1", "grant:ops-2", "grant:ops-3"],
+        );
+
         let sponsor_entry = LedgerEntry {
             entry_id: Uuid::new_v4(),
             namespace: "builder.credits".to_string(),
