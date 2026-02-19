@@ -1,6 +1,6 @@
 mod admission;
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::env;
 use std::fs;
 use std::net::{Ipv4Addr, SocketAddr};
@@ -23,6 +23,7 @@ use citizen_types::{
     ValidatorPerformance, ValidatorSetSnapshot, ValidatorStatus,
 };
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 use std::time::Duration;
 use tokio::signal;
 
@@ -285,7 +286,7 @@ struct NodeConfig {
     data_dir: Option<PathBuf>,
     #[serde(default)]
     bind_addr: Option<SocketAddr>,
-    #[serde(default)]
+    #[serde(default = "default_namespaces")]
     namespaces: Vec<NamespaceRuleset>,
     #[serde(default)]
     validators: Vec<ConfigValidator>,
@@ -533,7 +534,7 @@ impl Default for NodeConfig {
             api_clients: Vec::new(),
             data_dir: Some(PathBuf::from("data")),
             bind_addr: Some(default_bind()),
-            namespaces: Vec::new(),
+            namespaces: default_namespaces(),
             validators: Vec::new(),
             peers: Vec::new(),
             network_key_rotation_secs: default_rotation_secs(),
@@ -588,6 +589,120 @@ fn default_api_port() -> u16 {
 
 fn default_rotation_secs() -> u64 {
     3600
+}
+
+fn default_namespaces() -> Vec<NamespaceRuleset> {
+    vec![
+        NamespaceRuleset {
+            descriptor: citizen_types::NamespaceDescriptor {
+                namespace: "identity.citizen".into(),
+                version: 1,
+                rules_hash: "sha256:identity-default-v1".into(),
+                governed_by: "governance.vote".into(),
+            },
+            writers: BTreeSet::from(["registry.identity".into()]),
+            validators: vec![citizen_types::NamespaceRule {
+                name: "require_signature".into(),
+                config: json!({}),
+            }],
+        },
+        NamespaceRuleset {
+            descriptor: citizen_types::NamespaceDescriptor {
+                namespace: "registry.land".into(),
+                version: 1,
+                rules_hash: "sha256:land-default-v1".into(),
+                governed_by: "governance.vote".into(),
+            },
+            writers: BTreeSet::from(["registry.land".into()]),
+            validators: vec![
+                citizen_types::NamespaceRule {
+                    name: "require_signature".into(),
+                    config: json!({}),
+                },
+                citizen_types::NamespaceRule {
+                    name: "prevent_double_transfer".into(),
+                    config: json!({"object_id": "object_id"}),
+                },
+            ],
+        },
+        NamespaceRuleset {
+            descriptor: citizen_types::NamespaceDescriptor {
+                namespace: "audit.procurement".into(),
+                version: 1,
+                rules_hash: "sha256:audit-default-v1".into(),
+                governed_by: "governance.vote".into(),
+            },
+            writers: BTreeSet::from(["audit.procurement".into()]),
+            validators: vec![citizen_types::NamespaceRule {
+                name: "require_signature".into(),
+                config: json!({}),
+            }],
+        },
+        NamespaceRuleset {
+            descriptor: citizen_types::NamespaceDescriptor {
+                namespace: "governance.vote".into(),
+                version: 1,
+                rules_hash: "sha256:governance-default-v1".into(),
+                governed_by: "governance.vote".into(),
+            },
+            writers: BTreeSet::from(["governance.vote".into()]),
+            validators: vec![citizen_types::NamespaceRule {
+                name: "require_signature".into(),
+                config: json!({}),
+            }],
+        },
+        NamespaceRuleset {
+            descriptor: citizen_types::NamespaceDescriptor {
+                namespace: "builder.credits".into(),
+                version: 1,
+                rules_hash: "sha256:builder-credits-default-v1".into(),
+                governed_by: "governance.vote".into(),
+            },
+            writers: BTreeSet::from(["builder.credits".into()]),
+            validators: vec![
+                citizen_types::NamespaceRule {
+                    name: "require_signature".into(),
+                    config: json!({}),
+                },
+                citizen_types::NamespaceRule {
+                    name: "builder_credit_policy".into(),
+                    config: json!({
+                        "required_grant_approvals": 3,
+                        "daily_sponsor_spend_cap": 5000,
+                        "grant_approvers": [
+                            "grant:ops-1",
+                            "grant:ops-2",
+                            "grant:ops-3",
+                            "grant:ops-4",
+                            "grant:ops-5"
+                        ]
+                    }),
+                },
+            ],
+        },
+        NamespaceRuleset {
+            descriptor: citizen_types::NamespaceDescriptor {
+                namespace: "execution.module".into(),
+                version: 1,
+                rules_hash: "sha256:execution-module-default-v1".into(),
+                governed_by: "governance.vote".into(),
+            },
+            writers: BTreeSet::from(["execution.module".into()]),
+            validators: vec![
+                citizen_types::NamespaceRule {
+                    name: "require_signature".into(),
+                    config: json!({}),
+                },
+                citizen_types::NamespaceRule {
+                    name: "wasm_runtime_policy".into(),
+                    config: json!({
+                        "allowed_module_classes": ["deterministic-indexer", "policy-guard", "receipt-verifier"],
+                        "required_governance_approvals": 3
+                    }),
+                },
+            ],
+        },
+    ]
 }
 
 fn default_network_id() -> String {
@@ -783,6 +898,31 @@ mod tests {
 
         let result = config.build_admission_snapshot("different-pubkey", &context);
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn default_config_bootstraps_canonical_namespaces() {
+        let config = NodeConfig::default();
+
+        assert!(config
+            .namespaces
+            .iter()
+            .any(|ruleset| ruleset.descriptor.namespace == "builder.credits"));
+        assert!(config
+            .namespaces
+            .iter()
+            .any(|ruleset| ruleset.descriptor.namespace == "execution.module"));
+    }
+
+    #[test]
+    fn deserialization_uses_default_namespaces_when_omitted() {
+        let config: NodeConfig = toml::from_str(
+            r#"validator_id = "validator.local"
+api_port = 9001"#,
+        )
+        .expect("config should deserialize");
+
+        assert!(!config.namespaces.is_empty());
     }
 
     #[test]
