@@ -62,11 +62,13 @@ fn run_preflight_inner<S: LedgerStorage>(
     settings: &AdmissionSettings,
     storage: &S,
 ) -> Result<AdmissionContext, AdmissionError> {
-    if settings.network_id != RUNTIME_NETWORK_ID {
-        return Err(AdmissionError::RuntimeNetworkMismatch {
-            runtime: RUNTIME_NETWORK_ID.to_string(),
-            configured: settings.network_id.clone(),
-        });
+    if let Some(runtime_network_id) = RUNTIME_NETWORK_ID {
+        if settings.network_id != runtime_network_id {
+            return Err(AdmissionError::RuntimeNetworkMismatch {
+                runtime: runtime_network_id.to_string(),
+                configured: settings.network_id.clone(),
+            });
+        }
     }
 
     if RUNTIME_PSK_HASH.is_some() && settings.startup_secret.is_none() {
@@ -201,6 +203,7 @@ fn reason_code(err: &AdmissionError) -> &'static str {
     match err {
         AdmissionError::ManifestRequired => "manifest_required",
         AdmissionError::ManifestRead { .. } => "manifest_read",
+        AdmissionError::ManifestPathPlaceholder { .. } => "manifest_path_placeholder",
         AdmissionError::ManifestParse(_) => "manifest_parse",
         AdmissionError::ManifestCanonicalization(_) => "manifest_canonicalization",
         AdmissionError::InvalidManifestSignature(_) => "invalid_manifest_signature",
@@ -269,17 +272,21 @@ mod tests {
     }
 
     #[test]
-    fn preflight_rejects_runtime_network_mismatch() {
+    fn preflight_runtime_network_policy_depends_on_baked_identity() {
         reset_metrics();
         let storage = MemoryStorage::new();
         let mut settings = base_settings();
         settings.network_id = "citizen-othernet".to_string();
 
         let result = run_preflight(&settings, &storage);
-        assert!(matches!(
-            result,
-            Err(AdmissionError::RuntimeNetworkMismatch { .. })
-        ));
+        if RUNTIME_NETWORK_ID.is_some() {
+            assert!(matches!(
+                result,
+                Err(AdmissionError::RuntimeNetworkMismatch { .. })
+            ));
+        } else {
+            assert!(result.is_ok());
+        }
     }
 
     #[test]
@@ -291,6 +298,21 @@ mod tests {
 
         let result = run_preflight(&settings, &storage);
         assert!(matches!(result, Err(AdmissionError::ManifestRequired)));
+    }
+
+    #[test]
+    fn preflight_rejects_placeholder_manifest_path() {
+        reset_metrics();
+        let storage = MemoryStorage::new();
+        let mut settings = base_settings();
+        settings.manifest_enforce = true;
+        settings.manifest_path = Some("REPLACE_WITH_SIGNED_MANIFEST_JSON_PATH".into());
+
+        let result = run_preflight(&settings, &storage);
+        assert!(matches!(
+            result,
+            Err(AdmissionError::ManifestPathPlaceholder { .. })
+        ));
     }
 
     #[test]

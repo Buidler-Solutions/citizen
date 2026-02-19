@@ -33,6 +33,10 @@ pub enum AdmissionError {
         path: PathBuf,
         source: std::io::Error,
     },
+    #[error(
+        "manifest_path uses a placeholder value ({path}); replace it with the path to a signed admission manifest json artifact"
+    )]
+    ManifestPathPlaceholder { path: PathBuf },
     #[error("failed to parse manifest json: {0}")]
     ManifestParse(serde_json::Error),
     #[error("failed to canonicalize manifest payload: {0}")]
