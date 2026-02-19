@@ -28,6 +28,7 @@ Map `admission_startup_fail_total{reason}` to remediation:
 | --- | --- | --- |
 | `manifest_required` | `manifest_enforce=true` but no manifest file was supplied. | Set `manifest_path` to the signed manifest or disable enforcement only in approved local/dev profiles. |
 | `manifest_read` | Manifest file cannot be read (path/permissions). | Verify `manifest_path`, file ownership, and mount state. |
+| `manifest_path_placeholder` | `manifest_path` still points at `REPLACE_WITH_SIGNED_MANIFEST_JSON_PATH` from sample configs. | Replace with the signed manifest JSON path distributed by release/governance operations for the target network. |
 | `manifest_parse` | Manifest file is not valid JSON/schema. | Regenerate manifest artifact from release pipeline and redeploy. |
 | `manifest_canonicalization` | Payload failed deterministic serialization. | Re-export manifest with canonical payload fields; do not hand-edit manifest JSON. |
 | `invalid_manifest_signature` | Signature set does not validate over canonical payload. | Replace with signed governance artifact; verify signing key and payload digest match. |
