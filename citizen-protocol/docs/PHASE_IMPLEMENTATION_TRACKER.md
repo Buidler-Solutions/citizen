@@ -98,11 +98,13 @@ Baseline reference: `docs/DEEP_RESEARCH_ARCHITECTURE_BASELINE.md` (Phase 1 secti
 
 ### Completed
 - [x] Added `builder_credit_policy` namespace rule enforcing non-transferability (no transfer action/path), sponsorship ownership (`author == object_id`), and balance-aware sponsorship debits.
+- [x] Hardened `MULTISIG_CREDIT_GRANT` handling to require cryptographic `payload.multisig_proofs` objects (`approver`, `public_key`, `signature`) and ledger-side signature verification against deterministic grant messages.
 - [x] Added anti-abuse instrumentation guardrails in rule validation: unique `sponsorship_id` and configurable `max_daily_spend` cap.
 - [x] Added API summary endpoint `GET /api/v1/builder-credits/:builder_id` to expose credited/sponsored/available totals plus sponsorship instrumentation for builders.
 - [x] Added regression coverage for builder credit policy rule checks and API reporting path.
 
 ### Last Update
+- 2026-02-19: Updated Phase 3 documentation for the new cryptographic `MULTISIG_CREDIT_GRANT` proof model and deterministic signer verification requirements.
 - 2026-02-13: Completed Phase 3 readiness review (`docs/PHASE3_READINESS_REVIEW.md`); Phase 3 scope validated as complete and Phase 4 is approved to start.
 - 2026-02-13: Started and completed initial Phase 3 builder credit implementation (rule enforcement, anti-abuse instrumentation, and API summary surface) with test coverage.
 - Commit: see git history
