@@ -135,6 +135,7 @@ All write paths should yield deterministic receipts containing:
 ### Phase 3 (Builder Fee Credits)
 
 - Non-transferable fee credits and sponsorship.
+- Dedicated `MULTISIG_CREDIT_GRANT` policy with cryptographic proof objects (`approver`, `public_key`, `signature`) and deterministic signer verification.
 - Builder registry policies and anti-abuse instrumentation.
 
 ### Phase 4 (Asset Controls)
