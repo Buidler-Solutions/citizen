@@ -315,25 +315,4 @@ $$
 
 ---
 
-## 10. Standard Whitepaper Structure Alignment
-
-This document follows standard whitepaper requirements:
-
-- problem and motivation,
-- formal model and assumptions,
-- protocol mechanics,
-- governance and economic policy,
-- theorem-level safety/liveness reasoning,
-- operational and security implications.
-
-Companion artifacts should include:
-
-1. engineering specification (wire format, APIs, test vectors),
-2. governance charter (policy and legal process),
-3. operations runbooks (incident response, upgrades, recovery).
-
----
-
-## 11. Conclusion
-
 CITIZEN defines a mathematically grounded, governance-first public ledger that prioritizes deterministic truth over speculation. Its 80%-BFT consensus provides strong finality, namespaces provide policy-safe domain composition, and builder credit grants create a transparent non-transferable incentive path for ecosystem growth. Together, these elements form a deployable framework for civic and institutional digital infrastructure.
