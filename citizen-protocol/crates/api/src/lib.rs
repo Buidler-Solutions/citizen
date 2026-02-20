@@ -913,12 +913,25 @@ mod tests {
     };
     use serde_json::{json, Value};
     use std::collections::BTreeMap;
-    use std::collections::BTreeSet;
+    use std::collections::{BTreeSet, HashMap};
     use std::sync::Arc;
     use tower::util::ServiceExt;
     use uuid::Uuid;
 
     fn build_server() -> ApiServer<MemoryStorage> {
+        let grant_keys = grant_approver_keys(&[
+            "grant:ops-1",
+            "grant:ops-2",
+            "grant:ops-3",
+            "grant:ops-4",
+            "grant:ops-5",
+        ]);
+        build_server_with_grant_keys(&grant_keys)
+    }
+
+    fn build_server_with_grant_keys(
+        grant_keys: &HashMap<String, ValidatorKeypair>,
+    ) -> ApiServer<MemoryStorage> {
         let storage = Arc::new(MemoryStorage::new());
         let ledger = Arc::new(Ledger::new(storage, KeyRegistry::new()));
         ledger.bootstrap_namespaces(vec![NamespaceRuleset {
@@ -986,7 +999,7 @@ mod tests {
             writers: BTreeSet::new(),
             validators: vec![NamespaceRule {
                 name: "builder_credit_policy".to_string(),
-                config: json!({"max_daily_spend": 10_000, "enforce_dedicated_grant_opcode": true, "required_grant_approvals": 3, "grant_approvers": ["grant:ops-1", "grant:ops-2", "grant:ops-3", "grant:ops-4", "grant:ops-5"]}),
+                config: json!({"max_daily_spend": 10_000, "required_grant_approvals": 3, "grant_approvers": grant_approvers_config(grant_keys)}),
             }],
         }]);
         ledger.bootstrap_namespaces(vec![NamespaceRuleset {
@@ -1053,7 +1066,40 @@ mod tests {
         ApiServer::with_edge_config(ledger, edge)
     }
 
-    fn attach_multisig_proofs(entry: &mut LedgerEntry, approvers: &[&str]) {
+    fn grant_approver_keys(approvers: &[&str]) -> HashMap<String, ValidatorKeypair> {
+        approvers
+            .iter()
+            .map(|approver| {
+                (
+                    (*approver).to_string(),
+                    ValidatorKeypair::generate((*approver).to_string()),
+                )
+            })
+            .collect()
+    }
+
+    fn grant_approvers_config(keys: &HashMap<String, ValidatorKeypair>) -> Vec<serde_json::Value> {
+        let mut approver_ids: Vec<&String> = keys.keys().collect();
+        approver_ids.sort();
+        approver_ids
+            .iter()
+            .map(|approver| {
+                let keypair = keys
+                    .get(*approver)
+                    .expect("grant approver keypair must exist");
+                json!({
+                    "id": approver,
+                    "public_key": verifying_key_to_string(keypair.verifying_key())
+                })
+            })
+            .collect()
+    }
+
+    fn attach_multisig_proofs(
+        entry: &mut LedgerEntry,
+        approvers: &[&str],
+        keys: &HashMap<String, ValidatorKeypair>,
+    ) {
         let amount = entry
             .payload
             .get("amount")
@@ -1063,7 +1109,9 @@ mod tests {
         let proofs: Vec<serde_json::Value> = approvers
             .iter()
             .map(|approver| {
-                let keypair = ValidatorKeypair::generate((*approver).to_string());
+                let keypair = keys
+                    .get(*approver)
+                    .expect("missing key for requested approver");
                 let message = serde_json::to_string(&json!({
                     "entry_id": entry.entry_id,
                     "namespace": entry.namespace,
@@ -1254,7 +1302,14 @@ mod tests {
 
     #[tokio::test]
     async fn resolves_did_from_identity_namespace() {
-        let app = build_server().router();
+        let grant_keys = grant_approver_keys(&[
+            "grant:ops-1",
+            "grant:ops-2",
+            "grant:ops-3",
+            "grant:ops-4",
+            "grant:ops-5",
+        ]);
+        let app = build_server_with_grant_keys(&grant_keys).router();
         let now = chrono::Utc::now().timestamp();
         let identity_entry = LedgerEntry {
             entry_id: Uuid::new_v4(),
@@ -1303,7 +1358,14 @@ mod tests {
 
     #[tokio::test]
     async fn consent_policy_check_returns_valid_for_live_receipt() {
-        let app = build_server().router();
+        let grant_keys = grant_approver_keys(&[
+            "grant:ops-1",
+            "grant:ops-2",
+            "grant:ops-3",
+            "grant:ops-4",
+            "grant:ops-5",
+        ]);
+        let app = build_server_with_grant_keys(&grant_keys).router();
         let now = chrono::Utc::now().timestamp();
         let consent_entry = LedgerEntry {
             entry_id: Uuid::new_v4(),
@@ -1366,7 +1428,14 @@ mod tests {
 
     #[tokio::test]
     async fn consent_policy_check_returns_revoked_when_latest_event_revokes() {
-        let app = build_server().router();
+        let grant_keys = grant_approver_keys(&[
+            "grant:ops-1",
+            "grant:ops-2",
+            "grant:ops-3",
+            "grant:ops-4",
+            "grant:ops-5",
+        ]);
+        let app = build_server_with_grant_keys(&grant_keys).router();
         let now = chrono::Utc::now().timestamp();
         let granted_entry = LedgerEntry {
             entry_id: Uuid::new_v4(),
@@ -1445,7 +1514,14 @@ mod tests {
 
     #[tokio::test]
     async fn builder_credit_endpoint_returns_available_balance_and_instrumentation() {
-        let app = build_server().router();
+        let grant_keys = grant_approver_keys(&[
+            "grant:ops-1",
+            "grant:ops-2",
+            "grant:ops-3",
+            "grant:ops-4",
+            "grant:ops-5",
+        ]);
+        let app = build_server_with_grant_keys(&grant_keys).router();
         let now = chrono::Utc::now().timestamp();
         let mut grant_entry = LedgerEntry {
             entry_id: Uuid::new_v4(),
@@ -1460,6 +1536,7 @@ mod tests {
         attach_multisig_proofs(
             &mut grant_entry,
             &["grant:ops-1", "grant:ops-2", "grant:ops-3"],
+            &grant_keys,
         );
 
         let sponsor_entry = LedgerEntry {
@@ -1474,7 +1551,8 @@ mod tests {
         };
 
         for entry in [grant_entry, sponsor_entry] {
-            app.clone()
+            let submit_response = app
+                .clone()
                 .oneshot(
                     Request::builder()
                         .method("POST")
@@ -1487,6 +1565,7 @@ mod tests {
                 )
                 .await
                 .expect("submit response");
+            assert_eq!(submit_response.status(), StatusCode::ACCEPTED);
         }
 
         let response = app
@@ -1517,7 +1596,14 @@ mod tests {
 
     #[tokio::test]
     async fn asset_positions_endpoint_returns_trustline_holdings_and_disclosure() {
-        let app = build_server().router();
+        let grant_keys = grant_approver_keys(&[
+            "grant:ops-1",
+            "grant:ops-2",
+            "grant:ops-3",
+            "grant:ops-4",
+            "grant:ops-5",
+        ]);
+        let app = build_server_with_grant_keys(&grant_keys).router();
         let now = chrono::Utc::now().timestamp();
 
         let trustline_entry = LedgerEntry {
