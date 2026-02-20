@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "check:minimatch": "node -e \"const l=require('./package-lock.json'); const pk=l.packages||{}; const found=Object.entries(pk).filter(([k])=>k.includes('node_modules/minimatch')).map(([k,v])=>k+'@'+v.version); if(!found.length){console.error('No minimatch entries found in lockfile'); process.exit(1);} const bad=found.filter((x)=>!x.endsWith('@10.2.1')); if(bad.length){console.error('Unexpected minimatch versions:', bad.join(', ')); process.exit(1);} console.log('Verified minimatch entries:', found.join(', '));\""
   },
   "dependencies": {
     "react": "^18.3.1",
@@ -32,5 +33,11 @@
     "vite": "^6.0.11",
     "vitest": "^3.0.4",
     "vitest-axe": "^0.1.0"
+  },
+  "overrides": {
+    "@typescript-eslint/typescript-estree": {
+      "minimatch": "10.2.1"
+    },
+    "minimatch": "10.2.1"
   }
 }
