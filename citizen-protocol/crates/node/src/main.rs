@@ -668,14 +668,20 @@ fn default_namespaces() -> Vec<NamespaceRuleset> {
                     name: "builder_credit_policy".into(),
                     config: json!({
                         "required_grant_approvals": 3,
-                        "daily_sponsor_spend_cap": 5000,
+                        "max_daily_spend": 5000,
                         "grant_approvers": [
-                            "grant:ops-1",
-                            "grant:ops-2",
-                            "grant:ops-3",
-                            "grant:ops-4",
-                            "grant:ops-5"
-                        ]
+                            {"id": "grant:ops-1", "public_key": "a28000878f6ad2d87478d4e217c042375d6254a52de30eda7ccb1e6063cdc9f8"},
+                            {"id": "grant:ops-2", "public_key": "ce7b9bd48eb28da70be46149b4c390bfdbf063ee57d0c1c3d8671f043261275f"},
+                            {"id": "grant:ops-3", "public_key": "33f916e23f89cafc8eb1cacaffbcc9fec622974b27383ed2491c7573427856bc"},
+                            {"id": "grant:ops-4", "public_key": "8900579255c892112d9128bee22b01c2e96c6dd8942e80157ecddfd14982c1f2"},
+                            {"id": "grant:ops-5", "public_key": "4c35b96dec331f6a59b4342559ad5d1bed7fdcb1eada43e10d0d79cfafc99811"}
+                        ],
+                        "programmable_multisig": {
+                            "enabled": false,
+                            "policy_id": "builder-credits-auto-v1",
+                            "actors": ["automation.builder-credit-bot"],
+                            "max_grant_amount": 1000
+                        }
                     }),
                 },
             ],

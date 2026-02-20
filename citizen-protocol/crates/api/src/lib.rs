@@ -1,6 +1,6 @@
 use axum::extract::Path;
+use axum::http::HeaderMap;
 use axum::http::StatusCode;
-use axum::http::{HeaderMap, HeaderValue};
 use axum::routing::{get, post};
 use axum::{serve, Json, Router};
 use chrono::Utc;
@@ -372,6 +372,20 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
             ));
         }
 
+        if envelope.signer != envelope.payload.author {
+            return protocol_error_response(ProtocolError::ValidationFailed(
+                "envelope signer must match payload author".into(),
+            ));
+        }
+
+        if !envelope.payload.signature.is_empty()
+            && envelope.payload.signature != envelope.signature
+        {
+            return protocol_error_response(ProtocolError::ValidationFailed(
+                "envelope signature must match payload signature when both are present".into(),
+            ));
+        }
+
         let action = envelope.payload.action.clone();
         let mut entry = envelope.payload;
         if entry.signature.is_empty() {
@@ -485,7 +499,7 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
                 .and_then(|value| value.as_u64())
                 .unwrap_or_default();
             match entry.action.as_str() {
-                "CREDIT_GRANT" | "MULTISIG_CREDIT_GRANT" => {
+                "CREDIT_GRANT" | "MULTISIG_CREDIT_GRANT" | "PROGRAMMABLE_CREDIT_GRANT" => {
                     credited = credited.saturating_add(amount)
                 }
                 "SPONSOR_USAGE" => {
@@ -858,10 +872,7 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
             }
             token
         } else {
-            headers
-                .get("x-forwarded-for")
-                .and_then(header_to_string)
-                .unwrap_or_else(|| "anonymous".to_string())
+            "anonymous".to_string()
         };
 
         let now = Utc::now().timestamp();
@@ -877,10 +888,6 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
         entries.push(now);
         Ok(())
     }
-}
-
-fn header_to_string(value: &HeaderValue) -> Option<String> {
-    value.to_str().ok().map(ToString::to_string)
 }
 
 fn protocol_error_response(err: ProtocolError) -> (StatusCode, Json<serde_json::Value>) {
@@ -913,12 +920,25 @@ mod tests {
     };
     use serde_json::{json, Value};
     use std::collections::BTreeMap;
-    use std::collections::BTreeSet;
+    use std::collections::{BTreeSet, HashMap};
     use std::sync::Arc;
     use tower::util::ServiceExt;
     use uuid::Uuid;
 
     fn build_server() -> ApiServer<MemoryStorage> {
+        let grant_keys = grant_approver_keys(&[
+            "grant:ops-1",
+            "grant:ops-2",
+            "grant:ops-3",
+            "grant:ops-4",
+            "grant:ops-5",
+        ]);
+        build_server_with_grant_keys(&grant_keys)
+    }
+
+    fn build_server_with_grant_keys(
+        grant_keys: &HashMap<String, ValidatorKeypair>,
+    ) -> ApiServer<MemoryStorage> {
         let storage = Arc::new(MemoryStorage::new());
         let ledger = Arc::new(Ledger::new(storage, KeyRegistry::new()));
         ledger.bootstrap_namespaces(vec![NamespaceRuleset {
@@ -986,7 +1006,7 @@ mod tests {
             writers: BTreeSet::new(),
             validators: vec![NamespaceRule {
                 name: "builder_credit_policy".to_string(),
-                config: json!({"max_daily_spend": 10_000, "enforce_dedicated_grant_opcode": true, "required_grant_approvals": 3, "grant_approvers": ["grant:ops-1", "grant:ops-2", "grant:ops-3", "grant:ops-4", "grant:ops-5"]}),
+                config: json!({"max_daily_spend": 10_000, "required_grant_approvals": 3, "grant_approvers": grant_approvers_config(grant_keys)}),
             }],
         }]);
         ledger.bootstrap_namespaces(vec![NamespaceRuleset {
@@ -1053,7 +1073,40 @@ mod tests {
         ApiServer::with_edge_config(ledger, edge)
     }
 
-    fn attach_multisig_proofs(entry: &mut LedgerEntry, approvers: &[&str]) {
+    fn grant_approver_keys(approvers: &[&str]) -> HashMap<String, ValidatorKeypair> {
+        approvers
+            .iter()
+            .map(|approver| {
+                (
+                    (*approver).to_string(),
+                    ValidatorKeypair::generate((*approver).to_string()),
+                )
+            })
+            .collect()
+    }
+
+    fn grant_approvers_config(keys: &HashMap<String, ValidatorKeypair>) -> Vec<serde_json::Value> {
+        let mut approver_ids: Vec<&String> = keys.keys().collect();
+        approver_ids.sort();
+        approver_ids
+            .iter()
+            .map(|approver| {
+                let keypair = keys
+                    .get(*approver)
+                    .expect("grant approver keypair must exist");
+                json!({
+                    "id": approver,
+                    "public_key": verifying_key_to_string(keypair.verifying_key())
+                })
+            })
+            .collect()
+    }
+
+    fn attach_multisig_proofs(
+        entry: &mut LedgerEntry,
+        approvers: &[&str],
+        keys: &HashMap<String, ValidatorKeypair>,
+    ) {
         let amount = entry
             .payload
             .get("amount")
@@ -1063,7 +1116,9 @@ mod tests {
         let proofs: Vec<serde_json::Value> = approvers
             .iter()
             .map(|approver| {
-                let keypair = ValidatorKeypair::generate((*approver).to_string());
+                let keypair = keys
+                    .get(*approver)
+                    .expect("missing key for requested approver");
                 let message = serde_json::to_string(&json!({
                     "entry_id": entry.entry_id,
                     "namespace": entry.namespace,
@@ -1086,22 +1141,65 @@ mod tests {
 
         entry.payload = json!({"amount": amount, "multisig_proofs": proofs});
     }
+    fn sign_entry_for_tests(entry: &mut LedgerEntry, keypair: &ValidatorKeypair) {
+        entry.payload["author_public_key"] =
+            json!(verifying_key_to_string(keypair.verifying_key()));
+        let signing_payload = json!({
+            "entry_id": entry.entry_id,
+            "namespace": entry.namespace,
+            "action": entry.action,
+            "object_id": entry.object_id,
+            "payload": entry.payload,
+            "author": entry.author,
+            "timestamp": entry.timestamp,
+        });
+        let signature = sign_message(keypair, canonical_json(&signing_payload).as_bytes());
+        entry.signature = hex::encode(signature.to_bytes());
+    }
+
+    fn canonical_json(value: &Value) -> String {
+        match value {
+            Value::Object(map) => {
+                let mut keys: Vec<&String> = map.keys().collect();
+                keys.sort();
+                let parts: Vec<String> = keys
+                    .iter()
+                    .map(|key| {
+                        let encoded_key =
+                            serde_json::to_string(key).expect("canonical object key serialization");
+                        let encoded_value = canonical_json(&map[*key]);
+                        format!("{encoded_key}:{encoded_value}")
+                    })
+                    .collect();
+                format!("{{{}}}", parts.join(","))
+            }
+            Value::Array(items) => {
+                let encoded_items: Vec<String> = items.iter().map(canonical_json).collect();
+                format!("[{}]", encoded_items.join(","))
+            }
+            _ => serde_json::to_string(value).expect("canonical scalar serialization"),
+        }
+    }
+
     fn test_envelope() -> SignedEnvelope<LedgerEntry> {
+        let keypair = ValidatorKeypair::generate("did:author:a".to_string());
+        let mut payload = LedgerEntry {
+            entry_id: Uuid::new_v4(),
+            namespace: "audit.procurement".to_string(),
+            action: "RECORD_EVENT".to_string(),
+            object_id: "PROC-001".to_string(),
+            payload: json!({"event":"BID_OPENED"}),
+            author: "did:author:a".to_string(),
+            signature: String::new(),
+            timestamp: chrono::Utc::now().timestamp(),
+        };
+        sign_entry_for_tests(&mut payload, &keypair);
         SignedEnvelope {
             envelope_id: Uuid::new_v4(),
-            signer: "did:author:a".to_string(),
-            signature: "sig-envelope".to_string(),
+            signer: payload.author.clone(),
+            signature: payload.signature.clone(),
             submitted_at: chrono::Utc::now(),
-            payload: LedgerEntry {
-                entry_id: Uuid::new_v4(),
-                namespace: "audit.procurement".to_string(),
-                action: "RECORD_EVENT".to_string(),
-                object_id: "PROC-001".to_string(),
-                payload: json!({"event":"BID_OPENED"}),
-                author: "did:author:a".to_string(),
-                signature: "sig-entry".to_string(),
-                timestamp: chrono::Utc::now().timestamp(),
-            },
+            payload,
         }
     }
 
@@ -1254,7 +1352,14 @@ mod tests {
 
     #[tokio::test]
     async fn resolves_did_from_identity_namespace() {
-        let app = build_server().router();
+        let grant_keys = grant_approver_keys(&[
+            "grant:ops-1",
+            "grant:ops-2",
+            "grant:ops-3",
+            "grant:ops-4",
+            "grant:ops-5",
+        ]);
+        let app = build_server_with_grant_keys(&grant_keys).router();
         let now = chrono::Utc::now().timestamp();
         let identity_entry = LedgerEntry {
             entry_id: Uuid::new_v4(),
@@ -1303,7 +1408,14 @@ mod tests {
 
     #[tokio::test]
     async fn consent_policy_check_returns_valid_for_live_receipt() {
-        let app = build_server().router();
+        let grant_keys = grant_approver_keys(&[
+            "grant:ops-1",
+            "grant:ops-2",
+            "grant:ops-3",
+            "grant:ops-4",
+            "grant:ops-5",
+        ]);
+        let app = build_server_with_grant_keys(&grant_keys).router();
         let now = chrono::Utc::now().timestamp();
         let consent_entry = LedgerEntry {
             entry_id: Uuid::new_v4(),
@@ -1366,7 +1478,14 @@ mod tests {
 
     #[tokio::test]
     async fn consent_policy_check_returns_revoked_when_latest_event_revokes() {
-        let app = build_server().router();
+        let grant_keys = grant_approver_keys(&[
+            "grant:ops-1",
+            "grant:ops-2",
+            "grant:ops-3",
+            "grant:ops-4",
+            "grant:ops-5",
+        ]);
+        let app = build_server_with_grant_keys(&grant_keys).router();
         let now = chrono::Utc::now().timestamp();
         let granted_entry = LedgerEntry {
             entry_id: Uuid::new_v4(),
@@ -1445,7 +1564,14 @@ mod tests {
 
     #[tokio::test]
     async fn builder_credit_endpoint_returns_available_balance_and_instrumentation() {
-        let app = build_server().router();
+        let grant_keys = grant_approver_keys(&[
+            "grant:ops-1",
+            "grant:ops-2",
+            "grant:ops-3",
+            "grant:ops-4",
+            "grant:ops-5",
+        ]);
+        let app = build_server_with_grant_keys(&grant_keys).router();
         let now = chrono::Utc::now().timestamp();
         let mut grant_entry = LedgerEntry {
             entry_id: Uuid::new_v4(),
@@ -1460,6 +1586,7 @@ mod tests {
         attach_multisig_proofs(
             &mut grant_entry,
             &["grant:ops-1", "grant:ops-2", "grant:ops-3"],
+            &grant_keys,
         );
 
         let sponsor_entry = LedgerEntry {
@@ -1474,7 +1601,8 @@ mod tests {
         };
 
         for entry in [grant_entry, sponsor_entry] {
-            app.clone()
+            let submit_response = app
+                .clone()
                 .oneshot(
                     Request::builder()
                         .method("POST")
@@ -1487,6 +1615,7 @@ mod tests {
                 )
                 .await
                 .expect("submit response");
+            assert_eq!(submit_response.status(), StatusCode::ACCEPTED);
         }
 
         let response = app
@@ -1517,7 +1646,14 @@ mod tests {
 
     #[tokio::test]
     async fn asset_positions_endpoint_returns_trustline_holdings_and_disclosure() {
-        let app = build_server().router();
+        let grant_keys = grant_approver_keys(&[
+            "grant:ops-1",
+            "grant:ops-2",
+            "grant:ops-3",
+            "grant:ops-4",
+            "grant:ops-5",
+        ]);
+        let app = build_server_with_grant_keys(&grant_keys).router();
         let now = chrono::Utc::now().timestamp();
 
         let trustline_entry = LedgerEntry {
@@ -1772,6 +1908,73 @@ mod tests {
         let payload: Value = serde_json::from_slice(&body).expect("interop payload");
         assert_eq!(payload["latest_link"], "did:web:example.com:alice");
         assert_eq!(payload["latest_proof_hash"], "proof:0xabc");
+    }
+
+    #[tokio::test]
+    async fn envelope_submission_rejects_mismatched_signer_and_author() {
+        let app = build_server().router();
+        let mut envelope = test_envelope();
+        envelope.signer = "did:attacker:z".to_string();
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/envelopes/submit")
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        serde_json::to_vec(&envelope).expect("serialize envelope"),
+                    ))
+                    .expect("request"),
+            )
+            .await
+            .expect("submit response");
+
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn unauthenticated_rate_limits_are_not_bypassable_via_forwarded_for_header() {
+        let app = build_server_with_edge(ApiEdgeConfig {
+            write_enabled: true,
+            auth_required: false,
+            max_write_requests_per_minute: 1,
+            clients: BTreeMap::new(),
+        })
+        .router();
+
+        let first = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/entries/submit")
+                    .header("content-type", "application/json")
+                    .header("x-forwarded-for", "198.51.100.1")
+                    .body(Body::from(
+                        serde_json::to_vec(&test_envelope().payload).expect("entry body"),
+                    ))
+                    .expect("first request"),
+            )
+            .await
+            .expect("first submit");
+        assert_eq!(first.status(), StatusCode::ACCEPTED);
+
+        let second = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/entries/submit")
+                    .header("content-type", "application/json")
+                    .header("x-forwarded-for", "203.0.113.2")
+                    .body(Body::from(
+                        serde_json::to_vec(&test_envelope().payload).expect("entry body"),
+                    ))
+                    .expect("second request"),
+            )
+            .await
+            .expect("second submit");
+        assert_eq!(second.status(), StatusCode::TOO_MANY_REQUESTS);
     }
 
     #[tokio::test]
