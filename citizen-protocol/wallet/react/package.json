@@ -32,5 +32,10 @@
     "vite": "^6.0.11",
     "vitest": "^3.0.4",
     "vitest-axe": "^0.1.0"
+  },
+  "overrides": {
+    "@typescript-eslint/typescript-estree": {
+      "minimatch": "10.2.1"
+    }
   }
 }
