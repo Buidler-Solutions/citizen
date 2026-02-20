@@ -20,6 +20,7 @@ npm run dev
 ## Validation
 
 ```bash
+npm run check:minimatch
 npm run test
 npm run build
 ```
