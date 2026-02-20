@@ -50,6 +50,7 @@ Current delivery includes Phase 2 identity/data ownership primitives, Phase 3 bu
 - Consent receipt namespace policy enforcement (`consent.receipt`) and API policy checks via `POST /api/v1/consent/check`.
 - Builder fee credit namespace policy enforcement (`builder.credits`) with non-transferability, mandatory `MULTISIG_CREDIT_GRANT` opcode usage, approver-to-public-key binding via configured `grant_approvers` entries (`id`, `public_key`), required `payload.multisig_proofs` (`approver`, `public_key`, `signature`) with deterministic ledger-side signature verification, sponsorship balance checks, and anti-abuse controls (`sponsorship_id` uniqueness + daily spend cap).
 - Builder credit reporting endpoint: `GET /api/v1/builder-credits/:builder_id` for deterministic credited/sponsored/available accounting, active policy metadata (including `max_daily_spend`), and sponsorship instrumentation.
+- Detailed 3-of-5 multisig implementation and operations guide for builder credit grants: `docs/MULTISIG_3_OF_5_IMPLEMENTATION_HOWTO.md`.
 - Governed asset control namespace policy (`asset.control`) enforcing trustline activation, issuer-authorized holds, holder-authorized releases, and governance-scoped policy flags/disclosure commitments.
 - Asset disclosure endpoint: `GET /api/v1/assets/:account_id` for trustline status, controlled policy flags, held balance, and available trustline capacity.
 - Scoped WASM runtime namespace policy (`execution.module`) enforcing audit artifact requirements, governance-gated activation thresholds, and deterministic execution receipt commitments.
@@ -175,6 +176,10 @@ If you leave the placeholder untouched, startup fails by design with
    Observer/watcher rollout profile (read-only runtime mode, bootstrap template, and onboarding checks) is documented in:
 
    - `docs/OBSERVER_NODE_RUNBOOK.md`
+
+   Builder-credit grant signer operations and deterministic 3-of-5 multisig proof construction are documented in:
+
+   - `docs/MULTISIG_3_OF_5_IMPLEMENTATION_HOWTO.md`
 
    Validator rollout readiness gate (keys, admission policy, telemetry, and runbook sign-off) is documented in:
 
