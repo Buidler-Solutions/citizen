@@ -675,7 +675,13 @@ fn default_namespaces() -> Vec<NamespaceRuleset> {
                             {"id": "grant:ops-3", "public_key": "33f916e23f89cafc8eb1cacaffbcc9fec622974b27383ed2491c7573427856bc"},
                             {"id": "grant:ops-4", "public_key": "8900579255c892112d9128bee22b01c2e96c6dd8942e80157ecddfd14982c1f2"},
                             {"id": "grant:ops-5", "public_key": "4c35b96dec331f6a59b4342559ad5d1bed7fdcb1eada43e10d0d79cfafc99811"}
-                        ]
+                        ],
+                        "programmable_multisig": {
+                            "enabled": false,
+                            "policy_id": "builder-credits-auto-v1",
+                            "actors": ["automation.builder-credit-bot"],
+                            "max_grant_amount": 1000
+                        }
                     }),
                 },
             ],
