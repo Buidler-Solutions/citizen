@@ -1,6 +1,6 @@
 use axum::extract::Path;
+use axum::http::HeaderMap;
 use axum::http::StatusCode;
-use axum::http::{HeaderMap, HeaderValue};
 use axum::routing::{get, post};
 use axum::{serve, Json, Router};
 use chrono::Utc;
@@ -372,6 +372,20 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
             ));
         }
 
+        if envelope.signer != envelope.payload.author {
+            return protocol_error_response(ProtocolError::ValidationFailed(
+                "envelope signer must match payload author".into(),
+            ));
+        }
+
+        if !envelope.payload.signature.is_empty()
+            && envelope.payload.signature != envelope.signature
+        {
+            return protocol_error_response(ProtocolError::ValidationFailed(
+                "envelope signature must match payload signature when both are present".into(),
+            ));
+        }
+
         let action = envelope.payload.action.clone();
         let mut entry = envelope.payload;
         if entry.signature.is_empty() {
@@ -485,7 +499,7 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
                 .and_then(|value| value.as_u64())
                 .unwrap_or_default();
             match entry.action.as_str() {
-                "CREDIT_GRANT" | "MULTISIG_CREDIT_GRANT" => {
+                "CREDIT_GRANT" | "MULTISIG_CREDIT_GRANT" | "PROGRAMMABLE_CREDIT_GRANT" => {
                     credited = credited.saturating_add(amount)
                 }
                 "SPONSOR_USAGE" => {
@@ -858,10 +872,7 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
             }
             token
         } else {
-            headers
-                .get("x-forwarded-for")
-                .and_then(header_to_string)
-                .unwrap_or_else(|| "anonymous".to_string())
+            "anonymous".to_string()
         };
 
         let now = Utc::now().timestamp();
@@ -877,10 +888,6 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
         entries.push(now);
         Ok(())
     }
-}
-
-fn header_to_string(value: &HeaderValue) -> Option<String> {
-    value.to_str().ok().map(ToString::to_string)
 }
 
 fn protocol_error_response(err: ProtocolError) -> (StatusCode, Json<serde_json::Value>) {
@@ -1134,22 +1141,65 @@ mod tests {
 
         entry.payload = json!({"amount": amount, "multisig_proofs": proofs});
     }
+    fn sign_entry_for_tests(entry: &mut LedgerEntry, keypair: &ValidatorKeypair) {
+        entry.payload["author_public_key"] =
+            json!(verifying_key_to_string(keypair.verifying_key()));
+        let signing_payload = json!({
+            "entry_id": entry.entry_id,
+            "namespace": entry.namespace,
+            "action": entry.action,
+            "object_id": entry.object_id,
+            "payload": entry.payload,
+            "author": entry.author,
+            "timestamp": entry.timestamp,
+        });
+        let signature = sign_message(keypair, canonical_json(&signing_payload).as_bytes());
+        entry.signature = hex::encode(signature.to_bytes());
+    }
+
+    fn canonical_json(value: &Value) -> String {
+        match value {
+            Value::Object(map) => {
+                let mut keys: Vec<&String> = map.keys().collect();
+                keys.sort();
+                let parts: Vec<String> = keys
+                    .iter()
+                    .map(|key| {
+                        let encoded_key =
+                            serde_json::to_string(key).expect("canonical object key serialization");
+                        let encoded_value = canonical_json(&map[*key]);
+                        format!("{encoded_key}:{encoded_value}")
+                    })
+                    .collect();
+                format!("{{{}}}", parts.join(","))
+            }
+            Value::Array(items) => {
+                let encoded_items: Vec<String> = items.iter().map(canonical_json).collect();
+                format!("[{}]", encoded_items.join(","))
+            }
+            _ => serde_json::to_string(value).expect("canonical scalar serialization"),
+        }
+    }
+
     fn test_envelope() -> SignedEnvelope<LedgerEntry> {
+        let keypair = ValidatorKeypair::generate("did:author:a".to_string());
+        let mut payload = LedgerEntry {
+            entry_id: Uuid::new_v4(),
+            namespace: "audit.procurement".to_string(),
+            action: "RECORD_EVENT".to_string(),
+            object_id: "PROC-001".to_string(),
+            payload: json!({"event":"BID_OPENED"}),
+            author: "did:author:a".to_string(),
+            signature: String::new(),
+            timestamp: chrono::Utc::now().timestamp(),
+        };
+        sign_entry_for_tests(&mut payload, &keypair);
         SignedEnvelope {
             envelope_id: Uuid::new_v4(),
-            signer: "did:author:a".to_string(),
-            signature: "sig-envelope".to_string(),
+            signer: payload.author.clone(),
+            signature: payload.signature.clone(),
             submitted_at: chrono::Utc::now(),
-            payload: LedgerEntry {
-                entry_id: Uuid::new_v4(),
-                namespace: "audit.procurement".to_string(),
-                action: "RECORD_EVENT".to_string(),
-                object_id: "PROC-001".to_string(),
-                payload: json!({"event":"BID_OPENED"}),
-                author: "did:author:a".to_string(),
-                signature: "sig-entry".to_string(),
-                timestamp: chrono::Utc::now().timestamp(),
-            },
+            payload,
         }
     }
 
@@ -1858,6 +1908,73 @@ mod tests {
         let payload: Value = serde_json::from_slice(&body).expect("interop payload");
         assert_eq!(payload["latest_link"], "did:web:example.com:alice");
         assert_eq!(payload["latest_proof_hash"], "proof:0xabc");
+    }
+
+    #[tokio::test]
+    async fn envelope_submission_rejects_mismatched_signer_and_author() {
+        let app = build_server().router();
+        let mut envelope = test_envelope();
+        envelope.signer = "did:attacker:z".to_string();
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/envelopes/submit")
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        serde_json::to_vec(&envelope).expect("serialize envelope"),
+                    ))
+                    .expect("request"),
+            )
+            .await
+            .expect("submit response");
+
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn unauthenticated_rate_limits_are_not_bypassable_via_forwarded_for_header() {
+        let app = build_server_with_edge(ApiEdgeConfig {
+            write_enabled: true,
+            auth_required: false,
+            max_write_requests_per_minute: 1,
+            clients: BTreeMap::new(),
+        })
+        .router();
+
+        let first = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/entries/submit")
+                    .header("content-type", "application/json")
+                    .header("x-forwarded-for", "198.51.100.1")
+                    .body(Body::from(
+                        serde_json::to_vec(&test_envelope().payload).expect("entry body"),
+                    ))
+                    .expect("first request"),
+            )
+            .await
+            .expect("first submit");
+        assert_eq!(first.status(), StatusCode::ACCEPTED);
+
+        let second = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/entries/submit")
+                    .header("content-type", "application/json")
+                    .header("x-forwarded-for", "203.0.113.2")
+                    .body(Body::from(
+                        serde_json::to_vec(&test_envelope().payload).expect("entry body"),
+                    ))
+                    .expect("second request"),
+            )
+            .await
+            .expect("second submit");
+        assert_eq!(second.status(), StatusCode::TOO_MANY_REQUESTS);
     }
 
     #[tokio::test]
