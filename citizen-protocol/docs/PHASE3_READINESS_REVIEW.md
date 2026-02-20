@@ -12,8 +12,8 @@ Phase 3 criteria from the deep-research baseline:
 
 ### 1) Non-transferable fee credits and sponsorship
 - The `builder_credit_policy` rule enforces mandatory numeric positive `payload.amount` values for builder credit actions.
-- Credit grants are hardened behind the dedicated `MULTISIG_CREDIT_GRANT` opcode, with required `payload.multisig_proofs` objects containing `approver`, `public_key`, and `signature` fields.
-- Each multisig proof is verified cryptographically by the ledger against a deterministic grant-signing message, and only configured `grant_approvers` count toward `required_grant_approvals`.
+- Credit grants are hardened behind mandatory `MULTISIG_CREDIT_GRANT` usage, with required `payload.multisig_proofs` objects containing `approver`, `public_key`, and `signature` fields.
+- Each multisig proof is verified cryptographically by the ledger against a deterministic grant-signing message, and each approver must use the exact configured `grant_approvers` key binding (`id` + `public_key`) to count toward `required_grant_approvals`.
 - Credits are explicitly non-transferable by rejecting `TRANSFER_CREDITS` actions and payloads containing a `to_builder` path.
 - Sponsorship is ownership-bound (`author == object_id`) and requires a unique `payload.sponsorship_id`.
 - Sponsorship debits are balance-aware using ledger-side balance computation (`MULTISIG_CREDIT_GRANT`/`CREDIT_GRANT` totals minus unique `SPONSOR_USAGE` entries).
