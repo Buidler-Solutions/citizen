@@ -291,12 +291,7 @@ impl<S: LedgerStorage + 'static> Ledger<S> {
             ));
         }
 
-        if entry.action == "CREDIT_GRANT"
-            && config
-                .get("enforce_dedicated_grant_opcode")
-                .and_then(Value::as_bool)
-                .unwrap_or(false)
-        {
+        if entry.action == "CREDIT_GRANT" {
             return Err(ProtocolError::ValidationFailed(
                 "builder credit grants must use MULTISIG_CREDIT_GRANT action".into(),
             ));
@@ -316,11 +311,45 @@ impl<S: LedgerStorage + 'static> Ledger<S> {
                             .into(),
                     )
                 })?;
-            let allowed_approvers: HashSet<String> = approvers
-                .iter()
-                .filter_map(Value::as_str)
-                .map(ToString::to_string)
-                .collect();
+            let mut allowed_approvers: HashMap<String, String> = HashMap::new();
+            for approver in approvers {
+                let config_entry = approver.as_object().ok_or_else(|| {
+                    ProtocolError::ValidationFailed(
+                        "grant_approvers entries must be objects containing id and public_key"
+                            .into(),
+                    )
+                })?;
+                let approver_id =
+                    config_entry
+                        .get("id")
+                        .and_then(Value::as_str)
+                        .ok_or_else(|| {
+                            ProtocolError::ValidationFailed(
+                                "grant_approvers entries require string id".into(),
+                            )
+                        })?;
+                let approver_public_key = config_entry
+                    .get("public_key")
+                    .and_then(Value::as_str)
+                    .ok_or_else(|| {
+                        ProtocolError::ValidationFailed(
+                            "grant_approvers entries require string public_key".into(),
+                        )
+                    })?;
+                parse_verifying_key(approver_public_key).map_err(|err| {
+                    ProtocolError::ValidationFailed(format!(
+                        "invalid grant_approvers public_key for {approver_id}: {err}"
+                    ))
+                })?;
+                if allowed_approvers
+                    .insert(approver_id.to_string(), approver_public_key.to_string())
+                    .is_some()
+                {
+                    return Err(ProtocolError::ValidationFailed(
+                        "grant_approvers entries must be unique by id".into(),
+                    ));
+                }
+            }
             if allowed_approvers.is_empty() {
                 return Err(ProtocolError::ValidationFailed(
                     "builder credit policy grant_approvers cannot be empty".into(),
@@ -352,11 +381,11 @@ impl<S: LedgerStorage + 'static> Ledger<S> {
                             "MULTISIG_CREDIT_GRANT proof requires approver".into(),
                         )
                     })?;
-                if !allowed_approvers.contains(approver) {
-                    return Err(ProtocolError::ValidationFailed(
+                let configured_public_key = allowed_approvers.get(approver).ok_or_else(|| {
+                    ProtocolError::ValidationFailed(
                         "MULTISIG_CREDIT_GRANT includes approver outside grant_approvers".into(),
-                    ));
-                }
+                    )
+                })?;
 
                 let verifying_key_hex = proof
                     .get("public_key")
@@ -366,6 +395,11 @@ impl<S: LedgerStorage + 'static> Ledger<S> {
                             "MULTISIG_CREDIT_GRANT proof requires public_key".into(),
                         )
                     })?;
+                if verifying_key_hex != configured_public_key {
+                    return Err(ProtocolError::ValidationFailed(format!(
+                        "MULTISIG_CREDIT_GRANT public_key does not match configured key for approver {approver}"
+                    )));
+                }
                 let verifying_key = parse_verifying_key(verifying_key_hex).map_err(|err| {
                     ProtocolError::ValidationFailed(format!(
                         "invalid MULTISIG_CREDIT_GRANT public_key for approver {approver}: {err}"
@@ -1127,7 +1161,7 @@ mod tests {
         CommitProof, LedgerEntry, NamespaceDescriptor, NamespaceRule, NamespaceRuleset,
     };
     use serde_json::json;
-    use std::collections::BTreeSet;
+    use std::collections::{BTreeSet, HashMap};
     use uuid::Uuid;
 
     fn test_entry(namespace: &str) -> LedgerEntry {
@@ -1156,7 +1190,40 @@ mod tests {
         }
     }
 
-    fn attach_multisig_proofs(entry: &mut LedgerEntry, approvers: &[&str]) {
+    fn grant_approver_keys(approvers: &[&str]) -> HashMap<String, ValidatorKeypair> {
+        approvers
+            .iter()
+            .map(|approver| {
+                (
+                    (*approver).to_string(),
+                    ValidatorKeypair::generate((*approver).to_string()),
+                )
+            })
+            .collect()
+    }
+
+    fn grant_approvers_config(keys: &HashMap<String, ValidatorKeypair>) -> Vec<serde_json::Value> {
+        let mut approver_ids: Vec<&String> = keys.keys().collect();
+        approver_ids.sort();
+        approver_ids
+            .iter()
+            .map(|approver| {
+                let keypair = keys
+                    .get(*approver)
+                    .expect("grant approver keypair must exist");
+                json!({
+                    "id": approver,
+                    "public_key": verifying_key_to_string(keypair.verifying_key())
+                })
+            })
+            .collect()
+    }
+
+    fn attach_multisig_proofs(
+        entry: &mut LedgerEntry,
+        approvers: &[&str],
+        keys: &HashMap<String, ValidatorKeypair>,
+    ) {
         let amount = entry
             .payload
             .get("amount")
@@ -1166,7 +1233,9 @@ mod tests {
         let proofs: Vec<serde_json::Value> = approvers
             .iter()
             .map(|approver| {
-                let keypair = ValidatorKeypair::generate((*approver).to_string());
+                let keypair = keys
+                    .get(*approver)
+                    .expect("missing key for requested approver");
                 let message = serde_json::to_string(&json!({
                     "entry_id": entry.entry_id,
                     "namespace": entry.namespace,
@@ -1355,15 +1424,21 @@ mod tests {
     fn enforces_builder_credit_non_transferability_and_balance() {
         let ledger = Ledger::in_memory();
         let namespace = "builder.credits";
+        let grant_keys = grant_approver_keys(&[
+            "grant:ops-1",
+            "grant:ops-2",
+            "grant:ops-3",
+            "grant:ops-4",
+            "grant:ops-5",
+        ]);
         ledger.bootstrap_namespaces(vec![namespace_with_rules(
             namespace,
             vec![NamespaceRule {
                 name: "builder_credit_policy".into(),
                 config: json!({
                     "max_daily_spend": 100,
-                    "enforce_dedicated_grant_opcode": true,
                     "required_grant_approvals": 3,
-                    "grant_approvers": ["grant:ops-1", "grant:ops-2", "grant:ops-3", "grant:ops-4", "grant:ops-5"]
+                    "grant_approvers": grant_approvers_config(&grant_keys)
                 }),
             }],
         )]);
@@ -1373,7 +1448,11 @@ mod tests {
         grant.object_id = "builder:alpha".into();
         grant.author = "governance:ops".into();
         grant.payload = json!({"amount": 50_u64});
-        attach_multisig_proofs(&mut grant, &["grant:ops-1", "grant:ops-2", "grant:ops-3"]);
+        attach_multisig_proofs(
+            &mut grant,
+            &["grant:ops-1", "grant:ops-2", "grant:ops-3"],
+            &grant_keys,
+        );
         ledger.apply_entry(grant).expect("grant should pass");
 
         let mut spend = test_entry(namespace);
@@ -1412,15 +1491,21 @@ mod tests {
     fn enforces_builder_sponsorship_daily_limit_and_unique_sponsorship_id() {
         let ledger = Ledger::in_memory();
         let namespace = "builder.credits";
+        let grant_keys = grant_approver_keys(&[
+            "grant:ops-1",
+            "grant:ops-2",
+            "grant:ops-3",
+            "grant:ops-4",
+            "grant:ops-5",
+        ]);
         ledger.bootstrap_namespaces(vec![namespace_with_rules(
             namespace,
             vec![NamespaceRule {
                 name: "builder_credit_policy".into(),
                 config: json!({
                     "max_daily_spend": 25,
-                    "enforce_dedicated_grant_opcode": true,
                     "required_grant_approvals": 3,
-                    "grant_approvers": ["grant:ops-1", "grant:ops-2", "grant:ops-3", "grant:ops-4", "grant:ops-5"]
+                    "grant_approvers": grant_approvers_config(&grant_keys)
                 }),
             }],
         )]);
@@ -1430,7 +1515,11 @@ mod tests {
         grant.object_id = "builder:alpha".into();
         grant.author = "governance:ops".into();
         grant.payload = json!({"amount": 100_u64});
-        attach_multisig_proofs(&mut grant, &["grant:ops-1", "grant:ops-2", "grant:ops-3"]);
+        attach_multisig_proofs(
+            &mut grant,
+            &["grant:ops-1", "grant:ops-2", "grant:ops-3"],
+            &grant_keys,
+        );
         ledger.apply_entry(grant).expect("grant should pass");
 
         let mut spend = test_entry(namespace);
@@ -1465,14 +1554,20 @@ mod tests {
     fn enforces_multisig_credit_grant_threshold_and_approver_allowlist() {
         let ledger = Ledger::in_memory();
         let namespace = "builder.credits";
+        let grant_keys = grant_approver_keys(&[
+            "grant:ops-1",
+            "grant:ops-2",
+            "grant:ops-3",
+            "grant:ops-4",
+            "grant:ops-5",
+        ]);
         ledger.bootstrap_namespaces(vec![namespace_with_rules(
             namespace,
             vec![NamespaceRule {
                 name: "builder_credit_policy".into(),
                 config: json!({
-                    "enforce_dedicated_grant_opcode": true,
                     "required_grant_approvals": 3,
-                    "grant_approvers": ["grant:ops-1", "grant:ops-2", "grant:ops-3", "grant:ops-4", "grant:ops-5"]
+                    "grant_approvers": grant_approvers_config(&grant_keys)
                 }),
             }],
         )]);
@@ -1494,7 +1589,11 @@ mod tests {
         insufficient.object_id = "builder:alpha".into();
         insufficient.author = "governance:ops".into();
         insufficient.payload = json!({"amount": 25_u64});
-        attach_multisig_proofs(&mut insufficient, &["grant:ops-1", "grant:ops-2"]);
+        attach_multisig_proofs(
+            &mut insufficient,
+            &["grant:ops-1", "grant:ops-2"],
+            &grant_keys,
+        );
         let insufficient_err = ledger
             .apply_entry(insufficient)
             .expect_err("insufficient approvals should fail");
@@ -1509,14 +1608,62 @@ mod tests {
         unauthorized.payload = json!({"amount": 25_u64});
         attach_multisig_proofs(
             &mut unauthorized,
-            &["grant:ops-1", "grant:ops-2", "grant:rogue"],
+            &["grant:ops-1", "grant:ops-2", "grant:ops-3"],
+            &grant_keys,
         );
+        unauthorized.payload["multisig_proofs"][2]["approver"] = json!("grant:rogue");
         let unauthorized_err = ledger
             .apply_entry(unauthorized)
             .expect_err("unauthorized approver should fail");
         assert!(unauthorized_err
             .to_string()
             .contains("outside grant_approvers"));
+    }
+
+    #[test]
+    fn rejects_multisig_grant_when_proof_key_does_not_match_configured_approver_key() {
+        let ledger = Ledger::in_memory();
+        let namespace = "builder.credits";
+        let grant_keys = grant_approver_keys(&[
+            "grant:ops-1",
+            "grant:ops-2",
+            "grant:ops-3",
+            "grant:ops-4",
+            "grant:ops-5",
+        ]);
+        ledger.bootstrap_namespaces(vec![namespace_with_rules(
+            namespace,
+            vec![NamespaceRule {
+                name: "builder_credit_policy".into(),
+                config: json!({
+                    "required_grant_approvals": 3,
+                    "grant_approvers": grant_approvers_config(&grant_keys)
+                }),
+            }],
+        )]);
+
+        let mut grant = test_entry(namespace);
+        grant.action = "MULTISIG_CREDIT_GRANT".into();
+        grant.object_id = "builder:alpha".into();
+        grant.author = "governance:ops".into();
+        grant.payload = json!({"amount": 25_u64});
+        attach_multisig_proofs(
+            &mut grant,
+            &["grant:ops-1", "grant:ops-2", "grant:ops-3"],
+            &grant_keys,
+        );
+
+        let mismatched_key = verifying_key_to_string(
+            ValidatorKeypair::generate("grant:rogue".into()).verifying_key(),
+        );
+        grant.payload["multisig_proofs"][0]["public_key"] = json!(mismatched_key);
+
+        let err = ledger
+            .apply_entry(grant)
+            .expect_err("mismatched proof key should fail");
+        assert!(err
+            .to_string()
+            .contains("public_key does not match configured key"));
     }
 
     #[test]
