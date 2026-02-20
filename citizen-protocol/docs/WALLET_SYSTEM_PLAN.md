@@ -29,7 +29,7 @@ Explicit non-goals:
 - Generate/import/export keys (ed25519 / BLS / secp256k1 as selected by protocol).
 - Support for **hardware-backed keys** (TPM/HSM) with pluggable key provider.
 - Key rotation flows with on-chain update entries.
-- Multi-sig / policy controls for institutional accounts.
+- Multi-sig / policy controls for institutional accounts, including deterministic 3-of-5 grant approvals for `builder.credits`.
 - Encrypted local storage and passphrase support.
 
 ### 3.2 Identity & DID Management
@@ -112,13 +112,14 @@ Local storage recommendation: encrypted SQLite (or sled) with filesystem-backed 
 ---
 
 ## 9) API Integration (Node)
-- `POST /entries` submit signed entry.
-- `GET /entries/{id}` fetch entry status.
-- `GET /blocks/{height}` verification.
-- `POST /governance/proposals` create proposal.
-- `POST /governance/votes` cast vote.
+- `POST /api/v1/envelopes/submit` submit signed entry envelopes.
+- `GET /api/v1/entries/{entry_id}` fetch entry status (when enabled by node profile).
+- `GET /api/v1/blocks/{height}` verify finalized block data.
+- `POST /api/v1/governance/proposals` create governance proposals (validator-auth flows).
+- `POST /api/v1/governance/votes` cast governance votes (validator-auth flows).
+- `GET /api/v1/builder-credits/{builder_id}` inspect credited/sponsored/available totals after multisig grants.
 
-Define a stable API schema with versioning for wallet compatibility.
+Define a stable API schema with explicit `/api/v1` versioning for wallet compatibility.
 
 ---
 
@@ -153,3 +154,8 @@ Define a stable API schema with versioning for wallet compatibility.
 - Define canonical entry schemas and signing formats.
 - Implement minimal CLI prototype to validate flows.
 - Coordinate API specification with node team.
+
+## 13) Technical HOWTO References
+- 3-of-5 multisig grant implementation details: `docs/MULTISIG_3_OF_5_IMPLEMENTATION_HOWTO.md`
+- Wallet CLI usage: `wallet/cli/README.md`
+- Wallet generation and key export: `docs/WALLET_GENERATION_GUIDE.md`
