@@ -64,6 +64,33 @@ config = {}
 name = "require_payload_fields"
 config.fields = ["title", "content", "signedMessage", "network"]
 
+[[namespaces]]
+descriptor.namespace = "builder.credits"
+descriptor.version = 1
+descriptor.rules_hash = "sha256:builder-credits-localnet-v1"
+descriptor.governed_by = "governance.vote"
+writers = ["builder.credits"]
+[[namespaces.validators]]
+name = "require_signature"
+config = {}
+[[namespaces.validators]]
+name = "builder_credit_policy"
+config.required_grant_approvals = 3
+config.max_daily_spend = 5000
+config.grant_approvers = [
+  { id = "grant:ops-1", public_key = "11eec230e93451631d92331ab14f7cd3beb71d7d0664213c3c245ee34e218bbc" },
+  { id = "grant:ops-2", public_key = "4fba12886de6f3955e1e00122ecfa5f28f6143b4ebfd623426b31db6e3ba759b" },
+  { id = "grant:ops-3", public_key = "05d820297454180f0a29826db77629efaf2866ce6321bdf1e36653fbce5f87fc" },
+  { id = "grant:ops-4", public_key = "871aae4a90265130ec08636783f7c6967201557511093f2ebe5b1ec3b5759500" },
+  { id = "grant:ops-5", public_key = "64b4461734432d8b1651171a2f4385948748665c876a377cd1722ef55389553b" }
+]
+
+[namespaces.validators.config.programmable_multisig]
+enabled = false
+policy_id = "builder-credits-auto-v1"
+actors = ["automation.builder-credit-bot"]
+max_grant_amount = 1000
+
 [[validators]]
 validator_id = "validator-alpha"
 public_key = "712651f450ba05b63898b99ef5f7ba45632e8e2527f7f715cd671ec4024cc51e"

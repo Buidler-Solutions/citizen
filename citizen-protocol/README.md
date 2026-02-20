@@ -181,6 +181,10 @@ If you leave the placeholder untouched, startup fails by design with
 
    - `docs/MULTISIG_3_OF_5_IMPLEMENTATION_HOWTO.md`
 
+   End-to-end localnet execution runbook for real entry submission + 80% consensus finality checks + 3-of-5 multisig builder-credit grant submission is documented in:
+
+   - `docs/LOCALNET_80_QUORUM_MULTISIG_RUNBOOK.md`
+
    Validator rollout readiness gate (keys, admission policy, telemetry, and runbook sign-off) is documented in:
 
    - `docs/VALIDATOR_ROLLOUT_READINESS.md`

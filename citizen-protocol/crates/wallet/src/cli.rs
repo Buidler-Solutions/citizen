@@ -2,7 +2,7 @@ use chrono::Utc;
 use citizen_types::{LedgerEntry, SignedEnvelope};
 use clap::{Parser, Subcommand};
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -190,6 +190,24 @@ enum Commands {
         #[arg(long)]
         password: Option<String>,
     },
+    SignBuilderCreditProof {
+        #[arg(long)]
+        entry_json: String,
+        #[arg(long)]
+        approver: String,
+        #[arg(long)]
+        secret_key_hex: String,
+        #[arg(long)]
+        expected_public_key: Option<String>,
+    },
+}
+
+#[derive(Debug, Serialize)]
+struct BuilderCreditProof {
+    approver: String,
+    public_key: String,
+    signature: String,
+    signing_payload: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -635,6 +653,47 @@ pub fn run() -> anyhow::Result<()> {
                 timestamp,
                 password,
             )?;
+        }
+        Commands::SignBuilderCreditProof {
+            entry_json,
+            approver,
+            secret_key_hex,
+            expected_public_key,
+        } => {
+            let entry: LedgerEntry = serde_json::from_str(&entry_json)?;
+            let amount = entry
+                .payload
+                .get("amount")
+                .and_then(Value::as_u64)
+                .ok_or_else(|| anyhow::anyhow!("entry payload.amount must be a positive integer"))?;
+            let secret_bytes = hex::decode(secret_key_hex)?;
+            let keypair = WalletKeypair::from_secret_bytes(Uuid::new_v4(), &secret_bytes)?;
+            let public_key = keypair.verifying_key_hex();
+            if let Some(expected) = expected_public_key {
+                if expected != public_key {
+                    return Err(anyhow::anyhow!(
+                        "expected_public_key does not match derived key (expected={expected}, actual={public_key})"
+                    ));
+                }
+            }
+            let signing_payload = serde_json::to_string(&json!({
+                "entry_id": entry.entry_id,
+                "namespace": entry.namespace,
+                "action": entry.action,
+                "object_id": entry.object_id,
+                "author": entry.author,
+                "amount": amount,
+                "timestamp": entry.timestamp,
+                "approver": approver
+            }))?;
+            let signature = keypair.sign_bytes(signing_payload.as_bytes());
+            let proof = BuilderCreditProof {
+                approver,
+                public_key,
+                signature: hex::encode(signature.to_bytes()),
+                signing_payload,
+            };
+            println!("{}", serde_json::to_string_pretty(&proof)?);
         }
     }
 
