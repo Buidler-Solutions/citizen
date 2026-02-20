@@ -293,11 +293,11 @@ impl<S: LedgerStorage + 'static> Ledger<S> {
 
         if entry.action == "CREDIT_GRANT" {
             return Err(ProtocolError::ValidationFailed(
-                "builder credit grants must use MULTISIG_CREDIT_GRANT action".into(),
+                "builder credit grants must use MULTISIG_CREDIT_GRANT or PROGRAMMABLE_CREDIT_GRANT action".into(),
             ));
         }
 
-        if entry.action == "MULTISIG_CREDIT_GRANT" {
+        if entry.action == "MULTISIG_CREDIT_GRANT" || entry.action == "PROGRAMMABLE_CREDIT_GRANT" {
             let required_approvals = config
                 .get("required_grant_approvals")
                 .and_then(Value::as_u64)
@@ -307,7 +307,7 @@ impl<S: LedgerStorage + 'static> Ledger<S> {
                 .and_then(Value::as_array)
                 .ok_or_else(|| {
                     ProtocolError::ValidationFailed(
-                        "builder credit policy requires grant_approvers for MULTISIG_CREDIT_GRANT"
+                        "builder credit policy requires grant_approvers for credit grant actions"
                             .into(),
                     )
                 })?;
@@ -361,86 +361,99 @@ impl<S: LedgerStorage + 'static> Ledger<S> {
                 ));
             }
 
-            let proofs = entry
-                .payload
-                .get("multisig_proofs")
-                .and_then(Value::as_array)
-                .ok_or_else(|| {
-                    ProtocolError::ValidationFailed(
-                        "MULTISIG_CREDIT_GRANT requires payload.multisig_proofs array".into(),
-                    )
-                })?;
+            if entry.action == "MULTISIG_CREDIT_GRANT" {
+                let proofs = entry
+                    .payload
+                    .get("multisig_proofs")
+                    .and_then(Value::as_array)
+                    .ok_or_else(|| {
+                        ProtocolError::ValidationFailed(
+                            "MULTISIG_CREDIT_GRANT requires payload.multisig_proofs array".into(),
+                        )
+                    })?;
+                self.validate_multisig_credit_grant_proofs(
+                    entry,
+                    amount,
+                    required_approvals,
+                    &allowed_approvers,
+                    proofs,
+                )?;
+            } else {
+                let programmable = config
+                    .get("programmable_multisig")
+                    .and_then(Value::as_object)
+                    .ok_or_else(|| {
+                        ProtocolError::ValidationFailed(
+                            "PROGRAMMABLE_CREDIT_GRANT requires programmable_multisig policy settings"
+                                .into(),
+                        )
+                    })?;
+                if !programmable
+                    .get("enabled")
+                    .and_then(Value::as_bool)
+                    .unwrap_or(false)
+                {
+                    return Err(ProtocolError::ValidationFailed(
+                        "PROGRAMMABLE_CREDIT_GRANT is disabled by governance policy".into(),
+                    ));
+                }
 
-            let mut unique_approvals: HashSet<String> = HashSet::new();
-            for proof in proofs {
-                let approver = proof
-                    .get("approver")
+                let policy_id = programmable
+                    .get("policy_id")
                     .and_then(Value::as_str)
                     .ok_or_else(|| {
                         ProtocolError::ValidationFailed(
-                            "MULTISIG_CREDIT_GRANT proof requires approver".into(),
+                            "programmable_multisig requires policy_id".into(),
                         )
                     })?;
-                let configured_public_key = allowed_approvers.get(approver).ok_or_else(|| {
-                    ProtocolError::ValidationFailed(
-                        "MULTISIG_CREDIT_GRANT includes approver outside grant_approvers".into(),
-                    )
-                })?;
-
-                let verifying_key_hex = proof
-                    .get("public_key")
+                let payload_policy_id = entry
+                    .payload
+                    .get("policy_id")
                     .and_then(Value::as_str)
                     .ok_or_else(|| {
                         ProtocolError::ValidationFailed(
-                            "MULTISIG_CREDIT_GRANT proof requires public_key".into(),
+                            "PROGRAMMABLE_CREDIT_GRANT requires payload.policy_id".into(),
                         )
                     })?;
-                if verifying_key_hex != configured_public_key {
-                    return Err(ProtocolError::ValidationFailed(format!(
-                        "MULTISIG_CREDIT_GRANT public_key does not match configured key for approver {approver}"
-                    )));
-                }
-                let verifying_key = parse_verifying_key(verifying_key_hex).map_err(|err| {
-                    ProtocolError::ValidationFailed(format!(
-                        "invalid MULTISIG_CREDIT_GRANT public_key for approver {approver}: {err}"
-                    ))
-                })?;
-
-                let signature_hex =
-                    proof
-                        .get("signature")
-                        .and_then(Value::as_str)
-                        .ok_or_else(|| {
-                            ProtocolError::ValidationFailed(
-                                "MULTISIG_CREDIT_GRANT proof requires signature".into(),
-                            )
-                        })?;
-                let signature_bytes = hex::decode(signature_hex).map_err(|err| {
-                    ProtocolError::ValidationFailed(format!(
-                        "invalid MULTISIG_CREDIT_GRANT signature hex for approver {approver}: {err}"
-                    ))
-                })?;
-                let signature = Signature::from_slice(&signature_bytes).map_err(|err| {
-                    ProtocolError::ValidationFailed(format!(
-                        "invalid MULTISIG_CREDIT_GRANT signature bytes for approver {approver}: {err}"
-                    ))
-                })?;
-
-                let message =
-                    self.multisig_credit_grant_signing_message(entry, amount, approver)?;
-                if !verify_signature(&verifying_key, message.as_bytes(), &signature) {
-                    return Err(ProtocolError::ValidationFailed(format!(
-                        "MULTISIG_CREDIT_GRANT signature verification failed for approver {approver}"
-                    )));
+                if payload_policy_id != policy_id {
+                    return Err(ProtocolError::ValidationFailed(
+                        "PROGRAMMABLE_CREDIT_GRANT payload.policy_id does not match governance policy"
+                            .into(),
+                    ));
                 }
 
-                unique_approvals.insert(approver.to_string());
-            }
+                let allowed_actors: HashSet<String> = programmable
+                    .get("actors")
+                    .and_then(Value::as_array)
+                    .map(|actors| {
+                        actors
+                            .iter()
+                            .filter_map(Value::as_str)
+                            .map(ToString::to_string)
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                if allowed_actors.is_empty() {
+                    return Err(ProtocolError::ValidationFailed(
+                        "programmable_multisig requires at least one automation actor".into(),
+                    ));
+                }
+                if !allowed_actors.contains(&entry.author) {
+                    return Err(ProtocolError::ValidationFailed(
+                        "PROGRAMMABLE_CREDIT_GRANT author is not an approved automation actor"
+                            .into(),
+                    ));
+                }
 
-            if unique_approvals.len() < required_approvals {
-                return Err(ProtocolError::ValidationFailed(format!(
-                    "MULTISIG_CREDIT_GRANT requires at least {required_approvals} unique approvals"
-                )));
+                let max_grant_amount = programmable
+                    .get("max_grant_amount")
+                    .and_then(Value::as_u64)
+                    .unwrap_or(u64::MAX);
+                if amount > max_grant_amount {
+                    return Err(ProtocolError::ValidationFailed(format!(
+                        "PROGRAMMABLE_CREDIT_GRANT amount exceeds policy max_grant_amount {max_grant_amount}"
+                    )));
+                }
             }
         }
 
@@ -506,6 +519,89 @@ impl<S: LedgerStorage + 'static> Ledger<S> {
         Ok(())
     }
 
+    fn validate_multisig_credit_grant_proofs(
+        &self,
+        entry: &LedgerEntry,
+        amount: u64,
+        required_approvals: usize,
+        allowed_approvers: &HashMap<String, String>,
+        proofs: &[Value],
+    ) -> Result<()> {
+        let mut unique_approvals: HashSet<String> = HashSet::new();
+        for proof in proofs {
+            let approver = proof
+                .get("approver")
+                .and_then(Value::as_str)
+                .ok_or_else(|| {
+                    ProtocolError::ValidationFailed(
+                        "MULTISIG_CREDIT_GRANT proof requires approver".into(),
+                    )
+                })?;
+            let configured_public_key = allowed_approvers.get(approver).ok_or_else(|| {
+                ProtocolError::ValidationFailed(
+                    "MULTISIG_CREDIT_GRANT includes approver outside grant_approvers".into(),
+                )
+            })?;
+
+            let verifying_key_hex =
+                proof
+                    .get("public_key")
+                    .and_then(Value::as_str)
+                    .ok_or_else(|| {
+                        ProtocolError::ValidationFailed(
+                            "MULTISIG_CREDIT_GRANT proof requires public_key".into(),
+                        )
+                    })?;
+            if verifying_key_hex != configured_public_key {
+                return Err(ProtocolError::ValidationFailed(format!(
+                    "MULTISIG_CREDIT_GRANT public_key does not match configured key for approver {approver}"
+                )));
+            }
+            let verifying_key = parse_verifying_key(verifying_key_hex).map_err(|err| {
+                ProtocolError::ValidationFailed(format!(
+                    "invalid MULTISIG_CREDIT_GRANT public_key for approver {approver}: {err}"
+                ))
+            })?;
+
+            let signature_hex =
+                proof
+                    .get("signature")
+                    .and_then(Value::as_str)
+                    .ok_or_else(|| {
+                        ProtocolError::ValidationFailed(
+                            "MULTISIG_CREDIT_GRANT proof requires signature".into(),
+                        )
+                    })?;
+            let signature_bytes = hex::decode(signature_hex).map_err(|err| {
+                ProtocolError::ValidationFailed(format!(
+                    "invalid MULTISIG_CREDIT_GRANT signature hex for approver {approver}: {err}"
+                ))
+            })?;
+            let signature = Signature::from_slice(&signature_bytes).map_err(|err| {
+                ProtocolError::ValidationFailed(format!(
+                    "invalid MULTISIG_CREDIT_GRANT signature bytes for approver {approver}: {err}"
+                ))
+            })?;
+
+            let message = self.multisig_credit_grant_signing_message(entry, amount, approver)?;
+            if !verify_signature(&verifying_key, message.as_bytes(), &signature) {
+                return Err(ProtocolError::ValidationFailed(format!(
+                    "MULTISIG_CREDIT_GRANT signature verification failed for approver {approver}"
+                )));
+            }
+
+            unique_approvals.insert(approver.to_string());
+        }
+
+        if unique_approvals.len() < required_approvals {
+            return Err(ProtocolError::ValidationFailed(format!(
+                "MULTISIG_CREDIT_GRANT requires at least {required_approvals} unique approvals"
+            )));
+        }
+
+        Ok(())
+    }
+
     fn multisig_credit_grant_signing_message(
         &self,
         entry: &LedgerEntry,
@@ -545,7 +641,9 @@ impl<S: LedgerStorage + 'static> Ledger<S> {
                 .and_then(Value::as_u64)
                 .unwrap_or_default() as i128;
             match entry.action.as_str() {
-                "CREDIT_GRANT" | "MULTISIG_CREDIT_GRANT" => balance += amount,
+                "CREDIT_GRANT" | "MULTISIG_CREDIT_GRANT" | "PROGRAMMABLE_CREDIT_GRANT" => {
+                    balance += amount
+                }
                 "SPONSOR_USAGE" => {
                     let sponsorship_id = entry
                         .payload
@@ -1122,7 +1220,77 @@ impl<S: LedgerStorage + 'static> Ledger<S> {
     }
 
     pub fn validate_entry_submission(&self, entry: &LedgerEntry) -> Result<()> {
-        self.validate_entry(entry)
+        self.validate_entry(entry)?;
+        let requires_signature = self
+            .namespace_rules
+            .read()
+            .get(&entry.namespace)
+            .map(|ruleset| {
+                ruleset
+                    .validators
+                    .iter()
+                    .any(|rule| rule.name == "require_signature")
+            })
+            .unwrap_or(false);
+        if requires_signature {
+            self.verify_submission_signature(entry)?;
+        }
+        Ok(())
+    }
+
+    fn verify_submission_signature(&self, entry: &LedgerEntry) -> Result<()> {
+        let verifying_key = self.resolve_submission_verifying_key(entry)?;
+        let signing_payload = serde_json::json!({
+            "entry_id": entry.entry_id,
+            "namespace": entry.namespace,
+            "action": entry.action,
+            "object_id": entry.object_id,
+            "payload": entry.payload,
+            "author": entry.author,
+            "timestamp": entry.timestamp,
+        });
+        let canonical_payload = canonical_json(&signing_payload);
+        let signature_bytes = hex::decode(&entry.signature).map_err(|err| {
+            ProtocolError::ValidationFailed(format!("invalid signature hex: {err}"))
+        })?;
+        let signature = Signature::from_slice(&signature_bytes).map_err(|err| {
+            ProtocolError::ValidationFailed(format!("invalid signature bytes: {err}"))
+        })?;
+        if !verify_signature(&verifying_key, canonical_payload.as_bytes(), &signature) {
+            return Err(ProtocolError::ValidationFailed(
+                "signature verification failed for submission entry".to_string(),
+            ));
+        }
+        Ok(())
+    }
+
+    fn resolve_submission_verifying_key(
+        &self,
+        entry: &LedgerEntry,
+    ) -> Result<ed25519_dalek::VerifyingKey> {
+        if let Some(public_key_hex) = entry
+            .payload
+            .get("author_public_key")
+            .and_then(Value::as_str)
+        {
+            return parse_verifying_key(public_key_hex).map_err(|err| {
+                ProtocolError::ValidationFailed(format!("invalid payload.author_public_key: {err}"))
+            });
+        }
+
+        if let Some(encoded_key) = entry.author.strip_prefix("did:key:") {
+            return parse_verifying_key(encoded_key).map_err(|err| {
+                ProtocolError::ValidationFailed(format!("invalid did:key author public key: {err}"))
+            });
+        }
+
+        if let Some(key) = self.key_registry.get(&entry.author) {
+            return Ok(key);
+        }
+
+        Err(ProtocolError::ValidationFailed(
+            "unable to resolve verifying key for submission; provide payload.author_public_key, use did:key author, or register author in validator key registry".to_string(),
+        ))
     }
 
     pub fn apply_entry(&self, entry: LedgerEntry) -> Result<()> {
@@ -1147,6 +1315,30 @@ impl<S: LedgerStorage + 'static> Ledger<S> {
     }
 }
 
+fn canonical_json(value: &Value) -> String {
+    match value {
+        Value::Object(map) => {
+            let mut keys: Vec<&String> = map.keys().collect();
+            keys.sort();
+            let parts: Vec<String> = keys
+                .iter()
+                .map(|key| {
+                    let encoded_key =
+                        serde_json::to_string(key).unwrap_or_else(|_| "\"\"".to_string());
+                    let encoded_value = canonical_json(&map[*key]);
+                    format!("{encoded_key}:{encoded_value}")
+                })
+                .collect();
+            format!("{{{}}}", parts.join(","))
+        }
+        Value::Array(items) => {
+            let encoded_items: Vec<String> = items.iter().map(canonical_json).collect();
+            format!("[{}]", encoded_items.join(","))
+        }
+        _ => serde_json::to_string(value).unwrap_or_else(|_| "null".to_string()),
+    }
+}
+
 impl Ledger<MemoryStorage> {
     pub fn in_memory() -> Self {
         Self::new(Arc::new(MemoryStorage::new()), KeyRegistry::new())
@@ -1156,6 +1348,7 @@ impl Ledger<MemoryStorage> {
 #[cfg(test)]
 mod tests {
     use super::Ledger;
+    use crate::canonical_json;
     use citizen_crypto::{sign_message, verifying_key_to_string, ValidatorKeypair};
     use citizen_types::{
         CommitProof, LedgerEntry, NamespaceDescriptor, NamespaceRule, NamespaceRuleset,
@@ -1621,6 +1814,104 @@ mod tests {
     }
 
     #[test]
+    fn programmable_multisig_grant_allows_automation_after_policy_setup() {
+        let ledger = Ledger::in_memory();
+        let namespace = "builder.credits";
+        let grant_keys = grant_approver_keys(&[
+            "grant:ops-1",
+            "grant:ops-2",
+            "grant:ops-3",
+            "grant:ops-4",
+            "grant:ops-5",
+        ]);
+        ledger.bootstrap_namespaces(vec![namespace_with_rules(
+            namespace,
+            vec![NamespaceRule {
+                name: "builder_credit_policy".into(),
+                config: json!({
+                    "required_grant_approvals": 3,
+                    "grant_approvers": grant_approvers_config(&grant_keys),
+                    "programmable_multisig": {
+                        "enabled": true,
+                        "policy_id": "builder-auto-v1",
+                        "actors": ["automation.builder-credit-bot"],
+                        "max_grant_amount": 75
+                    }
+                }),
+            }],
+        )]);
+
+        let mut grant = test_entry(namespace);
+        grant.action = "PROGRAMMABLE_CREDIT_GRANT".into();
+        grant.object_id = "builder:alpha".into();
+        grant.author = "automation.builder-credit-bot".into();
+        grant.payload = json!({"amount": 40_u64, "policy_id": "builder-auto-v1"});
+        ledger.apply_entry(grant).expect(
+            "programmable grant should pass without manual signatures once policy is configured",
+        );
+
+        let mut spend = test_entry(namespace);
+        spend.action = "SPONSOR_USAGE".into();
+        spend.object_id = "builder:alpha".into();
+        spend.author = "builder:alpha".into();
+        spend.payload = json!({"amount": 30_u64, "sponsorship_id":"prog-spn-1", "sponsored_did":"did:ledger:user1"});
+        ledger
+            .apply_entry(spend)
+            .expect("spend should use programmable granted balance");
+    }
+
+    #[test]
+    fn programmable_multisig_grant_enforces_actor_and_amount_limits() {
+        let ledger = Ledger::in_memory();
+        let namespace = "builder.credits";
+        let grant_keys = grant_approver_keys(&[
+            "grant:ops-1",
+            "grant:ops-2",
+            "grant:ops-3",
+            "grant:ops-4",
+            "grant:ops-5",
+        ]);
+        ledger.bootstrap_namespaces(vec![namespace_with_rules(
+            namespace,
+            vec![NamespaceRule {
+                name: "builder_credit_policy".into(),
+                config: json!({
+                    "required_grant_approvals": 3,
+                    "grant_approvers": grant_approvers_config(&grant_keys),
+                    "programmable_multisig": {
+                        "enabled": true,
+                        "policy_id": "builder-auto-v1",
+                        "actors": ["automation.builder-credit-bot"],
+                        "max_grant_amount": 50
+                    }
+                }),
+            }],
+        )]);
+
+        let mut unauthorized_actor = test_entry(namespace);
+        unauthorized_actor.action = "PROGRAMMABLE_CREDIT_GRANT".into();
+        unauthorized_actor.object_id = "builder:alpha".into();
+        unauthorized_actor.author = "automation.rogue".into();
+        unauthorized_actor.payload = json!({"amount": 40_u64, "policy_id": "builder-auto-v1"});
+        let actor_err = ledger
+            .apply_entry(unauthorized_actor)
+            .expect_err("unapproved automation actor must fail");
+        assert!(actor_err
+            .to_string()
+            .contains("not an approved automation actor"));
+
+        let mut over_cap = test_entry(namespace);
+        over_cap.action = "PROGRAMMABLE_CREDIT_GRANT".into();
+        over_cap.object_id = "builder:alpha".into();
+        over_cap.author = "automation.builder-credit-bot".into();
+        over_cap.payload = json!({"amount": 60_u64, "policy_id": "builder-auto-v1"});
+        let amount_err = ledger
+            .apply_entry(over_cap)
+            .expect_err("amount above max_grant_amount should fail");
+        assert!(amount_err.to_string().contains("max_grant_amount"));
+    }
+
+    #[test]
     fn rejects_multisig_grant_when_proof_key_does_not_match_configured_approver_key() {
         let ledger = Ledger::in_memory();
         let namespace = "builder.credits";
@@ -1896,5 +2187,58 @@ mod tests {
         assert!(err
             .to_string()
             .contains("interop standard 'custom-oneoff' is not governance approved"));
+    }
+    #[test]
+    fn validate_entry_submission_requires_verifiable_signature_material() {
+        let ledger = Ledger::in_memory();
+        let namespace = "audit.procurement";
+        ledger.bootstrap_namespaces(vec![namespace_with_rules(
+            namespace,
+            vec![NamespaceRule {
+                name: "require_signature".into(),
+                config: json!({}),
+            }],
+        )]);
+
+        let entry = test_entry(namespace);
+        let err = ledger
+            .validate_entry_submission(&entry)
+            .expect_err("submission without key material must fail");
+        assert!(err
+            .to_string()
+            .contains("unable to resolve verifying key for submission"));
+    }
+
+    #[test]
+    fn validate_entry_submission_accepts_valid_author_public_key_signature() {
+        let ledger = Ledger::in_memory();
+        let namespace = "audit.procurement";
+        ledger.bootstrap_namespaces(vec![namespace_with_rules(
+            namespace,
+            vec![NamespaceRule {
+                name: "require_signature".into(),
+                config: json!({}),
+            }],
+        )]);
+
+        let keypair = ValidatorKeypair::generate("did:author:a".into());
+        let mut entry = test_entry(namespace);
+        entry.payload["author_public_key"] =
+            json!(verifying_key_to_string(keypair.verifying_key()));
+        let signing_payload = serde_json::json!({
+            "entry_id": entry.entry_id,
+            "namespace": entry.namespace,
+            "action": entry.action,
+            "object_id": entry.object_id,
+            "payload": entry.payload,
+            "author": entry.author,
+            "timestamp": entry.timestamp,
+        });
+        let signature = sign_message(&keypair, canonical_json(&signing_payload).as_bytes());
+        entry.signature = hex::encode(signature.to_bytes());
+
+        ledger
+            .validate_entry_submission(&entry)
+            .expect("valid signature should be accepted");
     }
 }
