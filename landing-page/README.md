@@ -19,7 +19,16 @@ cd landing-page/frontend && npm install
 cd ../backend && npm install
 ```
 
-### 2) Run with Docker Compose
+### 2) Create environment file
+
+```bash
+cd landing-page
+cp .env.example .env
+```
+
+Update `JWT_SECRET` and `JWT_ADMIN_KEY` before non-local use.
+
+### 3) Run with Docker Compose
 
 ```bash
 cd landing-page
@@ -30,7 +39,24 @@ App URLs:
 
 - Frontend: `http://localhost:3000`
 - Backend API: `http://localhost:3001/interest`
-- Lead stats endpoint: `http://localhost:3001/interest/stats`
+- Lead stats endpoint (JWT protected): `http://localhost:3001/interest/stats`
+
+## JWT Setup
+
+1. Request a token with the admin key:
+
+```bash
+curl -X POST http://localhost:3001/auth/token \
+  -H 'Content-Type: application/json' \
+  -d '{"adminKey":"change-me-admin-key","subject":"ops-user"}'
+```
+
+2. Use the returned `accessToken` as a bearer token to query stats:
+
+```bash
+curl http://localhost:3001/interest/stats \
+  -H "Authorization: Bearer <accessToken>"
+```
 
 ## API Payload
 
