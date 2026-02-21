@@ -3,9 +3,9 @@ services:
     image: postgres:16-alpine
     restart: unless-stopped
     environment:
-      POSTGRES_DB: citizen_landing
-      POSTGRES_USER: citizen
-      POSTGRES_PASSWORD: citizen
+      POSTGRES_DB: ${POSTGRES_DB:-citizen_landing}
+      POSTGRES_USER: ${POSTGRES_USER:-citizen}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-citizen}
     ports:
       - '5432:5432'
     volumes:
@@ -17,13 +17,16 @@ services:
     depends_on:
       - postgres
     environment:
-      PORT: 3001
-      DB_HOST: postgres
-      DB_PORT: 5432
-      DB_USER: citizen
-      DB_PASSWORD: citizen
-      DB_NAME: citizen_landing
-      CORS_ORIGIN: http://localhost:3000
+      PORT: ${PORT:-3001}
+      DB_HOST: ${DB_HOST:-postgres}
+      DB_PORT: ${DB_PORT:-5432}
+      DB_USER: ${DB_USER:-citizen}
+      DB_PASSWORD: ${DB_PASSWORD:-citizen}
+      DB_NAME: ${DB_NAME:-citizen_landing}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:3000}
+      JWT_SECRET: ${JWT_SECRET:-change-me-in-production}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-1d}
+      JWT_ADMIN_KEY: ${JWT_ADMIN_KEY:-change-me-admin-key}
     ports:
       - '3001:3001'
 
@@ -33,7 +36,7 @@ services:
     depends_on:
       - backend
     environment:
-      NEXT_PUBLIC_API_URL: http://localhost:3001
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:3001}
     ports:
       - '3000:3000'
 
