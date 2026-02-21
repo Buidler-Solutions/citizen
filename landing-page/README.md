@@ -19,20 +19,29 @@ cd landing-page/frontend && npm install
 cd ../backend && npm install
 ```
 
-### 2) Create environment file
+## Run Locally (without Docker)
+
+### 1) Create local environment files
 
 ```bash
-cd landing-page
-cp .env.example .env
+cp landing-page/frontend/.env.local.example landing-page/frontend/.env.local
+cp landing-page/backend/.env.example landing-page/backend/.env
 ```
 
 Update `JWT_SECRET` and `JWT_ADMIN_KEY` before non-local use.
 
-### 3) Run with Docker Compose
+### 2) Start backend
 
 ```bash
-cd landing-page
-docker compose up --build
+cd landing-page/backend
+npm run start:dev
+```
+
+### 3) Start frontend
+
+```bash
+cd landing-page/frontend
+npm run dev
 ```
 
 App URLs:
@@ -40,6 +49,22 @@ App URLs:
 - Frontend: `http://localhost:3000`
 - Backend API: `http://localhost:3001/interest`
 - Lead stats endpoint (JWT protected): `http://localhost:3001/interest/stats`
+
+## Run with Docker Compose
+
+### 1) Create Docker environment file
+
+```bash
+cd landing-page
+cp .env.example .env
+```
+
+### 2) Start containers
+
+```bash
+cd landing-page
+docker compose up --build
+```
 
 ## JWT Setup
 
