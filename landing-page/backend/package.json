@@ -42,6 +42,9 @@
     "lodash": "^4.17.23",
     "webpack": "^5.104.1",
     "tmp": "^0.2.4",
+    "@angular-devkit/core": {
+      "ajv": "^8.18.0"
+    },
     "@eslint/eslintrc": {
       "ajv": "6.14.0"
     }
