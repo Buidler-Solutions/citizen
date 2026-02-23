@@ -17,4 +17,5 @@ ed25519-dalek = { workspace = true }
 hex = { workspace = true }
 
 [dev-dependencies]
+citizen-wallet = { path = "../wallet" }
 uuid = { workspace = true }
