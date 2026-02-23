@@ -724,6 +724,7 @@ dependencies = [
  "citizen-crypto",
  "citizen-storage",
  "citizen-types",
+ "citizen-wallet",
  "ed25519-dalek",
  "hex",
  "parking_lot",
