@@ -47,9 +47,31 @@ pub struct LedgerEntry {
     pub action: String,
     pub object_id: String,
     pub payload: Value,
+    #[serde(default)]
+    pub privacy_flag: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub payload_commitment: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ciphertext_hex: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub nonce_hex: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub salt_hex: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub kdf_params: Option<KdfParams>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub consent_receipt: Option<ConsentReceipt>,
     pub author: String,
     pub signature: String,
     pub timestamp: UnixTimestamp,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct KdfParams {
+    pub memory_kib: u32,
+    pub iterations: u32,
+    pub parallelism: u32,
+    pub output_length: usize,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]

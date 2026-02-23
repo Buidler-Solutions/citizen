@@ -58,6 +58,7 @@ Current delivery includes Phase 2 identity/data ownership primitives, Phase 3 bu
 - Module runtime status endpoint: `GET /api/v1/modules/:module_id` for registration/activation/audit visibility.
 - Interop linkage endpoint: `GET /api/v1/interop/:object_id` for latest remote identifier and proof disclosures.
 - Wallet SDK verification helpers for DID document checks and off-chain commitment validation against on-chain consent receipts.
+- Wallet opt-in encrypt-then-commit entry signing (`--encrypt`/`--private`) with Argon2id + ChaCha20-Poly1305 payload protection, on-chain payload commitments, and embedded consent receipts for governance/audit compliance while keeping public clear-text as the default mode.
 
 ## Getting Started
 

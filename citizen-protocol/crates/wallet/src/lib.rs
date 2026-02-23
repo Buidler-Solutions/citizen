@@ -4,7 +4,7 @@ use chacha20poly1305::{
     ChaCha20Poly1305, Key, Nonce,
 };
 use citizen_types::{
-    ConsentReceipt, DidDocument, DidStatus, LedgerEntry, ProtocolError, UnixTimestamp,
+    ConsentReceipt, DidDocument, DidStatus, KdfParams, LedgerEntry, ProtocolError, UnixTimestamp,
 };
 use ed25519_dalek::{
     Signature, Signer, SigningKey, VerifyingKey, PUBLIC_KEY_LENGTH, SECRET_KEY_LENGTH,
@@ -27,6 +27,10 @@ pub struct EntryDraft {
     pub action: String,
     pub object_id: String,
     pub payload: Value,
+    #[serde(default)]
+    pub privacy_flag: bool,
+    #[serde(skip_serializing, skip_deserializing)]
+    pub encryption_passphrase: Option<String>,
     pub author: String,
     pub timestamp: UnixTimestamp,
 }
@@ -209,43 +213,86 @@ struct EntrySigningPayload {
     action: String,
     object_id: String,
     payload: Value,
+    privacy_flag: bool,
+    payload_commitment: Option<String>,
+    ciphertext_hex: Option<String>,
+    nonce_hex: Option<String>,
+    salt_hex: Option<String>,
+    kdf_params: Option<KdfParams>,
+    consent_receipt: Option<ConsentReceipt>,
     author: String,
     timestamp: UnixTimestamp,
 }
 
 pub fn sign_entry(draft: EntryDraft, keypair: &WalletKeypair) -> Result<LedgerEntry> {
     let entry_id = Uuid::new_v4();
-    let payload = EntrySigningPayload {
+    let canonical_payload = canonical_json(&draft.payload);
+    let payload_commitment = hex::encode(Sha256::digest(canonical_payload.as_bytes()));
+    let (entry_payload, ciphertext_hex, nonce_hex, salt_hex, kdf_params, consent_receipt) = if draft
+        .privacy_flag
+    {
+        let passphrase = draft.encryption_passphrase.as_deref().ok_or_else(|| {
+            ProtocolError::crypto(
+                "privacy_flag=true requires a one-time encryption passphrase".to_string(),
+            )
+        })?;
+        let encrypted = encrypt_payload(&draft.payload, passphrase)?;
+        let consent_receipt = ConsentReceipt {
+            subject_did: draft.author.clone(),
+            data_hash: payload_commitment.clone(),
+            policy_ref: "wallet:encrypt-then-commit:v1".to_string(),
+            granted_at: draft.timestamp,
+            expires_at: draft.timestamp + 30 * 24 * 60 * 60,
+        };
+        (
+            serde_json::json!({ "privacy": "encrypted", "payload_commitment": payload_commitment }),
+            Some(encrypted.ciphertext_hex),
+            Some(encrypted.nonce_hex),
+            Some(encrypted.salt_hex),
+            Some(encrypted.kdf_params),
+            Some(consent_receipt),
+        )
+    } else {
+        (draft.payload.clone(), None, None, None, None, None)
+    };
+    let signing_payload = EntrySigningPayload {
         entry_id,
         namespace: draft.namespace.clone(),
         action: draft.action.clone(),
         object_id: draft.object_id.clone(),
-        payload: draft.payload.clone(),
+        payload: entry_payload.clone(),
+        privacy_flag: draft.privacy_flag,
+        payload_commitment: Some(payload_commitment.clone()),
+        ciphertext_hex: ciphertext_hex.clone(),
+        nonce_hex: nonce_hex.clone(),
+        salt_hex: salt_hex.clone(),
+        kdf_params: kdf_params.clone(),
+        consent_receipt: consent_receipt.clone(),
         author: draft.author.clone(),
         timestamp: draft.timestamp,
     };
-    let canonical_payload = canonical_json(&serde_json::to_value(payload).map_err(|err| {
-        ProtocolError::crypto(format!("failed to serialize signing payload: {err}"))
-    })?);
+    let canonical_payload =
+        canonical_json(&serde_json::to_value(signing_payload).map_err(|err| {
+            ProtocolError::crypto(format!("failed to serialize signing payload: {err}"))
+        })?);
     let signature = keypair.sign_bytes(canonical_payload.as_bytes());
     Ok(LedgerEntry {
         entry_id,
         namespace: draft.namespace,
         action: draft.action,
         object_id: draft.object_id,
-        payload: draft.payload,
+        payload: entry_payload,
+        privacy_flag: draft.privacy_flag,
+        payload_commitment: Some(payload_commitment),
+        ciphertext_hex,
+        nonce_hex,
+        salt_hex,
+        kdf_params,
+        consent_receipt,
         author: draft.author,
         signature: hex::encode(signature.to_bytes()),
         timestamp: draft.timestamp,
     })
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct KdfParams {
-    pub memory_kib: u32,
-    pub iterations: u32,
-    pub parallelism: u32,
-    pub output_length: usize,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -255,6 +302,81 @@ pub struct EncryptedSecretKey {
     pub nonce_hex: String,
     pub kdf: String,
     pub kdf_params: KdfParams,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct EncryptedPayload {
+    pub ciphertext_hex: String,
+    pub salt_hex: String,
+    pub nonce_hex: String,
+    pub kdf: String,
+    pub kdf_params: KdfParams,
+}
+
+pub fn encrypt_payload(payload: &Value, passphrase: &str) -> Result<EncryptedPayload> {
+    let canonical_payload = canonical_json(payload);
+    let plaintext = canonical_payload.as_bytes();
+    let mut salt = [0u8; 16];
+    OsRng.fill_bytes(&mut salt);
+    let mut nonce = [0u8; 12];
+    OsRng.fill_bytes(&mut nonce);
+    let params = Params::new(19456, 2, 1, Some(32))
+        .map_err(|err| ProtocolError::crypto(format!("invalid kdf params: {err}")))?;
+    let mut derived_key = [0u8; 32];
+    let kdf_params = KdfParams {
+        memory_kib: params.m_cost(),
+        iterations: params.t_cost(),
+        parallelism: params.p_cost(),
+        output_length: 32,
+    };
+    let argon2 = Argon2::new(Algorithm::Argon2id, Version::V0x13, params);
+    argon2
+        .hash_password_into(passphrase.as_bytes(), &salt, &mut derived_key)
+        .map_err(|err| ProtocolError::crypto(format!("failed to derive key: {err}")))?;
+    let cipher = ChaCha20Poly1305::new(Key::from_slice(&derived_key));
+    let ciphertext = cipher
+        .encrypt(Nonce::from_slice(&nonce), plaintext)
+        .map_err(|err| ProtocolError::crypto(format!("failed to encrypt payload: {err}")))?;
+    Ok(EncryptedPayload {
+        ciphertext_hex: hex::encode(ciphertext),
+        salt_hex: hex::encode(salt),
+        nonce_hex: hex::encode(nonce),
+        kdf: "argon2id".to_string(),
+        kdf_params,
+    })
+}
+
+pub fn decrypt_payload(encrypted: &EncryptedPayload, passphrase: &str) -> Result<Value> {
+    if encrypted.kdf != "argon2id" {
+        return Err(ProtocolError::crypto(format!(
+            "unsupported kdf: {}",
+            encrypted.kdf
+        )));
+    }
+    let salt = hex::decode(&encrypted.salt_hex)
+        .map_err(|err| ProtocolError::crypto(format!("invalid salt hex: {err}")))?;
+    let nonce = hex::decode(&encrypted.nonce_hex)
+        .map_err(|err| ProtocolError::crypto(format!("invalid nonce hex: {err}")))?;
+    let ciphertext = hex::decode(&encrypted.ciphertext_hex)
+        .map_err(|err| ProtocolError::crypto(format!("invalid ciphertext hex: {err}")))?;
+    let params = Params::new(
+        encrypted.kdf_params.memory_kib,
+        encrypted.kdf_params.iterations,
+        encrypted.kdf_params.parallelism,
+        Some(encrypted.kdf_params.output_length),
+    )
+    .map_err(|err| ProtocolError::crypto(format!("invalid kdf params: {err}")))?;
+    let argon2 = Argon2::new(Algorithm::Argon2id, Version::V0x13, params);
+    let mut derived_key = [0u8; 32];
+    argon2
+        .hash_password_into(passphrase.as_bytes(), &salt, &mut derived_key)
+        .map_err(|err| ProtocolError::crypto(format!("failed to derive key: {err}")))?;
+    let cipher = ChaCha20Poly1305::new(Key::from_slice(&derived_key));
+    let plaintext = cipher
+        .decrypt(Nonce::from_slice(&nonce), ciphertext.as_slice())
+        .map_err(|err| ProtocolError::crypto(format!("failed to decrypt payload: {err}")))?;
+    serde_json::from_slice(&plaintext)
+        .map_err(|err| ProtocolError::crypto(format!("decrypted payload is invalid JSON: {err}")))
 }
 
 pub fn encrypt_secret_key(
@@ -334,18 +456,26 @@ pub fn decrypt_secret_key(
 }
 
 pub fn verify_entry_signature(entry: &LedgerEntry, verifying_key: &VerifyingKey) -> Result<()> {
-    let payload = EntrySigningPayload {
+    let signing_payload = EntrySigningPayload {
         entry_id: entry.entry_id,
         namespace: entry.namespace.clone(),
         action: entry.action.clone(),
         object_id: entry.object_id.clone(),
         payload: entry.payload.clone(),
+        privacy_flag: entry.privacy_flag,
+        payload_commitment: entry.payload_commitment.clone(),
+        ciphertext_hex: entry.ciphertext_hex.clone(),
+        nonce_hex: entry.nonce_hex.clone(),
+        salt_hex: entry.salt_hex.clone(),
+        kdf_params: entry.kdf_params.clone(),
+        consent_receipt: entry.consent_receipt.clone(),
         author: entry.author.clone(),
         timestamp: entry.timestamp,
     };
-    let canonical_payload = canonical_json(&serde_json::to_value(payload).map_err(|err| {
-        ProtocolError::crypto(format!("failed to serialize signing payload: {err}"))
-    })?);
+    let canonical_payload =
+        canonical_json(&serde_json::to_value(signing_payload).map_err(|err| {
+            ProtocolError::crypto(format!("failed to serialize signing payload: {err}"))
+        })?);
     let signature_bytes = hex::decode(&entry.signature)
         .map_err(|err| ProtocolError::crypto(format!("invalid signature hex: {err}")))?;
     let signature = Signature::from_slice(&signature_bytes)
@@ -457,6 +587,8 @@ mod tests {
             action: "REGISTER_IDENTITY".to_string(),
             object_id: "did:ledger:abc".to_string(),
             payload: json!({ "claims_hash": "abc123" }),
+            privacy_flag: false,
+            encryption_passphrase: None,
             author: "did:ledger:abc".to_string(),
             timestamp: 1_736_500_000,
         };
@@ -471,6 +603,35 @@ mod tests {
             encrypt_secret_key(keypair.secret_key_bytes(), "password").expect("encrypt secret key");
         let decrypted = decrypt_secret_key(&encrypted, "password").expect("decrypt secret key");
         assert_eq!(decrypted, keypair.secret_key_bytes());
+    }
+
+    #[test]
+    fn encrypts_and_decrypts_payload() {
+        let payload = json!({"email":"alice@example.org","tier":"restricted"});
+        let encrypted = encrypt_payload(&payload, "p@ssphrase").expect("encrypt payload");
+        let decrypted = decrypt_payload(&encrypted, "p@ssphrase").expect("decrypt payload");
+        assert_eq!(decrypted, payload);
+    }
+
+    #[test]
+    fn signs_and_verifies_private_entry() {
+        let keypair = WalletKeypair::generate();
+        let draft = EntryDraft {
+            namespace: "audit.procurement".to_string(),
+            action: "RECORD_EVENT".to_string(),
+            object_id: "AUD-1".to_string(),
+            payload: json!({"document_hash":"abc123","event":"BID_OPENED"}),
+            privacy_flag: true,
+            encryption_passphrase: Some("wallet-private-passphrase".to_string()),
+            author: "did:ledger:auditor".to_string(),
+            timestamp: 1_736_500_001,
+        };
+        let entry = sign_entry(draft, &keypair).expect("sign private entry");
+        assert!(entry.privacy_flag);
+        assert!(entry.ciphertext_hex.is_some());
+        assert!(entry.payload_commitment.is_some());
+        assert!(entry.consent_receipt.is_some());
+        verify_entry_signature(&entry, keypair.verifying_key()).expect("verify signature");
     }
 
     #[test]
