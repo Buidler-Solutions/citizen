@@ -1,102 +1,107 @@
 # Wallet System Readiness Review
 
-Date: 2026-02-11
+Date: 2026-02-23
 
 ## Executive Decision
 
-**Status update (2026-02-14): Wallet implementation phases are complete and operationally integrated.**
+**Status: Production-readiness gate for the wallet implementation is closed.**
 
-The repository has a functional Rust wallet core (`crates/wallet`) with encrypted key custody, entry signing, signature verification, and hardening controls, plus delivered CLI and React wallet applications.
+The wallet surface is no longer in a pre-implementation state. The repository now contains:
 
-This means the original readiness gate has been closed and wallet delivery is now in sustain/operations mode rather than pre-implementation planning.
+- a reusable Rust wallet core (`crates/wallet`),
+- an operator/developer CLI application (`wallet/cli` + `crates/wallet/src/cli.rs`),
+- a React web wallet console (`wallet/react`), and
+- a browser-extension signer surface (`wallet/browser`).
 
-Alignment source: `docs/PHASE_IMPLEMENTATION_TRACKER.md`, `docs/WALLET_IMPLEMENTATION_TASKS.md`, and `docs/WALLET_TASK_STATUS_REVIEW.md`.
+This document supersedes the original “can we start implementation?” framing and records the current operational baseline.
+
+Alignment source of truth:
+
+- `docs/PHASE_IMPLEMENTATION_TRACKER.md`
+- `docs/WALLET_IMPLEMENTATION_TASKS.md`
+- `docs/WALLET_TASK_STATUS_REVIEW.md`
 
 ---
 
-## Current Baseline (What Exists)
+## Current Baseline (Implemented)
 
-### 1) Reusable wallet core is present
-- Ed25519 key generation and restore from raw secret bytes.
-- Deterministic entry signing with canonical JSON normalization.
-- Signature verification.
-- Encrypted secret key storage primitives (Argon2id + ChaCha20-Poly1305).
+### 1) Wallet core (`crates/wallet`)
 
-### 2) CLI command surface is already usable
-Current commands in the shared CLI implementation:
-- `init`
-- `keygen`
-- `import-key`
-- `public-key`
-- `list-keys`
-- `sign-entry`
-- `verify-entry`
+Delivered capabilities include:
 
-### 3) Dedicated app folders exist
-- `wallet/cli/` is wired as a runnable binary package using the shared CLI implementation.
-- `wallet/react/` exists as a placeholder, ready for scaffolding.
+- deterministic entry signing and signature verification,
+- encrypted secret-key custody primitives,
+- policy controls for high-impact actions, and
+- reusable helpers consumed by CLI/web surfaces.
+
+### 2) Wallet CLI (`wallet/cli`)
+
+Delivered command surface includes:
+
+- key lifecycle (`init`, `keygen`, `import-key`, `public-key`, `list-keys`, `export-key`),
+- namespace-aware signing helpers (`sign-identity-register`, `sign-governance-vote`, `sign-registry-transfer`, `sign-audit-record`),
+- submission + deterministic receipt workflows (`submit`, `list-receipts`, `verify-receipt`),
+- builder-credit multisig proof helper (`sign-builder-credit-proof`).
+
+### 3) React wallet console (`wallet/react`)
+
+Delivered UX capabilities include:
+
+- onboarding and key management flows,
+- namespace operation builders,
+- submission/receipt visualization,
+- governance-focused interaction panels.
+
+### 4) Browser signer extension (`wallet/browser`)
+
+Delivered browser-wallet UX includes:
+
+- popup signing/review interactions,
+- extension build/load workflow,
+- integration path with local stack testing (`docs/STACK_TESTING_GUIDE.md`).
 
 ---
 
 ## Readiness Verdict by Track
 
-## CLI Wallet Track
+### CLI Wallet Track
 
-**Readiness: High (start now).**
+**Readiness: High (operational).**
 
-You can proceed with immediate implementation of:
-1. API submission command(s) and receipt persistence.
-2. Namespace-focused authoring helpers.
-3. Better UX hardening (password prompts, output modes, structured errors).
+- Use for developer/operator signing, submission, and deterministic receipt verification flows.
+- Keep `wallet/cli/README.md` as the canonical usage reference.
 
-Blocking risks are low because key lifecycle and signing are already in place.
+### React Wallet Track
 
-## React Wallet Track
+**Readiness: High (operational with ongoing UX hardening).**
 
-**Readiness: Medium (start now, in parallel with API contract work).**
+- Core namespace workflows are implemented.
+- Continue incremental hardening and parity checks with runtime API changes.
 
-You can proceed with immediate implementation of:
-1. App scaffold + design system + route skeletons.
-2. Local key onboarding experience and secure browser storage strategy.
-3. Entry builder UI shells per namespace.
+### Browser Extension Track
 
-Main dependency: lock a stable wallet-facing API contract (submit/status/governance endpoints) so frontend integration does not churn.
+**Readiness: High (operational for signer-keeper flows).**
 
----
-
-## Critical Gaps to Close First (Week 1)
-
-1. **Node API contract freeze (versioned).**
-   - Request/response schemas for entry submission and status polling.
-2. **Receipt model finalization.**
-   - Standard shape for `entry_id`, inclusion/finality status, block height, and proof payloads.
-3. **CLI keystore format decision.**
-   - Confirm JSON vs SQLite for near-term roadmap; document migration path if starting with JSON.
-4. **React key strategy decision.**
-   - Browser-only crypto vs local companion/bridge for stronger key custody.
+- Use for in-browser request review + explicit sign/reject UX.
+- Keep extension-focused docs in `wallet/browser/README.md` aligned with stack runbooks.
 
 ---
 
-## Recommended Next Sprint Plan
+## Remaining Ongoing Work (Post-Readiness Operations)
 
-1. **CLI Sprint A**
-   - Add `submit` command + HTTP client abstraction.
-   - Add receipt persistence and `receipt get/list` commands.
-   - Add integration tests against localnet.
-
-2. **React Sprint A**
-   - Scaffold app (choose Next.js or Vite explicitly).
-   - Build onboarding flow (create/import key, passphrase).
-   - Build entry draft form and local signing preview.
-
-3. **Shared Workstream**
-   - Publish `wallet-api` schema package (or versioned OpenAPI).
-   - Add end-to-end flow doc covering CLI + React parity.
+1. Maintain API-contract parity whenever canonical envelope/receipt models evolve.
+2. Keep wallet UI disclosure text aligned with governed policy changes (e.g., asset control/clawback disclosures).
+3. Continue end-to-end validation via:
+   - `scripts/run_wallet_cli_e2e.sh`
+   - `scripts/run_builder_asset_parity_checks.sh`
+   - stack-level smoke workflows in `docs/STACK_TESTING_GUIDE.md` and `docs/REAL_NODE_RUNTIME_RUNBOOK.md`.
 
 ---
 
 ## Go / No-Go Summary
 
-- **CLI implementation start:** **GO**
-- **React wallet implementation start:** **GO**
-- **Condition:** keep API/schema alignment as a first-class parallel task.
+- CLI wallet operations: **GO**
+- React wallet operations: **GO**
+- Browser extension signer operations: **GO**
+
+Condition: keep docs and runbooks synchronized with runtime/API implementation changes.

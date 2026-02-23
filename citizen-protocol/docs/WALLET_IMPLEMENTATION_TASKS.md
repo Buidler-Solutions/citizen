@@ -1,7 +1,7 @@
 # Wallet Implementation Task Tracker
 
 This checklist turns the wallet plan into ready-to-assign tasks. It is scoped to the
-CLI + React wallet apps while reusing the existing `crates/wallet` library.
+CLI + React + browser-extension wallet apps while reusing the existing `crates/wallet` library.
 
 Legend: `[x] done` (all scoped tasks completed; tracker retained as implementation record).
 
@@ -42,6 +42,13 @@ Legend: `[x] done` (all scoped tasks completed; tracker retained as implementati
       Owner: _Wallet team_ · Status: _Done_
 - [x] Add audit receipt viewer + export bundle.  
       Owner: _Wallet team_ · Status: _Done_
+
+
+## Phase 2.5 — Browser Signer Extension
+- [x] Maintain dedicated browser-extension project for popup signing UX (`wallet/browser`).  
+      Owner: _Wallet UI team_ · Status: _Done_
+- [x] Document extension build/load workflow and stack integration path.  
+      Owner: _Wallet UI team_ · Status: _Done (`wallet/browser/README.md`, `docs/STACK_TESTING_GUIDE.md`)_
 
 ## Phase 3 — Governance + Validator Support
 - [x] Proposal creation flow (validator add/remove, param change).  

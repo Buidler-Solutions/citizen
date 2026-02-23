@@ -949,10 +949,16 @@ mod tests {
                 governed_by: "governance".to_string(),
             },
             writers: BTreeSet::new(),
-            validators: vec![NamespaceRule {
-                name: "require_signature".to_string(),
-                config: json!({}),
-            }],
+            validators: vec![
+                NamespaceRule {
+                    name: "require_signature".to_string(),
+                    config: json!({}),
+                },
+                NamespaceRule {
+                    name: "privacy_policy".to_string(),
+                    config: json!({"allow_encryption": true}),
+                },
+            ],
         }]);
         ledger.bootstrap_namespaces(vec![NamespaceRuleset {
             descriptor: NamespaceDescriptor {
@@ -1065,10 +1071,16 @@ mod tests {
                 governed_by: "governance".to_string(),
             },
             writers: BTreeSet::new(),
-            validators: vec![NamespaceRule {
-                name: "require_signature".to_string(),
-                config: json!({}),
-            }],
+            validators: vec![
+                NamespaceRule {
+                    name: "require_signature".to_string(),
+                    config: json!({}),
+                },
+                NamespaceRule {
+                    name: "privacy_policy".to_string(),
+                    config: json!({"allow_encryption": true}),
+                },
+            ],
         }]);
         ApiServer::with_edge_config(ledger, edge)
     }
@@ -1189,6 +1201,13 @@ mod tests {
             action: "RECORD_EVENT".to_string(),
             object_id: "PROC-001".to_string(),
             payload: json!({"event":"BID_OPENED"}),
+            privacy_flag: false,
+            payload_commitment: None,
+            ciphertext_hex: None,
+            nonce_hex: None,
+            salt_hex: None,
+            kdf_params: None,
+            consent_receipt: None,
             author: "did:author:a".to_string(),
             signature: String::new(),
             timestamp: chrono::Utc::now().timestamp(),
@@ -1367,6 +1386,13 @@ mod tests {
             action: "REGISTER_IDENTITY".to_string(),
             object_id: "did:ledger:alice".to_string(),
             payload: json!({"claims_hash":"0xabc"}),
+            privacy_flag: false,
+            payload_commitment: None,
+            ciphertext_hex: None,
+            nonce_hex: None,
+            salt_hex: None,
+            kdf_params: None,
+            consent_receipt: None,
             author: "did:ledger:alice".to_string(),
             signature: "sig".to_string(),
             timestamp: now,
@@ -1579,6 +1605,13 @@ mod tests {
             action: "MULTISIG_CREDIT_GRANT".to_string(),
             object_id: "builder:alpha".to_string(),
             payload: json!({"amount": 100_u64}),
+            privacy_flag: false,
+            payload_commitment: None,
+            ciphertext_hex: None,
+            nonce_hex: None,
+            salt_hex: None,
+            kdf_params: None,
+            consent_receipt: None,
             author: "governance:ops".to_string(),
             signature: "sig".to_string(),
             timestamp: now,
@@ -1595,6 +1628,13 @@ mod tests {
             action: "SPONSOR_USAGE".to_string(),
             object_id: "builder:alpha".to_string(),
             payload: json!({"amount": 30_u64, "sponsorship_id":"spn-1", "sponsored_did":"did:ledger:user1"}),
+            privacy_flag: false,
+            payload_commitment: None,
+            ciphertext_hex: None,
+            nonce_hex: None,
+            salt_hex: None,
+            kdf_params: None,
+            consent_receipt: None,
             author: "builder:alpha".to_string(),
             signature: "sig".to_string(),
             timestamp: now + 1,

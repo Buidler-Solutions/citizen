@@ -87,6 +87,10 @@ enum Commands {
         timestamp: Option<i64>,
         #[arg(long)]
         password: Option<String>,
+        #[arg(long = "encrypt", alias = "private")]
+        encrypt: bool,
+        #[arg(long)]
+        encryption_passphrase: Option<String>,
     },
     VerifyEntry {
         #[arg(long)]
@@ -129,6 +133,10 @@ enum Commands {
         timestamp: Option<i64>,
         #[arg(long)]
         password: Option<String>,
+        #[arg(long = "encrypt", alias = "private")]
+        encrypt: bool,
+        #[arg(long)]
+        encryption_passphrase: Option<String>,
     },
     SignGovernanceVote {
         #[arg(long, default_value = "wallet.json")]
@@ -147,6 +155,10 @@ enum Commands {
         timestamp: Option<i64>,
         #[arg(long)]
         password: Option<String>,
+        #[arg(long = "encrypt", alias = "private")]
+        encrypt: bool,
+        #[arg(long)]
+        encryption_passphrase: Option<String>,
         #[arg(long)]
         required_approvals: Option<usize>,
         #[arg(long = "policy-approver")]
@@ -171,6 +183,10 @@ enum Commands {
         timestamp: Option<i64>,
         #[arg(long)]
         password: Option<String>,
+        #[arg(long = "encrypt", alias = "private")]
+        encrypt: bool,
+        #[arg(long)]
+        encryption_passphrase: Option<String>,
     },
     SignAuditRecord {
         #[arg(long, default_value = "wallet.json")]
@@ -189,6 +205,10 @@ enum Commands {
         timestamp: Option<i64>,
         #[arg(long)]
         password: Option<String>,
+        #[arg(long = "encrypt", alias = "private")]
+        encrypt: bool,
+        #[arg(long)]
+        encryption_passphrase: Option<String>,
     },
     SignBuilderCreditProof {
         #[arg(long)]
@@ -485,6 +505,8 @@ pub fn run() -> anyhow::Result<()> {
             payload_json,
             timestamp,
             password,
+            encrypt,
+            encryption_passphrase,
         } => {
             let store = Keystore::load_or_create(&path)?;
             let record = store
@@ -498,6 +520,8 @@ pub fn run() -> anyhow::Result<()> {
                 action,
                 object_id,
                 payload,
+                privacy_flag: encrypt,
+                encryption_passphrase: load_encryption_passphrase(encrypt, encryption_passphrase)?,
                 author,
                 timestamp: timestamp.unwrap_or_else(|| Utc::now().timestamp()),
             };
@@ -548,6 +572,8 @@ pub fn run() -> anyhow::Result<()> {
             author,
             timestamp,
             password,
+            encrypt,
+            encryption_passphrase,
         } => {
             let payload = serde_json::json!({
                 "subject": subject.clone(),
@@ -563,6 +589,8 @@ pub fn run() -> anyhow::Result<()> {
                 payload,
                 timestamp,
                 password,
+                encrypt,
+                encryption_passphrase,
             )?;
         }
         Commands::SignGovernanceVote {
@@ -577,6 +605,8 @@ pub fn run() -> anyhow::Result<()> {
             required_approvals,
             policy_approvers,
             approvals,
+            encrypt,
+            encryption_passphrase,
         } => {
             enforce_policy_for_action(
                 "CAST_VOTE",
@@ -599,6 +629,8 @@ pub fn run() -> anyhow::Result<()> {
                 payload,
                 timestamp,
                 password,
+                encrypt,
+                encryption_passphrase,
             )?;
         }
         Commands::SignRegistryTransfer {
@@ -610,6 +642,8 @@ pub fn run() -> anyhow::Result<()> {
             author,
             timestamp,
             password,
+            encrypt,
+            encryption_passphrase,
         } => {
             let payload = serde_json::json!({
                 "parcel_id": parcel_id.clone(),
@@ -626,6 +660,8 @@ pub fn run() -> anyhow::Result<()> {
                 payload,
                 timestamp,
                 password,
+                encrypt,
+                encryption_passphrase,
             )?;
         }
         Commands::SignAuditRecord {
@@ -637,6 +673,8 @@ pub fn run() -> anyhow::Result<()> {
             author,
             timestamp,
             password,
+            encrypt,
+            encryption_passphrase,
         } => {
             let payload = serde_json::json!({
                 "event": event,
@@ -652,6 +690,8 @@ pub fn run() -> anyhow::Result<()> {
                 payload,
                 timestamp,
                 password,
+                encrypt,
+                encryption_passphrase,
             )?;
         }
         Commands::SignBuilderCreditProof {
@@ -665,7 +705,9 @@ pub fn run() -> anyhow::Result<()> {
                 .payload
                 .get("amount")
                 .and_then(Value::as_u64)
-                .ok_or_else(|| anyhow::anyhow!("entry payload.amount must be a positive integer"))?;
+                .ok_or_else(|| {
+                    anyhow::anyhow!("entry payload.amount must be a positive integer")
+                })?;
             let secret_bytes = hex::decode(secret_key_hex)?;
             let keypair = WalletKeypair::from_secret_bytes(Uuid::new_v4(), &secret_bytes)?;
             let public_key = keypair.verifying_key_hex();
@@ -711,6 +753,8 @@ fn sign_namespace_entry(
     payload: Value,
     timestamp: Option<i64>,
     password: Option<String>,
+    encrypt: bool,
+    encryption_passphrase: Option<String>,
 ) -> anyhow::Result<()> {
     let store = Keystore::load_or_create(path)?;
     let record = store
@@ -723,6 +767,8 @@ fn sign_namespace_entry(
         action: action.to_string(),
         object_id,
         payload,
+        privacy_flag: encrypt,
+        encryption_passphrase: load_encryption_passphrase(encrypt, encryption_passphrase)?,
         author,
         timestamp: timestamp.unwrap_or_else(|| Utc::now().timestamp()),
     };
@@ -730,6 +776,24 @@ fn sign_namespace_entry(
     let entry_json = serde_json::to_string_pretty(&entry)?;
     println!("{entry_json}");
     Ok(())
+}
+
+fn load_encryption_passphrase(
+    encrypt: bool,
+    explicit: Option<String>,
+) -> anyhow::Result<Option<String>> {
+    if !encrypt {
+        return Ok(None);
+    }
+    eprintln!(
+        "WARNING: --encrypt/--private stores only commitments on-chain; payload decryption requires this passphrase."
+    );
+    if let Some(passphrase) = explicit {
+        return Ok(Some(passphrase));
+    }
+    std::env::var("CITIZEN_ENTRY_ENCRYPTION_PASSPHRASE")
+        .map(Some)
+        .map_err(|_| anyhow::anyhow!("encryption passphrase required (--encryption-passphrase or CITIZEN_ENTRY_ENCRYPTION_PASSPHRASE)"))
 }
 
 fn enforce_policy_for_action(
@@ -915,6 +979,8 @@ mod tests {
                 action: "RECORD_EVENT".to_string(),
                 object_id: "AUD-1".to_string(),
                 payload: json!({"event": "BID_OPENED"}),
+                privacy_flag: false,
+                encryption_passphrase: None,
                 author: "did:ledger:test".to_string(),
                 timestamp: 1_736_500_000,
             },

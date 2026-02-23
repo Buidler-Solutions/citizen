@@ -106,6 +106,7 @@ impl<S: LedgerStorage + 'static> Ledger<S> {
             "consent_policy" => self.consent_policy(entry, config),
             "author_matches_object_id" => self.author_matches_object_id(entry),
             "builder_credit_policy" => self.builder_credit_policy(entry, config),
+            "privacy_policy" => self.privacy_policy(entry, config),
             "asset_control_policy" => self.asset_control_policy(entry, config),
             "wasm_runtime_policy" => self.wasm_runtime_policy(entry, config),
             "interop_adapter_policy" => self.interop_adapter_policy(entry, config),
@@ -516,6 +517,48 @@ impl<S: LedgerStorage + 'static> Ledger<S> {
             }
         }
 
+        Ok(())
+    }
+
+    fn privacy_policy(&self, entry: &LedgerEntry, config: &Value) -> Result<()> {
+        let allow_encryption = config
+            .get("allow_encryption")
+            .and_then(Value::as_bool)
+            .unwrap_or(false);
+        if entry.privacy_flag && !allow_encryption {
+            return Err(ProtocolError::ValidationFailed(format!(
+                "namespace {} does not permit encrypted payloads",
+                entry.namespace
+            )));
+        }
+        if !entry.privacy_flag {
+            return Ok(());
+        }
+        if entry.ciphertext_hex.is_none()
+            || entry.nonce_hex.is_none()
+            || entry.salt_hex.is_none()
+            || entry.kdf_params.is_none()
+            || entry.payload_commitment.is_none()
+        {
+            return Err(ProtocolError::ValidationFailed(
+                "encrypted entries must include ciphertext, nonce, salt, kdf_params, and payload_commitment".into(),
+            ));
+        }
+        let receipt = entry.consent_receipt.as_ref().ok_or_else(|| {
+            ProtocolError::ValidationFailed(
+                "encrypted entries require an embedded consent_receipt".into(),
+            )
+        })?;
+        if Some(&receipt.data_hash) != entry.payload_commitment.as_ref() {
+            return Err(ProtocolError::ValidationFailed(
+                "consent receipt data_hash must match payload commitment".into(),
+            ));
+        }
+        if receipt.expires_at <= receipt.granted_at {
+            return Err(ProtocolError::ValidationFailed(
+                "consent receipt must expire after grant timestamp".into(),
+            ));
+        }
         Ok(())
     }
 
@@ -1364,6 +1407,13 @@ mod tests {
             action: "RECORD_EVENT".into(),
             object_id: "LOT-239-A".into(),
             payload: json!({"from":"did:a","to":"did:b"}),
+            privacy_flag: false,
+            payload_commitment: None,
+            ciphertext_hex: None,
+            nonce_hex: None,
+            salt_hex: None,
+            kdf_params: None,
+            consent_receipt: None,
             author: "did:a".into(),
             signature: "sig".into(),
             timestamp: 1_736_500_000,
@@ -1584,6 +1634,68 @@ mod tests {
             .apply_entry(entry)
             .expect_err("identity subject mismatch must fail");
         assert!(err.to_string().contains("must match object_id"));
+    }
+
+    #[test]
+    fn rejects_encrypted_entries_when_namespace_disallows_privacy() {
+        let ledger = Ledger::in_memory();
+        let namespace = "registry.land";
+        ledger.bootstrap_namespaces(vec![namespace_with_rules(
+            namespace,
+            vec![NamespaceRule {
+                name: "privacy_policy".into(),
+                config: json!({"allow_encryption":false}),
+            }],
+        )]);
+
+        let mut entry = test_entry(namespace);
+        entry.privacy_flag = true;
+        entry.payload_commitment = Some("deadbeef".into());
+        entry.ciphertext_hex = Some("00".into());
+        entry.nonce_hex = Some("00".into());
+        entry.salt_hex = Some("00".into());
+        entry.kdf_params = Some(citizen_types::KdfParams {
+            memory_kib: 19456,
+            iterations: 2,
+            parallelism: 1,
+            output_length: 32,
+        });
+        entry.consent_receipt = Some(citizen_types::ConsentReceipt {
+            subject_did: entry.author.clone(),
+            data_hash: "deadbeef".into(),
+            policy_ref: "policy:v1".into(),
+            granted_at: entry.timestamp,
+            expires_at: entry.timestamp + 100,
+        });
+
+        let err = ledger
+            .apply_entry(entry)
+            .expect_err("privacy disabled namespace must reject encrypted entries");
+        assert!(err
+            .to_string()
+            .contains("does not permit encrypted payloads"));
+    }
+
+    #[test]
+    fn requires_commitment_and_consent_for_encrypted_entries() {
+        let ledger = Ledger::in_memory();
+        let namespace = "audit.procurement";
+        ledger.bootstrap_namespaces(vec![namespace_with_rules(
+            namespace,
+            vec![NamespaceRule {
+                name: "privacy_policy".into(),
+                config: json!({"allow_encryption":true}),
+            }],
+        )]);
+
+        let mut entry = test_entry(namespace);
+        entry.privacy_flag = true;
+        let err = ledger
+            .apply_entry(entry)
+            .expect_err("missing encrypted metadata must fail");
+        assert!(err
+            .to_string()
+            .contains("must include ciphertext, nonce, salt, kdf_params, and payload_commitment"));
     }
 
     #[test]
