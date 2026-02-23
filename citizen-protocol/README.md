@@ -69,6 +69,12 @@ Current delivery includes Phase 2 identity/data ownership primitives, Phase 3 bu
    cargo check
    ```
 
+Quick wallet encrypt-then-commit smoke check (avoids brittle multiline shell copy/paste):
+
+```bash
+scripts/run_wallet_encrypt_then_commit_smoke.sh
+```
+
 3. Launch a single local validator node (non-production mock network):
 
    ```bash

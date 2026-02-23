@@ -1396,6 +1396,7 @@ mod tests {
     use citizen_types::{
         CommitProof, LedgerEntry, NamespaceDescriptor, NamespaceRule, NamespaceRuleset,
     };
+    use citizen_wallet::{sign_entry, EntryDraft, WalletKeypair};
     use serde_json::json;
     use std::collections::{BTreeSet, HashMap};
     use uuid::Uuid;
@@ -1696,6 +1697,36 @@ mod tests {
         assert!(err
             .to_string()
             .contains("must include ciphertext, nonce, salt, kdf_params, and payload_commitment"));
+    }
+
+    #[test]
+    fn accepts_wallet_signed_encrypt_then_commit_entry_when_namespace_allows_privacy() {
+        let ledger = Ledger::in_memory();
+        let namespace = "audit.procurement";
+        ledger.bootstrap_namespaces(vec![namespace_with_rules(
+            namespace,
+            vec![NamespaceRule {
+                name: "privacy_policy".into(),
+                config: json!({"allow_encryption": true}),
+            }],
+        )]);
+
+        let keypair = WalletKeypair::generate();
+        let draft = EntryDraft {
+            namespace: namespace.to_string(),
+            action: "RECORD_EVENT".to_string(),
+            object_id: "AUD-ETC-1".to_string(),
+            payload: json!({"event":"BID_OPENED","document_hash":"abc123"}),
+            privacy_flag: true,
+            encryption_passphrase: Some("e2e-opt-in-passphrase".to_string()),
+            author: "did:ledger:auditor".to_string(),
+            timestamp: 1_736_500_222,
+        };
+
+        let entry = sign_entry(draft, &keypair).expect("wallet should sign encrypted entry");
+        ledger
+            .apply_entry(entry)
+            .expect("ledger should accept valid encrypt-then-commit entry");
     }
 
     #[test]
