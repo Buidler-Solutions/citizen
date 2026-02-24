@@ -12,7 +12,7 @@ use ed25519_dalek::{
 use rand::rngs::OsRng;
 use rand::RngCore;
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::{Map, Value};
 use sha2::{Digest, Sha256};
 use std::collections::HashSet;
 use uuid::Uuid;
@@ -228,33 +228,34 @@ pub fn sign_entry(draft: EntryDraft, keypair: &WalletKeypair) -> Result<LedgerEn
     let entry_id = Uuid::new_v4();
     let canonical_payload = canonical_json(&draft.payload);
     let payload_commitment = hex::encode(Sha256::digest(canonical_payload.as_bytes()));
-    let (entry_payload, ciphertext_hex, nonce_hex, salt_hex, kdf_params, consent_receipt) = if draft
-        .privacy_flag
-    {
-        let passphrase = draft.encryption_passphrase.as_deref().ok_or_else(|| {
-            ProtocolError::crypto(
-                "privacy_flag=true requires a one-time encryption passphrase".to_string(),
+    let (entry_payload, ciphertext_hex, nonce_hex, salt_hex, kdf_params, consent_receipt) =
+        if draft.privacy_flag {
+            let passphrase = draft.encryption_passphrase.as_deref().ok_or_else(|| {
+                ProtocolError::crypto(
+                    "privacy_flag=true requires a one-time encryption passphrase".to_string(),
+                )
+            })?;
+            let (payload_to_encrypt, entry_payload) =
+                build_privacy_payload(&draft.payload, &payload_commitment)?;
+            let encrypted = encrypt_payload(&payload_to_encrypt, passphrase)?;
+            let consent_receipt = ConsentReceipt {
+                subject_did: draft.author.clone(),
+                data_hash: payload_commitment.clone(),
+                policy_ref: "wallet:encrypt-then-commit:v1".to_string(),
+                granted_at: draft.timestamp,
+                expires_at: draft.timestamp + 30 * 24 * 60 * 60,
+            };
+            (
+                entry_payload,
+                Some(encrypted.ciphertext_hex),
+                Some(encrypted.nonce_hex),
+                Some(encrypted.salt_hex),
+                Some(encrypted.kdf_params),
+                Some(consent_receipt),
             )
-        })?;
-        let encrypted = encrypt_payload(&draft.payload, passphrase)?;
-        let consent_receipt = ConsentReceipt {
-            subject_did: draft.author.clone(),
-            data_hash: payload_commitment.clone(),
-            policy_ref: "wallet:encrypt-then-commit:v1".to_string(),
-            granted_at: draft.timestamp,
-            expires_at: draft.timestamp + 30 * 24 * 60 * 60,
+        } else {
+            (draft.payload.clone(), None, None, None, None, None)
         };
-        (
-            serde_json::json!({ "privacy": "encrypted", "payload_commitment": payload_commitment }),
-            Some(encrypted.ciphertext_hex),
-            Some(encrypted.nonce_hex),
-            Some(encrypted.salt_hex),
-            Some(encrypted.kdf_params),
-            Some(consent_receipt),
-        )
-    } else {
-        (draft.payload.clone(), None, None, None, None, None)
-    };
     let signing_payload = EntrySigningPayload {
         entry_id,
         namespace: draft.namespace.clone(),
@@ -293,6 +294,105 @@ pub fn sign_entry(draft: EntryDraft, keypair: &WalletKeypair) -> Result<LedgerEn
         signature: hex::encode(signature.to_bytes()),
         timestamp: draft.timestamp,
     })
+}
+
+fn build_privacy_payload(payload: &Value, payload_commitment: &str) -> Result<(Value, Value)> {
+    if let Some(selective) = parse_selective_payload(payload)? {
+        let public_fields_commitment = hex::encode(Sha256::digest(
+            canonical_json(&selective.public_fields).as_bytes(),
+        ));
+        let encrypted_fields_commitment = hex::encode(Sha256::digest(
+            canonical_json(&selective.private_fields).as_bytes(),
+        ));
+        let entry_payload = serde_json::json!({
+            "privacy": "selective-encrypted",
+            "privacy_mode": "field_selective_v1",
+            "public_fields": selective.public_fields,
+            "public_allowlist": selective.public_allowlist,
+            "public_fields_commitment": public_fields_commitment,
+            "encrypted_fields_commitment": encrypted_fields_commitment,
+            "payload_commitment": payload_commitment,
+        });
+        return Ok((selective.private_fields, entry_payload));
+    }
+
+    Ok((
+        payload.clone(),
+        serde_json::json!({ "privacy": "encrypted", "payload_commitment": payload_commitment }),
+    ))
+}
+
+struct SelectivePayload {
+    public_fields: Value,
+    private_fields: Value,
+    public_allowlist: Vec<String>,
+}
+
+fn parse_selective_payload(payload: &Value) -> Result<Option<SelectivePayload>> {
+    let Some(obj) = payload.as_object() else {
+        return Ok(None);
+    };
+    let Some(public_fields) = obj.get("public_fields") else {
+        return Ok(None);
+    };
+    let Some(private_fields) = obj.get("private_fields") else {
+        return Ok(None);
+    };
+    if !public_fields.is_object() || !private_fields.is_object() {
+        return Err(ProtocolError::ValidationFailed(
+            "selective privacy payload requires object public_fields and private_fields".into(),
+        ));
+    }
+
+    let allowlist = obj
+        .get("public_allowlist")
+        .and_then(Value::as_array)
+        .ok_or_else(|| {
+            ProtocolError::ValidationFailed(
+                "selective privacy payload requires public_allowlist string array".into(),
+            )
+        })?;
+    let mut normalized_allowlist: Vec<String> = allowlist
+        .iter()
+        .map(|field| {
+            field.as_str().map(ToOwned::to_owned).ok_or_else(|| {
+                ProtocolError::ValidationFailed(
+                    "public_allowlist values must all be strings".into(),
+                )
+            })
+        })
+        .collect::<Result<Vec<_>>>()?;
+    normalized_allowlist.sort();
+    normalized_allowlist.dedup();
+
+    let public_map = public_fields
+        .as_object()
+        .expect("public_fields object already verified");
+    if normalized_allowlist.len() != public_map.len() {
+        return Err(ProtocolError::ValidationFailed(
+            "public_allowlist must exactly match public_fields keys".into(),
+        ));
+    }
+    for field in &normalized_allowlist {
+        if !public_map.contains_key(field) {
+            return Err(ProtocolError::ValidationFailed(
+                "public_allowlist must exactly match public_fields keys".into(),
+            ));
+        }
+    }
+
+    let mut normalized_public = Map::new();
+    for field in &normalized_allowlist {
+        if let Some(value) = public_map.get(field) {
+            normalized_public.insert(field.clone(), value.clone());
+        }
+    }
+
+    Ok(Some(SelectivePayload {
+        public_fields: Value::Object(normalized_public),
+        private_fields: private_fields.clone(),
+        public_allowlist: normalized_allowlist,
+    }))
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -631,6 +731,32 @@ mod tests {
         assert!(entry.ciphertext_hex.is_some());
         assert!(entry.payload_commitment.is_some());
         assert!(entry.consent_receipt.is_some());
+        verify_entry_signature(&entry, keypair.verifying_key()).expect("verify signature");
+    }
+
+    #[test]
+    fn signs_selective_private_entry_with_public_allowlist() {
+        let keypair = WalletKeypair::generate();
+        let draft = EntryDraft {
+            namespace: "audit.procurement".to_string(),
+            action: "RECORD_EVENT".to_string(),
+            object_id: "AUD-2".to_string(),
+            payload: json!({
+                "public_fields": {"event": "BID_OPENED", "document_hash": "abc123"},
+                "private_fields": {"bidder_email": "alice@example.org", "amount": 1200},
+                "public_allowlist": ["document_hash", "event"]
+            }),
+            privacy_flag: true,
+            encryption_passphrase: Some("wallet-private-passphrase".to_string()),
+            author: "did:ledger:auditor".to_string(),
+            timestamp: 1_736_500_101,
+        };
+        let entry = sign_entry(draft, &keypair).expect("sign selective private entry");
+        assert_eq!(
+            entry.payload.get("privacy_mode").and_then(Value::as_str),
+            Some("field_selective_v1")
+        );
+        assert!(entry.ciphertext_hex.is_some());
         verify_entry_signature(&entry, keypair.verifying_key()).expect("verify signature");
     }
 
