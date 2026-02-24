@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { InterestForm } from '@/components/InterestForm';
 
 const pillars = [
@@ -24,6 +25,7 @@ export default function HomePage() {
     <main>
       <section className="hero">
         <p className="kicker">Citizen Protocol • Government Adoption Pitch</p>
+        <Link className="admin-link" href="/admin/login">Admin login</Link>
         <h1>National-grade public ledger infrastructure, built for trust.</h1>
         <p>
           Deploy civic registries, audit trails, and governance records on a protocol built for
