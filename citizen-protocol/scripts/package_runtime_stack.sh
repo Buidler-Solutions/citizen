@@ -36,6 +36,19 @@ mkdir -p "$RUNTIME_DIR/bin" "$RUNTIME_DIR/config" "$RUNTIME_DIR/docker" "$APPS_D
 cp "$BINARY_PATH" "$RUNTIME_DIR/bin/citizen-node"
 cp "$REPO_ROOT/config/localnet/validator-alpha.toml" "$RUNTIME_DIR/config/node.toml"
 
+# The runtime bundle is a local/dev artifact. Ensure the starter config can
+# boot without requiring an external signed admission manifest.
+TEMP_NODE_CONFIG="$(mktemp)"
+{
+  echo "# Added by scripts/package_runtime_stack.sh for local runtime bundles."
+  echo "# IMPORTANT: this bundle is for local/dev use and does not include a signed"
+  echo "# admission manifest artifact. Production/staged environments should set"
+  echo "# manifest_enforce = true and provide manifest_path to a signed manifest JSON."
+  echo "manifest_enforce = false"
+  cat "$RUNTIME_DIR/config/node.toml"
+} > "$TEMP_NODE_CONFIG"
+mv "$TEMP_NODE_CONFIG" "$RUNTIME_DIR/config/node.toml"
+
 cp "$REPO_ROOT/deploy/runtime-stack/Dockerfile" "$RUNTIME_DIR/docker/Dockerfile"
 cp "$REPO_ROOT/deploy/runtime-stack/docker-compose.yml" "$RUNTIME_DIR/docker/docker-compose.yml"
 cp "$REPO_ROOT/deploy/runtime-stack/run-node.sh" "$RUNTIME_DIR/run-node.sh"
@@ -82,6 +95,22 @@ cd node-runtime
 cd node-runtime/docker
 docker compose up --build
 ```
+
+## Admission manifest note
+
+The packaged `node-runtime/config/node.toml` sets `manifest_enforce = false`
+for local/dev convenience because this runtime bundle does not ship with a
+signed admission manifest JSON.
+
+For shared/staged/production environments, re-enable admission enforcement:
+
+1. Set `manifest_enforce = true` in `node-runtime/config/node.toml`.
+2. Add `manifest_path = "/path/to/signed-manifest.json"`.
+3. Ensure the manifest includes:
+   - `payload.network_id`, `payload.genesis_hash`, `payload.boot_nodes`
+   - `payload.validator_allowlist` (`validator_id` + `public_key` entries)
+   - `payload.issued_at`, `payload.version`, `payload.manifest_id`
+   - one or more trusted `signatures` over the canonical payload
 BUNDLE_README
 
 echo "[bundle] done"

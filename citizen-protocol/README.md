@@ -191,6 +191,20 @@ accidentally boot a shared network with an unsigned or stale allowlist.
 If you leave the placeholder untouched, startup fails by design with
 `manifest_path_placeholder` during admission preflight.
 
+### Generate a signed admission manifest (one-liner)
+
+Use the helper script to produce `signed-manifest.json` from a payload +
+Ed25519 private key:
+
+```bash
+scripts/generate_signed_manifest.sh --payload ./manifest.payload.json --private-key ./manifest-signer-ed25519.pem --key-id "$(openssl pkey -in ./manifest-signer-ed25519.pem -pubout -outform DER | tail -c 32 | od -An -v -tx1 | tr -d ' \n')" --output ./signed-manifest.json
+```
+
+For a full technical walkthrough (payload fields, signature model, and rollout
+steps), see:
+
+- `docs/ADMISSION_MANIFEST_GENERATION_HOWTO.md`
+
    Operator disaster-recovery procedures (snapshot/restore drills, signed retention, quorum-safe regional restore) are documented in:
 
    - `docs/OPERATOR_DISASTER_RECOVERY_RUNBOOK.md`
