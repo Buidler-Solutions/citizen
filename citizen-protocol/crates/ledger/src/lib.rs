@@ -9,6 +9,7 @@ use citizen_types::{
 use ed25519_dalek::Signature;
 use parking_lot::RwLock;
 use serde_json::Value;
+use sha2::{Digest, Sha256};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use tracing::debug;
@@ -559,6 +560,85 @@ impl<S: LedgerStorage + 'static> Ledger<S> {
                 "consent receipt must expire after grant timestamp".into(),
             ));
         }
+
+        if entry.payload.get("privacy_mode").and_then(Value::as_str) == Some("field_selective_v1") {
+            self.validate_selective_privacy_payload(entry)?;
+        }
+        Ok(())
+    }
+
+    fn validate_selective_privacy_payload(&self, entry: &LedgerEntry) -> Result<()> {
+        let public_fields = entry
+            .payload
+            .get("public_fields")
+            .and_then(Value::as_object)
+            .ok_or_else(|| {
+                ProtocolError::ValidationFailed(
+                    "field_selective_v1 requires payload.public_fields object".into(),
+                )
+            })?;
+        let allowlist = entry
+            .payload
+            .get("public_allowlist")
+            .and_then(Value::as_array)
+            .ok_or_else(|| {
+                ProtocolError::ValidationFailed(
+                    "field_selective_v1 requires payload.public_allowlist string array".into(),
+                )
+            })?;
+        let mut allowlisted_fields = allowlist
+            .iter()
+            .map(|field| {
+                field.as_str().map(str::to_owned).ok_or_else(|| {
+                    ProtocolError::ValidationFailed(
+                        "payload.public_allowlist values must be strings".into(),
+                    )
+                })
+            })
+            .collect::<Result<Vec<_>>>()?;
+        allowlisted_fields.sort();
+        allowlisted_fields.dedup();
+
+        if allowlisted_fields.len() != public_fields.len()
+            || !allowlisted_fields
+                .iter()
+                .all(|field| public_fields.contains_key(field))
+        {
+            return Err(ProtocolError::ValidationFailed(
+                "payload.public_allowlist must exactly match payload.public_fields keys".into(),
+            ));
+        }
+
+        let expected_public_fields_commitment = {
+            let canonical = canonical_json(&Value::Object(public_fields.clone()));
+            hex::encode(Sha256::digest(canonical.as_bytes()))
+        };
+        let public_fields_commitment = entry
+            .payload
+            .get("public_fields_commitment")
+            .and_then(Value::as_str)
+            .ok_or_else(|| {
+                ProtocolError::ValidationFailed(
+                    "field_selective_v1 requires payload.public_fields_commitment".into(),
+                )
+            })?;
+        if public_fields_commitment != expected_public_fields_commitment {
+            return Err(ProtocolError::ValidationFailed(
+                "payload.public_fields_commitment does not match canonical public_fields".into(),
+            ));
+        }
+
+        if entry
+            .payload
+            .get("encrypted_fields_commitment")
+            .and_then(Value::as_str)
+            .is_none()
+        {
+            return Err(ProtocolError::ValidationFailed(
+                "field_selective_v1 requires payload.encrypted_fields_commitment".into(),
+            ));
+        }
+
         Ok(())
     }
 
@@ -1727,6 +1807,78 @@ mod tests {
         ledger
             .apply_entry(entry)
             .expect("ledger should accept valid encrypt-then-commit entry");
+    }
+
+    #[test]
+    fn accepts_wallet_signed_selective_encryption_entry_when_namespace_allows_privacy() {
+        let ledger = Ledger::in_memory();
+        let namespace = "audit.procurement";
+        ledger.bootstrap_namespaces(vec![namespace_with_rules(
+            namespace,
+            vec![NamespaceRule {
+                name: "privacy_policy".into(),
+                config: json!({"allow_encryption": true}),
+            }],
+        )]);
+
+        let keypair = WalletKeypair::generate();
+        let draft = EntryDraft {
+            namespace: namespace.to_string(),
+            action: "RECORD_EVENT".to_string(),
+            object_id: "AUD-ETC-SELECTIVE-1".to_string(),
+            payload: json!({
+                "public_fields": {"event":"BID_OPENED","document_hash":"abc123"},
+                "private_fields": {"vendor_email":"alice@example.org","amount":9000},
+                "public_allowlist": ["document_hash","event"]
+            }),
+            privacy_flag: true,
+            encryption_passphrase: Some("e2e-opt-in-passphrase".to_string()),
+            author: "did:ledger:auditor".to_string(),
+            timestamp: 1_736_500_223,
+        };
+
+        let entry = sign_entry(draft, &keypair).expect("wallet should sign selective entry");
+        ledger
+            .apply_entry(entry)
+            .expect("ledger should accept valid selective encrypted entry");
+    }
+
+    #[test]
+    fn rejects_selective_encryption_entry_with_mismatched_allowlist() {
+        let ledger = Ledger::in_memory();
+        let namespace = "audit.procurement";
+        ledger.bootstrap_namespaces(vec![namespace_with_rules(
+            namespace,
+            vec![NamespaceRule {
+                name: "privacy_policy".into(),
+                config: json!({"allow_encryption": true}),
+            }],
+        )]);
+
+        let keypair = WalletKeypair::generate();
+        let draft = EntryDraft {
+            namespace: namespace.to_string(),
+            action: "RECORD_EVENT".to_string(),
+            object_id: "AUD-ETC-SELECTIVE-2".to_string(),
+            payload: json!({
+                "public_fields": {"event":"BID_OPENED"},
+                "private_fields": {"vendor_email":"alice@example.org"},
+                "public_allowlist": ["event"]
+            }),
+            privacy_flag: true,
+            encryption_passphrase: Some("e2e-opt-in-passphrase".to_string()),
+            author: "did:ledger:auditor".to_string(),
+            timestamp: 1_736_500_224,
+        };
+
+        let mut entry = sign_entry(draft, &keypair).expect("wallet should sign selective entry");
+        entry.payload["public_allowlist"] = json!(["event", "extra"]);
+        let err = ledger
+            .apply_entry(entry)
+            .expect_err("ledger should reject malformed selective entry");
+        assert!(err
+            .to_string()
+            .contains("must exactly match payload.public_fields keys"));
     }
 
     #[test]
