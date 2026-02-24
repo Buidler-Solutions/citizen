@@ -1,9 +1,11 @@
 use chrono::Utc;
+use citizen_types::PrivacyMode;
 use citizen_types::{LedgerEntry, SignedEnvelope};
 use clap::{Parser, Subcommand};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
+use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use uuid::Uuid;
@@ -521,7 +523,18 @@ pub fn run() -> anyhow::Result<()> {
                 object_id,
                 payload,
                 privacy_flag: encrypt,
+                privacy_mode: if encrypt {
+                    PrivacyMode::Passphrase
+                } else {
+                    PrivacyMode::None
+                },
                 encryption_passphrase: load_encryption_passphrase(encrypt, encryption_passphrase)?,
+                authorized_readers: vec![],
+                custodian_policy_id: None,
+                key_wrapped_secrets: vec![],
+                revocation_events: vec![],
+            field_reader_acls: Default::default(),
+                reader_public_keys: BTreeMap::new(),
                 author,
                 timestamp: timestamp.unwrap_or_else(|| Utc::now().timestamp()),
             };
@@ -768,7 +781,18 @@ fn sign_namespace_entry(
         object_id,
         payload,
         privacy_flag: encrypt,
+        privacy_mode: if encrypt {
+            PrivacyMode::Passphrase
+        } else {
+            PrivacyMode::None
+        },
         encryption_passphrase: load_encryption_passphrase(encrypt, encryption_passphrase)?,
+        authorized_readers: vec![],
+        custodian_policy_id: None,
+        key_wrapped_secrets: vec![],
+        revocation_events: vec![],
+            field_reader_acls: Default::default(),
+        reader_public_keys: BTreeMap::new(),
         author,
         timestamp: timestamp.unwrap_or_else(|| Utc::now().timestamp()),
     };
@@ -980,7 +1004,14 @@ mod tests {
                 object_id: "AUD-1".to_string(),
                 payload: json!({"event": "BID_OPENED"}),
                 privacy_flag: false,
+                privacy_mode: PrivacyMode::None,
                 encryption_passphrase: None,
+                authorized_readers: vec![],
+                custodian_policy_id: None,
+                key_wrapped_secrets: vec![],
+                revocation_events: vec![],
+            field_reader_acls: Default::default(),
+                reader_public_keys: BTreeMap::new(),
                 author: "did:ledger:test".to_string(),
                 timestamp: 1_736_500_000,
             },
