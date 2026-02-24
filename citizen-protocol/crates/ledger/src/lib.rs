@@ -466,6 +466,16 @@ impl<S: LedgerStorage + 'static> Ledger<S> {
                 ));
             }
 
+            let credit_grant_id = entry
+                .payload
+                .get("credit_grant_id")
+                .and_then(Value::as_str)
+                .ok_or_else(|| {
+                    ProtocolError::ValidationFailed(
+                        "sponsored usage requires payload.credit_grant_id".into(),
+                    )
+                })?;
+
             let sponsorship_id = entry
                 .payload
                 .get("sponsorship_id")
@@ -477,6 +487,18 @@ impl<S: LedgerStorage + 'static> Ledger<S> {
                 })?;
 
             let entries = self.storage.namespace_entries(&entry.namespace)?;
+            let grant_exists = entries.iter().any(|existing| {
+                existing.entry_id.to_string() == credit_grant_id
+                    && existing.object_id == entry.object_id
+                    && (existing.action == "MULTISIG_CREDIT_GRANT"
+                        || existing.action == "PROGRAMMABLE_CREDIT_GRANT")
+            });
+            if !grant_exists {
+                return Err(ProtocolError::ValidationFailed(
+                    "payload.credit_grant_id does not reference an active builder grant".into(),
+                ));
+            }
+
             if entries.iter().any(|existing| {
                 existing
                     .payload
@@ -2030,6 +2052,7 @@ mod tests {
         grant.object_id = "builder:alpha".into();
         grant.author = "governance:ops".into();
         grant.payload = json!({"amount": 50_u64});
+        let grant_id = grant.entry_id.to_string();
         attach_multisig_proofs(
             &mut grant,
             &["grant:ops-1", "grant:ops-2", "grant:ops-3"],
@@ -2041,8 +2064,12 @@ mod tests {
         spend.action = "SPONSOR_USAGE".into();
         spend.object_id = "builder:alpha".into();
         spend.author = "builder:alpha".into();
-        spend.payload =
-            json!({"amount": 40_u64, "sponsorship_id":"spn-1", "sponsored_did":"did:ledger:user1"});
+        spend.payload = json!({
+            "amount": 40_u64,
+            "credit_grant_id": grant_id,
+            "sponsorship_id":"spn-1",
+            "sponsored_did":"did:ledger:user1"
+        });
         ledger.apply_entry(spend).expect("spend should pass");
 
         let mut transfer = test_entry(namespace);
@@ -2059,8 +2086,12 @@ mod tests {
         over_spend.action = "SPONSOR_USAGE".into();
         over_spend.object_id = "builder:alpha".into();
         over_spend.author = "builder:alpha".into();
-        over_spend.payload =
-            json!({"amount": 20_u64, "sponsorship_id":"spn-2", "sponsored_did":"did:ledger:user2"});
+        over_spend.payload = json!({
+            "amount": 20_u64,
+            "credit_grant_id": grant_id,
+            "sponsorship_id":"spn-2",
+            "sponsored_did":"did:ledger:user2"
+        });
         let balance_err = ledger
             .apply_entry(over_spend)
             .expect_err("overspend should fail");
@@ -2097,6 +2128,7 @@ mod tests {
         grant.object_id = "builder:alpha".into();
         grant.author = "governance:ops".into();
         grant.payload = json!({"amount": 100_u64});
+        let grant_id = grant.entry_id.to_string();
         attach_multisig_proofs(
             &mut grant,
             &["grant:ops-1", "grant:ops-2", "grant:ops-3"],
@@ -2108,7 +2140,12 @@ mod tests {
         spend.action = "SPONSOR_USAGE".into();
         spend.object_id = "builder:alpha".into();
         spend.author = "builder:alpha".into();
-        spend.payload = json!({"amount": 10_u64, "sponsorship_id":"dup-id", "sponsored_did":"did:ledger:user1"});
+        spend.payload = json!({
+            "amount": 10_u64,
+            "credit_grant_id": grant_id,
+            "sponsorship_id":"dup-id",
+            "sponsored_did":"did:ledger:user1"
+        });
         ledger
             .apply_entry(spend.clone())
             .expect("first spend should pass");
@@ -2122,14 +2159,98 @@ mod tests {
         limit_breach.action = "SPONSOR_USAGE".into();
         limit_breach.object_id = "builder:alpha".into();
         limit_breach.author = "builder:alpha".into();
-        limit_breach.payload =
-            json!({"amount": 20_u64, "sponsorship_id":"spn-3", "sponsored_did":"did:ledger:user3"});
+        limit_breach.payload = json!({
+            "amount": 20_u64,
+            "credit_grant_id": grant_id,
+            "sponsorship_id":"spn-3",
+            "sponsored_did":"did:ledger:user3"
+        });
         let limit_err = ledger
             .apply_entry(limit_breach)
             .expect_err("daily max spend should fail");
         assert!(limit_err
             .to_string()
             .contains("daily sponsored spend limit exceeded"));
+    }
+
+    #[test]
+    fn enforces_credit_grant_linkage_for_sponsored_usage() {
+        let ledger = Ledger::in_memory();
+        let namespace = "builder.credits";
+        let grant_keys = grant_approver_keys(&[
+            "grant:ops-1",
+            "grant:ops-2",
+            "grant:ops-3",
+            "grant:ops-4",
+            "grant:ops-5",
+        ]);
+        ledger.bootstrap_namespaces(vec![namespace_with_rules(
+            namespace,
+            vec![NamespaceRule {
+                name: "builder_credit_policy".into(),
+                config: json!({
+                    "required_grant_approvals": 3,
+                    "grant_approvers": grant_approvers_config(&grant_keys)
+                }),
+            }],
+        )]);
+
+        let mut grant = test_entry(namespace);
+        grant.action = "MULTISIG_CREDIT_GRANT".into();
+        grant.object_id = "builder:alpha".into();
+        grant.author = "governance:ops".into();
+        grant.payload = json!({"amount": 50_u64});
+        let grant_id = grant.entry_id.to_string();
+        attach_multisig_proofs(
+            &mut grant,
+            &["grant:ops-1", "grant:ops-2", "grant:ops-3"],
+            &grant_keys,
+        );
+        ledger.apply_entry(grant).expect("grant should pass");
+
+        let mut missing_grant_link = test_entry(namespace);
+        missing_grant_link.action = "SPONSOR_USAGE".into();
+        missing_grant_link.object_id = "builder:alpha".into();
+        missing_grant_link.author = "builder:alpha".into();
+        missing_grant_link.payload =
+            json!({"amount": 1_u64, "sponsorship_id":"spn-no-grant", "sponsored_did":"did:ledger:user1"});
+        let missing_err = ledger
+            .apply_entry(missing_grant_link)
+            .expect_err("sponsor usage should require credit_grant_id");
+        assert!(missing_err
+            .to_string()
+            .contains("payload.credit_grant_id"));
+
+        let mut unknown_grant_link = test_entry(namespace);
+        unknown_grant_link.action = "SPONSOR_USAGE".into();
+        unknown_grant_link.object_id = "builder:alpha".into();
+        unknown_grant_link.author = "builder:alpha".into();
+        unknown_grant_link.payload = json!({
+            "amount": 1_u64,
+            "credit_grant_id": "not-a-real-grant",
+            "sponsorship_id":"spn-unknown-grant",
+            "sponsored_did":"did:ledger:user2"
+        });
+        let unknown_err = ledger
+            .apply_entry(unknown_grant_link)
+            .expect_err("unknown credit_grant_id should fail");
+        assert!(unknown_err
+            .to_string()
+            .contains("does not reference an active builder grant"));
+
+        let mut valid = test_entry(namespace);
+        valid.action = "SPONSOR_USAGE".into();
+        valid.object_id = "builder:alpha".into();
+        valid.author = "builder:alpha".into();
+        valid.payload = json!({
+            "amount": 1_u64,
+            "credit_grant_id": grant_id,
+            "sponsorship_id":"spn-valid-grant",
+            "sponsored_did":"did:ledger:user3"
+        });
+        ledger
+            .apply_entry(valid)
+            .expect("known credit_grant_id should pass");
     }
 
     #[test]
@@ -2235,6 +2356,7 @@ mod tests {
         grant.object_id = "builder:alpha".into();
         grant.author = "automation.builder-credit-bot".into();
         grant.payload = json!({"amount": 40_u64, "policy_id": "builder-auto-v1"});
+        let grant_id = grant.entry_id.to_string();
         ledger.apply_entry(grant).expect(
             "programmable grant should pass without manual signatures once policy is configured",
         );
@@ -2243,7 +2365,7 @@ mod tests {
         spend.action = "SPONSOR_USAGE".into();
         spend.object_id = "builder:alpha".into();
         spend.author = "builder:alpha".into();
-        spend.payload = json!({"amount": 30_u64, "sponsorship_id":"prog-spn-1", "sponsored_did":"did:ledger:user1"});
+        spend.payload = json!({"amount": 30_u64, "credit_grant_id": grant_id, "sponsorship_id":"prog-spn-1", "sponsored_did":"did:ledger:user1"});
         ledger
             .apply_entry(spend)
             .expect("spend should use programmable granted balance");
