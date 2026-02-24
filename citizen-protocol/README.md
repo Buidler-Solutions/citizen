@@ -48,7 +48,7 @@ Current delivery includes Phase 2 identity/data ownership primitives, Phase 3 bu
 - DID registry namespace rule enforcement (`identity.citizen`) with governed action allowlists.
 - Resolver endpoint: `GET /api/v1/identity/:did` for latest DID status (`Active`/`Revoked`).
 - Consent receipt namespace policy enforcement (`consent.receipt`) and API policy checks via `POST /api/v1/consent/check`.
-- Builder fee credit namespace policy enforcement (`builder.credits`) with non-transferability, mandatory `MULTISIG_CREDIT_GRANT` opcode usage, approver-to-public-key binding via configured `grant_approvers` entries (`id`, `public_key`), required `payload.multisig_proofs` (`approver`, `public_key`, `signature`) with deterministic ledger-side signature verification, sponsorship balance checks, and anti-abuse controls (`sponsorship_id` uniqueness + daily spend cap).
+- Builder fee credit namespace policy enforcement (`builder.credits`) with non-transferability, mandatory `MULTISIG_CREDIT_GRANT` opcode usage, approver-to-public-key binding via configured `grant_approvers` entries (`id`, `public_key`), required `payload.multisig_proofs` (`approver`, `public_key`, `signature`) with deterministic ledger-side signature verification, mandatory `payload.credit_grant_id` linkage for `SPONSOR_USAGE`, sponsorship balance checks, and anti-abuse controls (`sponsorship_id` uniqueness + daily spend cap).
 - Builder credit reporting endpoint: `GET /api/v1/builder-credits/:builder_id` for deterministic credited/sponsored/available accounting, active policy metadata (including `max_daily_spend`), and sponsorship instrumentation.
 - Detailed 3-of-5 multisig implementation and operations guide for builder credit grants: `docs/MULTISIG_3_OF_5_IMPLEMENTATION_HOWTO.md`.
 - Governed asset control namespace policy (`asset.control`) enforcing trustline activation, issuer-authorized holds, holder-authorized releases, and governance-scoped policy flags/disclosure commitments.
@@ -216,6 +216,18 @@ steps), see:
    Builder-credit grant signer operations and deterministic 3-of-5 multisig proof construction are documented in:
 
    - `docs/MULTISIG_3_OF_5_IMPLEMENTATION_HOWTO.md`
+
+   Credit-grant-gated write access model (API key + grant composition for sponsored user writes) is documented in:
+
+   - `docs/CREDIT_GRANT_WRITE_GATING_MODEL.md`
+
+   Complete on-chain policy runtime sync sample for all validator node configs is documented in:
+
+   - `docs/ONCHAIN_POLICY_RUNTIME_SYNC_SAMPLE.md`
+
+   Operational rollout runbook for policy sync (cohort restart, parity checks, rollback, and audit evidence) is documented in:
+
+   - `docs/ONCHAIN_POLICY_RUNTIME_SYNC_RUNBOOK.md`
 
    End-to-end localnet execution runbook for real entry submission + 80% consensus finality checks + 3-of-5 multisig builder-credit grant submission is documented in:
 
