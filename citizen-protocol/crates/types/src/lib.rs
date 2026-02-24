@@ -49,6 +49,8 @@ pub struct LedgerEntry {
     pub payload: Value,
     #[serde(default)]
     pub privacy_flag: bool,
+    #[serde(default)]
+    pub privacy_mode: PrivacyMode,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub payload_commitment: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -61,9 +63,45 @@ pub struct LedgerEntry {
     pub kdf_params: Option<KdfParams>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub consent_receipt: Option<ConsentReceipt>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub authorized_readers: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub custodian_policy_id: Option<String>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub field_reader_acls: BTreeMap<String, Vec<String>>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub key_wrapped_secrets: Vec<KeyWrap>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub revocation_events: Vec<RevocationEvent>,
     pub author: String,
     pub signature: String,
     pub timestamp: UnixTimestamp,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum PrivacyMode {
+    #[default]
+    None,
+    Passphrase,
+    Hybrid,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct KeyWrap {
+    pub reader_id: String,
+    pub wrapped_dek: String,
+    pub wrap_algorithm: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct RevocationEvent {
+    pub event_id: String,
+    pub data_hash: String,
+    pub reader_id: String,
+    pub timestamp: UnixTimestamp,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub threshold_signatures: Vec<String>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
@@ -301,6 +339,12 @@ pub struct ConsentReceipt {
     pub policy_ref: String,
     pub granted_at: UnixTimestamp,
     pub expires_at: UnixTimestamp,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub authorized_readers: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub custodian_policy_id: Option<String>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub field_reader_acls: BTreeMap<String, Vec<String>>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
