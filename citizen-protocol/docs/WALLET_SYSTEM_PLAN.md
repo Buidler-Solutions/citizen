@@ -68,6 +68,26 @@ Implemented now:
 - approval-threshold policy checks for high-impact actions,
 - multisig builder-credit proof workflow support.
 
+### 2.5 Privacy ACL + DEK Controls
+
+Implemented now:
+
+- hybrid privacy mode using per-entry DEKs and per-reader wrapped key material,
+- field-level reader ACL maps (`field_reader_acls`) for selective disclosure,
+- deterministic per-payload commitments preserved in signing payloads and consent receipts,
+- verification/decryption helpers that require caller-specific DEK wrap ownership.
+
+### 2.6 Privacy option model (explicit)
+
+Implemented now (four practical choices):
+
+- `none` (default): clear-text payload, no encrypt-then-commit.
+- `passphrase`: opt-in full-payload encrypt-then-commit.
+- `hybrid_full_payload`: opt-in ACL + DEK full-payload encrypt-then-commit.
+- `hybrid_selective_fields`: opt-in ACL + DEK selective-field encrypt-then-commit (`field_reader_acls`).
+
+Implementation note: the last two choices map to `privacy_mode = hybrid` and are distinguished by selective-field ACL metadata.
+
 ---
 
 ## 3) Current Architecture (As Built)
