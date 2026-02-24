@@ -970,6 +970,10 @@ mod tests {
         };
         let entry = sign_entry(draft, &keypair).expect("sign entry");
         verify_entry_signature(&entry, keypair.verifying_key()).expect("verify signature");
+        println!(
+            "SAMPLE_PUBLIC_ENTRY={}\n",
+            serde_json::to_string_pretty(&entry).expect("serialize public entry sample")
+        );
     }
 
     #[test]
@@ -1088,6 +1092,11 @@ mod tests {
         )
         .expect("decrypt hybrid entry");
         assert_eq!(decrypted, json!({"document_hash":"abc123","event":"BID_OPENED"}));
+
+        println!(
+            "SAMPLE_WHOLE_PAYLOAD_ENTRY={}\n",
+            serde_json::to_string_pretty(&entry).expect("serialize whole-payload entry sample")
+        );
     }
 
 
@@ -1128,6 +1137,11 @@ mod tests {
         let entry = sign_entry(draft, &author).expect("sign selective hybrid entry");
         assert_eq!(entry.payload.get("privacy_mode").and_then(Value::as_str), Some("field_selective_v1"));
         assert_eq!(entry.field_reader_acls.get("bidder_email").map(Vec::len), Some(1));
+
+        println!(
+            "SAMPLE_PER_FIELD_ENTRY={}\n",
+            serde_json::to_string_pretty(&entry).expect("serialize per-field entry sample")
+        );
     }
 
     #[test]
