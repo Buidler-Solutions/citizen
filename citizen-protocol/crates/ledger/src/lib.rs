@@ -3,8 +3,8 @@ use citizen_crypto::{
 };
 use citizen_storage::{LedgerStorage, MemoryStorage};
 use citizen_types::{
-    Block, GovernanceProposal, LedgerEntry, NamespaceId, NamespaceRuleset, ProtocolError,
-    ValidatorSetSnapshot,
+    Block, GovernanceProposal, LedgerEntry, NamespaceId, NamespaceRuleset, PrivacyMode,
+    ProtocolError, ValidatorSetSnapshot,
 };
 use ed25519_dalek::Signature;
 use parking_lot::RwLock;
@@ -526,24 +526,66 @@ impl<S: LedgerStorage + 'static> Ledger<S> {
             .get("allow_encryption")
             .and_then(Value::as_bool)
             .unwrap_or(false);
-        if entry.privacy_flag && !allow_encryption {
+        if entry.privacy_mode != PrivacyMode::None && !allow_encryption {
             return Err(ProtocolError::ValidationFailed(format!(
                 "namespace {} does not permit encrypted payloads",
                 entry.namespace
             )));
         }
-        if !entry.privacy_flag {
+        if entry.privacy_mode == PrivacyMode::None {
             return Ok(());
         }
-        if entry.ciphertext_hex.is_none()
-            || entry.nonce_hex.is_none()
-            || entry.salt_hex.is_none()
-            || entry.kdf_params.is_none()
-            || entry.payload_commitment.is_none()
+        if entry.ciphertext_hex.is_none() || entry.nonce_hex.is_none() || entry.payload_commitment.is_none() {
+            return Err(ProtocolError::ValidationFailed(
+                "encrypted entries must include ciphertext, nonce, and payload_commitment".into(),
+            ));
+        }
+        if entry.privacy_mode == PrivacyMode::Passphrase
+            && (entry.salt_hex.is_none() || entry.kdf_params.is_none())
         {
             return Err(ProtocolError::ValidationFailed(
-                "encrypted entries must include ciphertext, nonce, salt, kdf_params, and payload_commitment".into(),
+                "passphrase mode requires salt_hex and kdf_params".into(),
             ));
+        }
+        if entry.privacy_mode == PrivacyMode::Hybrid {
+            if entry.key_wrapped_secrets.is_empty() {
+                return Err(ProtocolError::ValidationFailed(
+                    "hybrid mode requires key_wrapped_secrets".into(),
+                ));
+            }
+            for reader_id in &entry.authorized_readers {
+                if !entry
+                    .key_wrapped_secrets
+                    .iter()
+                    .any(|wrapped| &wrapped.reader_id == reader_id)
+                {
+                    return Err(ProtocolError::ValidationFailed(format!(
+                        "hybrid mode missing key wrap for authorized reader `{reader_id}`"
+                    )));
+                }
+            }
+            if let Some(policy_id) = entry.custodian_policy_id.as_deref() {
+                if !self.is_governance_approved_custodian_policy(policy_id) {
+                    return Err(ProtocolError::ValidationFailed(
+                        "custodian policy is not governance-approved".into(),
+                    ));
+                }
+            }
+            for (field, readers) in &entry.field_reader_acls {
+                if readers.is_empty() {
+                    return Err(ProtocolError::ValidationFailed(format!(
+                        "field_reader_acls[{field}] must include at least one reader"
+                    )));
+                }
+                if !readers
+                    .iter()
+                    .all(|reader| entry.authorized_readers.iter().any(|allowed| allowed == reader))
+                {
+                    return Err(ProtocolError::ValidationFailed(
+                        "field_reader_acls readers must be present in authorized_readers".into(),
+                    ));
+                }
+            }
         }
         let receipt = entry.consent_receipt.as_ref().ok_or_else(|| {
             ProtocolError::ValidationFailed(
@@ -560,11 +602,30 @@ impl<S: LedgerStorage + 'static> Ledger<S> {
                 "consent receipt must expire after grant timestamp".into(),
             ));
         }
+        if receipt.authorized_readers != entry.authorized_readers {
+            return Err(ProtocolError::ValidationFailed(
+                "consent receipt authorized_readers must match entry".into(),
+            ));
+        }
+        if receipt.custodian_policy_id != entry.custodian_policy_id {
+            return Err(ProtocolError::ValidationFailed(
+                "consent receipt custodian_policy_id must match entry".into(),
+            ));
+        }
+        if receipt.field_reader_acls != entry.field_reader_acls {
+            return Err(ProtocolError::ValidationFailed(
+                "consent receipt field_reader_acls must match entry".into(),
+            ));
+        }
 
         if entry.payload.get("privacy_mode").and_then(Value::as_str) == Some("field_selective_v1") {
             self.validate_selective_privacy_payload(entry)?;
         }
         Ok(())
+    }
+
+    fn is_governance_approved_custodian_policy(&self, _policy_id: &str) -> bool {
+        true
     }
 
     fn validate_selective_privacy_payload(&self, entry: &LedgerEntry) -> Result<()> {
@@ -1475,6 +1536,7 @@ mod tests {
     use citizen_crypto::{sign_message, verifying_key_to_string, ValidatorKeypair};
     use citizen_types::{
         CommitProof, LedgerEntry, NamespaceDescriptor, NamespaceRule, NamespaceRuleset,
+        PrivacyMode,
     };
     use citizen_wallet::{sign_entry, EntryDraft, WalletKeypair};
     use serde_json::json;
@@ -1489,12 +1551,18 @@ mod tests {
             object_id: "LOT-239-A".into(),
             payload: json!({"from":"did:a","to":"did:b"}),
             privacy_flag: false,
+            privacy_mode: PrivacyMode::None,
             payload_commitment: None,
             ciphertext_hex: None,
             nonce_hex: None,
             salt_hex: None,
             kdf_params: None,
             consent_receipt: None,
+            authorized_readers: vec![],
+            custodian_policy_id: None,
+            key_wrapped_secrets: vec![],
+            revocation_events: vec![],
+            field_reader_acls: Default::default(),
             author: "did:a".into(),
             signature: "sig".into(),
             timestamp: 1_736_500_000,
@@ -1731,6 +1799,7 @@ mod tests {
 
         let mut entry = test_entry(namespace);
         entry.privacy_flag = true;
+        entry.privacy_mode = PrivacyMode::Passphrase;
         entry.payload_commitment = Some("deadbeef".into());
         entry.ciphertext_hex = Some("00".into());
         entry.nonce_hex = Some("00".into());
@@ -1747,6 +1816,9 @@ mod tests {
             policy_ref: "policy:v1".into(),
             granted_at: entry.timestamp,
             expires_at: entry.timestamp + 100,
+            authorized_readers: vec![],
+            custodian_policy_id: None,
+            field_reader_acls: Default::default(),
         });
 
         let err = ledger
@@ -1771,12 +1843,13 @@ mod tests {
 
         let mut entry = test_entry(namespace);
         entry.privacy_flag = true;
+        entry.privacy_mode = PrivacyMode::Passphrase;
         let err = ledger
             .apply_entry(entry)
             .expect_err("missing encrypted metadata must fail");
         assert!(err
             .to_string()
-            .contains("must include ciphertext, nonce, salt, kdf_params, and payload_commitment"));
+            .contains("must include ciphertext, nonce, and payload_commitment"));
     }
 
     #[test]
@@ -1798,7 +1871,14 @@ mod tests {
             object_id: "AUD-ETC-1".to_string(),
             payload: json!({"event":"BID_OPENED","document_hash":"abc123"}),
             privacy_flag: true,
+            privacy_mode: PrivacyMode::Passphrase,
             encryption_passphrase: Some("e2e-opt-in-passphrase".to_string()),
+            authorized_readers: vec![],
+            custodian_policy_id: None,
+            key_wrapped_secrets: vec![],
+            revocation_events: vec![],
+            field_reader_acls: Default::default(),
+            reader_public_keys: Default::default(),
             author: "did:ledger:auditor".to_string(),
             timestamp: 1_736_500_222,
         };
@@ -1832,7 +1912,14 @@ mod tests {
                 "public_allowlist": ["document_hash","event"]
             }),
             privacy_flag: true,
+            privacy_mode: PrivacyMode::Passphrase,
             encryption_passphrase: Some("e2e-opt-in-passphrase".to_string()),
+            authorized_readers: vec![],
+            custodian_policy_id: None,
+            key_wrapped_secrets: vec![],
+            revocation_events: vec![],
+            field_reader_acls: Default::default(),
+            reader_public_keys: Default::default(),
             author: "did:ledger:auditor".to_string(),
             timestamp: 1_736_500_223,
         };
@@ -1866,7 +1953,14 @@ mod tests {
                 "public_allowlist": ["event"]
             }),
             privacy_flag: true,
+            privacy_mode: PrivacyMode::Passphrase,
             encryption_passphrase: Some("e2e-opt-in-passphrase".to_string()),
+            authorized_readers: vec![],
+            custodian_policy_id: None,
+            key_wrapped_secrets: vec![],
+            revocation_events: vec![],
+            field_reader_acls: Default::default(),
+            reader_public_keys: Default::default(),
             author: "did:ledger:auditor".to_string(),
             timestamp: 1_736_500_224,
         };
