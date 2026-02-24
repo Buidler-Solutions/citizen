@@ -244,8 +244,9 @@ To make Citizen visibly work "in action," run the stack as an integrated loop ra
 4. **dApp backend** verifies signatures, applies builder policy, and submits envelopes to node APIs.
 5. **Explorer backend/frontend** indexes and displays finalized blocks/entries/receipts.
 6. **Citizen Laboratory** drives the same APIs for no-code/low-code operation testing.
+7. **ACL + DEK privacy interoperability** keeps selective-field access consistent: wallet emits `field_reader_acls` + wrapped DEKs, backend forwards canonical envelope fields, node stores commitment-backed metadata, and explorer/read APIs preserve deterministic verification context.
 
-If all six are online and pointed at the same network profile, you can demonstrate end-to-end deterministic flow in minutes.
+If all seven are online and pointed at the same network profile, you can demonstrate end-to-end deterministic flow in minutes.
 
 ### 8.2 Minimum "show it works" application set
 
@@ -280,3 +281,14 @@ Citizen Laboratory should be positioned as the builder-first entry point:
 - **Deterministic verification UX**: every submit returns receipt + explorer deep link + raw proof material.
 - **Team collaboration mode**: saved payload drafts, fixture export/import, and reproducible scenario runs.
 - **Production migration lane**: "Generate SDK snippet" and "Export backend payload" actions for app teams.
+
+### 8.5 ACL + DEK ecosystem synchronization checks
+
+For each release candidate, validate the same signed entry across all surfaces:
+
+1. Wallet output includes `payload_commitment`, `key_wrapped_secrets`, and `field_reader_acls`.
+2. dApp/backend canonical submission preserves those fields without mutation.
+3. Node receipt + entry retrieval returns unchanged commitment metadata.
+4. Explorer/indexer display and API output expose privacy metadata for auditability without revealing encrypted plaintext.
+
+Reference: `docs/ACL_DEK_IMPLEMENTATION_DOUBLE_CHECK.md`.

@@ -21,3 +21,4 @@ uuid = { workspace = true }
 thiserror = { workspace = true }
 reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"] }
 sha2 = "0.10"
+x25519-dalek = { version = "2.0", features = ["static_secrets"] }
