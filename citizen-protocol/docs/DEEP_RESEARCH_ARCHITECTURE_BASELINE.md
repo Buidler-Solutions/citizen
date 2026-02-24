@@ -50,6 +50,9 @@ Protocol requirements:
 - Signed, time-scoped consent events.
 - Verifiable authorization history.
 - Portable identity and claims via DID/VC-compatible flows.
+- Reader-scoped ACLs for encrypted payload access, including field-level ACL overlays for selective disclosure.
+- DEK-based hybrid encryption paths where payloads/field bundles are encrypted off-chain and key access is controlled by per-reader key wraps.
+- Deterministic per-payload commitments (and deterministic selective-field commitment views) that remain verifiable across node, wallet, dApp, and explorer surfaces.
 
 ## Interoperability Direction (Staged)
 
@@ -168,3 +171,14 @@ Documentation is considered aligned when:
 - Public docs consistently describe the two-plane architecture.
 - Builder onboarding references canonical APIs and deterministic receipts.
 - Explorer requirements include finality verification and governance transparency.
+
+## Current Implementation Sync Addendum (ACL + DEK)
+
+The current repository implementation aligns with the data-ownership direction by shipping:
+
+- wallet-level hybrid DEK handling with reader-bound key wrapping,
+- `field_reader_acls` propagation for selective field access,
+- deterministic payload commitment anchoring in signed entry material,
+- canonical receipt verification paths that preserve commit integrity across ecosystem surfaces.
+
+Operational synchronization details are tracked in `docs/ACL_DEK_IMPLEMENTATION_DOUBLE_CHECK.md`.

@@ -26,6 +26,7 @@ Reference: `docs/DEVELOPER_EXPERIENCE_BLUEPRINT.md` Section 6 + Section 8.
   - Updated wallet CLI submit defaults and response parsing for canonical envelope + receipt flow.
 
 ### Last Update
+- 2026-02-24: Added repository-wide ACL + DEK documentation synchronization for hybrid privacy mode (per-field ACLs + per-payload commitments) and published cross-surface verification matrix in `docs/ACL_DEK_IMPLEMENTATION_DOUBLE_CHECK.md`.
 - 2026-02-14: Completed blueprint application alignment audit and remediated dApp starter + wallet CLI canonical runtime mismatches (envelope submit + deterministic receipt handling).
 
 ## Update Rule (for every agent)
