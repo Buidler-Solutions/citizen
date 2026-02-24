@@ -251,6 +251,37 @@ If you already compiled the runtime, you can run the binary directly without
 
    - `docs/DEVELOPER_EXPERIENCE_BLUEPRINT.md`
 
+### Build a separated runtime + app bundle (node runtime in Docker)
+
+If you want the compiled node runtime and companion apps outside the main
+source tree, generate a standalone bundle:
+
+```bash
+scripts/package_runtime_stack.sh
+```
+
+This creates `dist/runtime-stack/` with:
+
+- `node-runtime/bin/citizen-node` (compiled release runtime)
+- `node-runtime/docker/` (Dockerfile + Compose to run the compiled runtime)
+- `node-runtime/run-node.sh` (node runtime CLI wrapper)
+- `apps/wallet-cli`, `apps/explorer`, `apps/dapp`, and `apps/demo` (copied
+  implementation folders without build artifacts)
+
+To run the compiled runtime from the generated bundle:
+
+```bash
+cd dist/runtime-stack/node-runtime
+./run-node.sh ./config/node.toml
+```
+
+To run the compiled runtime in Docker:
+
+```bash
+cd dist/runtime-stack/node-runtime/docker
+docker compose up --build
+```
+
 ## Transport Admission & Key Rotation
 
 - Incoming QUIC/libp2p peers are validated against the configured validator snapshot in `node.toml`. Use

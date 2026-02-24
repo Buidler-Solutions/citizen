@@ -1,0 +1,18 @@
+services:
+  citizen-node:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: citizen-node-runtime
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+      - "9100:9100"
+      - "9200:9200"
+    volumes:
+      - ../config/node.toml:/etc/citizen/node.toml:ro
+      - citizen_node_data:/var/lib/citizen
+    command: ["/etc/citizen/node.toml"]
+
+volumes:
+  citizen_node_data:
