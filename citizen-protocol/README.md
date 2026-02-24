@@ -191,6 +191,20 @@ accidentally boot a shared network with an unsigned or stale allowlist.
 If you leave the placeholder untouched, startup fails by design with
 `manifest_path_placeholder` during admission preflight.
 
+### Generate a signed admission manifest (one-liner)
+
+Use the helper script to produce `signed-manifest.json` from a payload +
+Ed25519 private key:
+
+```bash
+scripts/generate_signed_manifest.sh --payload ./manifest.payload.json --private-key ./manifest-signer-ed25519.pem --key-id "$(openssl pkey -in ./manifest-signer-ed25519.pem -pubout -outform DER | tail -c 32 | od -An -v -tx1 | tr -d ' \n')" --output ./signed-manifest.json
+```
+
+For a full technical walkthrough (payload fields, signature model, and rollout
+steps), see:
+
+- `docs/ADMISSION_MANIFEST_GENERATION_HOWTO.md`
+
    Operator disaster-recovery procedures (snapshot/restore drills, signed retention, quorum-safe regional restore) are documented in:
 
    - `docs/OPERATOR_DISASTER_RECOVERY_RUNBOOK.md`
@@ -250,6 +264,37 @@ If you already compiled the runtime, you can run the binary directly without
    read:
 
    - `docs/DEVELOPER_EXPERIENCE_BLUEPRINT.md`
+
+### Build a separated runtime + app bundle (node runtime in Docker)
+
+If you want the compiled node runtime and companion apps outside the main
+source tree, generate a standalone bundle:
+
+```bash
+scripts/package_runtime_stack.sh
+```
+
+This creates `dist/runtime-stack/` with:
+
+- `node-runtime/bin/citizen-node` (compiled release runtime)
+- `node-runtime/docker/` (Dockerfile + Compose to run the compiled runtime)
+- `node-runtime/run-node.sh` (node runtime CLI wrapper)
+- `apps/wallet-cli`, `apps/explorer`, `apps/dapp`, and `apps/demo` (copied
+  implementation folders without build artifacts)
+
+To run the compiled runtime from the generated bundle:
+
+```bash
+cd dist/runtime-stack/node-runtime
+./run-node.sh ./config/node.toml
+```
+
+To run the compiled runtime in Docker:
+
+```bash
+cd dist/runtime-stack/node-runtime/docker
+docker compose up --build
+```
 
 ## Transport Admission & Key Rotation
 
