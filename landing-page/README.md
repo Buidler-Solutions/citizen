@@ -49,6 +49,8 @@ App URLs:
 - Frontend: `http://localhost:3000`
 - Backend API: `http://localhost:3001/interest`
 - Lead stats endpoint (JWT protected): `http://localhost:3001/interest/stats`
+- Admin login UI: `http://localhost:3000/admin/login`
+- Admin dashboard UI: `http://localhost:3000/admin/dashboard`
 
 ## Run with Docker Compose
 
