@@ -168,6 +168,17 @@ curl http://localhost:4300/api/chain
 curl http://127.0.0.1:8081/entries/content.article
 ```
 
+6. ACL + DEK synchronization spot-check (for privacy-mode submissions):
+
+```bash
+curl -s http://127.0.0.1:8081/entries/content.article | jq '.[-1] | {privacy_mode, payload_commitment, field_reader_acls, key_wrapped_secrets}'
+```
+
+Expected result:
+- `privacy_mode` should reflect the wallet submission mode (`hybrid` for DEK + ACL flow).
+- `payload_commitment` must be present and deterministic across submit/retrieve.
+- `field_reader_acls` and `key_wrapped_secrets` should remain populated for authorized-reader entries.
+
 ### C) Optional smoke runner for all stack services
 
 After all five terminals are up, run:
