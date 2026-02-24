@@ -58,7 +58,7 @@ Current delivery includes Phase 2 identity/data ownership primitives, Phase 3 bu
 - Module runtime status endpoint: `GET /api/v1/modules/:module_id` for registration/activation/audit visibility.
 - Interop linkage endpoint: `GET /api/v1/interop/:object_id` for latest remote identifier and proof disclosures.
 - Wallet SDK verification helpers for DID document checks and off-chain commitment validation against on-chain consent receipts.
-- Wallet opt-in encrypt-then-commit entry signing (`--encrypt`/`--private`) with Argon2id + ChaCha20-Poly1305 payload protection, on-chain payload commitments, and embedded consent receipts for governance/audit compliance while keeping public clear-text as the default mode.
+- Wallet opt-in privacy modes now include both full encrypt-then-commit and field-selective encryption (`public_fields` + encrypted `private_fields` + `public_allowlist`) with canonical commitment checks, Argon2id + ChaCha20-Poly1305 payload protection, and embedded consent receipts for governance/audit compliance while keeping public clear-text as the default mode.
 
 ## Getting Started
 
@@ -73,6 +73,12 @@ Quick wallet encrypt-then-commit smoke check (avoids brittle multiline shell cop
 
 ```bash
 scripts/run_wallet_encrypt_then_commit_smoke.sh
+```
+
+Quick wallet selective field-encryption smoke check:
+
+```bash
+scripts/run_wallet_selective_encrypt_then_commit_smoke.sh
 ```
 
 3. Launch a single local validator node (non-production mock network):
