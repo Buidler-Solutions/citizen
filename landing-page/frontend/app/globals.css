@@ -1,6 +1,26 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
 :root {
   color-scheme: dark;
   font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  --background: 226 55% 7%;
+  --foreground: 210 40% 96%;
+  --card: 222 45% 11%;
+  --card-foreground: 210 40% 96%;
+  --primary: 219 100% 62%;
+  --primary-foreground: 210 40% 98%;
+  --secondary: 217 33% 18%;
+  --secondary-foreground: 210 40% 96%;
+  --muted: 217 33% 18%;
+  --muted-foreground: 215 20% 73%;
+  --accent: 214 52% 20%;
+  --accent-foreground: 210 40% 96%;
+  --border: 215 42% 26%;
+  --input: 215 42% 26%;
+  --ring: 208 90% 65%;
+  --radius: 0.75rem;
 }
 
 * {
@@ -41,7 +61,7 @@ body {
   margin-bottom: 0.6rem;
 }
 
-h1 {
+.typeform-main h1 {
   font-size: clamp(1.6rem, 3.2vw, 2.6rem);
   margin: 0;
 }
@@ -61,7 +81,6 @@ h1 {
   display: grid;
   gap: 1rem;
 }
-
 
 .typeform-step-motion {
   will-change: transform, opacity, filter;
@@ -114,8 +133,9 @@ h1 {
   color: #8de9ff;
 }
 
-input,
-button {
+.typeform-shell input,
+.typeform-shell button,
+.typeform-shell textarea {
   width: 100%;
   border-radius: 12px;
   padding: 0.95rem;
@@ -124,24 +144,12 @@ button {
   color: #f3f7ff;
 }
 
-input {
+.typeform-shell input {
   font-size: clamp(1.05rem, 2.2vw, 1.35rem);
 }
 
-
-textarea {
-  width: 100%;
-  border-radius: 12px;
-  padding: 0.95rem;
-  border: 1px solid rgba(169, 202, 255, 0.28);
-  background: rgba(10, 22, 45, 0.9);
-  color: #f3f7ff;
+.typeform-shell textarea {
   resize: vertical;
-}
-
-.settings-form {
-  display: grid;
-  gap: 0.7rem;
 }
 
 .wizard-actions {
@@ -150,7 +158,7 @@ textarea {
   gap: 0.75rem;
 }
 
-button {
+.typeform-shell button {
   cursor: pointer;
   background: linear-gradient(95deg, #3f69ff, #2ad2f6);
   border: none;
@@ -158,13 +166,13 @@ button {
   transition: transform 180ms ease, box-shadow 220ms ease, filter 220ms ease;
 }
 
-button:hover:not(:disabled) {
+.typeform-shell button:hover:not(:disabled) {
   transform: translateY(-1px);
   box-shadow: 0 10px 24px rgba(31, 112, 255, 0.35);
   filter: saturate(1.08);
 }
 
-button:disabled {
+.typeform-shell button:disabled {
   opacity: 0.6;
   cursor: not-allowed;
 }
@@ -199,34 +207,6 @@ button:disabled {
   font-weight: 600;
 }
 
-.admin-panel {
-  width: min(520px, 92vw);
-  margin: 0 auto;
-  display: grid;
-  gap: 1rem;
-  background: rgba(7, 14, 31, 0.85);
-  border-radius: 18px;
-  padding: 1.5rem;
-  border: 1px solid rgba(111, 151, 255, 0.4);
-}
-
-.error {
-  color: #ff9ab0;
-}
-
-.stats-card {
-  background: rgba(10, 26, 58, 0.78);
-  border-radius: 14px;
-  border: 1px solid rgba(121, 203, 255, 0.2);
-  padding: 1rem;
-}
-
-.stats-card strong {
-  display: block;
-  margin-top: 0.4rem;
-  font-size: 2rem;
-}
-
 @media (max-width: 680px) {
   .typeform-shell {
     min-height: calc(100vh - 140px);
@@ -243,7 +223,7 @@ button:disabled {
     animation: none;
   }
 
-  button {
+  .typeform-shell button {
     transition: none;
   }
 }
