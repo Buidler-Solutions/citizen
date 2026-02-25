@@ -11,6 +11,7 @@ import {
   LogOut,
   Menu,
   MessageSquareMore,
+  RectangleEllipsis,
   Settings,
   Users,
 } from 'lucide-react';
@@ -28,6 +29,7 @@ const NAV_GROUPS = [
     label: 'Configuration',
     items: [
       { href: '/admin/dashboard/form-settings', label: 'Form Settings', icon: Settings },
+      { href: '/admin/dashboard/campaign-cards', label: 'Campaign Cards', icon: RectangleEllipsis },
       { href: '/admin/dashboard/site-setting', label: 'Site Settings', icon: Settings },
     ],
   },
@@ -38,20 +40,13 @@ export function AdminConsoleLayout({ children }: PropsWithChildren) {
   const router = useRouter();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
-  const [sessionReady, setSessionReady] = useState(false);
-  const [mounted, setMounted] = useState(false);
+  const [sessionReady] = useState(() => (typeof window !== 'undefined' ? Boolean(localStorage.getItem(ADMIN_TOKEN_KEY)) : false));
 
   useEffect(() => {
-    setMounted(true);
-    const token = typeof window !== 'undefined' ? localStorage.getItem(ADMIN_TOKEN_KEY) : null;
-    setSessionReady(Boolean(token));
-  }, []);
-
-  useEffect(() => {
-    if (mounted && !sessionReady) {
+    if (!sessionReady) {
       router.replace('/admin/login');
     }
-  }, [router, sessionReady, mounted]);
+  }, [router, sessionReady]);
 
   const toggleSidebar = () => setIsSidebarCollapsed(!isSidebarCollapsed);
 
@@ -65,7 +60,7 @@ export function AdminConsoleLayout({ children }: PropsWithChildren) {
     router.push('/admin/login');
   };
 
-  if (!mounted) {
+  if (!sessionReady) {
     return <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/20" />;
   }
 
