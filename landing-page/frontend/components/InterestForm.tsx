@@ -137,16 +137,6 @@ export function InterestForm() {
   }, []);
 
   useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape') return;
-      setShowIntro(false);
-    };
-
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, []);
-
-  useEffect(() => {
     const loadSettings = async () => {
       try {
         const response = await fetch(`${API_URL}/interest/form-settings`);
@@ -169,6 +159,37 @@ export function InterestForm() {
   const introSlides = useMemo(() => settings.campaignCards
     .filter((card) => card.title.trim() && card.body.trim())
     .sort((a, b) => (a.weight ?? Number.MAX_SAFE_INTEGER) - (b.weight ?? Number.MAX_SAFE_INTEGER)), [settings.campaignCards]);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!showIntro || introSlides.length === 0) return;
+
+      if (event.key === 'Escape') {
+        setShowIntro(false);
+        return;
+      }
+
+      if (event.key === 'ArrowLeft') {
+        event.preventDefault();
+        setMotionDirection('backward');
+        setIntroIndex((prev) => Math.max(prev - 1, 0));
+        return;
+      }
+
+      if (event.key === 'ArrowRight') {
+        event.preventDefault();
+        setMotionDirection('forward');
+        if (introIndex === introSlides.length - 1) {
+          setShowIntro(false);
+          return;
+        }
+        setIntroIndex((prev) => Math.min(prev + 1, introSlides.length - 1));
+      }
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [introIndex, introSlides.length, showIntro]);
 
   useEffect(() => {
     if (introSlides.length === 0) {
@@ -354,7 +375,7 @@ export function InterestForm() {
             </button>
           </div>
           <button type="button" className="escape-shortcut" onClick={() => setShowIntro(false)}>
-            Skip campaign cards and fill form (Esc)
+            Skip campaign cards and fill form (Esc). Use ← / → to move between cards.
           </button>
         </>
       ) : (
