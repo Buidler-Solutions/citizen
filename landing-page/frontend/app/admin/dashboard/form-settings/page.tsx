@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Save, FileText, Palette, LoaderCircle, Check } from 'lucide-react';
-import { Button, Input, Label, Textarea, Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/admin-ui';
+import { Button, Input, Label, Textarea } from '@/components/admin-ui';
 import { ADMIN_TOKEN_KEY } from '@/components/admin-auth';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
@@ -125,49 +125,45 @@ export default function FormSettingsPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <Card gradient>
-        <CardContent>
-          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-            <div>
-              <h2 className="text-2xl font-bold text-slate-900">Form Settings</h2>
-              <p className="text-sm text-slate-600">Configure the interest form displayed on your landing page</p>
+    <div className="space-y-10">
+      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+        <div>
+          <h2 className="text-2xl font-bold text-slate-900">Form Settings</h2>
+          <p className="text-sm text-slate-600">Configure the interest form displayed on your landing page</p>
+        </div>
+        <div className="flex items-center gap-3">
+          {saveStatus && (
+            <div className={`flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold ${
+              saveStatus.includes('success') ? 'bg-emerald-50 text-emerald-700' : 'bg-blue-50 text-blue-700'
+            }`}>
+              <Check className="h-4 w-4" />
+              {saveStatus}
             </div>
-            <div className="flex items-center gap-3">
-              {saveStatus && (
-                <div className={`flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold ${
-                  saveStatus.includes('success') ? 'bg-emerald-50 text-emerald-700' : 'bg-blue-50 text-blue-700'
-                }`}>
-                  <Check className="h-4 w-4" />
-                  {saveStatus}
-                </div>
-              )}
-              <Button
-                onClick={saveSettings}
-                disabled={saving}
-                isLoading={saving}
-                className="gap-2"
-              >
-                <Save className="h-4 w-4" />
-                Save Changes
-              </Button>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+          )}
+          <Button
+            onClick={saveSettings}
+            disabled={saving}
+            isLoading={saving}
+            className="gap-2"
+          >
+            <Save className="h-4 w-4" />
+            Save Changes
+          </Button>
+        </div>
+      </div>
 
-      <Card>
-        <div className="flex overflow-x-auto border-b-2 border-slate-200">
+      <div className="space-y-8">
+        <div className="flex overflow-x-auto gap-2">
           {tabs.map((tab) => {
             const Icon = tab.icon;
             return (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`flex items-center gap-2 whitespace-nowrap px-6 py-4 text-sm font-bold transition-all duration-200 ${
+                className={`flex items-center gap-2 whitespace-nowrap rounded-xl px-6 py-3 text-sm font-bold transition-all duration-200 ${
                   activeTab === tab.id
-                    ? 'border-b-2 border-blue-600 bg-gradient-to-b from-blue-50 to-white text-blue-600'
-                    : 'border-b-2 border-transparent text-slate-600 hover:bg-slate-50'
+                    ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-500/30'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                 }`}
               >
                 <Icon className="h-4 w-4" />
@@ -177,9 +173,9 @@ export default function FormSettingsPage() {
           })}
         </div>
 
-        <CardContent>
+        <div className="space-y-8 py-8">
           {activeTab === 'basic' && (
-            <div className="space-y-6">
+            <div className="space-y-8">
               <div>
                 <h3 className="text-lg font-bold text-slate-900">Basic Information</h3>
                 <p className="text-sm text-slate-600">Configure basic form settings</p>
@@ -201,7 +197,7 @@ export default function FormSettingsPage() {
           )}
 
           {activeTab === 'prompts' && (
-            <div className="space-y-6">
+            <div className="space-y-8">
               <div>
                 <h3 className="text-lg font-bold text-slate-900">Role Prompts</h3>
                 <p className="text-sm text-slate-600">Configure prompts for different user roles</p>
@@ -242,17 +238,17 @@ export default function FormSettingsPage() {
           )}
 
           {activeTab === 'appearance' && (
-            <div className="space-y-6">
+            <div className="space-y-8">
               <div>
                 <h3 className="text-lg font-bold text-slate-900">Appearance Settings</h3>
                 <p className="text-sm text-slate-600">Customize visual appearance of form</p>
               </div>
 
-              <div className="overflow-hidden rounded-xl border-2 border-slate-200 bg-gradient-to-br from-slate-50 to-white p-6">
-                <Label className="text-base">Primary Color</Label>
-                <div className="mt-3 flex items-center gap-4">
+              <div className="rounded-2xl bg-gradient-to-br from-slate-50 to-white p-8 shadow-lg shadow-slate-200/50">
+                <Label className="text-base font-semibold">Primary Color</Label>
+                <div className="mt-4 flex items-center gap-6">
                   <div
-                    className="h-20 w-20 rounded-xl border-4 border-slate-200 shadow-lg transition-all duration-300"
+                    className="h-24 w-24 rounded-2xl shadow-xl transition-all duration-300"
                     style={{ backgroundColor: formColor }}
                   />
                   <div className="flex-1">
@@ -260,7 +256,7 @@ export default function FormSettingsPage() {
                       type="color"
                       value={formColor}
                       onChange={(e) => setFormColor(e.target.value)}
-                      className="h-12 w-32"
+                      className="h-12 w-40"
                     />
                     <p className="mt-2 text-sm text-slate-600">Choose the primary accent color for your form</p>
                   </div>
@@ -268,8 +264,8 @@ export default function FormSettingsPage() {
               </div>
             </div>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </div>
     </div>
   );
 }
