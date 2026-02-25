@@ -25,6 +25,15 @@ export class LeadService {
     return { totalInterestSubmissions: total };
   }
 
+  async submissions(): Promise<LeadInterest[]> {
+    return this.leadRepository.find({
+      order: {
+        createdAt: 'DESC',
+      },
+      take: 100,
+    });
+  }
+
   async getFormSettings(): Promise<FormSettings> {
     const existing = await this.formSettingsRepository.findOne({ where: { id: 'default' } });
 
