@@ -25,6 +25,9 @@ interface PublicFormSettings {
   validatorPrompt: string;
   builderPrompt: string;
   observerPrompt: string;
+  validatorThankYouNote: string;
+  builderThankYouNote: string;
+  observerThankYouNote: string;
   campaignCards: CampaignCard[];
 }
 
@@ -86,6 +89,9 @@ const DEFAULT_SETTINGS: PublicFormSettings = {
   validatorPrompt: 'I want to stress test the system as a Validator focused on...',
   builderPrompt: 'I want to build civic applications as a Builder for...',
   observerPrompt: 'I want to run audits as an Observer to improve...',
+  validatorThankYouNote: 'Thank you for applying to run a Citizen Validator node. We have added you to the validator waitlist. Our team will review your submission and send onboarding updates, eligibility checks, and timeline details to your email.',
+  builderThankYouNote: 'Thank you for joining as a Builder. You are now on our builder waitlist. We will share product updates, API access details, and onboarding milestones by email as new slots open.',
+  observerThankYouNote: 'Thank you for registering as an Observer. We have added you to the observer waitlist. You will receive updates by email about review status, audit participation windows, and next steps.',
   campaignCards: DEFAULT_CAMPAIGN_CARDS,
 };
 
@@ -113,6 +119,8 @@ export function InterestForm() {
   const [formValues, setFormValues] = useState<Record<string, string>>({
     fullName: '', institution: '', email: '', country: '', missionNeed: '',
   });
+  const [submittedThankYouNote, setSubmittedThankYouNote] = useState('');
+  const [submittedRole, setSubmittedRole] = useState<Role | null>(null);
 
   const validCountryNames = useMemo(() => {
     const displayNames = new Intl.DisplayNames(['en'], { type: 'region' });
@@ -264,7 +272,16 @@ export function InterestForm() {
         throw new Error('Submission failed');
       }
 
-      setStatus('Thank you. Our adoption team will contact you shortly.');
+      const selectedRole = role;
+      const thankYouMessageByRole: Record<Role, string> = {
+        Validator: settings.validatorThankYouNote,
+        Builder: settings.builderThankYouNote,
+        Observer: settings.observerThankYouNote,
+      };
+
+      setSubmittedThankYouNote(thankYouMessageByRole[selectedRole]);
+      setSubmittedRole(selectedRole);
+      setStatus('');
       setRole(null);
       setStepIndex(0);
       setMotionDirection('forward');
@@ -282,6 +299,17 @@ export function InterestForm() {
     if (!validateStep()) return;
     await submit();
   };
+
+
+  if (submittedThankYouNote) {
+    return (
+      <section className="typeform-shell typeform-thankyou-screen" aria-live="polite">
+        <p className="step-count">Submission received</p>
+        <h2>Thank you for joining as {submittedRole ?? 'a participant'}.</h2>
+        <p className="thankyou-note">{submittedThankYouNote}</p>
+      </section>
+    );
+  }
 
   return (
     <form className="typeform-shell" onSubmit={onSubmit}>

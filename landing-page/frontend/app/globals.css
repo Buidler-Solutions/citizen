@@ -367,3 +367,25 @@ body {
 .admin-scroll::-webkit-scrollbar-corner {
   background: transparent;
 }
+
+
+.typeform-thankyou-screen {
+  min-height: calc(100vh - 180px);
+  place-content: center;
+  text-align: center;
+  gap: 1.5rem;
+}
+
+.typeform-thankyou-screen h2 {
+  margin: 0;
+  font-size: clamp(2rem, 4vw, 3.4rem);
+  line-height: 1.15;
+}
+
+.thankyou-note {
+  margin: 0 auto;
+  max-width: 760px;
+  font-size: clamp(1.12rem, 2.2vw, 1.5rem);
+  line-height: 1.7;
+  color: #d9ebff;
+}
