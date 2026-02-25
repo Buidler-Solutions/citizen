@@ -14,11 +14,21 @@ interface FormSettingsResponse {
   validatorPrompt: string;
   builderPrompt: string;
   observerPrompt: string;
+  validatorThankYouNote: string;
+  builderThankYouNote: string;
+  observerThankYouNote: string;
 }
 
 type FormSettingsPayload = Pick<
   FormSettingsResponse,
-  'title' | 'subtitle' | 'validatorPrompt' | 'builderPrompt' | 'observerPrompt'
+  | 'title'
+  | 'subtitle'
+  | 'validatorPrompt'
+  | 'builderPrompt'
+  | 'observerPrompt'
+  | 'validatorThankYouNote'
+  | 'builderThankYouNote'
+  | 'observerThankYouNote'
 >;
 
 const DEFAULT_SETTINGS: FormSettingsResponse = {
@@ -27,6 +37,9 @@ const DEFAULT_SETTINGS: FormSettingsResponse = {
   validatorPrompt: 'I want to stress test system as a Validator focused on...',
   builderPrompt: 'I want to build civic applications as a Builder for...',
   observerPrompt: 'I want to run audits as an Observer to improve...',
+  validatorThankYouNote: 'Thank you for applying to run a Citizen Validator node. We have added you to the validator waitlist. Our team will review your submission and send onboarding updates, eligibility checks, and timeline details to your email.',
+  builderThankYouNote: 'Thank you for joining as a Builder. You are now on our builder waitlist. We will share product updates, API access details, and onboarding milestones by email as new slots open.',
+  observerThankYouNote: 'Thank you for registering as an Observer. We have added you to the observer waitlist. You will receive updates by email about review status, audit participation windows, and next steps.',
 };
 
 export default function FormSettingsPage() {
@@ -66,6 +79,9 @@ export default function FormSettingsPage() {
             validatorPrompt: settingsData.validatorPrompt ?? prev.validatorPrompt,
             builderPrompt: settingsData.builderPrompt ?? prev.builderPrompt,
             observerPrompt: settingsData.observerPrompt ?? prev.observerPrompt,
+            validatorThankYouNote: settingsData.validatorThankYouNote ?? prev.validatorThankYouNote,
+            builderThankYouNote: settingsData.builderThankYouNote ?? prev.builderThankYouNote,
+            observerThankYouNote: settingsData.observerThankYouNote ?? prev.observerThankYouNote,
           }));
         }
       } catch (loadError) {
@@ -95,6 +111,9 @@ export default function FormSettingsPage() {
         validatorPrompt: settings.validatorPrompt,
         builderPrompt: settings.builderPrompt,
         observerPrompt: settings.observerPrompt,
+        validatorThankYouNote: settings.validatorThankYouNote,
+        builderThankYouNote: settings.builderThankYouNote,
+        observerThankYouNote: settings.observerThankYouNote,
       };
 
       const response = await fetch(`${API_URL}/interest/form-settings`, {
@@ -253,6 +272,36 @@ export default function FormSettingsPage() {
                     rows={4}
                   />
                   <p className="mt-2 text-sm text-slate-600">Prompt for observer role selection</p>
+                </div>
+
+                <div>
+                  <Textarea
+                    label="Validator Thank You Note"
+                    value={settings.validatorThankYouNote}
+                    onChange={(e) => setSettings((prev) => ({ ...prev, validatorThankYouNote: e.target.value }))}
+                    rows={5}
+                  />
+                  <p className="mt-2 text-sm text-slate-600">Detailed confirmation shown after a validator node submission</p>
+                </div>
+
+                <div>
+                  <Textarea
+                    label="Builder Thank You Note"
+                    value={settings.builderThankYouNote}
+                    onChange={(e) => setSettings((prev) => ({ ...prev, builderThankYouNote: e.target.value }))}
+                    rows={5}
+                  />
+                  <p className="mt-2 text-sm text-slate-600">Detailed confirmation shown after a builder submission</p>
+                </div>
+
+                <div>
+                  <Textarea
+                    label="Observer Thank You Note"
+                    value={settings.observerThankYouNote}
+                    onChange={(e) => setSettings((prev) => ({ ...prev, observerThankYouNote: e.target.value }))}
+                    rows={5}
+                  />
+                  <p className="mt-2 text-sm text-slate-600">Detailed confirmation shown after an observer submission</p>
                 </div>
               </div>
             </div>

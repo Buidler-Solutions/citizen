@@ -59,6 +59,24 @@ export class UpdateFormSettingsDto {
   observerPrompt?: string;
 
   @IsOptional()
+  @IsString()
+  @MinLength(20)
+  @MaxLength(1600)
+  validatorThankYouNote?: string;
+
+  @IsOptional()
+  @IsString()
+  @MinLength(20)
+  @MaxLength(1600)
+  builderThankYouNote?: string;
+
+  @IsOptional()
+  @IsString()
+  @MinLength(20)
+  @MaxLength(1600)
+  observerThankYouNote?: string;
+
+  @IsOptional()
   @IsArray()
   @ArrayMaxSize(30)
   @ValidateNested({ each: true })
