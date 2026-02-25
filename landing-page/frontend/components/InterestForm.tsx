@@ -27,6 +27,38 @@ interface PublicFormSettings {
   campaignCards: CampaignCard[];
 }
 
+const ISO_COUNTRY_CODES = [
+  'AD', 'AE', 'AF', 'AG', 'AI', 'AL', 'AM', 'AO', 'AR', 'AS', 'AT', 'AU', 'AW', 'AX', 'AZ', 'BA', 'BB', 'BD',
+  'BE', 'BF', 'BG', 'BH', 'BI', 'BJ', 'BL', 'BM', 'BN', 'BO', 'BQ', 'BR', 'BS', 'BT', 'BV', 'BW', 'BY', 'BZ',
+  'CA', 'CC', 'CD', 'CF', 'CG', 'CH', 'CI', 'CK', 'CL', 'CM', 'CN', 'CO', 'CR', 'CU', 'CV', 'CW', 'CX', 'CY',
+  'CZ', 'DE', 'DJ', 'DK', 'DM', 'DO', 'DZ', 'EC', 'EE', 'EG', 'EH', 'ER', 'ES', 'ET', 'FI', 'FJ', 'FK', 'FM',
+  'FO', 'FR', 'GA', 'GB', 'GD', 'GE', 'GF', 'GG', 'GH', 'GI', 'GL', 'GM', 'GN', 'GP', 'GQ', 'GR', 'GS', 'GT',
+  'GU', 'GW', 'GY', 'HK', 'HM', 'HN', 'HR', 'HT', 'HU', 'ID', 'IE', 'IL', 'IM', 'IN', 'IO', 'IQ', 'IR', 'IS',
+  'IT', 'JE', 'JM', 'JO', 'JP', 'KE', 'KG', 'KH', 'KI', 'KM', 'KN', 'KP', 'KR', 'KW', 'KY', 'KZ', 'LA', 'LB',
+  'LC', 'LI', 'LK', 'LR', 'LS', 'LT', 'LU', 'LV', 'LY', 'MA', 'MC', 'MD', 'ME', 'MF', 'MG', 'MH', 'MK', 'ML',
+  'MM', 'MN', 'MO', 'MP', 'MQ', 'MR', 'MS', 'MT', 'MU', 'MV', 'MW', 'MX', 'MY', 'MZ', 'NA', 'NC', 'NE', 'NF',
+  'NG', 'NI', 'NL', 'NO', 'NP', 'NR', 'NU', 'NZ', 'OM', 'PA', 'PE', 'PF', 'PG', 'PH', 'PK', 'PL', 'PM', 'PN',
+  'PR', 'PS', 'PT', 'PW', 'PY', 'QA', 'RE', 'RO', 'RS', 'RU', 'RW', 'SA', 'SB', 'SC', 'SD', 'SE', 'SG', 'SH',
+  'SI', 'SJ', 'SK', 'SL', 'SM', 'SN', 'SO', 'SR', 'SS', 'ST', 'SV', 'SX', 'SY', 'SZ', 'TC', 'TD', 'TF', 'TG',
+  'TH', 'TJ', 'TK', 'TL', 'TM', 'TN', 'TO', 'TR', 'TT', 'TV', 'TW', 'TZ', 'UA', 'UG', 'UM', 'US', 'UY', 'UZ',
+  'VA', 'VC', 'VE', 'VG', 'VI', 'VN', 'VU', 'WF', 'WS', 'YE', 'YT', 'ZA', 'ZM', 'ZW',
+] as const;
+
+const COUNTRY_ALIASES = ['uk', 'u.k.', 'united kingdom', 'usa', 'u.s.a.', 'u.s.', 'us'];
+
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+const isValidEmail = (email: string) => {
+  const normalizedEmail = email.trim();
+  if (!EMAIL_PATTERN.test(normalizedEmail)) return false;
+
+  const [localPart, domainPart] = normalizedEmail.split('@');
+  if (!localPart || !domainPart) return false;
+  if (localPart.length > 64 || domainPart.length > 255) return false;
+  if (domainPart.includes('..')) return false;
+  return domainPart.split('.').every((section) => section.length >= 2);
+};
+
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
 
 const DEFAULT_CAMPAIGN_CARDS: CampaignCard[] = [
@@ -77,6 +109,20 @@ export function InterestForm() {
   const [formValues, setFormValues] = useState<Record<string, string>>({
     fullName: '', institution: '', email: '', country: '', missionNeed: '',
   });
+
+  const validCountryNames = useMemo(() => {
+    const displayNames = new Intl.DisplayNames(['en'], { type: 'region' });
+    const countries = new Set<string>();
+
+    ISO_COUNTRY_CODES.forEach((countryCode) => {
+      const name = displayNames.of(countryCode);
+      if (name) countries.add(name.trim().toLowerCase());
+      countries.add(countryCode.toLowerCase());
+    });
+
+    COUNTRY_ALIASES.forEach((alias) => countries.add(alias));
+    return countries;
+  }, []);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -153,6 +199,20 @@ export function InterestForm() {
     }
 
     if (!currentStep) return false;
+
+    if (currentStep.name === 'email' && !isValidEmail(value)) {
+      setStatus('Please provide a valid email address.');
+      return false;
+    }
+
+    if (currentStep.name === 'country') {
+      const countryInput = value.trim().toLowerCase();
+      if (!validCountryNames.has(countryInput)) {
+        setStatus('Please enter a valid country name or ISO country code.');
+        return false;
+      }
+    }
+
     const minLength = currentStep.minLength ?? 1;
     if (value.trim().length < minLength) {
       setStatus(`Please provide at least ${minLength} characters.`);
@@ -193,7 +253,13 @@ export function InterestForm() {
       const response = await fetch(`${API_URL}/interest`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
       });
-      if (!response.ok) throw new Error('Submission failed');
+      if (!response.ok) {
+        if (response.status === 409) {
+          setStatus('This email already submitted the form. Please use a different email.');
+          return;
+        }
+        throw new Error('Submission failed');
+      }
 
       setStatus('Thank you. Our adoption team will contact you shortly.');
       setRole(null);
