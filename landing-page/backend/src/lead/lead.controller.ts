@@ -29,4 +29,10 @@ export class LeadController {
   stats() {
     return this.leadService.stats();
   }
+
+  @UseGuards(JwtAuthGuard)
+  @Get('submissions')
+  submissions() {
+    return this.leadService.submissions();
+  }
 }
