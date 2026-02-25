@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Check, LoaderCircle, Plus, Save, Trash2 } from 'lucide-react';
+import { Check, LoaderCircle, Plus, Save, Trash2, X } from 'lucide-react';
 import { Button, Input, Textarea } from '@/components/admin-ui';
 import { ADMIN_TOKEN_KEY } from '@/components/admin-auth';
 
@@ -31,6 +31,8 @@ export default function CampaignCardsPage() {
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState('');
   const [dragIndex, setDragIndex] = useState<number | null>(null);
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [newCard, setNewCard] = useState<CampaignCard>(DEFAULT_CARD);
 
   const normalizeWeights = (list: CampaignCard[]): CampaignCard[] => list.map((card, index) => ({ ...card, weight: index + 1 }));
 
@@ -75,8 +77,30 @@ export default function CampaignCardsPage() {
     setCards((prev) => prev.map((card, cardIndex) => (cardIndex === index ? { ...card, [field]: value } : card)));
   };
 
+  const openAddModal = () => {
+    setNewCard({ ...DEFAULT_CARD, weight: cards.length + 1 });
+    setShowAddModal(true);
+    setStatus('');
+  };
+
+  const closeAddModal = () => {
+    setShowAddModal(false);
+    setNewCard(DEFAULT_CARD);
+  };
+
   const addCard = () => {
-    setCards((prev) => [...prev, { ...DEFAULT_CARD, weight: prev.length + 1 }]);
+    if (!newCard.title.trim() || !newCard.body.trim()) {
+      setStatus('Title and description are required to add a card.');
+      return;
+    }
+
+    setCards((prev) => [...prev, {
+      weight: prev.length + 1,
+      title: newCard.title.trim(),
+      body: newCard.body.trim(),
+    }]);
+    closeAddModal();
+    setStatus('Card added. Save cards to publish changes.');
   };
 
   const removeCard = (index: number) => {
@@ -167,7 +191,7 @@ export default function CampaignCardsPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Button onClick={addCard} variant="outline" className="gap-2">
+          <Button onClick={openAddModal} variant="outline" className="gap-2">
             <Plus className="h-4 w-4" /> Add card
           </Button>
           <Button onClick={saveCards} disabled={saving} isLoading={saving} className="gap-2">
@@ -236,6 +260,50 @@ export default function CampaignCardsPage() {
               />
             </div>
           ))}
+        </div>
+      )}
+
+      {showAddModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 px-4" role="dialog" aria-modal="true" aria-label="Add campaign card">
+          <div className="w-full max-w-2xl rounded-2xl bg-white p-6 shadow-2xl">
+            <div className="mb-4 flex items-start justify-between gap-3">
+              <div>
+                <h3 className="text-xl font-bold text-slate-900">Add Info Card</h3>
+                <p className="text-sm text-slate-600">Create a new card for the landing page intro sequence.</p>
+              </div>
+              <button
+                type="button"
+                onClick={closeAddModal}
+                className="rounded-lg p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-700"
+                aria-label="Close add card dialog"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <Input
+                label="Title"
+                value={newCard.title}
+                onChange={(event) => setNewCard((prev) => ({ ...prev, title: event.target.value }))}
+                placeholder="Citizen Protocol in one line"
+              />
+              <Textarea
+                label="Description"
+                value={newCard.body}
+                onChange={(event) => setNewCard((prev) => ({ ...prev, body: event.target.value }))}
+                rows={4}
+                placeholder="Explain one key value proposition before users continue to the form."
+              />
+            </div>
+
+            <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <Button variant="outline" onClick={closeAddModal}>Cancel</Button>
+              <Button onClick={addCard} className="gap-2">
+                <Plus className="h-4 w-4" /> Add card
+              </Button>
+            </div>
+          </div>
         </div>
       )}
     </section>
