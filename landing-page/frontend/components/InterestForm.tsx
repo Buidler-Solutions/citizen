@@ -223,7 +223,7 @@ export function InterestForm() {
 
       {showIntro && introSlides.length > 0 ? (
         <>
-          <p className="step-count">Campaign card {introIndex + 1} of {introSlides.length}</p>
+          <p className="step-count">Info card {introIndex + 1} of {introSlides.length}</p>
           <div key={`intro-${introIndex}`} className={`typeform-step-motion ${motionDirection}`}>
             <section className="typeform-step intro-card">
               <h2>{introSlides[introIndex].title}</h2>
