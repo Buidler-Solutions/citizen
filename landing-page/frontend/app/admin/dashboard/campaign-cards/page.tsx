@@ -112,7 +112,7 @@ export default function CampaignCardsPage() {
         throw new Error('Unable to save campaign cards');
       }
 
-      setStatus('Campaign cards saved successfully.');
+      setStatus('Info cards saved successfully.');
     } catch (error) {
       setStatus(error instanceof Error ? error.message : 'Unknown error while saving campaign cards');
     } finally {
@@ -132,7 +132,7 @@ export default function CampaignCardsPage() {
     <section className="space-y-6">
       <header className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-slate-900">Campaign Cards</h2>
+          <h2 className="text-2xl font-bold text-slate-900">Info Cards</h2>
           <p className="text-sm text-slate-600">
             Configure the educational cards shown before users fill the landing page form.
           </p>

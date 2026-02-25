@@ -29,7 +29,7 @@ const NAV_GROUPS = [
     label: 'Configuration',
     items: [
       { href: '/admin/dashboard/form-settings', label: 'Form Settings', icon: Settings },
-      { href: '/admin/dashboard/campaign-cards', label: 'Campaign Cards', icon: RectangleEllipsis },
+      { href: '/admin/dashboard/campaign-cards', label: 'Info Cards', icon: RectangleEllipsis },
       { href: '/admin/dashboard/site-setting', label: 'Site Settings', icon: Settings },
     ],
   },
@@ -70,9 +70,8 @@ export function AdminConsoleLayout({ children }: PropsWithChildren) {
         {isMobileMenuOpen && <button className="fixed inset-0 z-30 bg-slate-950/40 lg:hidden" onClick={() => setIsMobileMenuOpen(false)} aria-label="Close menu" />}
 
         <aside
-          className={`fixed inset-y-0 left-0 z-40 bg-gradient-to-b from-[#0a1929] via-[#0d2847] to-[#103060] text-white transition-all duration-300 ease-in-out lg:static lg:shadow-2xl lg:shadow-black/10 ${
-            isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'
-          } ${isSidebarCollapsed ? 'w-20' : 'w-72'} lg:translate-x-0`}
+          className={`fixed inset-y-0 left-0 z-40 bg-gradient-to-b from-[#0a1929] via-[#0d2847] to-[#103060] text-white transition-all duration-300 ease-in-out lg:static lg:shadow-2xl lg:shadow-black/10 ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'
+            } ${isSidebarCollapsed ? 'w-20' : 'w-72'} lg:translate-x-0`}
         >
           <div className="flex h-full flex-col">
             <div className="px-6 py-8">
@@ -101,11 +100,10 @@ export function AdminConsoleLayout({ children }: PropsWithChildren) {
                         <Link
                           key={item.href}
                           href={item.href}
-                          className={`group relative flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-medium transition-all duration-200 ${
-                            isActive
+                          className={`group relative flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-medium transition-all duration-200 ${isActive
                               ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-500/30'
                               : 'text-slate-300 hover:bg-white/5 hover:text-white'
-                          }`}
+                            }`}
                           onClick={() => setIsMobileMenuOpen(false)}
                           title={isSidebarCollapsed ? item.label : undefined}
                         >
