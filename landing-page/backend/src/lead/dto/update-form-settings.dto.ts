@@ -1,7 +1,9 @@
 import {
   ArrayMaxSize,
   IsArray,
+  IsInt,
   IsOptional,
+  Min,
   IsString,
   MaxLength,
   MinLength,
@@ -10,6 +12,10 @@ import {
 import { Type } from 'class-transformer';
 
 export class CampaignCardDto {
+  @IsInt()
+  @Min(1)
+  weight!: number;
+
   @IsString()
   @MinLength(2)
   @MaxLength(120)

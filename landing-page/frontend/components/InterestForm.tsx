@@ -14,6 +14,7 @@ interface StepConfig {
 }
 
 interface CampaignCard {
+  weight?: number;
   title: string;
   body: string;
 }
@@ -63,14 +64,17 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
 
 const DEFAULT_CAMPAIGN_CARDS: CampaignCard[] = [
   {
+    weight: 1,
     title: 'Citizen Protocol in one line',
     body: 'A governance-first blockchain for public truth, accountability, and tamper-evident civic records.',
   },
   {
+    weight: 2,
     title: 'Why this project exists',
     body: 'Critical public records are fragmented and hard to trust. Citizen Protocol creates one auditable source of truth for civic systems.',
   },
   {
+    weight: 3,
     title: 'What we are solving',
     body: 'We reduce record fraud, strengthen governance transparency, and improve institutional trust across agencies.',
   },
@@ -154,10 +158,9 @@ export function InterestForm() {
     loadSettings();
   }, []);
 
-  const introSlides = useMemo(
-    () => settings.campaignCards.filter((card) => card.title.trim() && card.body.trim()),
-    [settings.campaignCards],
-  );
+  const introSlides = useMemo(() => settings.campaignCards
+    .filter((card) => card.title.trim() && card.body.trim())
+    .sort((a, b) => (a.weight ?? Number.MAX_SAFE_INTEGER) - (b.weight ?? Number.MAX_SAFE_INTEGER)), [settings.campaignCards]);
 
   useEffect(() => {
     if (introSlides.length === 0) {
