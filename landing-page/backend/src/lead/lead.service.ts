@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { ConflictException, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { CreateLeadDto } from './dto/create-lead.dto';
@@ -31,7 +31,21 @@ export class LeadService {
   ) {}
 
   async create(payload: CreateLeadDto): Promise<LeadInterest> {
-    const lead = this.leadRepository.create(payload);
+    const normalizedEmail = payload.email.trim().toLowerCase();
+    const existingLead = await this.leadRepository
+      .createQueryBuilder('lead')
+      .where('LOWER(lead.email) = :email', { email: normalizedEmail })
+      .getOne();
+
+    if (existingLead) {
+      throw new ConflictException('A submission already exists for this email address.');
+    }
+
+    const lead = this.leadRepository.create({
+      ...payload,
+      email: normalizedEmail,
+    });
+
     return this.leadRepository.save(lead);
   }
 
