@@ -1,4 +1,25 @@
-import { IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
+import {
+  ArrayMaxSize,
+  IsArray,
+  IsOptional,
+  IsString,
+  MaxLength,
+  MinLength,
+  ValidateNested,
+} from 'class-validator';
+import { Type } from 'class-transformer';
+
+export class CampaignCardDto {
+  @IsString()
+  @MinLength(2)
+  @MaxLength(120)
+  title!: string;
+
+  @IsString()
+  @MinLength(10)
+  @MaxLength(420)
+  body!: string;
+}
 
 export class UpdateFormSettingsDto {
   @IsOptional()
@@ -30,4 +51,11 @@ export class UpdateFormSettingsDto {
   @MinLength(5)
   @MaxLength(1200)
   observerPrompt?: string;
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(30)
+  @ValidateNested({ each: true })
+  @Type(() => CampaignCardDto)
+  campaignCards?: CampaignCardDto[];
 }
