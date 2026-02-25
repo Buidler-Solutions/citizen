@@ -101,6 +101,18 @@ body {
   gap: 1rem;
 }
 
+.intro-card {
+  min-height: 260px;
+  align-content: center;
+}
+
+.intro-card p {
+  margin: 0;
+  color: #d5e6ff;
+  font-size: clamp(1.05rem, 2vw, 1.35rem);
+  line-height: 1.5;
+}
+
 .typeform-step-motion {
   will-change: transform, opacity, filter;
 }
@@ -194,6 +206,13 @@ body {
 .typeform-shell button:disabled {
   opacity: 0.6;
   cursor: not-allowed;
+}
+
+.escape-shortcut {
+  background: rgba(11, 28, 56, 0.88) !important;
+  border: 1px dashed rgba(141, 233, 255, 0.5) !important;
+  color: #8de9ff !important;
+  font-weight: 600;
 }
 
 .role-options-inline {
@@ -348,4 +367,3 @@ body {
 .admin-scroll::-webkit-scrollbar-corner {
   background: transparent;
 }
-
