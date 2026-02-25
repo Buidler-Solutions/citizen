@@ -40,7 +40,7 @@ export function AdminLoginForm() {
       }
 
       localStorage.setItem(ADMIN_TOKEN_KEY, data.accessToken);
-      router.push('/admin/dashboard');
+      router.push('/admin/dashboard/applicants');
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : 'Login failed');
     } finally {
