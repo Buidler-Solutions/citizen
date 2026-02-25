@@ -2,6 +2,7 @@ import { Column, Entity, PrimaryColumn, UpdateDateColumn } from 'typeorm';
 
 
 interface CampaignCard {
+  weight: number;
   title: string;
   body: string;
 }
@@ -29,9 +30,9 @@ export class FormSettings {
   @Column({
     type: 'jsonb',
     default: () => `'[
-      {"title":"Citizen Protocol in one line","body":"A governance-first blockchain for public truth, accountability, and tamper-evident civic records."},
-      {"title":"Why this project exists","body":"Critical public records are fragmented and hard to trust. Citizen Protocol creates one auditable source of truth for civic systems."},
-      {"title":"What we are solving","body":"We reduce record fraud, strengthen governance transparency, and improve institutional trust across agencies."}
+      {"weight":1,"title":"Citizen Protocol in one line","body":"A governance-first blockchain for public truth, accountability, and tamper-evident civic records."},
+      {"weight":2,"title":"Why this project exists","body":"Critical public records are fragmented and hard to trust. Citizen Protocol creates one auditable source of truth for civic systems."},
+      {"weight":3,"title":"What we are solving","body":"We reduce record fraud, strengthen governance transparency, and improve institutional trust across agencies."}
     ]'::jsonb`,
   })
   campaignCards!: CampaignCard[];
