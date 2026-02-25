@@ -61,7 +61,7 @@ export function AdminConsoleLayout({ children }: PropsWithChildren) {
   };
 
   if (!sessionReady) {
-    return <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/20" />;
+    return <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/20 text-slate-900" />;
   }
 
   return (
