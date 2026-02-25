@@ -8,14 +8,17 @@ import { UpdateFormSettingsDto } from './dto/update-form-settings.dto';
 
 const DEFAULT_CAMPAIGN_CARDS = [
   {
+    weight: 1,
     title: 'Citizen Protocol in one line',
     body: 'A governance-first blockchain for public truth, accountability, and tamper-evident civic records.',
   },
   {
+    weight: 2,
     title: 'Why this project exists',
     body: 'Critical public records are fragmented and hard to trust. Citizen Protocol creates one auditable source of truth for civic systems.',
   },
   {
+    weight: 3,
     title: 'What we are solving',
     body: 'We reduce record fraud, strengthen governance transparency, and improve institutional trust across agencies.',
   },
@@ -63,6 +66,19 @@ export class LeadService {
     });
   }
 
+  private normalizeCampaignCards(campaignCards: FormSettings['campaignCards']): FormSettings['campaignCards'] {
+    return campaignCards
+      .map((card, index) => {
+        const rawWeight = typeof card.weight === 'number' ? card.weight : index + 1;
+        return {
+          ...card,
+          weight: Math.max(1, Math.trunc(rawWeight)),
+        };
+      })
+      .sort((a, b) => a.weight - b.weight)
+      .map((card, index) => ({ ...card, weight: index + 1 }));
+  }
+
   async getFormSettings(): Promise<FormSettings> {
     const existing = await this.formSettingsRepository.findOne({ where: { id: 'default' } });
 
@@ -71,6 +87,8 @@ export class LeadService {
         existing.campaignCards = DEFAULT_CAMPAIGN_CARDS;
         return this.formSettingsRepository.save(existing);
       }
+
+      existing.campaignCards = this.normalizeCampaignCards(existing.campaignCards);
       return existing;
     }
 
@@ -80,7 +98,13 @@ export class LeadService {
 
   async updateFormSettings(payload: UpdateFormSettingsDto): Promise<FormSettings> {
     const settings = await this.getFormSettings();
-    const updated = this.formSettingsRepository.merge(settings, payload);
+    const sanitizedPayload = {
+      ...payload,
+      campaignCards: payload.campaignCards
+        ? this.normalizeCampaignCards(payload.campaignCards)
+        : payload.campaignCards,
+    };
+    const updated = this.formSettingsRepository.merge(settings, sanitizedPayload);
     return this.formSettingsRepository.save(updated);
   }
 }

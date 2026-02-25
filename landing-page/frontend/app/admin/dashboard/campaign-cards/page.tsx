@@ -9,6 +9,7 @@ import { ADMIN_TOKEN_KEY } from '@/components/admin-auth';
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
 
 interface CampaignCard {
+  weight?: number;
   title: string;
   body: string;
 }
@@ -18,6 +19,7 @@ interface FormSettingsResponse {
 }
 
 const DEFAULT_CARD: CampaignCard = {
+  weight: 1,
   title: 'New campaign card',
   body: 'Explain one key value proposition of Citizen Protocol before users start filling the form.',
 };
@@ -28,6 +30,9 @@ export default function CampaignCardsPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState('');
+  const [dragIndex, setDragIndex] = useState<number | null>(null);
+
+  const normalizeWeights = (list: CampaignCard[]): CampaignCard[] => list.map((card, index) => ({ ...card, weight: index + 1 }));
 
   useEffect(() => {
     const token = localStorage.getItem(ADMIN_TOKEN_KEY);
@@ -53,7 +58,8 @@ export default function CampaignCardsPage() {
 
         const data = (await response.json()) as Partial<FormSettingsResponse>;
         if (Array.isArray(data.campaignCards)) {
-          setCards(data.campaignCards);
+          const sortedCards = [...data.campaignCards].sort((a, b) => (a.weight ?? Number.MAX_SAFE_INTEGER) - (b.weight ?? Number.MAX_SAFE_INTEGER));
+          setCards(normalizeWeights(sortedCards));
         }
       } catch (error) {
         setStatus(error instanceof Error ? error.message : 'Unknown error while loading campaign cards');
@@ -70,11 +76,30 @@ export default function CampaignCardsPage() {
   };
 
   const addCard = () => {
-    setCards((prev) => [...prev, { ...DEFAULT_CARD }]);
+    setCards((prev) => [...prev, { ...DEFAULT_CARD, weight: prev.length + 1 }]);
   };
 
   const removeCard = (index: number) => {
-    setCards((prev) => prev.filter((_, cardIndex) => cardIndex !== index));
+    setCards((prev) => normalizeWeights(prev.filter((_, cardIndex) => cardIndex !== index)));
+  };
+
+  const moveCard = (fromIndex: number, toIndex: number) => {
+    if (fromIndex === toIndex) return;
+
+    setCards((prev) => {
+      const reordered = [...prev];
+      const [card] = reordered.splice(fromIndex, 1);
+      reordered.splice(toIndex, 0, card);
+      return normalizeWeights(reordered);
+    });
+  };
+
+  const updateWeight = (index: number, nextWeightValue: string) => {
+    const parsedWeight = Number.parseInt(nextWeightValue, 10);
+    if (Number.isNaN(parsedWeight)) return;
+
+    const boundedWeight = Math.min(cards.length, Math.max(1, parsedWeight));
+    moveCard(index, boundedWeight - 1);
   };
 
   const saveCards = async () => {
@@ -90,7 +115,11 @@ export default function CampaignCardsPage() {
       setStatus('Saving campaign cards...');
 
       const payload = {
-        campaignCards: cards.map((card) => ({ title: card.title.trim(), body: card.body.trim() })),
+        campaignCards: cards.map((card, index) => ({
+          weight: index + 1,
+          title: card.title.trim(),
+          body: card.body.trim(),
+        })),
       };
 
       const response = await fetch(`${API_URL}/interest/form-settings`, {
@@ -160,9 +189,21 @@ export default function CampaignCardsPage() {
       ) : (
         <div className="space-y-4">
           {cards.map((card, index) => (
-            <div key={`${index}-${card.title}`} className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div
+              key={`${index}-${card.title}`}
+              draggable
+              onDragStart={() => setDragIndex(index)}
+              onDragOver={(event) => event.preventDefault()}
+              onDrop={() => {
+                if (dragIndex === null) return;
+                moveCard(dragIndex, index);
+                setDragIndex(null);
+              }}
+              onDragEnd={() => setDragIndex(null)}
+              className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
+            >
               <div className="flex items-center justify-between">
-                <p className="text-sm font-semibold text-slate-500">Card {index + 1}</p>
+                <p className="text-sm font-semibold text-slate-500">Card {index + 1} · Drag to reorder</p>
                 <button
                   type="button"
                   onClick={() => removeCard(index)}
@@ -171,6 +212,15 @@ export default function CampaignCardsPage() {
                   <Trash2 className="h-3.5 w-3.5" /> Remove
                 </button>
               </div>
+              <Input
+                label="Weight"
+                type="number"
+                min={1}
+                max={cards.length}
+                value={String(card.weight)}
+                onChange={(event) => updateWeight(index, event.target.value)}
+                placeholder="1"
+              />
               <Input
                 label="Title"
                 value={card.title}
