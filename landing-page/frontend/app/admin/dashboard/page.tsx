@@ -1,9 +1,5 @@
-import { AdminDashboard } from '@/components/AdminDashboard';
+import { redirect } from 'next/navigation';
 
-export default function AdminDashboardPage() {
-  return (
-    <main>
-      <AdminDashboard />
-    </main>
-  );
+export default function DashboardIndexPage() {
+  redirect('/admin/dashboard/submissions');
 }
