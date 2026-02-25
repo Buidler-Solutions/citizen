@@ -28,6 +28,24 @@ export class FormSettings {
   observerPrompt!: string;
 
   @Column({
+    type: 'text',
+    default: 'Thank you for applying to run a Citizen Validator node. We have added you to the validator waitlist. Our team will review your submission and send onboarding updates, eligibility checks, and timeline details to your email.',
+  })
+  validatorThankYouNote!: string;
+
+  @Column({
+    type: 'text',
+    default: 'Thank you for joining as a Builder. You are now on our builder waitlist. We will share product updates, API access details, and onboarding milestones by email as new slots open.',
+  })
+  builderThankYouNote!: string;
+
+  @Column({
+    type: 'text',
+    default: 'Thank you for registering as an Observer. We have added you to the observer waitlist. You will receive updates by email about review status, audit participation windows, and next steps.',
+  })
+  observerThankYouNote!: string;
+
+  @Column({
     type: 'jsonb',
     default: () => `'[
       {"weight":1,"title":"Citizen Protocol in one line","body":"A governance-first blockchain for public truth, accountability, and tamper-evident civic records."},
