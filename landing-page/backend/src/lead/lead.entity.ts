@@ -1,23 +1,9 @@
-import { randomUUID } from 'node:crypto';
-import {
-  BeforeInsert,
-  Column,
-  CreateDateColumn,
-  Entity,
-  PrimaryColumn,
-} from 'typeorm';
+import { Column, CreateDateColumn, Entity, PrimaryGeneratedColumn } from 'typeorm';
 
 @Entity({ name: 'interest_submissions' })
 export class LeadInterest {
-  @PrimaryColumn({ type: 'varchar', length: 36 })
+  @PrimaryGeneratedColumn('uuid')
   id!: string;
-
-  @BeforeInsert()
-  assignId() {
-    if (!this.id) {
-      this.id = randomUUID();
-    }
-  }
 
   @Column({ length: 180 })
   fullName!: string;

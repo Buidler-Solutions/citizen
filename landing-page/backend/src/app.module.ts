@@ -16,6 +16,8 @@ import { AuthModule } from './auth.module';
         username: config.get<string>('DB_USER', 'citizen'),
         password: config.get<string>('DB_PASSWORD', 'citizen'),
         database: config.get<string>('DB_NAME', 'citizen_landing'),
+        uuidExtension: 'pgcrypto',
+        installExtensions: true,
         autoLoadEntities: true,
         synchronize: true,
       }),
