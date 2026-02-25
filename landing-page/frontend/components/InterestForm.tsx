@@ -13,15 +13,36 @@ interface StepConfig {
   minLength?: number;
 }
 
+interface CampaignCard {
+  title: string;
+  body: string;
+}
+
 interface PublicFormSettings {
   title: string;
   subtitle: string;
   validatorPrompt: string;
   builderPrompt: string;
   observerPrompt: string;
+  campaignCards: CampaignCard[];
 }
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
+
+const DEFAULT_CAMPAIGN_CARDS: CampaignCard[] = [
+  {
+    title: 'Citizen Protocol in one line',
+    body: 'A governance-first blockchain for public truth, accountability, and tamper-evident civic records.',
+  },
+  {
+    title: 'Why this project exists',
+    body: 'Critical public records are fragmented and hard to trust. Citizen Protocol creates one auditable source of truth for civic systems.',
+  },
+  {
+    title: 'What we are solving',
+    body: 'We reduce record fraud, strengthen governance transparency, and improve institutional trust across agencies.',
+  },
+];
 
 const DEFAULT_SETTINGS: PublicFormSettings = {
   title: 'Build Public Truth with Citizen',
@@ -29,6 +50,7 @@ const DEFAULT_SETTINGS: PublicFormSettings = {
   validatorPrompt: 'I want to stress test the system as a Validator focused on...',
   builderPrompt: 'I want to build civic applications as a Builder for...',
   observerPrompt: 'I want to run audits as an Observer to improve...',
+  campaignCards: DEFAULT_CAMPAIGN_CARDS,
 };
 
 const BASE_STEPS: StepConfig[] = [
@@ -50,9 +72,21 @@ export function InterestForm() {
   const [stepIndex, setStepIndex] = useState(0);
   const [motionDirection, setMotionDirection] = useState<MotionDirection>('forward');
   const [settings, setSettings] = useState<PublicFormSettings>(DEFAULT_SETTINGS);
+  const [showIntro, setShowIntro] = useState(true);
+  const [introIndex, setIntroIndex] = useState(0);
   const [formValues, setFormValues] = useState<Record<string, string>>({
     fullName: '', institution: '', email: '', country: '', missionNeed: '',
   });
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      setShowIntro(false);
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
 
   useEffect(() => {
     const loadSettings = async () => {
@@ -60,13 +94,33 @@ export function InterestForm() {
         const response = await fetch(`${API_URL}/interest/form-settings`);
         if (!response.ok) return;
         const data = (await response.json()) as Partial<PublicFormSettings>;
-        setSettings((prev) => ({ ...prev, ...data }));
+        setSettings((prev) => {
+          const merged: PublicFormSettings = { ...prev, ...data };
+          if (!Array.isArray(data.campaignCards)) {
+            merged.campaignCards = prev.campaignCards;
+          }
+          return merged;
+        });
       } catch {
         // Keep defaults if settings endpoint is unavailable
       }
     };
     loadSettings();
   }, []);
+
+  const introSlides = useMemo(
+    () => settings.campaignCards.filter((card) => card.title.trim() && card.body.trim()),
+    [settings.campaignCards],
+  );
+
+  useEffect(() => {
+    if (introSlides.length === 0) {
+      setShowIntro(false);
+      return;
+    }
+
+    setIntroIndex((prev) => Math.min(prev, introSlides.length - 1));
+  }, [introSlides.length]);
 
   const steps = useMemo<StepConfig[]>(() => {
     if (!role) return BASE_STEPS;
@@ -167,54 +221,97 @@ export function InterestForm() {
         <h1>{settings.subtitle}</h1>
       </header>
 
-      <p className="step-count">Step {stepIndex + 1} of {totalSteps}</p>
+      {showIntro && introSlides.length > 0 ? (
+        <>
+          <p className="step-count">Campaign card {introIndex + 1} of {introSlides.length}</p>
+          <div key={`intro-${introIndex}`} className={`typeform-step-motion ${motionDirection}`}>
+            <section className="typeform-step intro-card">
+              <h2>{introSlides[introIndex].title}</h2>
+              <p>{introSlides[introIndex].body}</p>
+            </section>
+          </div>
 
-      <div key={`step-${stepIndex}`} className={`typeform-step-motion ${motionDirection}`}>
-        {stepIndex === 0 ? (
-          <section className="typeform-step">
-            <h2>I want to participate as a...</h2>
-            <div className="role-options-inline">
-              {(['Validator', 'Builder', 'Observer'] as Role[]).map((option) => (
-                <button
-                  key={option}
-                  type="button"
-                  className={role === option ? 'role-option active' : 'role-option'}
-                  onClick={() => {
-                    setRole(option);
+          <div className="wizard-actions">
+            <button
+              type="button"
+              onClick={() => {
+                setMotionDirection('backward');
+                setIntroIndex((prev) => Math.max(prev - 1, 0));
+              }}
+              disabled={introIndex === 0}
+            >
+              Previous card
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setMotionDirection('forward');
+                if (introIndex === introSlides.length - 1) {
+                  setShowIntro(false);
+                  return;
+                }
+                setIntroIndex((prev) => Math.min(prev + 1, introSlides.length - 1));
+              }}
+            >
+              {introIndex === introSlides.length - 1 ? 'Start form' : 'Next card'}
+            </button>
+          </div>
+          <button type="button" className="escape-shortcut" onClick={() => setShowIntro(false)}>
+            Skip campaign cards and fill form (Esc)
+          </button>
+        </>
+      ) : (
+        <>
+          <p className="step-count">Step {stepIndex + 1} of {totalSteps}</p>
+
+          <div key={`step-${stepIndex}`} className={`typeform-step-motion ${motionDirection}`}>
+            {stepIndex === 0 ? (
+              <section className="typeform-step">
+                <h2>I want to participate as a...</h2>
+                <div className="role-options-inline">
+                  {(['Validator', 'Builder', 'Observer'] as Role[]).map((option) => (
+                    <button
+                      key={option}
+                      type="button"
+                      className={role === option ? 'role-option active' : 'role-option'}
+                      onClick={() => {
+                        setRole(option);
+                        setStatus('');
+                      }}
+                    >
+                      {option}
+                    </button>
+                  ))}
+                </div>
+              </section>
+            ) : currentStep ? (
+              <section className="typeform-step">
+                <label htmlFor={currentStep.name}>{currentStep.label}</label>
+                <input
+                  id={currentStep.name}
+                  type={currentStep.type ?? 'text'}
+                  value={value}
+                  placeholder={currentStep.placeholder}
+                  onChange={(event) => {
+                    setFormValues((prev) => ({ ...prev, [currentStep.name]: event.target.value }));
                     setStatus('');
                   }}
-                >
-                  {option}
-                </button>
-              ))}
-            </div>
-          </section>
-        ) : currentStep ? (
-          <section className="typeform-step">
-            <label htmlFor={currentStep.name}>{currentStep.label}</label>
-            <input
-              id={currentStep.name}
-              type={currentStep.type ?? 'text'}
-              value={value}
-              placeholder={currentStep.placeholder}
-              onChange={(event) => {
-                setFormValues((prev) => ({ ...prev, [currentStep.name]: event.target.value }));
-                setStatus('');
-              }}
-              required
-              minLength={currentStep.minLength}
-              autoFocus
-            />
-          </section>
-        ) : null}
-      </div>
+                  required
+                  minLength={currentStep.minLength}
+                  autoFocus
+                />
+              </section>
+            ) : null}
+          </div>
 
-      <div className="wizard-actions">
-        <button type="button" onClick={previousStep} disabled={stepIndex === 0 || loading}>Back</button>
-        <button type="submit" disabled={loading}>
-          {loading ? 'Submitting...' : stepIndex === totalSteps - 1 ? 'Submit' : 'Continue'}
-        </button>
-      </div>
+          <div className="wizard-actions">
+            <button type="button" onClick={previousStep} disabled={stepIndex === 0 || loading}>Back</button>
+            <button type="submit" disabled={loading}>
+              {loading ? 'Submitting...' : stepIndex === totalSteps - 1 ? 'Submit' : 'Continue'}
+            </button>
+          </div>
+        </>
+      )}
 
       {status && <p className="status">{status}</p>}
     </form>
