@@ -16,6 +16,11 @@ interface FormSettingsResponse {
   observerPrompt: string;
 }
 
+type FormSettingsPayload = Pick<
+  FormSettingsResponse,
+  'title' | 'subtitle' | 'validatorPrompt' | 'builderPrompt' | 'observerPrompt'
+>;
+
 const DEFAULT_SETTINGS: FormSettingsResponse = {
   title: 'Build Public Truth with Citizen',
   subtitle: 'Validator · Builder · Observer onboarding',
@@ -54,7 +59,14 @@ export default function FormSettingsPage() {
 
         if (response.ok) {
           const settingsData = (await response.json()) as Partial<FormSettingsResponse>;
-          setSettings((prev) => ({ ...prev, ...settingsData }));
+          setSettings((prev) => ({
+            ...prev,
+            title: settingsData.title ?? prev.title,
+            subtitle: settingsData.subtitle ?? prev.subtitle,
+            validatorPrompt: settingsData.validatorPrompt ?? prev.validatorPrompt,
+            builderPrompt: settingsData.builderPrompt ?? prev.builderPrompt,
+            observerPrompt: settingsData.observerPrompt ?? prev.observerPrompt,
+          }));
         }
       } catch (loadError) {
         setError(loadError instanceof Error ? loadError.message : 'Unknown error');
@@ -77,13 +89,21 @@ export default function FormSettingsPage() {
     try {
       setSaving(true);
       setSaveStatus('Saving...');
+      const payload: FormSettingsPayload = {
+        title: settings.title,
+        subtitle: settings.subtitle,
+        validatorPrompt: settings.validatorPrompt,
+        builderPrompt: settings.builderPrompt,
+        observerPrompt: settings.observerPrompt,
+      };
+
       const response = await fetch(`${API_URL}/interest/form-settings`, {
         method: 'PUT',
         headers: {
           Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(settings),
+        body: JSON.stringify(payload),
       });
 
       if (response.status === 401) {
@@ -93,7 +113,8 @@ export default function FormSettingsPage() {
       }
 
       if (!response.ok) {
-        throw new Error('Unable to save form settings');
+        const details = await response.text();
+        throw new Error(details || 'Unable to save form settings');
       }
 
       setSaveStatus('Settings saved successfully!');
