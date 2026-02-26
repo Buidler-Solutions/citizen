@@ -387,7 +387,7 @@ export function InterestForm() {
         <section className="grid min-h-[260px] content-center justify-items-start gap-6 text-left" aria-label="Onboarding introduction">
           <p className="m-0 text-[clamp(1rem,1.5vw,1.25rem)] font-semibold text-cyan-300">citizen-protocol-v0.1.0</p>
           <RotatingOnboardingText baseWord="Onboarding" rotatingWords={['Validator', 'Builder', 'Observer']} />
-          <p className="m-0 text-[clamp(1.2rem,2.3vw,1.8rem)] font-extralight tracking-[0.02em] leading-[1.35] text-slate-200">
+          <p className="m-0 text-[clamp(1.2rem,2.3vw,1.8rem)] font-extralight leading-[1.15] text-slate-200">
             We are seeking individuals interested in becoming Node Validators, dApp Builders, and Node Observers through this waitlist. Before participating, we encourage you to first understand the project’s vision, architecture, and objectives so you can contribute meaningfully to its growth and integrity.
           </p>
           <div className="grid grid-cols-[minmax(180px,280px)] gap-3">
@@ -407,9 +407,9 @@ export function InterestForm() {
         <>
           <p className="m-0 text-cyan-300">Info card {introIndex + 1} of {introSlides.length}</p>
           <div key={`intro-${introIndex}`} className={`will-change-[transform,opacity,filter] ${motionClass} motion-reduce:animate-none`}>
-            <section className="grid min-h-[260px] content-center gap-4">
+            <section className="grid content-center gap-4 mt-2px">
               <h2 className="m-0 text-[clamp(1.6rem,3.5vw,2.8rem)] font-bold leading-[1.2]">{introSlides[introIndex].title}</h2>
-              <p className="m-0 text-[clamp(1.35rem,2.45vw,2rem)] font-semibold leading-[1.45] text-slate-200">{introSlides[introIndex].body}</p>
+              <p className="m-0 text-[clamp(1.2rem,2.3vw,1.8rem)] font-extralight leading-[1.15] text-slate-200">{introSlides[introIndex].body}</p>
             </section>
           </div>
 
