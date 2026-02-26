@@ -137,10 +137,10 @@ function RotatingOnboardingText({
   const longestWordLength = Math.max(...rotatingWords.map((word) => word.length));
 
   return (
-    <h2 className="onboarding-rotator" aria-live="polite" aria-atomic="true">
-      <span className="onboarding-static-word">{baseWord}</span>{' '}
-      <span className="onboarding-rotating-slot" style={{ '--longest-word': longestWordLength } as CSSProperties}>
-        <span key={rotatingWords[wordIndex]} className="onboarding-rotating-word">
+    <h2 className="m-0 flex items-center justify-start gap-3 text-[clamp(2rem,4.8vw,3.7rem)] font-extrabold leading-[1.1] tracking-tight" aria-live="polite" aria-atomic="true">
+      <span className="text-left text-slate-100">{baseWord}</span>{' '}
+      <span className="min-w-[calc(var(--longest-word)*1ch)] text-left" style={{ '--longest-word': longestWordLength } as CSSProperties}>
+        <span key={rotatingWords[wordIndex]} className="inline-block whitespace-nowrap font-bold text-cyan-300 [animation:onboardingWordSwap_520ms_cubic-bezier(0.22,0.61,0.36,1)] motion-reduce:animate-none">
           {rotatingWords[wordIndex]}
         </span>
       </span>
@@ -366,34 +366,34 @@ export function InterestForm() {
   };
 
 
+  const motionClass = motionDirection === 'forward'
+    ? '[animation:slideInForward_420ms_cubic-bezier(0.22,0.61,0.36,1)]'
+    : '[animation:slideInBackward_420ms_cubic-bezier(0.22,0.61,0.36,1)]';
+  const primaryButtonClass = 'w-full cursor-pointer rounded-xl border-0 bg-linear-to-r from-blue-500 to-cyan-400 p-4 font-bold text-white transition duration-200 hover:-translate-y-0.5 hover:shadow-[0_10px_24px_rgba(31,112,255,0.35)] hover:saturate-110 disabled:cursor-not-allowed disabled:opacity-60 motion-reduce:transition-none';
+
   if (submittedThankYouNote) {
     return (
-      <section className="typeform-shell typeform-thankyou-screen" aria-live="polite">
-        <p className="step-count">Submission received</p>
-        <h2>Thank you for joining as {submittedRole ?? 'a participant'}.</h2>
-        <p className="thankyou-note">{submittedThankYouNote}</p>
+      <section className="grid min-h-[calc(100vh-180px)] place-content-center gap-6 rounded-3xl border border-blue-200/35 bg-slate-950/80 p-[clamp(1.2rem,4vw,3.2rem)] text-center" aria-live="polite">
+        <p className="m-0 text-cyan-300">Submission received</p>
+        <h2 className="m-0 text-[clamp(2rem,4vw,3.4rem)] leading-[1.15]">Thank you for joining as {submittedRole ?? 'a participant'}.</h2>
+        <p className="m-0 mx-auto max-w-[760px] text-[clamp(1.12rem,2.2vw,1.5rem)] leading-[1.7] text-blue-100">{submittedThankYouNote}</p>
       </section>
     );
   }
 
   return (
-    <form className="typeform-shell" onSubmit={onSubmit}>
+    <form className="grid min-h-[calc(100vh-160px)] content-center gap-5 rounded-3xl border border-blue-200/35 bg-slate-950/80 p-[clamp(1.2rem,4vw,3.2rem)] max-[680px]:min-h-[calc(100vh-140px)]" onSubmit={onSubmit}>
       {showOnboardingIntro ? (
-        <section className="typeform-step onboarding-intro" aria-label="Onboarding introduction">
-          <p className="step-count">citizen-protocol-v0.1.0</p>
-          <RotatingOnboardingText
-            baseWord="Onboarding"
-            rotatingWords={['Validator', 'Builder', 'Observer']}
-          />
-          <p className="onboarding-intro-copy">
-            We invite you to rigorously stress-test the system, identify potential loopholes and vulnerabilities, and help us strengthen it through responsible feedback and collaboration. Our aim is to help shape a decentralized system design for our government, one that is resilient, transparent, and built to withstand real-world challenges.
-          </p>
-          <p className="onboarding-intro-copy">
+        <section className="grid min-h-[260px] content-center justify-items-start gap-6 text-left" aria-label="Onboarding introduction">
+          <p className="m-0 text-[clamp(1rem,1.5vw,1.25rem)] font-semibold text-cyan-300">citizen-protocol-v0.1.0</p>
+          <RotatingOnboardingText baseWord="Onboarding" rotatingWords={['Validator', 'Builder', 'Observer']} />
+          <p className="m-0 text-[clamp(1.2rem,2.3vw,1.8rem)] font-extralight tracking-[0.02em] leading-[1.35] text-slate-200">
             We are seeking individuals interested in becoming Node Validators, dApp Builders, and Node Observers through this waitlist. Before participating, we encourage you to first understand the project’s vision, architecture, and objectives so you can contribute meaningfully to its growth and integrity.
           </p>
-          <div className="wizard-actions onboarding-intro-actions">
+          <div className="grid grid-cols-[minmax(180px,280px)] gap-3">
             <button
               type="button"
+              className={primaryButtonClass}
               onClick={() => {
                 setShowOnboardingIntro(false);
                 setMotionDirection('forward');
@@ -405,17 +405,18 @@ export function InterestForm() {
         </section>
       ) : showIntro && introSlides.length > 0 ? (
         <>
-          <p className="step-count">Info card {introIndex + 1} of {introSlides.length}</p>
-          <div key={`intro-${introIndex}`} className={`typeform-step-motion ${motionDirection}`}>
-            <section className="typeform-step intro-card">
-              <h2>{introSlides[introIndex].title}</h2>
-              <p>{introSlides[introIndex].body}</p>
+          <p className="m-0 text-cyan-300">Info card {introIndex + 1} of {introSlides.length}</p>
+          <div key={`intro-${introIndex}`} className={`will-change-[transform,opacity,filter] ${motionClass} motion-reduce:animate-none`}>
+            <section className="grid min-h-[260px] content-center gap-4">
+              <h2 className="m-0 text-[clamp(1.6rem,3.5vw,2.8rem)] font-bold leading-[1.2]">{introSlides[introIndex].title}</h2>
+              <p className="m-0 text-[clamp(1.35rem,2.45vw,2rem)] font-semibold leading-[1.45] text-slate-200">{introSlides[introIndex].body}</p>
             </section>
           </div>
 
-          <div className="wizard-actions">
+          <div className="grid gap-3 [grid-template-columns:1fr_1fr] max-[680px]:grid-cols-1">
             <button
               type="button"
+              className={primaryButtonClass}
               onClick={() => {
                 setMotionDirection('backward');
                 setIntroIndex((prev) => Math.max(prev - 1, 0));
@@ -426,6 +427,7 @@ export function InterestForm() {
             </button>
             <button
               type="button"
+              className={primaryButtonClass}
               onClick={() => {
                 setMotionDirection('forward');
                 if (introIndex === introSlides.length - 1) {
@@ -438,24 +440,28 @@ export function InterestForm() {
               {introIndex === introSlides.length - 1 ? 'Start form' : 'Next card'}
             </button>
           </div>
-          <button type="button" className="escape-shortcut" onClick={() => setShowIntro(false)}>
+          <button
+            type="button"
+            className="w-full cursor-pointer rounded-xl border border-dashed border-cyan-300/50 bg-blue-950/80 p-4 font-semibold text-cyan-300"
+            onClick={() => setShowIntro(false)}
+          >
             Skip campaign cards and fill form (Esc). Use ← / → to move between cards.
           </button>
         </>
       ) : (
         <>
-          <p className="step-count">Step {stepIndex + 1} of {totalSteps}</p>
+          <p className="m-0 text-cyan-300">Step {stepIndex + 1} of {totalSteps}</p>
 
-          <div key={`step-${stepIndex}`} className={`typeform-step-motion ${motionDirection}`}>
+          <div key={`step-${stepIndex}`} className={`will-change-[transform,opacity,filter] ${motionClass} motion-reduce:animate-none`}>
             {stepIndex === 0 ? (
-              <section className="typeform-step">
-                <h2>I want to participate as a...</h2>
-                <div className="role-options-inline">
+              <section className="grid gap-4">
+                <h2 className="m-0 text-[clamp(1.6rem,3.5vw,2.8rem)] font-bold leading-[1.2]">I want to participate as a...</h2>
+                <div className="grid gap-3">
                   {(['Validator', 'Builder', 'Observer'] as Role[]).map((option) => (
                     <button
                       key={option}
                       type="button"
-                      className={role === option ? 'role-option active' : 'role-option'}
+                      className={`w-full rounded-xl border bg-blue-950/90 p-4 text-left ${role === option ? 'border-cyan-300 shadow-[0_0_0_1px_rgba(85,214,255,0.35)]' : 'border-blue-200/30'}`}
                       onClick={() => {
                         setRole(option);
                         setStatus('');
@@ -467,9 +473,10 @@ export function InterestForm() {
                 </div>
               </section>
             ) : currentStep ? (
-              <section className="typeform-step">
-                <label htmlFor={currentStep.name}>{currentStep.label}</label>
+              <section className="grid gap-4">
+                <label className="m-0 text-[clamp(1.6rem,3.5vw,2.8rem)] font-bold leading-[1.2]" htmlFor={currentStep.name}>{currentStep.label}</label>
                 <input
+                  className="w-full rounded-xl border border-blue-200/30 bg-blue-950/90 p-4 text-[clamp(1.05rem,2.2vw,1.35rem)] text-slate-100"
                   id={currentStep.name}
                   type={currentStep.type ?? 'text'}
                   value={value}
@@ -486,16 +493,16 @@ export function InterestForm() {
             ) : null}
           </div>
 
-          <div className="wizard-actions">
-            <button type="button" onClick={previousStep} disabled={stepIndex === 0 || loading}>Back</button>
-            <button type="submit" disabled={loading}>
+          <div className="grid gap-3 [grid-template-columns:1fr_1fr] max-[680px]:grid-cols-1">
+            <button className={primaryButtonClass} type="button" onClick={previousStep} disabled={stepIndex === 0 || loading}>Back</button>
+            <button className={primaryButtonClass} type="submit" disabled={loading}>
               {loading ? 'Submitting...' : stepIndex === totalSteps - 1 ? 'Submit' : 'Continue'}
             </button>
           </div>
         </>
       )}
 
-      {status && <p className="status">{status}</p>}
+      {status && <p className="m-0 text-cyan-300">{status}</p>}
     </form>
   );
 }
