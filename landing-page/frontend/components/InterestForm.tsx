@@ -373,10 +373,10 @@ export function InterestForm() {
 
   if (submittedThankYouNote) {
     return (
-      <section className="grid min-h-[calc(100vh-180px)] place-content-center gap-6 rounded-3xl border border-blue-200/35 bg-slate-950/80 p-[clamp(1.2rem,4vw,3.2rem)] text-center" aria-live="polite">
+      <section className="grid min-h-[calc(100vh-180px)] place-content-center gap-6 rounded-3xl border border-blue-200/35 bg-slate-950/80 p-[clamp(1.2rem,4vw,3.2rem)] text-left" aria-live="polite">
         <p className="m-0 text-cyan-300">Submission received</p>
-        <h2 className="m-0 text-[clamp(2rem,4vw,3.4rem)] leading-[1.15]">Thank you for joining as {submittedRole ?? 'a participant'}.</h2>
-        <p className="m-0 mx-auto max-w-[760px] text-[clamp(1.12rem,2.2vw,1.5rem)] leading-[1.7] text-blue-100">{submittedThankYouNote}</p>
+        <h2 className="m-0 text-[clamp(2rem,3.4vw,3.4rem)] leading-[1.15]">Thank you for interest on Testnet as {submittedRole ?? 'a participant'}.</h2>
+        <p className="m-0 mx-auto text-[clamp(1.12rem,2.2vw,1.5rem)] leading-[1.7] text-blue-100">{submittedThankYouNote}</p>
       </section>
     );
   }
