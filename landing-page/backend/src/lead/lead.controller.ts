@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post, Put, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Post, Put, UseGuards } from '@nestjs/common';
 import { CreateLeadDto } from './dto/create-lead.dto';
 import { LeadService } from './lead.service';
 import { JwtAuthGuard } from '../jwt-auth.guard';
@@ -34,5 +34,29 @@ export class LeadController {
   @Get('submissions')
   submissions() {
     return this.leadService.submissions();
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Delete('submissions/:id')
+  deleteSubmission(@Param('id') id: string) {
+    return this.leadService.deleteSubmission(id);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('submissions/:id/delete')
+  deleteSubmissionFallback(@Param('id') id: string) {
+    return this.leadService.deleteSubmission(id);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('submissions/:id')
+  deleteSubmissionLegacy(@Param('id') id: string) {
+    return this.leadService.deleteSubmission(id);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('submissions/delete')
+  deleteSubmissionByBody(@Body() payload: { id: string }) {
+    return this.leadService.deleteSubmission(payload.id);
   }
 }
