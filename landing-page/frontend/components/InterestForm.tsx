@@ -380,15 +380,16 @@ export function InterestForm() {
     <form className="typeform-shell" onSubmit={onSubmit}>
       {showOnboardingIntro ? (
         <section className="typeform-step onboarding-intro" aria-label="Onboarding introduction">
-          <p className="step-count">citizen-protocol</p>
+          <p className="step-count">citizen-protocol-v0.1.0</p>
           <RotatingOnboardingText
             baseWord="Onboarding"
             rotatingWords={['Validator', 'Builder', 'Observer']}
           />
           <p className="onboarding-intro-copy">
-            We want you to stress test the system, look for loopholes, vulnerabilities and then we address it! So, We look for interested individual to be a Node Validator, dApp Builder and Node Observer.</p>
+            We invite you to rigorously stress-test the system, identify potential loopholes and vulnerabilities, and help us strengthen it through responsible feedback and collaboration. Our aim is to help shape a decentralized system design for our government, one that is resilient, transparent, and built to withstand real-world challenges.
+          </p>
           <p className="onboarding-intro-copy">
-            But first we want you learn what this project all about.
+            We are seeking individuals interested in becoming Node Validators, dApp Builders, and Node Observers through this waitlist. Before participating, we encourage you to first understand the project’s vision, architecture, and objectives so you can contribute meaningfully to its growth and integrity.
           </p>
           <div className="wizard-actions onboarding-intro-actions">
             <button
