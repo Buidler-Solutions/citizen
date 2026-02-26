@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Check, LoaderCircle, Plus, Save, Trash2, X } from 'lucide-react';
+import { Check, ChevronDown, LoaderCircle, Plus, Save, Trash2, X } from 'lucide-react';
 import { Button, Input, Textarea } from '@/components/admin-ui';
 import { ADMIN_TOKEN_KEY } from '@/components/admin-auth';
 
@@ -33,6 +33,7 @@ export default function CampaignCardsPage() {
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [newCard, setNewCard] = useState<CampaignCard>(DEFAULT_CARD);
+  const [openCardIndex, setOpenCardIndex] = useState<number | null>(0);
 
   const normalizeWeights = (list: CampaignCard[]): CampaignCard[] => list.map((card, index) => ({ ...card, weight: index + 1 }));
 
@@ -62,6 +63,7 @@ export default function CampaignCardsPage() {
         if (Array.isArray(data.campaignCards)) {
           const sortedCards = [...data.campaignCards].sort((a, b) => (a.weight ?? Number.MAX_SAFE_INTEGER) - (b.weight ?? Number.MAX_SAFE_INTEGER));
           setCards(normalizeWeights(sortedCards));
+          setOpenCardIndex(sortedCards.length > 0 ? 0 : null);
         }
       } catch (error) {
         setStatus(error instanceof Error ? error.message : 'Unknown error while loading campaign cards');
@@ -99,12 +101,24 @@ export default function CampaignCardsPage() {
       title: newCard.title.trim(),
       body: newCard.body.trim(),
     }]);
+    setOpenCardIndex(cards.length);
     closeAddModal();
     setStatus('Card added. Save cards to publish changes.');
   };
 
   const removeCard = (index: number) => {
-    setCards((prev) => normalizeWeights(prev.filter((_, cardIndex) => cardIndex !== index)));
+    setCards((prev) => {
+      const nextCards = normalizeWeights(prev.filter((_, cardIndex) => cardIndex !== index));
+
+      setOpenCardIndex((current) => {
+        if (current === null) return nextCards.length > 0 ? 0 : null;
+        if (current === index) return nextCards.length > 0 ? Math.min(index, nextCards.length - 1) : null;
+        if (current > index) return current - 1;
+        return current;
+      });
+
+      return nextCards;
+    });
   };
 
   const moveCard = (fromIndex: number, toIndex: number) => {
@@ -226,38 +240,51 @@ export default function CampaignCardsPage() {
               onDragEnd={() => setDragIndex(null)}
               className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
             >
-              <div className="flex items-center justify-between">
-                <p className="text-sm font-semibold text-slate-500">Card {index + 1} · Drag to reorder</p>
+              <div className="flex items-center justify-between gap-3">
+                <button
+                  type="button"
+                  onClick={() => setOpenCardIndex((current) => (current === index ? null : index))}
+                  className="flex flex-1 items-center justify-between gap-2 text-left"
+                  aria-expanded={openCardIndex === index}
+                >
+                  <p className="text-sm font-semibold text-slate-500">Card {index + 1} · {card.title.trim() || 'Untitled card'}</p>
+                  <ChevronDown className={`h-4 w-4 text-slate-500 transition ${openCardIndex === index ? 'rotate-180' : ''}`} />
+                </button>
                 <button
                   type="button"
                   onClick={() => removeCard(index)}
-                  className="inline-flex items-center gap-1 rounded-lg bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-600 transition hover:bg-red-100"
+                  className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-600 transition hover:bg-red-100"
                 >
                   <Trash2 className="h-3.5 w-3.5" /> Remove
                 </button>
               </div>
-              <Input
-                label="Weight"
-                type="number"
-                min={1}
-                max={cards.length}
-                value={String(card.weight)}
-                onChange={(event) => updateWeight(index, event.target.value)}
-                placeholder="1"
-              />
-              <Input
-                label="Title"
-                value={card.title}
-                onChange={(event) => updateCard(index, 'title', event.target.value)}
-                placeholder="Citizen Protocol in one line"
-              />
-              <Textarea
-                label="Description"
-                value={card.body}
-                onChange={(event) => updateCard(index, 'body', event.target.value)}
-                rows={4}
-                placeholder="Explain why this protocol matters before users continue to the form."
-              />
+
+              {openCardIndex === index && (
+                <div className="space-y-4">
+                  <Input
+                    label="Weight"
+                    type="number"
+                    min={1}
+                    max={cards.length}
+                    value={String(card.weight)}
+                    onChange={(event) => updateWeight(index, event.target.value)}
+                    placeholder="1"
+                  />
+                  <Input
+                    label="Title"
+                    value={card.title}
+                    onChange={(event) => updateCard(index, 'title', event.target.value)}
+                    placeholder="Citizen Protocol in one line"
+                  />
+                  <Textarea
+                    label="Description"
+                    value={card.body}
+                    onChange={(event) => updateCard(index, 'body', event.target.value)}
+                    rows={4}
+                    placeholder="Explain why this protocol matters before users continue to the form."
+                  />
+                </div>
+              )}
             </div>
           ))}
         </div>
