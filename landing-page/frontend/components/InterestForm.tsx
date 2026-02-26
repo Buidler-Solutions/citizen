@@ -1,6 +1,6 @@
 'use client';
 
-import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { CSSProperties, FormEvent, useEffect, useMemo, useState } from 'react';
 
 type Role = 'Validator' | 'Builder' | 'Observer';
 type MotionDirection = 'forward' | 'backward';
@@ -107,6 +107,47 @@ const BASE_STEPS: StepConfig[] = [
   { name: 'country', label: 'Which country will you operate from?', placeholder: 'Country', minLength: 2 },
 ];
 
+interface RotatingOnboardingTextProps {
+  baseWord: string;
+  rotatingWords: string[];
+  intervalMs?: number;
+}
+
+function RotatingOnboardingText({
+  baseWord,
+  rotatingWords,
+  intervalMs = 3000,
+}: RotatingOnboardingTextProps) {
+  const [wordIndex, setWordIndex] = useState(0);
+
+  useEffect(() => {
+    if (rotatingWords.length <= 1) return undefined;
+
+    const intervalId = window.setInterval(() => {
+      setWordIndex((currentIndex) => (currentIndex + 1) % rotatingWords.length);
+    }, intervalMs);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [intervalMs, rotatingWords.length]);
+
+  if (rotatingWords.length === 0) return null;
+
+  const longestWordLength = Math.max(...rotatingWords.map((word) => word.length));
+
+  return (
+    <h2 className="onboarding-rotator" aria-live="polite" aria-atomic="true">
+      <span className="onboarding-static-word">{baseWord}</span>{' '}
+      <span className="onboarding-rotating-slot" style={{ '--longest-word': longestWordLength } as CSSProperties}>
+        <span key={rotatingWords[wordIndex]} className="onboarding-rotating-word">
+          {rotatingWords[wordIndex]}
+        </span>
+      </span>
+    </h2>
+  );
+}
+
 export function InterestForm() {
   const [status, setStatus] = useState('');
   const [loading, setLoading] = useState(false);
@@ -114,6 +155,7 @@ export function InterestForm() {
   const [stepIndex, setStepIndex] = useState(0);
   const [motionDirection, setMotionDirection] = useState<MotionDirection>('forward');
   const [settings, setSettings] = useState<PublicFormSettings>(DEFAULT_SETTINGS);
+  const [showOnboardingIntro, setShowOnboardingIntro] = useState(true);
   const [showIntro, setShowIntro] = useState(true);
   const [introIndex, setIntroIndex] = useState(0);
   const [formValues, setFormValues] = useState<Record<string, string>>({
@@ -161,6 +203,8 @@ export function InterestForm() {
     .sort((a, b) => (a.weight ?? Number.MAX_SAFE_INTEGER) - (b.weight ?? Number.MAX_SAFE_INTEGER)), [settings.campaignCards]);
 
   useEffect(() => {
+    if (showOnboardingIntro) return;
+
     const onKeyDown = (event: KeyboardEvent) => {
       if (!showIntro || introSlides.length === 0) return;
 
@@ -189,7 +233,7 @@ export function InterestForm() {
 
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [introIndex, introSlides.length, showIntro]);
+  }, [introIndex, introSlides.length, showIntro, showOnboardingIntro]);
 
   useEffect(() => {
     if (introSlides.length === 0) {
@@ -334,12 +378,31 @@ export function InterestForm() {
 
   return (
     <form className="typeform-shell" onSubmit={onSubmit}>
-      <header className="typeform-header">
-        <p className="kicker">{settings.title}</p>
-        <h1>{settings.subtitle}</h1>
-      </header>
-
-      {showIntro && introSlides.length > 0 ? (
+      {showOnboardingIntro ? (
+        <section className="typeform-step onboarding-intro" aria-label="Onboarding introduction">
+          <p className="step-count">citizen-protocol</p>
+          <RotatingOnboardingText
+            baseWord="Onboarding"
+            rotatingWords={['Validator', 'Builder', 'Observer']}
+          />
+          <p className="onboarding-intro-copy">
+            We want you to stress test the system, look for loopholes, vulnerabilities and then we address it! So, We look for interested individual to be a Node Validator, dApp Builder and Node Observer.</p>
+          <p className="onboarding-intro-copy">
+            But first we want you learn what this project all about.
+          </p>
+          <div className="wizard-actions onboarding-intro-actions">
+            <button
+              type="button"
+              onClick={() => {
+                setShowOnboardingIntro(false);
+                setMotionDirection('forward');
+              }}
+            >
+              Start
+            </button>
+          </div>
+        </section>
+      ) : showIntro && introSlides.length > 0 ? (
         <>
           <p className="step-count">Info card {introIndex + 1} of {introSlides.length}</p>
           <div key={`intro-${introIndex}`} className={`typeform-step-motion ${motionDirection}`}>
