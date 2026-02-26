@@ -1,4 +1,4 @@
-import { ConflictException, Injectable } from '@nestjs/common';
+import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { CreateLeadDto } from './dto/create-lead.dto';
@@ -64,6 +64,16 @@ export class LeadService {
       },
       take: 100,
     });
+  }
+
+  async deleteSubmission(id: string): Promise<{ deleted: true }> {
+    const result = await this.leadRepository.delete({ id });
+
+    if (!result.affected) {
+      throw new NotFoundException('Submission not found.');
+    }
+
+    return { deleted: true };
   }
 
   private normalizeCampaignCards(campaignCards: FormSettings['campaignCards']): FormSettings['campaignCards'] {
