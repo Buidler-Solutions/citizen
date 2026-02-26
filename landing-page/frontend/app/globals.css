@@ -23,7 +23,13 @@
 
 :root {
   color-scheme: dark;
-  font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  font-family:
+    Inter,
+    system-ui,
+    -apple-system,
+    Segoe UI,
+    Roboto,
+    sans-serif;
   --background: 226 55% 7%;
   --foreground: 210 40% 96%;
   --card: 222 45% 11%;
@@ -49,7 +55,8 @@
 body {
   margin: 0;
   min-height: 100vh;
-  background: radial-gradient(circle at 15% 10%, #2f5fff 0%, transparent 35%),
+  background:
+    radial-gradient(circle at 15% 10%, #2f5fff 0%, transparent 35%),
     radial-gradient(circle at 90% 10%, #0aa6b7 0%, transparent 30%),
     linear-gradient(145deg, #040712 0%, #0b1730 48%, #08111e 100%);
   color: #f3f7ff;
@@ -194,7 +201,10 @@ body {
   background: linear-gradient(95deg, #3f69ff, #2ad2f6);
   border: none;
   font-weight: 700;
-  transition: transform 180ms ease, box-shadow 220ms ease, filter 220ms ease;
+  transition:
+    transform 180ms ease,
+    box-shadow 220ms ease,
+    filter 220ms ease;
 }
 
 .typeform-shell button:hover:not(:disabled) {
@@ -213,6 +223,61 @@ body {
   border: 1px dashed rgba(141, 233, 255, 0.5) !important;
   color: #8de9ff !important;
   font-weight: 600;
+}
+
+.onboarding-intro {
+  min-height: 260px;
+  align-content: center;
+  justify-items: left;
+  text-align: left;
+}
+
+.onboarding-rotator {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.onboarding-static-word {
+  color: #dff2ff;
+}
+
+.onboarding-rotating-slot {
+  text-align: left;
+  min-width: calc(var(--longest-word) * 1ch);
+}
+
+.onboarding-rotating-word {
+  display: inline-block;
+  text-align: left;
+  color: #8de9ff;
+  font-weight: 700;
+  animation: onboardingWordSwap 520ms cubic-bezier(0.22, 0.61, 0.36, 1);
+  white-space: nowrap;
+}
+
+.onboarding-intro-copy {
+  margin: 0;
+  color: #b8d4ff;
+  font-size: 0.95rem;
+}
+
+.onboarding-intro-actions {
+  grid-template-columns: minmax(180px, 280px);
+}
+
+@keyframes onboardingWordSwap {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 12px, 0);
+    filter: blur(2px);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+    filter: blur(0);
+  }
 }
 
 .role-options-inline {
@@ -264,6 +329,10 @@ body {
   .typeform-shell button {
     transition: none;
   }
+
+  .onboarding-rotating-word {
+    animation: none;
+  }
 }
 
 /* Admin Dashboard Styles */
@@ -291,7 +360,8 @@ body {
 }
 
 @keyframes pulse-glow {
-  0%, 100% {
+  0%,
+  100% {
     box-shadow: 0 0 20px rgba(59, 130, 246, 0.15);
   }
   50% {
@@ -337,7 +407,11 @@ body {
 }
 
 .admin-table-row:hover {
-  background: linear-gradient(90deg, rgba(59, 130, 246, 0.03) 0%, rgba(59, 130, 246, 0.06) 100%);
+  background: linear-gradient(
+    90deg,
+    rgba(59, 130, 246, 0.03) 0%,
+    rgba(59, 130, 246, 0.06) 100%
+  );
 }
 
 .admin-badge-pulse {
@@ -367,7 +441,6 @@ body {
 .admin-scroll::-webkit-scrollbar-corner {
   background: transparent;
 }
-
 
 .typeform-thankyou-screen {
   min-height: calc(100vh - 180px);
