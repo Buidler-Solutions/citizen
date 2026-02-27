@@ -30,6 +30,14 @@ export type SignedEnvelope = {
   signature: string;
 };
 
+export type ReceiptEnvelope = {
+  receipt?: {
+    status?: string;
+    [key: string]: unknown;
+  };
+  [key: string]: unknown;
+};
+
 export function canonicalizeJson(value: unknown): string;
 
 export class BrowserWalletSigner implements Signer {
@@ -61,10 +69,19 @@ export class CitizenNodeClient {
     payload?: Record<string, unknown>;
     walletProvider?: WalletProvider;
     account?: string;
+    requestMethod?: string;
     timestamp?: number;
   }): Promise<unknown>;
   signEntry(entry: LedgerEntry, signer: Signer): Promise<LedgerEntry>;
   wrapEnvelope(args: { entry: LedgerEntry; signer: Signer; submittedAt?: string }): Promise<SignedEnvelope>;
   submitEnvelope(envelope: SignedEnvelope): Promise<unknown>;
   getReceipt(receiptId: string): Promise<unknown>;
+  waitForReceipt(
+    receiptId: string,
+    args?: {
+      pollIntervalMs?: number;
+      timeoutMs?: number;
+      isTerminal?: (receipt: ReceiptEnvelope) => boolean;
+    }
+  ): Promise<ReceiptEnvelope>;
 }
