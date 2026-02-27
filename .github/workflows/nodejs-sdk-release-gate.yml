@@ -1,0 +1,101 @@
+name: nodejs-sdk-release-gate
+
+on:
+  pull_request:
+    paths:
+      - "citizen-protocol/sdk/nodejs/**"
+      - "citizen-protocol/dapp/apps/api/**"
+      - "citizen-protocol/crates/**"
+      - "citizen-protocol/config/localnet/**"
+      - ".github/workflows/nodejs-sdk-release-gate.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "citizen-protocol/sdk/nodejs/**"
+      - "citizen-protocol/dapp/apps/api/**"
+      - "citizen-protocol/crates/**"
+      - "citizen-protocol/config/localnet/**"
+      - ".github/workflows/nodejs-sdk-release-gate.yml"
+
+jobs:
+  sdk-unit-node18:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: citizen-protocol/sdk/nodejs
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 18
+          cache: npm
+          cache-dependency-path: citizen-protocol/sdk/nodejs/package-lock.json
+      - run: npm ci
+      - run: npm test
+
+  sdk-unit-node20:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: citizen-protocol/sdk/nodejs
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: citizen-protocol/sdk/nodejs/package-lock.json
+      - run: npm ci
+      - run: npm test
+
+  sdk-package-audit:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: citizen-protocol/sdk/nodejs
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: citizen-protocol/sdk/nodejs/package-lock.json
+      - run: npm ci
+      - run: npm pack --dry-run
+      - name: Validate tarball file list
+        run: |
+          EXPECTED=$'README.md\npackage.json\nsrc/index.d.ts\nsrc/index.js'
+          ACTUAL=$(npm pack --dry-run --json | node -e '
+          const fs = require("node:fs");
+          const output = fs.readFileSync(0, "utf8");
+          const parsed = JSON.parse(output);
+          const files = (parsed[0]?.files ?? []).map((entry) => entry.path).sort();
+          process.stdout.write(files.join("\\n"));
+          ')
+          if [ "$ACTUAL" != "$EXPECTED" ]; then
+            echo "Unexpected package files"
+            echo "Expected:" && printf "%s\n" "$EXPECTED"
+            echo "Actual:" && printf "%s\n" "$ACTUAL"
+            exit 1
+          fi
+
+  sdk-live-node-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: citizen-protocol/sdk/nodejs/package-lock.json
+      - name: Install SDK dependencies
+        working-directory: citizen-protocol/sdk/nodejs
+        run: npm ci
+      - name: Run SDK live smoke (local non-Docker node)
+        env:
+          CITIZEN_NODE_MODE: local
+          CITIZEN_LOCAL_PROTOCOL_DIR: citizen-protocol
+          CITIZEN_LOCAL_CONFIG_PATH: config/localnet/validator-alpha.toml
+        run: node citizen-protocol/sdk/nodejs/scripts/live_node_smoke.mjs
