@@ -1,7 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { BrowserWalletSigner, CitizenNodeClient, canonicalizeJson } from "../src/index.js";
+import {
+  BrowserWalletSigner,
+  CitizenNodeClient,
+  canonicalizeJson,
+  createMultisigCreditGrant,
+  createSponsorshipUsage
+} from "../src/index.js";
 
 class StubSigner {
   constructor(id = "did:ledger:builder:demo") {
@@ -196,4 +202,55 @@ test("getReceipt calls deterministic receipt endpoint", async () => {
   const client = new CitizenNodeClient({ baseUrl: "http://127.0.0.1:8080", fetchImpl });
   const result = await client.getReceipt("receipt-123");
   assert.equal(result.receipt.finality.block_height, 1);
+});
+
+
+test("createMultisigCreditGrant builds builder.credits operation", () => {
+  const operation = createMultisigCreditGrant({
+    builderId: "builder:alpha",
+    amount: 100,
+    multisigProofs: [
+      { approver: "approver-1", public_key: "ed25519:pk1", signature: "deadbeef" }
+    ]
+  });
+
+  assert.equal(operation.namespace, "builder.credits");
+  assert.equal(operation.action, "MULTISIG_CREDIT_GRANT");
+  assert.equal(operation.objectId, "builder:alpha");
+  assert.equal(operation.payload.amount, 100);
+});
+
+test("createSponsorshipUsage builds sponsorship operation", () => {
+  const operation = createSponsorshipUsage({
+    builderId: "builder:alpha",
+    amount: 25,
+    creditGrantId: "grant-123",
+    sponsorshipId: "spn-1",
+    sponsoredDid: "did:ledger:user1"
+  });
+
+  assert.equal(operation.namespace, "builder.credits");
+  assert.equal(operation.action, "SPONSOR_USAGE");
+  assert.equal(operation.objectId, "builder:alpha");
+  assert.equal(operation.payload.credit_grant_id, "grant-123");
+});
+
+test("submitTransaction validates builder.credits payloads before submitting", async () => {
+  const client = new CitizenNodeClient({
+    baseUrl: "http://127.0.0.1:8080",
+    fetchImpl: async () => {
+      throw new Error("network should not be called on invalid payload");
+    }
+  });
+
+  await assert.rejects(
+    client.submitTransaction({
+      namespace: "builder.credits",
+      action: "SPONSOR_USAGE",
+      objectId: "builder:alpha",
+      payload: { amount: 10 },
+      signer: new StubSigner()
+    }),
+    /payload.credit_grant_id must be a non-empty string/
+  );
 });
