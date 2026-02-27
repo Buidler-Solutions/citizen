@@ -7,6 +7,10 @@ import { createHash, randomUUID } from "node:crypto";
 import { verifyMessage } from "ethers";
 import { DatabaseService } from "./db.service";
 
+type CitizenNodeClientInstance = {
+  submitEnvelope: (envelope: unknown) => Promise<unknown>;
+};
+
 type ArticleDraft = {
   title: string;
   content: string;
@@ -61,6 +65,7 @@ const NODE_ENDPOINTS: Record<TargetNetwork, string> = {
 export class AppService {
   private readonly challenges = new Map<string, ArticleChallenge>();
   private readonly articles: PublishedArticle[] = [];
+  private readonly sdkClients = new Map<TargetNetwork, CitizenNodeClientInstance>();
 
   constructor(private readonly databaseService: DatabaseService) {}
 
@@ -269,77 +274,117 @@ export class AppService {
 
   private async submitToNode(challenge: ArticleChallenge, signature: string) {
     const endpoint = NODE_ENDPOINTS[challenge.network];
-    let response: Response;
-    try {
-      const isDemoEndpoint = endpoint.includes("/api/articles");
-      const payload = isDemoEndpoint
-        ? {
-            author: challenge.authorWallet,
-            title: challenge.draft.title,
-            content: challenge.draft.content,
-            tags: ["citizen-dapp", challenge.network],
-            signedMessage: challenge.message,
-            walletSignature: signature
-          }
-        : {
-            envelope_id: randomUUID(),
-            signer: challenge.authorWallet,
-            signature,
-            submitted_at: new Date().toISOString(),
-            payload: {
-              entry_id: randomUUID(),
-              namespace: "content.article",
-              action: "PUBLISH_ARTICLE",
-              object_id: `article:${challenge.id}`,
-              payload: {
-                title: challenge.draft.title,
-                content: challenge.draft.content,
-                signedMessage: challenge.message,
-                network: challenge.network
-              },
-              author: challenge.authorWallet,
-              signature,
-              timestamp: Math.floor(Date.now() / 1000)
-            }
-          };
-
-      response = await fetch(endpoint, {
-        method: "POST",
-        headers: {
-          "content-type": "application/json"
+    const isDemoEndpoint = endpoint.includes("/api/articles");
+    const envelope = {
+      envelope_id: randomUUID(),
+      signer: challenge.authorWallet,
+      signature,
+      submitted_at: new Date().toISOString(),
+      payload: {
+        entry_id: randomUUID(),
+        namespace: "content.article",
+        action: "PUBLISH_ARTICLE",
+        object_id: `article:${challenge.id}`,
+        payload: {
+          title: challenge.draft.title,
+          content: challenge.draft.content,
+          signedMessage: challenge.message,
+          network: challenge.network
         },
-        body: JSON.stringify(payload)
-      });
-    } catch {
+        author: challenge.authorWallet,
+        signature,
+        timestamp: Math.floor(Date.now() / 1000)
+      }
+    };
+
+    try {
+      if (isDemoEndpoint) {
+        const payload = {
+          author: challenge.authorWallet,
+          title: challenge.draft.title,
+          content: challenge.draft.content,
+          tags: ["citizen-dapp", challenge.network],
+          signedMessage: challenge.message,
+          walletSignature: signature
+        };
+
+        const response = await fetch(endpoint, {
+          method: "POST",
+          headers: {
+            "content-type": "application/json"
+          },
+          body: JSON.stringify(payload)
+        });
+
+        const bodyText = await response.text();
+        let parsedBody: unknown = bodyText;
+        try {
+          parsedBody = JSON.parse(bodyText);
+        } catch {
+          // keep raw text as fallback
+        }
+
+        if (!response.ok) {
+          throw new ServiceUnavailableException({
+            message: `Network ${challenge.network} rejected article submission.`,
+            endpoint,
+            status: response.status,
+            response: parsedBody
+          });
+        }
+
+        return {
+          endpoint,
+          network: challenge.network,
+          status: response.status,
+          response: parsedBody,
+          submittedAt: new Date().toISOString()
+        };
+      }
+
+      const client = await this.getSdkClient(challenge.network);
+      const parsedBody = await client.submitEnvelope(envelope);
+      return {
+        endpoint,
+        network: challenge.network,
+        status: 200,
+        response: parsedBody,
+        submittedAt: new Date().toISOString()
+      };
+    } catch (error) {
+      if (error instanceof ServiceUnavailableException) {
+        throw error;
+      }
+
       throw new ServiceUnavailableException(
         `Unable to reach ${challenge.network} endpoint (${endpoint}).`
       );
     }
+  }
 
-    const bodyText = await response.text();
-    let parsedBody: unknown = bodyText;
-    try {
-      parsedBody = JSON.parse(bodyText);
-    } catch {
-      // keep raw text as fallback
+  private async getSdkClient(network: TargetNetwork): Promise<CitizenNodeClientInstance> {
+    const existingClient = this.sdkClients.get(network);
+    if (existingClient) {
+      return existingClient;
     }
 
-    if (!response.ok) {
-      throw new ServiceUnavailableException({
-        message: `Network ${challenge.network} rejected article submission.`,
-        endpoint,
-        status: response.status,
-        response: parsedBody
-      });
-    }
-
-    return {
-      endpoint,
-      network: challenge.network,
-      status: response.status,
-      response: parsedBody,
-      submittedAt: new Date().toISOString()
+    const { CitizenNodeClient } = (await import("@citizen-protocol/nodejs-sdk")) as {
+      CitizenNodeClient: new (args: { baseUrl: string }) => CitizenNodeClientInstance;
     };
+
+    const baseUrl = this.resolveBaseUrl(NODE_ENDPOINTS[network]);
+    const client = new CitizenNodeClient({ baseUrl });
+    this.sdkClients.set(network, client);
+    return client;
+  }
+
+  private resolveBaseUrl(endpoint: string) {
+    try {
+      const parsed = new URL(endpoint);
+      return `${parsed.protocol}//${parsed.host}`;
+    } catch {
+      throw new ServiceUnavailableException(`Configured endpoint is invalid: ${endpoint}`);
+    }
   }
 
   private validateWallet(address: string) {
