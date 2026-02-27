@@ -1,4 +1,6 @@
-# Citizen Node.js SDK (Draft)
+# Citizen Node.js SDK
+
+> Status: ✅ Working and ready for dApp builders.
 
 Node.js/browser client library for dApps that need to trigger the Citizen browser wallet extension for signing, submit signed CITIZEN runtime transactions (`LedgerEntry` wrapped in `SignedEnvelope`), and fetch deterministic receipts.
 
@@ -79,6 +81,9 @@ const submission = await client.submitTransaction({
 - `waitForReceipt(receiptId, { pollIntervalMs?, timeoutMs?, isTerminal? })`
 - `signEntry(entry, signer)`
 - `wrapEnvelope({ entry, signer, submittedAt? })`
+- `createMultisigCreditGrant({ builderId, amount, multisigProofs })`
+- `createSponsorshipUsage({ builderId, amount, creditGrantId, sponsorshipId, sponsoredDid })`
+- `validateBuilderCreditsPayload({ action, payload })`
 
 Signer options:
 
@@ -90,3 +95,4 @@ Signer options:
 - Canonical JSON key ordering is applied before signatures are generated, keeping signatures deterministic across runtimes.
 - Runtime write endpoints may require `x-api-key` depending on node operator policy (`api_auth_required`).
 - Browser wallet signing expects the Citizen extension provider to expose `citizen_requestAccounts` and `personal_sign` (or a custom `requestMethod`).
+- `builder.credits` helper builders provide first-class operation construction for `MULTISIG_CREDIT_GRANT` and `SPONSOR_USAGE`, including pre-submit payload validation for required fields.

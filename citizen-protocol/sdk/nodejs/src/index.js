@@ -56,6 +56,86 @@ function resolveWalletProvider(explicitProvider) {
   return provider;
 }
 
+function assertPositiveAmount(payload) {
+  if (!payload || typeof payload.amount !== "number" || !Number.isFinite(payload.amount) || payload.amount <= 0) {
+    throw new Error("builder.credits payload.amount must be a positive number");
+  }
+}
+
+function assertNonEmptyString(value, field) {
+  if (typeof value !== "string" || !value.trim()) {
+    throw new Error(`${field} must be a non-empty string`);
+  }
+}
+
+export function createMultisigCreditGrant({ builderId, amount, multisigProofs }) {
+  assertNonEmptyString(builderId, "builderId");
+
+  const payload = {
+    amount,
+    multisig_proofs: multisigProofs
+  };
+
+  validateBuilderCreditsPayload({ action: "MULTISIG_CREDIT_GRANT", payload });
+
+  return {
+    namespace: "builder.credits",
+    action: "MULTISIG_CREDIT_GRANT",
+    objectId: builderId,
+    payload
+  };
+}
+
+export function createSponsorshipUsage({ builderId, amount, creditGrantId, sponsorshipId, sponsoredDid }) {
+  assertNonEmptyString(builderId, "builderId");
+
+  const payload = {
+    amount,
+    credit_grant_id: creditGrantId,
+    sponsorship_id: sponsorshipId,
+    sponsored_did: sponsoredDid
+  };
+
+  validateBuilderCreditsPayload({ action: "SPONSOR_USAGE", payload });
+
+  return {
+    namespace: "builder.credits",
+    action: "SPONSOR_USAGE",
+    objectId: builderId,
+    payload
+  };
+}
+
+export function validateBuilderCreditsPayload({ action, payload }) {
+  assertNonEmptyString(action, "action");
+
+  if (action === "MULTISIG_CREDIT_GRANT") {
+    assertPositiveAmount(payload);
+    if (!Array.isArray(payload.multisig_proofs) || payload.multisig_proofs.length === 0) {
+      throw new Error("MULTISIG_CREDIT_GRANT requires payload.multisig_proofs");
+    }
+
+    for (const [index, proof] of payload.multisig_proofs.entries()) {
+      if (!proof || typeof proof !== "object") {
+        throw new Error(`payload.multisig_proofs[${index}] must be an object`);
+      }
+
+      assertNonEmptyString(proof.approver, `payload.multisig_proofs[${index}].approver`);
+      assertNonEmptyString(proof.public_key, `payload.multisig_proofs[${index}].public_key`);
+      assertNonEmptyString(proof.signature, `payload.multisig_proofs[${index}].signature`);
+    }
+
+    return;
+  }
+
+  if (action === "SPONSOR_USAGE") {
+    assertPositiveAmount(payload);
+    assertNonEmptyString(payload.credit_grant_id, "payload.credit_grant_id");
+    assertNonEmptyString(payload.sponsorship_id, "payload.sponsorship_id");
+    assertNonEmptyString(payload.sponsored_did, "payload.sponsored_did");
+  }
+}
+
 export class BrowserWalletSigner {
   constructor({ provider, account, requestMethod = "personal_sign" } = {}) {
     this.provider = resolveWalletProvider(provider);
@@ -130,6 +210,10 @@ export class CitizenNodeClient {
   async submitTransaction({ namespace, action, objectId, payload, signer, timestamp }) {
     if (!namespace || !action || !objectId || !signer) {
       throw new Error("namespace, action, objectId, and signer are required");
+    }
+
+    if (namespace === "builder.credits") {
+      validateBuilderCreditsPayload({ action, payload: payload ?? {} });
     }
 
     const signerId = await signer.getSignerId();
