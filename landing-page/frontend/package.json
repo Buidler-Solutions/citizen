@@ -10,6 +10,8 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@fontsource/manrope": "^5.2.8",
+    "@fontsource/space-grotesk": "^5.2.10",
     "@radix-ui/react-slot": "^1.2.4",
     "autoprefixer": "^10.4.24",
     "class-variance-authority": "^0.7.1",
