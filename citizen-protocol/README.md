@@ -18,6 +18,8 @@ citizen-protocol/
 │   ├── simulation/           # 50–100 validator stress-test harness + golden reports
 │   ├── storage/              # Persistence traits + RocksDB + in-memory backends
 │   └── types/                # Shared protocol data structures
+├── sdk/
+│   └── nodejs/               # Draft Node.js SDK for signed envelope submit + receipt lookup
 └── docs/
     ├── CITIZEN_MANIFESTO.md  # Positioning + civic mission statement
     ├── DEVELOPER_EXPERIENCE_BLUEPRINT.md # Validator + dApp + wallet + explorer + laboratory plan
@@ -58,6 +60,7 @@ Current delivery includes Phase 2 identity/data ownership primitives, Phase 3 bu
 - Module runtime status endpoint: `GET /api/v1/modules/:module_id` for registration/activation/audit visibility.
 - Interop linkage endpoint: `GET /api/v1/interop/:object_id` for latest remote identifier and proof disclosures.
 - Wallet SDK verification helpers for DID document checks and off-chain commitment validation against on-chain consent receipts.
+- Node.js dApp SDK draft for canonical envelope submit + deterministic receipt retrieval: `sdk/nodejs/README.md`.
 - Wallet opt-in privacy modes now include both full encrypt-then-commit and field-selective encryption (`public_fields` + encrypted `private_fields` + `public_allowlist`) with canonical commitment checks, Argon2id + ChaCha20-Poly1305 payload protection, and embedded consent receipts for governance/audit compliance while keeping public clear-text as the default mode.
 - Encrypt-then-commit is explicitly opt-in and supports two protected paths: (a) passphrase-protected mode for user-managed sharing and (b) ACL + DEK hybrid mode for reader-scoped access control.
 - Hybrid privacy mode enforces reader ACL + DEK wrapping semantics for both full-payload and per-field commit workflows: each authorized reader receives an X25519-wrapped DEK, `field_reader_acls` scopes access by field, and all flows keep deterministic `payload_commitment` anchoring so node, wallet, and explorer contracts stay verifiable.
