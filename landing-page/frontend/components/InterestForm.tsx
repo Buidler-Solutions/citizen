@@ -137,10 +137,10 @@ function RotatingOnboardingText({
   const longestWordLength = Math.max(...rotatingWords.map((word) => word.length));
 
   return (
-    <h2 className="m-0 flex items-center justify-start gap-3 text-[clamp(1.8rem,4.8vw,3.7rem)] font-extrabold leading-[1.1] tracking-tight" aria-live="polite" aria-atomic="true">
+    <h2 className="font-display m-0 flex items-center justify-start gap-3 text-[clamp(1.8rem,4.8vw,3.7rem)] font-extrabold leading-[1.1] tracking-tight" aria-live="polite" aria-atomic="true">
       <span className="text-left text-slate-100">{baseWord}</span>{' '}
       <span className="min-w-[calc(var(--longest-word)*1ch)] text-left" style={{ '--longest-word': longestWordLength } as CSSProperties}>
-        <span key={rotatingWords[wordIndex]} className="inline-block whitespace-nowrap font-bold text-cyan-300 [animation:onboardingWordSwap_520ms_cubic-bezier(0.22,0.61,0.36,1)] motion-reduce:animate-none">
+        <span key={rotatingWords[wordIndex]} className="font-display inline-block whitespace-nowrap font-bold text-cyan-300 [animation:onboardingWordSwap_520ms_cubic-bezier(0.22,0.61,0.36,1)] motion-reduce:animate-none">
           {rotatingWords[wordIndex]}
         </span>
       </span>
@@ -375,7 +375,7 @@ export function InterestForm() {
     return (
       <section className="grid min-h-[calc(100vh-180px)] place-content-center gap-6 rounded-3xl border border-blue-200/35 bg-slate-950/80 p-[clamp(1.2rem,4vw,3.2rem)] text-left" aria-live="polite">
         <p className="m-0 text-cyan-300">Submission received</p>
-        <h2 className="m-0 text-[clamp(2rem,3.4vw,3.4rem)] leading-[1.15]">Thank you for interest on Testnet as {submittedRole ?? 'a participant'}.</h2>
+        <h2 className="font-display m-0 text-[clamp(2rem,3.4vw,3.4rem)] leading-[1.15]">Thank you for interest on Testnet as {submittedRole ?? 'a participant'}.</h2>
         <p className="m-0 mx-auto text-[clamp(1.12rem,2.2vw,1.5rem)] leading-[1.7] text-blue-100">{submittedThankYouNote}</p>
       </section>
     );
@@ -385,9 +385,9 @@ export function InterestForm() {
     <form className="grid min-h-[calc(100vh-160px)] content-center gap-5 rounded-3xl border border-blue-200/35 bg-slate-950/80 p-[clamp(1.2rem,4vw,3.2rem)] max-[680px]:min-h-[calc(100vh-140px)]" onSubmit={onSubmit}>
       {showOnboardingIntro ? (
         <section className="grid min-h-[260px] content-center justify-items-start gap-6 text-left" aria-label="Onboarding introduction">
-          <p className="m-0 text-[clamp(1rem,1.5vw,1.25rem)] font-semibold text-cyan-300">citizen-protocol-v0.1.0</p>
+          <p className="font-display m-0 text-[clamp(1rem,1.5vw,1.25rem)] font-semibold uppercase tracking-[0.14em] text-cyan-300">citizen-protocol-v0.1.0</p>
           <RotatingOnboardingText baseWord="Onboarding" rotatingWords={['Validator', 'Builder', 'Observer']} />
-          <p className="m-0 text-[clamp(1.2rem,2.3vw,1.8rem)] font-extralight leading-[1.15] text-slate-200">
+          <p className="font-onboarding-lead m-0 text-[clamp(1.2rem,2.3vw,1.8rem)] font-light leading-[1.15] text-slate-200">
             We are seeking individuals interested in becoming Node Validators, dApp Builders, and Node Observers through this waitlist. Before participating, we encourage you to first understand the project’s vision, architecture, and objectives so you can contribute meaningfully to its growth and integrity.
           </p>
           <div className="grid grid-cols-[minmax(180px,280px)] gap-3">
@@ -408,8 +408,8 @@ export function InterestForm() {
           <p className="m-0 text-cyan-300">Info card {introIndex + 1} of {introSlides.length}</p>
           <div key={`intro-${introIndex}`} className={`will-change-[transform,opacity,filter] ${motionClass} motion-reduce:animate-none`}>
             <section className="grid content-center gap-4 mt-2px">
-              <h2 className="m-0 text-[clamp(1.6rem,3.5vw,2.8rem)] font-bold leading-[1.2]">{introSlides[introIndex].title}</h2>
-              <p className="m-0 text-[clamp(1.2rem,2.3vw,1.8rem)] font-extralight leading-[1.15] text-slate-200">{introSlides[introIndex].body}</p>
+              <h2 className="font-display m-0 text-[clamp(1.6rem,3.5vw,2.8rem)] font-bold leading-[1.2]">{introSlides[introIndex].title}</h2>
+              <p className="font-onboarding-lead m-0 text-[clamp(1.2rem,2.3vw,1.8rem)] font-light leading-[1.15] text-slate-200">{introSlides[introIndex].body}</p>
             </section>
           </div>
 
@@ -455,13 +455,13 @@ export function InterestForm() {
           <div key={`step-${stepIndex}`} className={`will-change-[transform,opacity,filter] ${motionClass} motion-reduce:animate-none`}>
             {stepIndex === 0 ? (
               <section className="grid gap-4">
-                <h2 className="m-0 text-[clamp(1.6rem,3.5vw,2.8rem)] font-bold leading-[1.2]">I want to participate as a...</h2>
+                <h2 className="font-display m-0 text-[clamp(1.6rem,3.5vw,2.8rem)] font-bold leading-[1.2]">I want to participate as a...</h2>
                 <div className="grid gap-3">
                   {(['Validator', 'Builder', 'Observer'] as Role[]).map((option) => (
                     <button
                       key={option}
                       type="button"
-                      className={`w-full rounded-xl border bg-blue-950/90 p-4 text-left ${role === option ? 'border-cyan-300 shadow-[0_0_0_1px_rgba(85,214,255,0.35)]' : 'border-blue-200/30'}`}
+                      className={`font-display w-full rounded-xl border bg-blue-950/90 p-4 text-left text-[1.05rem] ${role === option ? 'border-cyan-300 shadow-[0_0_0_1px_rgba(85,214,255,0.35)]' : 'border-blue-200/30'}`}
                       onClick={() => {
                         setRole(option);
                         setStatus('');
@@ -474,7 +474,7 @@ export function InterestForm() {
               </section>
             ) : currentStep ? (
               <section className="grid gap-4">
-                <label className="m-0 text-[clamp(1.6rem,3.5vw,2.8rem)] font-bold leading-[1.2]" htmlFor={currentStep.name}>{currentStep.label}</label>
+                <label className="font-display m-0 text-[clamp(1.6rem,3.5vw,2.8rem)] font-bold leading-[1.2]" htmlFor={currentStep.name}>{currentStep.label}</label>
                 <input
                   className="w-full rounded-xl border border-blue-200/30 bg-blue-950/90 p-4 text-[clamp(1.05rem,2.2vw,1.35rem)] text-slate-100"
                   id={currentStep.name}
