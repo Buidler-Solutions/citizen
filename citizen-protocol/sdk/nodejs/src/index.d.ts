@@ -38,7 +38,40 @@ export type ReceiptEnvelope = {
   [key: string]: unknown;
 };
 
+export type BuilderCreditMultisigProof = {
+  approver: string;
+  public_key: string;
+  signature: string;
+};
+
+export type CreateMultisigCreditGrantRequest = {
+  builderId: string;
+  amount: number;
+  multisigProofs: BuilderCreditMultisigProof[];
+};
+
+export type CreateSponsorshipUsageRequest = {
+  builderId: string;
+  amount: number;
+  creditGrantId: string;
+  sponsorshipId: string;
+  sponsoredDid: string;
+};
+
+export type BuilderCreditsOperation = {
+  namespace: "builder.credits";
+  action: "MULTISIG_CREDIT_GRANT" | "SPONSOR_USAGE";
+  objectId: string;
+  payload: Record<string, unknown>;
+};
+
 export function canonicalizeJson(value: unknown): string;
+export function createMultisigCreditGrant(args: CreateMultisigCreditGrantRequest): BuilderCreditsOperation;
+export function createSponsorshipUsage(args: CreateSponsorshipUsageRequest): BuilderCreditsOperation;
+export function validateBuilderCreditsPayload(args: {
+  action: string;
+  payload: Record<string, unknown>;
+}): void;
 
 export class BrowserWalletSigner implements Signer {
   constructor(args?: { provider?: WalletProvider; account?: string; requestMethod?: string });
