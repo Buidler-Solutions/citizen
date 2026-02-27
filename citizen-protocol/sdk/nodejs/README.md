@@ -41,7 +41,10 @@ const submission = await client.submitWithBrowserWallet({
   }
 });
 
-const receipt = await client.getReceipt(submission.receipt.receipt_id);
+const receipt = await client.waitForReceipt(submission.receipt.receipt_id, {
+  pollIntervalMs: 500,
+  timeoutMs: 30_000
+});
 console.log(receipt);
 ```
 
@@ -69,10 +72,11 @@ const submission = await client.submitTransaction({
 ## API
 
 - `new CitizenNodeClient({ baseUrl, apiKey?, fetchImpl? })`
-- `submitWithBrowserWallet({ namespace, action, objectId, payload?, walletProvider?, account?, timestamp? })`
+- `submitWithBrowserWallet({ namespace, action, objectId, payload?, walletProvider?, account?, requestMethod?, timestamp? })`
 - `submitTransaction({ namespace, action, objectId, payload?, signer, timestamp? })`
 - `submitEnvelope(envelope)`
 - `getReceipt(receiptId)`
+- `waitForReceipt(receiptId, { pollIntervalMs?, timeoutMs?, isTerminal? })`
 - `signEntry(entry, signer)`
 - `wrapEnvelope({ entry, signer, submittedAt? })`
 
@@ -85,4 +89,4 @@ Signer options:
 
 - Canonical JSON key ordering is applied before signatures are generated, keeping signatures deterministic across runtimes.
 - Runtime write endpoints may require `x-api-key` depending on node operator policy (`api_auth_required`).
-- Browser wallet signing expects the Citizen extension provider to expose `citizen_requestAccounts` and `personal_sign`.
+- Browser wallet signing expects the Citizen extension provider to expose `citizen_requestAccounts` and `personal_sign` (or a custom `requestMethod`).
