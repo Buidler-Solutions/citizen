@@ -31,6 +31,14 @@ export function canonicalizeJson(value) {
   return JSON.stringify(canonicalizeValue(value));
 }
 
+const DEFAULT_RECEIPT_TERMINAL_STATUSES = new Set(["Accepted", "Rejected"]);
+
+function sleep(ms) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
 function resolveWalletProvider(explicitProvider) {
   if (explicitProvider) {
     return explicitProvider;
@@ -140,8 +148,21 @@ export class CitizenNodeClient {
     return this.submitEnvelope(envelope);
   }
 
-  async submitWithBrowserWallet({ namespace, action, objectId, payload, walletProvider, account, timestamp }) {
-    const signer = new BrowserWalletSigner({ provider: walletProvider, account });
+  async submitWithBrowserWallet({
+    namespace,
+    action,
+    objectId,
+    payload,
+    walletProvider,
+    account,
+    requestMethod,
+    timestamp
+  }) {
+    const signer = new BrowserWalletSigner({
+      provider: walletProvider,
+      account,
+      requestMethod
+    });
     return this.submitTransaction({ namespace, action, objectId, payload, signer, timestamp });
   }
 
@@ -192,6 +213,34 @@ export class CitizenNodeClient {
     }
 
     return this.#request(`/api/v1/receipts/${encodeURIComponent(receiptId)}`);
+  }
+
+  async waitForReceipt(
+    receiptId,
+    {
+      pollIntervalMs = 1_000,
+      timeoutMs = 30_000,
+      isTerminal = (receipt) => DEFAULT_RECEIPT_TERMINAL_STATUSES.has(receipt?.receipt?.status)
+    } = {}
+  ) {
+    if (!receiptId) {
+      throw new Error("receiptId is required");
+    }
+
+    const startedAt = Date.now();
+    while (Date.now() - startedAt <= timeoutMs) {
+      const receipt = await this.getReceipt(receiptId);
+      if (isTerminal(receipt)) {
+        return receipt;
+      }
+
+      await sleep(pollIntervalMs);
+    }
+
+    const error = new Error(`Timed out waiting for receipt ${receiptId}`);
+    error.receiptId = receiptId;
+    error.timeoutMs = timeoutMs;
+    throw error;
   }
 
   async #request(path, init = {}) {

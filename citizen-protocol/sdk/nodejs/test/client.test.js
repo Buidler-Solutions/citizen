@@ -113,6 +113,71 @@ test("BrowserWalletSigner accepts explicit account", async () => {
   assert.equal(await signer.sign("hello"), "0xsignature");
 });
 
+
+
+test("submitWithBrowserWallet supports custom wallet sign method", async () => {
+  const providerCalls = [];
+  const provider = {
+    async request({ method }) {
+      providerCalls.push(method);
+      if (method === "citizen_requestAccounts") {
+        return ["0xbeef"];
+      }
+
+      if (method === "citizen_signTypedEntry") {
+        return "0xcustomsig";
+      }
+
+      throw new Error(`unexpected method ${method}`);
+    }
+  };
+
+  const client = new CitizenNodeClient({
+    baseUrl: "http://127.0.0.1:8080",
+    fetchImpl: async () => new Response(JSON.stringify({ ok: true }), { status: 202 })
+  });
+
+  await client.submitWithBrowserWallet({
+    namespace: "audit.procurement",
+    action: "RECORD_EVENT",
+    objectId: "obj-2",
+    walletProvider: provider,
+    requestMethod: "citizen_signTypedEntry"
+  });
+
+  assert.equal(providerCalls.filter((method) => method === "citizen_signTypedEntry").length, 2);
+});
+
+
+test("waitForReceipt polls until terminal receipt status", async () => {
+  let calls = 0;
+  const client = new CitizenNodeClient({
+    baseUrl: "http://127.0.0.1:8080",
+    fetchImpl: async () => {
+      calls += 1;
+      const status = calls < 2 ? "Pending" : "Accepted";
+      return new Response(JSON.stringify({ receipt: { receipt_id: "r1", status } }), { status: 200 });
+    }
+  });
+
+  const receipt = await client.waitForReceipt("r1", { pollIntervalMs: 1, timeoutMs: 500 });
+
+  assert.equal(calls, 2);
+  assert.equal(receipt.receipt.status, "Accepted");
+});
+
+
+test("waitForReceipt throws when timeout is reached", async () => {
+  const client = new CitizenNodeClient({
+    baseUrl: "http://127.0.0.1:8080",
+    fetchImpl: async () => new Response(JSON.stringify({ receipt: { receipt_id: "r2", status: "Pending" } }), { status: 200 })
+  });
+
+  await assert.rejects(
+    client.waitForReceipt("r2", { pollIntervalMs: 1, timeoutMs: 5 }),
+    /Timed out waiting for receipt r2/
+  );
+});
 test("getReceipt calls deterministic receipt endpoint", async () => {
   const fetchImpl = async (url) => {
     assert.equal(url, "http://127.0.0.1:8080/api/v1/receipts/receipt-123");
