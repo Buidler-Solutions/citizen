@@ -81,7 +81,7 @@ The integration path is:
 2. Browser wallet extension signs challenge and returns signature to the web app
 3. Web app sends signature to DApp API (`apps/api`)
 4. DApp API verifies signature with `ethers::verifyMessage`
-5. DApp API wraps the signed ledger entry in a canonical envelope and submits it to the configured network endpoint
+5. DApp API wraps the signed ledger entry in a canonical envelope and submits it to the configured network endpoint using the Node.js SDK client (`@citizen-protocol/nodejs-sdk`) for runtime endpoints
 
 ### Current state of Rust node API
 
