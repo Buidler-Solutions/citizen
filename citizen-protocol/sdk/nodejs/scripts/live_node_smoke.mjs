@@ -6,6 +6,7 @@ const HEALTH_URL = `${NODE_URL}/health`;
 const NODE_MODE = (process.env.CITIZEN_NODE_MODE ?? "external").toLowerCase();
 const LOCAL_CONFIG_PATH = process.env.CITIZEN_LOCAL_CONFIG_PATH ?? "config/localnet/validator-alpha.toml";
 const LOCAL_PROTOCOL_DIR = process.env.CITIZEN_LOCAL_PROTOCOL_DIR ?? "citizen-protocol";
+const LOCAL_BUILD_COMMAND = process.env.CITIZEN_LOCAL_BUILD_COMMAND ?? "cargo build -p citizen-node";
 const START_COMMAND = process.env.CITIZEN_NODE_START_COMMAND;
 const STOP_COMMAND = process.env.CITIZEN_NODE_STOP_COMMAND;
 
@@ -91,6 +92,7 @@ async function startNodeForMode(mode) {
   }
 
   if (mode === "local") {
+    await runCommand(LOCAL_BUILD_COMMAND, { cwd: LOCAL_PROTOCOL_DIR });
     const command = `cargo run -p citizen-node -- ${LOCAL_CONFIG_PATH}`;
     return startBackgroundCommand(command, { cwd: LOCAL_PROTOCOL_DIR });
   }
