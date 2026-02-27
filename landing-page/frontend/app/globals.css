@@ -1,3 +1,4 @@
+@import url("https://fonts.googleapis.com/css2?family=Oxanium:wght@200;700&display=swap");
 @import "tailwindcss";
 @import "@fontsource/manrope/400.css";
 @import "@fontsource/manrope/600.css";
@@ -30,8 +31,10 @@
   color-scheme: dark;
   --font-body: "Manrope";
   --font-display: "Space Grotesk";
+  --font-onboarding: "Oxanium";
   --font-body-fallback: Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
   --font-display-fallback: "Segoe UI", Inter, system-ui, sans-serif;
+  --font-onboarding-fallback: "Space Grotesk", "Segoe UI", Inter, system-ui, sans-serif;
   --background: 226 55% 7%;
   --foreground: 210 40% 96%;
   --card: 222 45% 11%;
@@ -78,6 +81,16 @@ body {
   font-family: var(--font-display), var(--font-display-fallback);
   letter-spacing: -0.02em;
   text-wrap: balance;
+}
+
+.onboarding-typography p {
+  font-family: var(--font-onboarding), var(--font-onboarding-fallback);
+  font-weight: 200;
+}
+
+.onboarding-typography h2 {
+  font-family: var(--font-onboarding), var(--font-onboarding-fallback);
+  font-weight: 700;
 }
 
 @keyframes slideInForward {
