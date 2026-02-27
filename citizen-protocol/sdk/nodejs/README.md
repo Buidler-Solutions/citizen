@@ -2,7 +2,15 @@
 
 Node.js/browser client library for dApps that need to trigger the Citizen browser wallet extension for signing, submit signed CITIZEN runtime transactions (`LedgerEntry` wrapped in `SignedEnvelope`), and fetch deterministic receipts.
 
-## Install (local draft)
+## Install
+
+From npm (published package):
+
+```bash
+npm install @citizen-protocol/nodejs-sdk
+```
+
+For local development in this repository:
 
 ```bash
 cd citizen-protocol/sdk/nodejs
