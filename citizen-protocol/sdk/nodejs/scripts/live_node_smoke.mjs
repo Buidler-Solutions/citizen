@@ -9,6 +9,11 @@ const LOCAL_PROTOCOL_DIR = process.env.CITIZEN_LOCAL_PROTOCOL_DIR ?? "citizen-pr
 const START_COMMAND = process.env.CITIZEN_NODE_START_COMMAND;
 const STOP_COMMAND = process.env.CITIZEN_NODE_STOP_COMMAND;
 
+const HEALTH_POLL_INTERVAL_MS = Number(process.env.CITIZEN_NODE_HEALTH_POLL_INTERVAL_MS ?? 1_000);
+const HEALTH_TIMEOUT_MS = Number(
+  process.env.CITIZEN_NODE_HEALTH_TIMEOUT_MS ?? (NODE_MODE === "local" ? 120_000 : 30_000)
+);
+
 class DeterministicStubSigner {
   constructor({ signerId = "did:ledger:builder:smoke", signature = "stub-signature" } = {}) {
     this.signerId = signerId;
@@ -61,7 +66,7 @@ function startBackgroundCommand(command, options = {}) {
   return child;
 }
 
-async function waitForHealthyNode({ timeoutMs = 30_000, pollIntervalMs = 1_000 } = {}) {
+async function waitForHealthyNode({ timeoutMs = HEALTH_TIMEOUT_MS, pollIntervalMs = HEALTH_POLL_INTERVAL_MS } = {}) {
   const startedAt = Date.now();
 
   while (Date.now() - startedAt <= timeoutMs) {
@@ -158,6 +163,7 @@ async function main() {
   const nodeProcess = await startNodeForMode(NODE_MODE);
 
   try {
+    console.log(`health_timeout_ms=${HEALTH_TIMEOUT_MS}`);
     await waitForHealthyNode();
     await runSmoke();
   } finally {
