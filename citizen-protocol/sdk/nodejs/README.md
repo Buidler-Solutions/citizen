@@ -71,6 +71,35 @@ const submission = await client.submitTransaction({
 });
 ```
 
+
+## Live smoke script modes
+
+The release-gate smoke script supports both externally managed nodes and self-started local runs:
+
+```bash
+# default: expect node already running at CITIZEN_NODE_URL
+node citizen-protocol/sdk/nodejs/scripts/live_node_smoke.mjs
+
+# start a local blockchain node without Docker (cargo run)
+CITIZEN_NODE_MODE=local \
+CITIZEN_LOCAL_PROTOCOL_DIR=citizen-protocol \
+CITIZEN_LOCAL_CONFIG_PATH=config/localnet/validator-alpha.toml \
+node citizen-protocol/sdk/nodejs/scripts/live_node_smoke.mjs
+
+# start/stop through custom commands (for Docker or other runtimes)
+CITIZEN_NODE_MODE=command \
+CITIZEN_NODE_START_COMMAND="docker compose -f my-stack.yml up -d citizen-node" \
+CITIZEN_NODE_STOP_COMMAND="docker compose -f my-stack.yml down" \
+node citizen-protocol/sdk/nodejs/scripts/live_node_smoke.mjs
+```
+
+Environment variables:
+- `CITIZEN_NODE_URL` (default `http://127.0.0.1:8081`)
+- `CITIZEN_NODE_MODE` (`external`, `local`, or `command`)
+- `CITIZEN_LOCAL_PROTOCOL_DIR` (default `citizen-protocol`)
+- `CITIZEN_LOCAL_CONFIG_PATH` (default `config/localnet/validator-alpha.toml`)
+- `CITIZEN_NODE_START_COMMAND` / `CITIZEN_NODE_STOP_COMMAND` (for `command` mode)
+
 ## API
 
 - `new CitizenNodeClient({ baseUrl, apiKey?, fetchImpl? })`
