@@ -369,7 +369,7 @@ export function InterestForm() {
   const motionClass = motionDirection === 'forward'
     ? '[animation:slideInForward_420ms_cubic-bezier(0.22,0.61,0.36,1)]'
     : '[animation:slideInBackward_420ms_cubic-bezier(0.22,0.61,0.36,1)]';
-  const primaryButtonClass = 'w-full cursor-pointer rounded-xl border-0 bg-linear-to-r from-blue-500 to-cyan-400 p-4 font-bold text-white transition duration-200 hover:-translate-y-0.5 hover:shadow-[0_10px_24px_rgba(31,112,255,0.35)] hover:saturate-110 disabled:cursor-not-allowed disabled:opacity-60 motion-reduce:transition-none';
+  const primaryButtonClass = 'w-full cursor-pointer rounded-xl bg-white/10 backdrop-blur-md border border-white/20 p-4 font-bold text-white transition-all duration-300 hover:-translate-y-0.5 hover:bg-white/20 hover:shadow-[0_8px_30px_rgba(255,255,255,0.15)] disabled:cursor-not-allowed disabled:opacity-60 motion-reduce:transition-none';
 
   if (submittedThankYouNote) {
     return (
@@ -390,7 +390,7 @@ export function InterestForm() {
           <p className="font-onboarding-lead m-0 text-[clamp(1.2rem,2.3vw,1.8rem)] font-light leading-[1.15] text-slate-200">
             We are seeking individuals interested in becoming Node Validators, dApp Builders, and Node Observers through this waitlist. Before participating, we encourage you to first understand the project’s vision, architecture, and objectives so you can contribute meaningfully to its growth and integrity.
           </p>
-          <div className="grid grid-cols-[minmax(180px,280px)] gap-3">
+          <div className="grid grid-cols-[minmax(180px,280px)] justify-self-center gap-3">
             <button
               type="button"
               className={primaryButtonClass}
@@ -399,7 +399,7 @@ export function InterestForm() {
                 setMotionDirection('forward');
               }}
             >
-              Start
+              → Start
             </button>
           </div>
         </section>
@@ -423,7 +423,7 @@ export function InterestForm() {
               }}
               disabled={introIndex === 0}
             >
-              Previous card
+              ← Previous card
             </button>
             <button
               type="button"
@@ -437,7 +437,7 @@ export function InterestForm() {
                 setIntroIndex((prev) => Math.min(prev + 1, introSlides.length - 1));
               }}
             >
-              {introIndex === introSlides.length - 1 ? 'Start form' : 'Next card'}
+              {introIndex === introSlides.length - 1 ? 'Start form' : 'Next card →'}
             </button>
           </div>
           <button
