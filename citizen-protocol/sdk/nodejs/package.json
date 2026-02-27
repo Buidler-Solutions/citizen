@@ -5,7 +5,11 @@
   "type": "module",
   "main": "src/index.js",
   "exports": {
-    ".": "./src/index.js"
+    ".": {
+      "types": "./src/index.d.ts",
+      "import": "./src/index.js",
+      "default": "./src/index.js"
+    }
   },
   "engines": {
     "node": ">=18"
@@ -13,5 +17,10 @@
   "scripts": {
     "test": "node --test"
   },
-  "license": "Apache-2.0"
+  "license": "Apache-2.0",
+  "types": "src/index.d.ts",
+  "files": [
+    "src",
+    "README.md"
+  ]
 }
