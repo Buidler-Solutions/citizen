@@ -137,7 +137,7 @@ function RotatingOnboardingText({
   const longestWordLength = Math.max(...rotatingWords.map((word) => word.length));
 
   return (
-    <h2 className="m-0 flex items-center justify-start gap-3 text-[clamp(2rem,4.8vw,3.7rem)] font-extrabold leading-[1.1] tracking-tight" aria-live="polite" aria-atomic="true">
+    <h2 className="m-0 flex items-center justify-start gap-3 text-[clamp(1.8rem,4.8vw,3.7rem)] font-extrabold leading-[1.1] tracking-tight" aria-live="polite" aria-atomic="true">
       <span className="text-left text-slate-100">{baseWord}</span>{' '}
       <span className="min-w-[calc(var(--longest-word)*1ch)] text-left" style={{ '--longest-word': longestWordLength } as CSSProperties}>
         <span key={rotatingWords[wordIndex]} className="inline-block whitespace-nowrap font-bold text-cyan-300 [animation:onboardingWordSwap_520ms_cubic-bezier(0.22,0.61,0.36,1)] motion-reduce:animate-none">
@@ -442,10 +442,10 @@ export function InterestForm() {
           </div>
           <button
             type="button"
-            className="w-full cursor-pointer rounded-xl border border-dashed border-cyan-300/50 bg-blue-950/80 p-4 font-semibold text-cyan-300"
+            className="w-full cursor-pointer rounded-x0 pt-2 font-semibold text-cyan-300"
             onClick={() => setShowIntro(false)}
           >
-            Skip campaign cards and fill form (Esc). Use ← / → to move between cards.
+            Skip info-cards and fill form (Esc). Use ← / → to move between cards.
           </button>
         </>
       ) : (
