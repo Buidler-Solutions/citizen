@@ -1,4 +1,19 @@
-import { Body, Controller, Delete, Get, Param, Post, Put, UseGuards } from '@nestjs/common';
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Post,
+  Put,
+  UploadedFile,
+  UseGuards,
+  UseInterceptors,
+} from '@nestjs/common';
+import { extname } from 'path';
+import { diskStorage } from 'multer';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { CreateLeadDto } from './dto/create-lead.dto';
 import { LeadService } from './lead.service';
 import { JwtAuthGuard } from '../jwt-auth.guard';
@@ -22,6 +37,34 @@ export class LeadController {
   @Put('form-settings')
   updateFormSettings(@Body() payload: UpdateFormSettingsDto) {
     return this.leadService.updateFormSettings(payload);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('form-settings/asciinema-upload')
+  @UseInterceptors(FileInterceptor('castFile', {
+    storage: diskStorage({
+      destination: 'uploads/casts',
+      filename: (_request: unknown, file: { originalname: string }, callback: (error: Error | null, filename: string) => void) => {
+        const extension = extname(file.originalname) || '.cast';
+        const safeExtension = extension.toLowerCase() === '.cast' ? '.cast' : '.json';
+        callback(null, `onboarding-${Date.now()}${safeExtension}`);
+      },
+    }),
+    limits: { fileSize: 5 * 1024 * 1024 },
+    fileFilter: (_request: unknown, file: { originalname: string }, callback: (error: Error | null, acceptFile: boolean) => void) => {
+      if (!file.originalname.toLowerCase().endsWith('.cast') && !file.originalname.toLowerCase().endsWith('.json')) {
+        callback(new BadRequestException('Only .cast/.json files are supported.'), false);
+        return;
+      }
+      callback(null, true);
+    },
+  }))
+  uploadAsciinemaCast(@UploadedFile() castFile?: { filename: string }) {
+    if (!castFile) {
+      throw new BadRequestException('Missing castFile upload.');
+    }
+
+    return this.leadService.setAsciinemaCastUrl(`/uploads/casts/${castFile.filename}`);
   }
 
   @UseGuards(JwtAuthGuard)
