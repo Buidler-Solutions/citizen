@@ -27,6 +27,32 @@ export class CampaignCardDto {
   body!: string;
 }
 
+export class RoleOptionDto {
+  @IsString()
+  @MinLength(2)
+  @MaxLength(40)
+  id!: string;
+
+  @IsString()
+  @MinLength(2)
+  @MaxLength(60)
+  label!: string;
+
+  @IsString()
+  @MinLength(5)
+  @MaxLength(1200)
+  prompt!: string;
+
+  @IsString()
+  @MinLength(20)
+  @MaxLength(1600)
+  thankYouNote!: string;
+
+  @IsInt()
+  @Min(1)
+  weight!: number;
+}
+
 export class UpdateFormSettingsDto {
   @IsOptional()
   @IsString()
@@ -41,45 +67,16 @@ export class UpdateFormSettingsDto {
   subtitle?: string;
 
   @IsOptional()
-  @IsString()
-  @MinLength(5)
-  @MaxLength(1200)
-  validatorPrompt?: string;
-
-  @IsOptional()
-  @IsString()
-  @MinLength(5)
-  @MaxLength(1200)
-  builderPrompt?: string;
-
-  @IsOptional()
-  @IsString()
-  @MinLength(5)
-  @MaxLength(1200)
-  observerPrompt?: string;
-
-  @IsOptional()
-  @IsString()
-  @MinLength(20)
-  @MaxLength(1600)
-  validatorThankYouNote?: string;
-
-  @IsOptional()
-  @IsString()
-  @MinLength(20)
-  @MaxLength(1600)
-  builderThankYouNote?: string;
-
-  @IsOptional()
-  @IsString()
-  @MinLength(20)
-  @MaxLength(1600)
-  observerThankYouNote?: string;
-
-  @IsOptional()
   @IsArray()
   @ArrayMaxSize(30)
   @ValidateNested({ each: true })
   @Type(() => CampaignCardDto)
   campaignCards?: CampaignCardDto[];
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(30)
+  @ValidateNested({ each: true })
+  @Type(() => RoleOptionDto)
+  roles?: RoleOptionDto[];
 }

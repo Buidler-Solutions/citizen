@@ -2,7 +2,7 @@
 
 import { CSSProperties, FormEvent, useEffect, useMemo, useState } from 'react';
 
-type Role = 'Validator' | 'Builder' | 'Observer';
+type Role = string;
 type MotionDirection = 'forward' | 'backward';
 
 interface StepConfig {
@@ -19,15 +19,18 @@ interface CampaignCard {
   body: string;
 }
 
+interface RoleOption {
+  id: string;
+  label: string;
+  prompt: string;
+  thankYouNote: string;
+  weight?: number;
+}
+
 interface PublicFormSettings {
   title: string;
   subtitle: string;
-  validatorPrompt: string;
-  builderPrompt: string;
-  observerPrompt: string;
-  validatorThankYouNote: string;
-  builderThankYouNote: string;
-  observerThankYouNote: string;
+  roles: RoleOption[];
   campaignCards: CampaignCard[];
 }
 
@@ -83,15 +86,34 @@ const DEFAULT_CAMPAIGN_CARDS: CampaignCard[] = [
   },
 ];
 
+const DEFAULT_ROLES: RoleOption[] = [
+  {
+    id: 'validator',
+    label: 'Validator',
+    prompt: 'I want to stress test the system as a Validator focused on...',
+    thankYouNote: 'Thank you for applying to run a Citizen Validator node. We have added you to the validator waitlist. Our team will review your submission and send onboarding updates, eligibility checks, and timeline details to your email.',
+    weight: 1,
+  },
+  {
+    id: 'builder',
+    label: 'Builder',
+    prompt: 'I want to build civic applications as a Builder for...',
+    thankYouNote: 'Thank you for joining as a Builder. You are now on our builder waitlist. We will share product updates, API access details, and onboarding milestones by email as new slots open.',
+    weight: 2,
+  },
+  {
+    id: 'observer',
+    label: 'Observer',
+    prompt: 'I want to run audits as an Observer to improve...',
+    thankYouNote: 'Thank you for registering as an Observer. We have added you to the observer waitlist. You will receive updates by email about review status, audit participation windows, and next steps.',
+    weight: 3,
+  },
+];
+
 const DEFAULT_SETTINGS: PublicFormSettings = {
   title: 'Build Public Truth with Citizen',
   subtitle: 'Validator · Builder · Observer onboarding',
-  validatorPrompt: 'I want to stress test the system as a Validator focused on...',
-  builderPrompt: 'I want to build civic applications as a Builder for...',
-  observerPrompt: 'I want to run audits as an Observer to improve...',
-  validatorThankYouNote: 'Thank you for applying to run a Citizen Validator node. We have added you to the validator waitlist. Our team will review your submission and send onboarding updates, eligibility checks, and timeline details to your email.',
-  builderThankYouNote: 'Thank you for joining as a Builder. You are now on our builder waitlist. We will share product updates, API access details, and onboarding milestones by email as new slots open.',
-  observerThankYouNote: 'Thank you for registering as an Observer. We have added you to the observer waitlist. You will receive updates by email about review status, audit participation windows, and next steps.',
+  roles: DEFAULT_ROLES,
   campaignCards: DEFAULT_CAMPAIGN_CARDS,
 };
 
@@ -162,7 +184,7 @@ export function InterestForm() {
     fullName: '', institution: '', email: '', country: '', missionNeed: '',
   });
   const [submittedThankYouNote, setSubmittedThankYouNote] = useState('');
-  const [submittedRole, setSubmittedRole] = useState<Role | null>(null);
+  const [submittedRole, setSubmittedRole] = useState<string | null>(null);
 
   const validCountryNames = useMemo(() => {
     const displayNames = new Intl.DisplayNames(['en'], { type: 'region' });
@@ -184,13 +206,12 @@ export function InterestForm() {
         const response = await fetch(`${API_URL}/interest/form-settings`);
         if (!response.ok) return;
         const data = (await response.json()) as Partial<PublicFormSettings>;
-        setSettings((prev) => {
-          const merged: PublicFormSettings = { ...prev, ...data };
-          if (!Array.isArray(data.campaignCards)) {
-            merged.campaignCards = prev.campaignCards;
-          }
-          return merged;
-        });
+        setSettings((prev) => ({
+          title: data.title ?? prev.title,
+          subtitle: data.subtitle ?? prev.subtitle,
+          campaignCards: Array.isArray(data.campaignCards) ? data.campaignCards : prev.campaignCards,
+          roles: Array.isArray(data.roles) && data.roles.length > 0 ? data.roles : prev.roles,
+        }));
       } catch {
         // Keep defaults if settings endpoint is unavailable
       }
@@ -244,22 +265,27 @@ export function InterestForm() {
     setIntroIndex((prev) => Math.min(prev, introSlides.length - 1));
   }, [introSlides.length]);
 
-  const steps = useMemo<StepConfig[]>(() => {
-    if (!role) return BASE_STEPS;
+  const availableRoles = useMemo(() => {
+    if (settings.roles.length > 0) {
+      return [...settings.roles]
+        .sort((a, b) => (a.weight ?? Number.MAX_SAFE_INTEGER) - (b.weight ?? Number.MAX_SAFE_INTEGER));
+    }
 
-    const rolePrompts: Record<Role, string> = {
-      Validator: settings.validatorPrompt,
-      Builder: settings.builderPrompt,
-      Observer: settings.observerPrompt,
-    };
+    return DEFAULT_ROLES;
+  }, [settings.roles]);
+
+  const selectedRoleOption = availableRoles.find((option) => option.label === role) ?? null;
+
+  const steps = useMemo<StepConfig[]>(() => {
+    if (!selectedRoleOption) return BASE_STEPS;
 
     return [...BASE_STEPS, {
       name: 'missionNeed',
-      label: rolePrompts[role],
+      label: selectedRoleOption.prompt,
       placeholder: 'Describe your mission, scope, and outcomes you want to achieve.',
       minLength: 5,
     }];
-  }, [role, settings.validatorPrompt, settings.builderPrompt, settings.observerPrompt]);
+  }, [selectedRoleOption]);
 
   const totalSteps = steps.length + 1;
   const currentStep = stepIndex === 0 ? null : steps[stepIndex - 1];
@@ -268,7 +294,7 @@ export function InterestForm() {
   const validateStep = () => {
     if (stepIndex === 0) {
       if (!role) {
-        setStatus('Please choose Validator, Builder, or Observer to continue.');
+        setStatus('Please choose a role to continue.');
         return false;
       }
       return true;
@@ -312,7 +338,7 @@ export function InterestForm() {
 
   const submit = async () => {
     if (!role) {
-      setStatus('Please choose Validator, Builder, or Observer to continue.');
+      setStatus('Please choose a role to continue.');
       return;
     }
 
@@ -338,13 +364,9 @@ export function InterestForm() {
       }
 
       const selectedRole = role;
-      const thankYouMessageByRole: Record<Role, string> = {
-        Validator: settings.validatorThankYouNote,
-        Builder: settings.builderThankYouNote,
-        Observer: settings.observerThankYouNote,
-      };
+      const thankYouMessage = selectedRoleOption?.thankYouNote ?? '';
 
-      setSubmittedThankYouNote(thankYouMessageByRole[selectedRole]);
+      setSubmittedThankYouNote(thankYouMessage);
       setSubmittedRole(selectedRole);
       setStatus('');
       setRole(null);
@@ -357,6 +379,8 @@ export function InterestForm() {
       setLoading(false);
     }
   };
+
+  const onboardingRoleLabels = availableRoles.map((option) => option.label);
 
   const onSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -386,9 +410,9 @@ export function InterestForm() {
       {showOnboardingIntro ? (
         <section className="grid min-h-[260px] content-center justify-items-start text-left" aria-label="Onboarding introduction">
           <p className="font-display m-0 text-[clamp(1rem,1.5vw,1.25rem)] font-semibold tracking-[0.14em] text-cyan-300 mt-8">citizen-protocol-v0.1.0</p>
-          <RotatingOnboardingText baseWord="Onboarding" rotatingWords={['Validator', 'Builder', 'Observer']} />
+          <RotatingOnboardingText baseWord="Onboarding" rotatingWords={onboardingRoleLabels} />
           <p className="font-onboarding-lead m-0 text-[clamp(1.2rem,2.3vw,1.8rem)] font-light leading-[1.15] text-slate-200 mt-1 mb-4 ">
-            We are seeking individuals interested in becoming Node Validators, dApp Builders, and Node Observers through this waitlist.
+            We are seeking individuals interested in participating in Citizen Protocol through this waitlist.
           </p>
           <p className="font-onboarding-lead m-0 text-[clamp(1.2rem,2.3vw,1.8rem)] font-light leading-[1.15] text-slate-200 mt-4 mb-6">
             Before participating, we encourage you to first understand the project’s vision, architecture, and objectives so you can contribute meaningfully to its growth and integrity.
@@ -460,17 +484,17 @@ export function InterestForm() {
               <section className="grid gap-4">
                 <h2 className="font-display text-[clamp(1.6rem,3.5vw,2.8rem)] font-bold leading-[1.2]">I want to participate as a...</h2>
                 <div className="mb-8 grid gap-3">
-                  {(['Validator', 'Builder', 'Observer'] as Role[]).map((option) => (
+                  {availableRoles.map((option) => (
                     <button
-                      key={option}
+                      key={option.id}
                       type="button"
-                      className={`font-display w-full rounded-xl border bg-blue-950/90 p-4 text-left text-[1.05rem] ${role === option ? 'border-cyan-300 shadow-[0_0_0_1px_rgba(85,214,255,0.35)]' : 'border-blue-200/30'}`}
+                      className={`font-display w-full rounded-xl border bg-blue-950/90 p-4 text-left text-[1.05rem] ${role === option.label ? 'border-cyan-300 shadow-[0_0_0_1px_rgba(85,214,255,0.35)]' : 'border-blue-200/30'}`}
                       onClick={() => {
-                        setRole(option);
+                        setRole(option.label);
                         setStatus('');
                       }}
                     >
-                      {option}
+                      {option.label}
                     </button>
                   ))}
                 </div>

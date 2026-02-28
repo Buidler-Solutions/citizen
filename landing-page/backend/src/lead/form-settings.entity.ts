@@ -7,6 +7,14 @@ interface CampaignCard {
   body: string;
 }
 
+interface RoleOption {
+  id: string;
+  label: string;
+  prompt: string;
+  thankYouNote: string;
+  weight: number;
+}
+
 @Entity({ name: 'form_settings' })
 export class FormSettings {
   @PrimaryColumn({ type: 'varchar', length: 40 })
@@ -18,33 +26,6 @@ export class FormSettings {
   @Column({ length: 260, default: 'Validator · Builder · Observer onboarding' })
   subtitle!: string;
 
-  @Column({ type: 'text', default: 'I want to stress test the system as a Validator focused on...' })
-  validatorPrompt!: string;
-
-  @Column({ type: 'text', default: 'I want to build civic applications as a Builder for...' })
-  builderPrompt!: string;
-
-  @Column({ type: 'text', default: 'I want to run audits as an Observer to improve...' })
-  observerPrompt!: string;
-
-  @Column({
-    type: 'text',
-    default: 'Thank you for applying to run a Citizen Validator node. We have added you to the validator waitlist. Our team will review your submission and send onboarding updates, eligibility checks, and timeline details to your email.',
-  })
-  validatorThankYouNote!: string;
-
-  @Column({
-    type: 'text',
-    default: 'Thank you for joining as a Builder. You are now on our builder waitlist. We will share product updates, API access details, and onboarding milestones by email as new slots open.',
-  })
-  builderThankYouNote!: string;
-
-  @Column({
-    type: 'text',
-    default: 'Thank you for registering as an Observer. We have added you to the observer waitlist. You will receive updates by email about review status, audit participation windows, and next steps.',
-  })
-  observerThankYouNote!: string;
-
   @Column({
     type: 'jsonb',
     default: () => `'[
@@ -54,6 +35,16 @@ export class FormSettings {
     ]'::jsonb`,
   })
   campaignCards!: CampaignCard[];
+
+  @Column({
+    type: 'jsonb',
+    default: () => `'[
+      {"id":"validator","label":"Validator","prompt":"I want to stress test the system as a Validator focused on...","thankYouNote":"Thank you for applying to run a Citizen Validator node. We have added you to the validator waitlist. Our team will review your submission and send onboarding updates, eligibility checks, and timeline details to your email.","weight":1},
+      {"id":"builder","label":"Builder","prompt":"I want to build civic applications as a Builder for...","thankYouNote":"Thank you for joining as a Builder. You are now on our builder waitlist. We will share product updates, API access details, and onboarding milestones by email as new slots open.","weight":2},
+      {"id":"observer","label":"Observer","prompt":"I want to run audits as an Observer to improve...","thankYouNote":"Thank you for registering as an Observer. We have added you to the observer waitlist. You will receive updates by email about review status, audit participation windows, and next steps.","weight":3}
+    ]'::jsonb`,
+  })
+  roles!: RoleOption[];
 
   @UpdateDateColumn()
   updatedAt!: Date;

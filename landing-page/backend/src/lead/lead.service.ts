@@ -24,6 +24,31 @@ const DEFAULT_CAMPAIGN_CARDS = [
   },
 ];
 
+
+const DEFAULT_ROLE_OPTIONS = [
+  {
+    id: 'validator',
+    label: 'Validator',
+    prompt: 'I want to stress test the system as a Validator focused on...',
+    thankYouNote: 'Thank you for applying to run a Citizen Validator node. We have added you to the validator waitlist. Our team will review your submission and send onboarding updates, eligibility checks, and timeline details to your email.',
+    weight: 1,
+  },
+  {
+    id: 'builder',
+    label: 'Builder',
+    prompt: 'I want to build civic applications as a Builder for...',
+    thankYouNote: 'Thank you for joining as a Builder. You are now on our builder waitlist. We will share product updates, API access details, and onboarding milestones by email as new slots open.',
+    weight: 2,
+  },
+  {
+    id: 'observer',
+    label: 'Observer',
+    prompt: 'I want to run audits as an Observer to improve...',
+    thankYouNote: 'Thank you for registering as an Observer. We have added you to the observer waitlist. You will receive updates by email about review status, audit participation windows, and next steps.',
+    weight: 3,
+  },
+];
+
 @Injectable()
 export class LeadService {
   constructor(
@@ -89,20 +114,62 @@ export class LeadService {
       .map((card, index) => ({ ...card, weight: index + 1 }));
   }
 
+  private normalizeRoleOptions(roleOptions: FormSettings['roles']): FormSettings['roles'] {
+    const normalizedRoles = roleOptions
+      .map((role, index) => {
+        const normalizedId = role.id.trim().toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-+|-+$/g, '');
+        const rawWeight = typeof role.weight === 'number' ? role.weight : index + 1;
+        return {
+          ...role,
+          id: normalizedId || `role-${index + 1}`,
+          label: role.label.trim(),
+          prompt: role.prompt.trim(),
+          thankYouNote: role.thankYouNote.trim(),
+          weight: Math.max(1, Math.trunc(rawWeight)),
+        };
+      })
+      .filter((role) => role.label && role.prompt && role.thankYouNote)
+      .sort((a, b) => a.weight - b.weight);
+
+    const uniqueIds = new Set<string>();
+    return normalizedRoles.map((role, index) => {
+      let id = role.id;
+      while (uniqueIds.has(id)) {
+        id = `${role.id}-${index + 1}`;
+      }
+      uniqueIds.add(id);
+      return { ...role, id, weight: index + 1 };
+    });
+  }
+
   async getFormSettings(): Promise<FormSettings> {
     const existing = await this.formSettingsRepository.findOne({ where: { id: 'default' } });
 
     if (existing) {
+      let needsSave = false;
+
       if (!Array.isArray(existing.campaignCards) || existing.campaignCards.length === 0) {
         existing.campaignCards = DEFAULT_CAMPAIGN_CARDS;
-        return this.formSettingsRepository.save(existing);
+        needsSave = true;
+      } else {
+        existing.campaignCards = this.normalizeCampaignCards(existing.campaignCards);
       }
 
-      existing.campaignCards = this.normalizeCampaignCards(existing.campaignCards);
-      return existing;
+      if (!Array.isArray(existing.roles) || existing.roles.length === 0) {
+        existing.roles = DEFAULT_ROLE_OPTIONS;
+        needsSave = true;
+      } else {
+        existing.roles = this.normalizeRoleOptions(existing.roles);
+      }
+
+      return needsSave ? this.formSettingsRepository.save(existing) : existing;
     }
 
-    const created = this.formSettingsRepository.create({ id: 'default', campaignCards: DEFAULT_CAMPAIGN_CARDS });
+    const created = this.formSettingsRepository.create({
+      id: 'default',
+      campaignCards: DEFAULT_CAMPAIGN_CARDS,
+      roles: DEFAULT_ROLE_OPTIONS,
+    });
     return this.formSettingsRepository.save(created);
   }
 
@@ -113,6 +180,9 @@ export class LeadService {
       campaignCards: payload.campaignCards
         ? this.normalizeCampaignCards(payload.campaignCards)
         : payload.campaignCards,
+      roles: payload.roles
+        ? this.normalizeRoleOptions(payload.roles)
+        : payload.roles,
     };
     const updated = this.formSettingsRepository.merge(settings, sanitizedPayload);
     return this.formSettingsRepository.save(updated);
