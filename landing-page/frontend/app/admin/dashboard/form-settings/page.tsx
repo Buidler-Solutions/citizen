@@ -2,44 +2,56 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Save, FileText, Palette, LoaderCircle, Check } from 'lucide-react';
+import { Save, FileText, Palette, LoaderCircle, Check, ListChecks, Plus, Trash2, X } from 'lucide-react';
 import { Button, Input, Label, Textarea } from '@/components/admin-ui';
 import { ADMIN_TOKEN_KEY } from '@/components/admin-auth';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
 
+interface RoleOption {
+  id: string;
+  label: string;
+  prompt: string;
+  thankYouNote: string;
+  weight: number;
+}
+
 interface FormSettingsResponse {
   title: string;
   subtitle: string;
-  validatorPrompt: string;
-  builderPrompt: string;
-  observerPrompt: string;
-  validatorThankYouNote: string;
-  builderThankYouNote: string;
-  observerThankYouNote: string;
+  roles: RoleOption[];
 }
 
-type FormSettingsPayload = Pick<
-  FormSettingsResponse,
-  | 'title'
-  | 'subtitle'
-  | 'validatorPrompt'
-  | 'builderPrompt'
-  | 'observerPrompt'
-  | 'validatorThankYouNote'
-  | 'builderThankYouNote'
-  | 'observerThankYouNote'
->;
+type FormSettingsPayload = Pick<FormSettingsResponse, 'title' | 'subtitle' | 'roles'>;
+
+const DEFAULT_ROLES: RoleOption[] = [
+  {
+    id: 'validator',
+    label: 'Validator',
+    prompt: 'I want to stress test system as a Validator focused on...',
+    thankYouNote: 'Thank you for applying to run a Citizen Validator node. We have added you to the validator waitlist. Our team will review your submission and send onboarding updates, eligibility checks, and timeline details to your email.',
+    weight: 1,
+  },
+  {
+    id: 'builder',
+    label: 'Builder',
+    prompt: 'I want to build civic applications as a Builder for...',
+    thankYouNote: 'Thank you for joining as a Builder. You are now on our builder waitlist. We will share product updates, API access details, and onboarding milestones by email as new slots open.',
+    weight: 2,
+  },
+  {
+    id: 'observer',
+    label: 'Observer',
+    prompt: 'I want to run audits as an Observer to improve...',
+    thankYouNote: 'Thank you for registering as an Observer. We have added you to the observer waitlist. You will receive updates by email about review status, audit participation windows, and next steps.',
+    weight: 3,
+  },
+];
 
 const DEFAULT_SETTINGS: FormSettingsResponse = {
   title: 'Build Public Truth with Citizen',
   subtitle: 'Validator · Builder · Observer onboarding',
-  validatorPrompt: 'I want to stress test system as a Validator focused on...',
-  builderPrompt: 'I want to build civic applications as a Builder for...',
-  observerPrompt: 'I want to run audits as an Observer to improve...',
-  validatorThankYouNote: 'Thank you for applying to run a Citizen Validator node. We have added you to the validator waitlist. Our team will review your submission and send onboarding updates, eligibility checks, and timeline details to your email.',
-  builderThankYouNote: 'Thank you for joining as a Builder. You are now on our builder waitlist. We will share product updates, API access details, and onboarding milestones by email as new slots open.',
-  observerThankYouNote: 'Thank you for registering as an Observer. We have added you to the observer waitlist. You will receive updates by email about review status, audit participation windows, and next steps.',
+  roles: DEFAULT_ROLES,
 };
 
 export default function FormSettingsPage() {
@@ -51,6 +63,15 @@ export default function FormSettingsPage() {
   const [error, setError] = useState('');
   const [saveStatus, setSaveStatus] = useState('');
   const [formColor, setFormColor] = useState('#022f52');
+  const [isAddRoleModalOpen, setIsAddRoleModalOpen] = useState(false);
+  const [newRoleDraft, setNewRoleDraft] = useState<RoleOption>({
+    id: '',
+    label: '',
+    prompt: 'I want to contribute to Citizen Protocol by...',
+    thankYouNote: 'Thank you for your interest. We have received your submission and will share the next onboarding updates by email.',
+    weight: 1,
+  });
+  const [addRoleError, setAddRoleError] = useState('');
 
   useEffect(() => {
     const token = localStorage.getItem(ADMIN_TOKEN_KEY);
@@ -76,12 +97,9 @@ export default function FormSettingsPage() {
             ...prev,
             title: settingsData.title ?? prev.title,
             subtitle: settingsData.subtitle ?? prev.subtitle,
-            validatorPrompt: settingsData.validatorPrompt ?? prev.validatorPrompt,
-            builderPrompt: settingsData.builderPrompt ?? prev.builderPrompt,
-            observerPrompt: settingsData.observerPrompt ?? prev.observerPrompt,
-            validatorThankYouNote: settingsData.validatorThankYouNote ?? prev.validatorThankYouNote,
-            builderThankYouNote: settingsData.builderThankYouNote ?? prev.builderThankYouNote,
-            observerThankYouNote: settingsData.observerThankYouNote ?? prev.observerThankYouNote,
+            roles: Array.isArray(settingsData.roles) && settingsData.roles.length > 0
+              ? settingsData.roles
+              : prev.roles,
           }));
         }
       } catch (loadError) {
@@ -93,6 +111,13 @@ export default function FormSettingsPage() {
 
     loadSettings();
   }, [router]);
+
+  const sanitizeRoleId = (value: string) => value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9-]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 40);
 
   const saveSettings = async () => {
     const token = localStorage.getItem(ADMIN_TOKEN_KEY);
@@ -108,12 +133,11 @@ export default function FormSettingsPage() {
       const payload: FormSettingsPayload = {
         title: settings.title,
         subtitle: settings.subtitle,
-        validatorPrompt: settings.validatorPrompt,
-        builderPrompt: settings.builderPrompt,
-        observerPrompt: settings.observerPrompt,
-        validatorThankYouNote: settings.validatorThankYouNote,
-        builderThankYouNote: settings.builderThankYouNote,
-        observerThankYouNote: settings.observerThankYouNote,
+        roles: settings.roles.map((role, index) => ({
+          ...role,
+          id: sanitizeRoleId(role.id || role.label || `role-${index + 1}`),
+          weight: index + 1,
+        })),
       };
 
       const response = await fetch(`${API_URL}/interest/form-settings`, {
@@ -144,9 +168,88 @@ export default function FormSettingsPage() {
     }
   };
 
+  const openAddRoleModal = () => {
+    const nextIndex = settings.roles.length + 1;
+    setNewRoleDraft({
+      id: `role-${nextIndex}`,
+      label: `Role ${nextIndex}`,
+      prompt: 'I want to contribute to Citizen Protocol by...',
+      thankYouNote: 'Thank you for your interest. We have received your submission and will share the next onboarding updates by email.',
+      weight: nextIndex,
+    });
+    setAddRoleError('');
+    setIsAddRoleModalOpen(true);
+  };
+
+  const closeAddRoleModal = () => {
+    setIsAddRoleModalOpen(false);
+    setAddRoleError('');
+  };
+
+  const addRoleFromModal = () => {
+    const label = newRoleDraft.label.trim();
+    const sanitizedId = sanitizeRoleId(newRoleDraft.id || label || `role-${settings.roles.length + 1}`);
+
+    if (label.length < 2) {
+      setAddRoleError('Role label must be at least 2 characters.');
+      return;
+    }
+
+    if (newRoleDraft.prompt.trim().length < 5) {
+      setAddRoleError('Role prompt must be at least 5 characters.');
+      return;
+    }
+
+    if (newRoleDraft.thankYouNote.trim().length < 20) {
+      setAddRoleError('Thank you note must be at least 20 characters.');
+      return;
+    }
+
+    if (!sanitizedId) {
+      setAddRoleError('Role ID is required.');
+      return;
+    }
+
+    if (settings.roles.some((role) => role.id === sanitizedId)) {
+      setAddRoleError('Role ID already exists. Please use a unique ID.');
+      return;
+    }
+
+    setSettings((prev) => ({
+      ...prev,
+      roles: [
+        ...prev.roles,
+        {
+          ...newRoleDraft,
+          id: sanitizedId,
+          label,
+          prompt: newRoleDraft.prompt.trim(),
+          thankYouNote: newRoleDraft.thankYouNote.trim(),
+          weight: prev.roles.length + 1,
+        },
+      ],
+    }));
+
+    closeAddRoleModal();
+  };
+
+  const updateRole = (index: number, updates: Partial<RoleOption>) => {
+    setSettings((prev) => ({
+      ...prev,
+      roles: prev.roles.map((role, roleIndex) => (roleIndex === index ? { ...role, ...updates } : role)),
+    }));
+  };
+
+  const removeRole = (index: number) => {
+    setSettings((prev) => ({
+      ...prev,
+      roles: prev.roles.filter((_, roleIndex) => roleIndex !== index),
+    }));
+  };
+
   const tabs = [
     { id: 'basic', label: 'Basic Info', icon: FileText },
-    { id: 'prompts', label: 'Role Prompts', icon: FileText },
+    { id: 'roles', label: 'Role Options', icon: ListChecks },
     { id: 'appearance', label: 'Appearance', icon: Palette },
   ];
 
@@ -165,11 +268,11 @@ export default function FormSettingsPage() {
   }
 
   return (
-    <div className="space-y-10">
+    <div className="space-y-8">
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div>
           <h2 className="text-2xl font-bold text-slate-900">Form Settings</h2>
-          <p className="text-sm text-slate-600">Configure the interest form displayed on your landing page</p>
+          <p className="text-slate-600">Configure onboarding form content and behavior</p>
         </div>
         <div className="flex items-center gap-3">
           {saveStatus && (
@@ -193,7 +296,7 @@ export default function FormSettingsPage() {
       </div>
 
       <div className="space-y-8">
-        <div className="flex overflow-x-auto gap-2">
+        <div className="flex gap-2 overflow-x-auto">
           {tabs.map((tab) => {
             const Icon = tab.icon;
             return (
@@ -236,73 +339,63 @@ export default function FormSettingsPage() {
             </div>
           )}
 
-          {activeTab === 'prompts' && (
-            <div className="space-y-8">
-              <div>
-                <h3 className="text-lg font-bold text-slate-900">Role Prompts</h3>
-                <p className="text-sm text-slate-600">Configure prompts for different user roles</p>
+
+
+          {activeTab === 'roles' && (
+            <div className="space-y-6">
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <h3 className="text-lg font-bold text-slate-900">Role Options</h3>
+                  <p className="text-sm text-slate-600">Control onboarding role choices dynamically from admin settings</p>
+                </div>
+                <Button onClick={openAddRoleModal} className="gap-2">
+                  <Plus className="h-4 w-4" /> Add Role
+                </Button>
               </div>
 
               <div className="space-y-6">
-                <div>
-                  <Textarea
-                    label="Validator Prompt"
-                    value={settings.validatorPrompt}
-                    onChange={(e) => setSettings((prev) => ({ ...prev, validatorPrompt: e.target.value }))}
-                    rows={4}
-                  />
-                  <p className="mt-2 text-sm text-slate-600">Prompt for validator role selection</p>
-                </div>
+                {settings.roles.map((role, index) => (
+                  <div key={`${role.id}-${index}`} className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5">
+                    <div className="grid gap-4 md:grid-cols-[1fr_1fr_auto]">
+                      <Input
+                        label="Role Label"
+                        value={role.label}
+                        onChange={(event) => {
+                          const label = event.target.value;
+                          updateRole(index, { label, id: sanitizeRoleId(label) || role.id });
+                        }}
+                      />
+                      <Input
+                        label="Role ID"
+                        value={role.id}
+                        onChange={(event) => updateRole(index, { id: sanitizeRoleId(event.target.value) })}
+                      />
+                      <div className="flex items-end">
+                        <Button
+                          onClick={() => removeRole(index)}
+                          variant="outline"
+                          className="gap-2"
+                          disabled={settings.roles.length <= 1}
+                        >
+                          <Trash2 className="h-4 w-4" /> Remove
+                        </Button>
+                      </div>
+                    </div>
 
-                <div>
-                  <Textarea
-                    label="Builder Prompt"
-                    value={settings.builderPrompt}
-                    onChange={(e) => setSettings((prev) => ({ ...prev, builderPrompt: e.target.value }))}
-                    rows={4}
-                  />
-                  <p className="mt-2 text-sm text-slate-600">Prompt for builder role selection</p>
-                </div>
-
-                <div>
-                  <Textarea
-                    label="Observer Prompt"
-                    value={settings.observerPrompt}
-                    onChange={(e) => setSettings((prev) => ({ ...prev, observerPrompt: e.target.value }))}
-                    rows={4}
-                  />
-                  <p className="mt-2 text-sm text-slate-600">Prompt for observer role selection</p>
-                </div>
-
-                <div>
-                  <Textarea
-                    label="Validator Thank You Note"
-                    value={settings.validatorThankYouNote}
-                    onChange={(e) => setSettings((prev) => ({ ...prev, validatorThankYouNote: e.target.value }))}
-                    rows={5}
-                  />
-                  <p className="mt-2 text-sm text-slate-600">Detailed confirmation shown after a validator node submission</p>
-                </div>
-
-                <div>
-                  <Textarea
-                    label="Builder Thank You Note"
-                    value={settings.builderThankYouNote}
-                    onChange={(e) => setSettings((prev) => ({ ...prev, builderThankYouNote: e.target.value }))}
-                    rows={5}
-                  />
-                  <p className="mt-2 text-sm text-slate-600">Detailed confirmation shown after a builder submission</p>
-                </div>
-
-                <div>
-                  <Textarea
-                    label="Observer Thank You Note"
-                    value={settings.observerThankYouNote}
-                    onChange={(e) => setSettings((prev) => ({ ...prev, observerThankYouNote: e.target.value }))}
-                    rows={5}
-                  />
-                  <p className="mt-2 text-sm text-slate-600">Detailed confirmation shown after an observer submission</p>
-                </div>
+                    <Textarea
+                      label="Prompt"
+                      value={role.prompt}
+                      onChange={(event) => updateRole(index, { prompt: event.target.value })}
+                      rows={4}
+                    />
+                    <Textarea
+                      label="Thank You Note"
+                      value={role.thankYouNote}
+                      onChange={(event) => updateRole(index, { thankYouNote: event.target.value })}
+                      rows={5}
+                    />
+                  </div>
+                ))}
               </div>
             </div>
           )}
@@ -336,6 +429,79 @@ export default function FormSettingsPage() {
           )}
         </div>
       </div>
+
+      {isAddRoleModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-2xl rounded-2xl bg-white p-6 shadow-2xl">
+            <div className="mb-4 flex items-start justify-between gap-4">
+              <div>
+                <h3 className="text-lg font-bold text-slate-900">Add New Role</h3>
+                <p className="text-sm text-slate-600">Create a new onboarding role option for the landing page form.</p>
+              </div>
+              <button
+                type="button"
+                onClick={closeAddRoleModal}
+                className="rounded-lg border border-slate-200 p-2 text-slate-500 transition hover:bg-slate-100"
+                aria-label="Close add role modal"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <Input
+                label="Role Label"
+                value={newRoleDraft.label}
+                onChange={(event) => {
+                  const label = event.target.value;
+                  setNewRoleDraft((prev) => ({
+                    ...prev,
+                    label,
+                    id: sanitizeRoleId(label) || prev.id,
+                  }));
+                }}
+              />
+              <Input
+                label="Role ID"
+                value={newRoleDraft.id}
+                onChange={(event) => setNewRoleDraft((prev) => ({
+                  ...prev,
+                  id: sanitizeRoleId(event.target.value),
+                }))}
+              />
+              <Textarea
+                label="Prompt"
+                value={newRoleDraft.prompt}
+                onChange={(event) => setNewRoleDraft((prev) => ({
+                  ...prev,
+                  prompt: event.target.value,
+                }))}
+                rows={4}
+              />
+              <Textarea
+                label="Thank You Note"
+                value={newRoleDraft.thankYouNote}
+                onChange={(event) => setNewRoleDraft((prev) => ({
+                  ...prev,
+                  thankYouNote: event.target.value,
+                }))}
+                rows={5}
+              />
+
+              {addRoleError && (
+                <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-600">{addRoleError}</p>
+              )}
+            </div>
+
+            <div className="mt-6 flex justify-end gap-3">
+              <Button variant="outline" onClick={closeAddRoleModal}>Cancel</Button>
+              <Button onClick={addRoleFromModal} className="gap-2">
+                <Plus className="h-4 w-4" /> Add Role
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
