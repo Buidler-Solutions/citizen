@@ -1,6 +1,7 @@
 'use client';
 
 import { CSSProperties, FormEvent, useEffect, useMemo, useState } from 'react';
+import { AsciinemaModal } from '@/components/AsciinemaModal';
 
 type Role = string;
 type MotionDirection = 'forward' | 'backward';
@@ -32,6 +33,8 @@ interface PublicFormSettings {
   subtitle: string;
   roles: RoleOption[];
   campaignCards: CampaignCard[];
+  asciinemaCastUrl?: string;
+  asciinemaShortcode?: string;
 }
 
 const ISO_COUNTRY_CODES = [
@@ -67,6 +70,21 @@ const isValidEmail = (email: string) => {
 };
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
+const ASCIINEMA_SHORTCODE_PATTERN = /\[asciinema:([a-zA-Z0-9_-]+)\]/;
+
+const toAbsoluteUrl = (url: string) => {
+  if (!url) return '';
+  if (url.startsWith('http://') || url.startsWith('https://')) return url;
+  if (url.startsWith('/')) return `${API_URL}${url}`;
+  return `${API_URL}/${url}`;
+};
+
+const extractShortcodeToken = (value: string): string | null => {
+  const match = value.match(ASCIINEMA_SHORTCODE_PATTERN);
+  return match?.[1] ?? null;
+};
+
+const stripShortcodeText = (value: string): string => value.replace(ASCIINEMA_SHORTCODE_PATTERN, '').trim();
 
 const DEFAULT_CAMPAIGN_CARDS: CampaignCard[] = [
   {
@@ -185,6 +203,7 @@ export function InterestForm() {
   });
   const [submittedThankYouNote, setSubmittedThankYouNote] = useState('');
   const [submittedRole, setSubmittedRole] = useState<string | null>(null);
+  const [isAsciinemaOpen, setIsAsciinemaOpen] = useState(false);
 
   const validCountryNames = useMemo(() => {
     const displayNames = new Intl.DisplayNames(['en'], { type: 'region' });
@@ -211,6 +230,8 @@ export function InterestForm() {
           subtitle: data.subtitle ?? prev.subtitle,
           campaignCards: Array.isArray(data.campaignCards) ? data.campaignCards : prev.campaignCards,
           roles: Array.isArray(data.roles) && data.roles.length > 0 ? data.roles : prev.roles,
+          asciinemaCastUrl: data.asciinemaCastUrl ?? prev.asciinemaCastUrl,
+          asciinemaShortcode: data.asciinemaShortcode ?? prev.asciinemaShortcode,
         }));
       } catch {
         // Keep defaults if settings endpoint is unavailable
@@ -264,6 +285,26 @@ export function InterestForm() {
 
     setIntroIndex((prev) => Math.min(prev, introSlides.length - 1));
   }, [introSlides.length]);
+
+  const shortcodeMap = useMemo(() => {
+    const shortcode = settings.asciinemaShortcode?.trim();
+    const castUrl = settings.asciinemaCastUrl?.trim();
+
+    if (!shortcode || !castUrl) {
+      return {};
+    }
+
+    return { [shortcode]: toAbsoluteUrl(castUrl) };
+  }, [settings.asciinemaCastUrl, settings.asciinemaShortcode]);
+
+  const activeIntroCard = introSlides[introIndex];
+  const activeIntroShortcode = useMemo(() => {
+    const shortcodeFromBody = extractShortcodeToken(activeIntroCard?.body ?? '');
+    const shortcodeFromTitle = extractShortcodeToken(activeIntroCard?.title ?? '');
+    return shortcodeFromBody ?? shortcodeFromTitle;
+  }, [activeIntroCard]);
+
+  const resolvedIntroRecording = activeIntroShortcode ? shortcodeMap[activeIntroShortcode] : '';
 
   const availableRoles = useMemo(() => {
     if (settings.roles.length > 0) {
@@ -435,8 +476,17 @@ export function InterestForm() {
           <p className="mt-8 mb-0 text-cyan-300">Info card {introIndex + 1} of {introSlides.length}</p>
           <div key={`intro-${introIndex}`} className={`will-change-[transform,opacity,filter] ${motionClass} motion-reduce:animate-none`}>
             <section className="grid content-center">
-              <h2 className="font-display mb-4 text-[clamp(1.6rem,3.5vw,2.8rem)] font-bold leading-[1.2]">{introSlides[introIndex].title}</h2>
-              <p className="font-onboarding-lead mb-8 text-[clamp(1.2rem,2.3vw,1.8rem)] font-light leading-[1.15] text-slate-200">{introSlides[introIndex].body}</p>
+              <h2 className="font-display mb-4 text-[clamp(1.6rem,3.5vw,2.8rem)] font-bold leading-[1.2]">{stripShortcodeText(introSlides[introIndex].title)}</h2>
+              <p className="font-onboarding-lead mb-8 text-[clamp(1.2rem,2.3vw,1.8rem)] font-light leading-[1.15] text-slate-200">{stripShortcodeText(introSlides[introIndex].body)}</p>
+              {resolvedIntroRecording && (
+                <button
+                  type="button"
+                  className={primaryButtonClass}
+                  onClick={() => setIsAsciinemaOpen(true)}
+                >
+                  ▶ Watch terminal demo
+                </button>
+              )}
             </section>
           </div>
 
@@ -530,6 +580,12 @@ export function InterestForm() {
       )}
 
       {status && <p className="m-0 text-cyan-300">{status}</p>}
+      <AsciinemaModal
+        isOpen={isAsciinemaOpen}
+        recordingUrl={activeIntroShortcode ? `[asciinema:${activeIntroShortcode}]` : resolvedIntroRecording}
+        shortcodeMap={shortcodeMap}
+        onClose={() => setIsAsciinemaOpen(false)}
+      />
     </form>
   );
 }

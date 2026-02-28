@@ -1,12 +1,60 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { InterestForm } from '@/components/InterestForm';
 import { OnboardingNetworkBackground } from '@/components/OnboardingNetworkBackground';
+import { AsciinemaModal } from '@/components/AsciinemaModal';
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
+
+const toAbsoluteUrl = (url: string) => {
+  if (!url) return '';
+  if (url.startsWith('http://') || url.startsWith('https://')) {
+    return url;
+  }
+  if (url.startsWith('/')) {
+    return `${API_URL}${url}`;
+  }
+  return `${API_URL}/${url}`;
+};
 
 export default function HomePage() {
   const navItems = ['Onboarding', 'Validators', 'Builders', 'Docs'];
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [isAsciinemaOpen, setIsAsciinemaOpen] = useState(false);
+  const [onboardingRecordingUrl, setOnboardingRecordingUrl] = useState(
+    process.env.NEXT_PUBLIC_ONBOARDING_ASCIINEMA_URL ?? '[asciinema:onboarding-demo]',
+  );
+  const [shortcodeMap, setShortcodeMap] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    const loadSettings = async () => {
+      try {
+        const response = await fetch(`${API_URL}/interest/form-settings`);
+        if (!response.ok) {
+          return;
+        }
+
+        const settings = (await response.json()) as { asciinemaCastUrl?: string; asciinemaShortcode?: string };
+        const absoluteCastUrl = settings.asciinemaCastUrl?.trim() ? toAbsoluteUrl(settings.asciinemaCastUrl) : '';
+        const shortcode = settings.asciinemaShortcode?.trim();
+
+        if (shortcode && absoluteCastUrl) {
+          setShortcodeMap({ [shortcode]: absoluteCastUrl });
+          setOnboardingRecordingUrl(`[asciinema:${shortcode}]`);
+          return;
+        }
+
+        if (absoluteCastUrl) {
+          setOnboardingRecordingUrl(absoluteCastUrl);
+        }
+      } catch {
+        // fallback to env/default URL
+      }
+    };
+
+    void loadSettings();
+  }, []);
 
   return (
     <>
@@ -25,6 +73,15 @@ export default function HomePage() {
                     <a href="#" className="transition-colors hover:text-cyan-300">{item}</a>
                   </li>
                 ))}
+                <li>
+                  <button
+                    type="button"
+                    onClick={() => setIsAsciinemaOpen(true)}
+                    className="rounded-full border border-cyan-300/40 px-3 py-1 text-xs font-semibold uppercase tracking-[0.08em] text-cyan-200 transition-colors hover:border-cyan-200 hover:text-cyan-100"
+                  >
+                    Watch terminal demo
+                  </button>
+                </li>
               </ul>
             </nav>
 
@@ -61,6 +118,18 @@ export default function HomePage() {
                       </a>
                     </li>
                   ))}
+                  <li>
+                    <button
+                      type="button"
+                      className="block w-full text-left text-cyan-200 transition-colors hover:text-cyan-100"
+                      onClick={() => {
+                        setMobileMenuOpen(false);
+                        setIsAsciinemaOpen(true);
+                      }}
+                    >
+                      Watch terminal demo
+                    </button>
+                  </li>
                 </ul>
                 <button
                   type="button"
@@ -75,6 +144,12 @@ export default function HomePage() {
 
         <InterestForm />
       </main>
+      <AsciinemaModal
+        isOpen={isAsciinemaOpen}
+        recordingUrl={onboardingRecordingUrl}
+        shortcodeMap={shortcodeMap}
+        onClose={() => setIsAsciinemaOpen(false)}
+      />
       <footer className="pointer-events-none fixed inset-x-0 bottom-3 z-[5] px-4 text-right text-[0.72rem] tracking-[0.08em] text-slate-300/60">
         <span>ToS | GDPR | Terms | About</span>
       </footer>
