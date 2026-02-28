@@ -142,6 +142,19 @@ export class LeadService {
     });
   }
 
+
+  private normalizeShortcode(value: string | undefined): string {
+    const raw = (value ?? '').trim().toLowerCase();
+    const token = raw
+      .replace(/^\[asciinema:/, '')
+      .replace(/\]$/, '')
+      .replace(/[^a-z0-9-]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 80);
+
+    return token || 'onboarding-demo';
+  }
+
   async getFormSettings(): Promise<FormSettings> {
     const existing = await this.formSettingsRepository.findOne({ where: { id: 'default' } });
 
@@ -162,6 +175,17 @@ export class LeadService {
         existing.roles = this.normalizeRoleOptions(existing.roles);
       }
 
+      if (typeof existing.asciinemaCastUrl !== 'string') {
+        existing.asciinemaCastUrl = '';
+        needsSave = true;
+      }
+
+      const normalizedShortcode = this.normalizeShortcode(existing.asciinemaShortcode);
+      if (existing.asciinemaShortcode !== normalizedShortcode) {
+        existing.asciinemaShortcode = normalizedShortcode;
+        needsSave = true;
+      }
+
       return needsSave ? this.formSettingsRepository.save(existing) : existing;
     }
 
@@ -169,8 +193,18 @@ export class LeadService {
       id: 'default',
       campaignCards: DEFAULT_CAMPAIGN_CARDS,
       roles: DEFAULT_ROLE_OPTIONS,
+      asciinemaCastUrl: '',
+      asciinemaShortcode: 'onboarding-demo',
     });
     return this.formSettingsRepository.save(created);
+  }
+
+
+  async setAsciinemaCastUrl(asciinemaCastUrl: string): Promise<FormSettings> {
+    const settings = await this.getFormSettings();
+    settings.asciinemaCastUrl = asciinemaCastUrl.trim();
+    settings.asciinemaShortcode = this.normalizeShortcode(settings.asciinemaShortcode);
+    return this.formSettingsRepository.save(settings);
   }
 
   async updateFormSettings(payload: UpdateFormSettingsDto): Promise<FormSettings> {
@@ -183,6 +217,9 @@ export class LeadService {
       roles: payload.roles
         ? this.normalizeRoleOptions(payload.roles)
         : payload.roles,
+      asciinemaShortcode: payload.asciinemaShortcode
+        ? this.normalizeShortcode(payload.asciinemaShortcode)
+        : payload.asciinemaShortcode,
     };
     const updated = this.formSettingsRepository.merge(settings, sanitizedPayload);
     return this.formSettingsRepository.save(updated);
