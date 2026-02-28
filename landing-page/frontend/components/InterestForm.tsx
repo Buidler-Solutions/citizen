@@ -373,7 +373,7 @@ export function InterestForm() {
 
   if (submittedThankYouNote) {
     return (
-      <section className="onboarding-typography grid min-h-[calc(100vh-180px)] place-content-center gap-6 rounded-3xl border border-blue-200/35 bg-slate-950/80 p-[clamp(1.2rem,4vw,3.2rem)] text-left" aria-live="polite">
+      <section className="onboarding-typography grid min-h-[calc(100vh-180px)] place-content-center gap-6 bg-slate-950/0 p-[clamp(1.2rem,4vw,3.2rem)] text-left" aria-live="polite">
         <p className="m-0 text-cyan-300">Submission received</p>
         <h2 className="font-display m-0 text-[clamp(2rem,3.4vw,3.4rem)] leading-[1.15]">Thank you for interest on Testnet as {submittedRole ?? 'a participant'}.</h2>
         <p className="m-0 mx-auto text-[clamp(1.12rem,2.2vw,1.5rem)] leading-[1.7] text-blue-100">{submittedThankYouNote}</p>
@@ -382,13 +382,16 @@ export function InterestForm() {
   }
 
   return (
-    <form className="onboarding-typography grid min-h-[calc(100vh-160px)] content-center gap-5 rounded-3xl border border-blue-200/35 bg-slate-950/80 p-[clamp(1.2rem,4vw,3.2rem)] max-[680px]:min-h-[calc(100vh-140px)]" onSubmit={onSubmit}>
+    <form className="onboarding-typography grid min-h-[calc(100vh-160px)] content-center gap-5 bg-slate-950/0 p-[clamp(1.2rem,4vw,3.2rem)] max-[680px]:min-h-[calc(100vh-140px)]" onSubmit={onSubmit}>
       {showOnboardingIntro ? (
         <section className="grid min-h-[260px] content-center justify-items-start gap-6 text-left" aria-label="Onboarding introduction">
           <p className="font-display m-0 text-[clamp(1rem,1.5vw,1.25rem)] font-semibold uppercase tracking-[0.14em] text-cyan-300">citizen-protocol-v0.1.0</p>
           <RotatingOnboardingText baseWord="Onboarding" rotatingWords={['Validator', 'Builder', 'Observer']} />
           <p className="font-onboarding-lead m-0 text-[clamp(1.2rem,2.3vw,1.8rem)] font-light leading-[1.15] text-slate-200">
-            We are seeking individuals interested in becoming Node Validators, dApp Builders, and Node Observers through this waitlist. Before participating, we encourage you to first understand the project’s vision, architecture, and objectives so you can contribute meaningfully to its growth and integrity.
+            We are seeking individuals interested in becoming Node Validators, dApp Builders, and Node Observers through this waitlist.
+          </p>
+          <p className="font-onboarding-lead m-0 text-[clamp(1.2rem,2.3vw,1.8rem)] font-light leading-[1.15] text-slate-200">
+            Before participating, we encourage you to first understand the project’s vision, architecture, and objectives so you can contribute meaningfully to its growth and integrity.
           </p>
           <div className="grid grid-cols-[minmax(180px,280px)] justify-self-center gap-3">
             <button
