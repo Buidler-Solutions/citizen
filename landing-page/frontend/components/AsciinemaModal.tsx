@@ -236,7 +236,7 @@ export function AsciinemaModal({ isOpen, recordingUrl, onClose, shortcodeMap = {
         playerInstanceRef.current = window.AsciinemaPlayer.create(source, playerContainer, {
           autoplay: true,
           preload: true,
-          fit: 'width',
+          fit: 'height',
         });
       } catch {
         if (!canceled) {
@@ -261,7 +261,7 @@ export function AsciinemaModal({ isOpen, recordingUrl, onClose, shortcodeMap = {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-4"
+      className="fixed inset-0 z-50 bg-slate-950/90"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) {
           onClose();
@@ -274,10 +274,10 @@ export function AsciinemaModal({ isOpen, recordingUrl, onClose, shortcodeMap = {
         role="dialog"
         aria-modal="true"
         aria-label="Asciinema terminal recording"
-        className="w-full max-w-4xl rounded-2xl border border-slate-700 bg-slate-950 p-4 shadow-2xl sm:p-6"
+        className="flex h-screen w-screen flex-col bg-slate-950 p-4 sm:p-6"
         tabIndex={-1}
       >
-        <div className="mb-4 flex items-center justify-between">
+        <div className="mb-4 flex items-center justify-between border-b border-slate-800 pb-4">
           <h2 className="text-base font-semibold text-slate-100 sm:text-lg">Terminal walkthrough</h2>
           <button
             type="button"
@@ -289,13 +289,13 @@ export function AsciinemaModal({ isOpen, recordingUrl, onClose, shortcodeMap = {
           </button>
         </div>
 
-        <div className="max-h-[70vh] overflow-auto rounded-xl border border-slate-800 bg-black p-2 sm:p-3">
+        <div className="flex-1 overflow-hidden rounded-xl border border-slate-800 bg-black p-2 sm:p-3">
           {playerError ? (
             <div className="grid min-h-[240px] place-items-center p-4 text-center text-sm text-red-200 sm:min-h-[320px]">
               <p>{playerError}</p>
             </div>
           ) : (
-            <div ref={playerContainerRef} className="asciinema-player-wrapper min-h-[240px] w-full sm:min-h-[320px]" />
+            <div ref={playerContainerRef} className="asciinema-player-wrapper h-full min-h-[240px] w-full" />
           )}
         </div>
       </div>
