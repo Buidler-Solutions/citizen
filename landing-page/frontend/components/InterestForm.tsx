@@ -70,7 +70,7 @@ const isValidEmail = (email: string) => {
 };
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
-const ASCIINEMA_SHORTCODE_PATTERN = /\[asciinema:([a-zA-Z0-9_-]+)\]/;
+const ASCIINEMA_SHORTCODE_PATTERN = /\[asciinema:([a-zA-Z0-9_-]+)(?:\|([^\]]+))?\]/g;
 
 const normalizeShortcodeToken = (token: string): string => token
   .trim()
@@ -86,7 +86,9 @@ const toAbsoluteUrl = (url: string) => {
 };
 
 const extractShortcodeToken = (value: string): string | null => {
-  const match = value.match(ASCIINEMA_SHORTCODE_PATTERN);
+  const match = ASCIINEMA_SHORTCODE_PATTERN.exec(value);
+  ASCIINEMA_SHORTCODE_PATTERN.lastIndex = 0;
+
   if (!match) {
     return null;
   }
@@ -95,27 +97,43 @@ const extractShortcodeToken = (value: string): string | null => {
   return normalizedToken || null;
 };
 
+const extractShortcodeLabel = (value: string): string | null => {
+  const match = ASCIINEMA_SHORTCODE_PATTERN.exec(value);
+  ASCIINEMA_SHORTCODE_PATTERN.lastIndex = 0;
+
+  if (!match) {
+    return null;
+  }
+
+  const label = match[2]?.trim();
+  return label || null;
+};
+
 const renderInlineShortcodeText = (
   value: string,
   hasRecording: boolean,
   onOpenRecording: () => void,
+  defaultLinkLabel: string,
 ) => {
+  ASCIINEMA_SHORTCODE_PATTERN.lastIndex = 0;
   const segments = value.split(ASCIINEMA_SHORTCODE_PATTERN);
 
   if (segments.length === 1) {
     return value;
   }
 
-  return segments.reduce<Array<string | ReactNode>>((parts, segment, index) => {
-    if (index % 2 === 0) {
-      if (segment) {
-        parts.push(segment);
-      }
-      return parts;
+  const parts: Array<string | ReactNode> = [];
+
+  for (let index = 0; index < segments.length; index += 3) {
+    const textSegment = segments[index];
+    const shortcodeLabel = segments[index + 2]?.trim();
+
+    if (textSegment) {
+      parts.push(textSegment);
     }
 
-    if (!hasRecording) {
-      return parts;
+    if (index + 1 >= segments.length || !hasRecording) {
+      continue;
     }
 
     parts.push(
@@ -128,12 +146,12 @@ const renderInlineShortcodeText = (
         }}
         className="mx-1 inline-flex items-center rounded-md border border-cyan-400/60 bg-cyan-500/10 px-2 py-0.5 align-middle text-[0.8em] font-semibold text-cyan-200 no-underline transition-colors hover:border-cyan-300 hover:bg-cyan-400/20 hover:text-cyan-100"
       >
-        ▶ Watch terminal demo
+        ▶ {shortcodeLabel || defaultLinkLabel}
       </a>,
     );
+  }
 
-    return parts;
-  }, []);
+  return parts;
 };
 
 const DEFAULT_CAMPAIGN_CARDS: CampaignCard[] = [
@@ -355,6 +373,11 @@ export function InterestForm() {
   }, [activeIntroCard]);
 
   const resolvedIntroRecording = activeIntroShortcode ? shortcodeMap[activeIntroShortcode] : '';
+  const activeIntroLabel = useMemo(() => {
+    const labelFromBody = extractShortcodeLabel(activeIntroCard?.body ?? '');
+    const labelFromTitle = extractShortcodeLabel(activeIntroCard?.title ?? '');
+    return labelFromBody ?? labelFromTitle ?? 'Watch terminal demo';
+  }, [activeIntroCard]);
 
   const availableRoles = useMemo(() => {
     if (settings.roles.length > 0) {
@@ -527,10 +550,10 @@ export function InterestForm() {
           <div key={`intro-${introIndex}`} className={`will-change-[transform,opacity,filter] ${motionClass} motion-reduce:animate-none`}>
             <section className="grid content-center">
               <h2 className="font-display mb-4 text-[clamp(1.6rem,3.5vw,2.8rem)] font-bold leading-[1.2]">
-                {renderInlineShortcodeText(introSlides[introIndex].title, Boolean(resolvedIntroRecording), () => setIsAsciinemaOpen(true))}
+                {renderInlineShortcodeText(introSlides[introIndex].title, Boolean(resolvedIntroRecording), () => setIsAsciinemaOpen(true), activeIntroLabel)}
               </h2>
               <p className="font-onboarding-lead mb-8 text-[clamp(1.2rem,2.3vw,1.8rem)] font-light leading-[1.15] text-slate-200">
-                {renderInlineShortcodeText(introSlides[introIndex].body, Boolean(resolvedIntroRecording), () => setIsAsciinemaOpen(true))}
+                {renderInlineShortcodeText(introSlides[introIndex].body, Boolean(resolvedIntroRecording), () => setIsAsciinemaOpen(true), activeIntroLabel)}
               </p>
             </section>
           </div>
@@ -628,6 +651,7 @@ export function InterestForm() {
       <AsciinemaModal
         isOpen={isAsciinemaOpen}
         recordingUrl={activeIntroShortcode ? `[asciinema:${activeIntroShortcode}]` : resolvedIntroRecording}
+        modalTitle={activeIntroLabel}
         shortcodeMap={shortcodeMap}
         onClose={() => setIsAsciinemaOpen(false)}
       />
