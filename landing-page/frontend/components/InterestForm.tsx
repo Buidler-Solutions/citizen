@@ -1,6 +1,6 @@
 'use client';
 
-import { CSSProperties, FormEvent, useEffect, useMemo, useState } from 'react';
+import { CSSProperties, FormEvent, ReactNode, useEffect, useMemo, useState } from 'react';
 import { AsciinemaModal } from '@/components/AsciinemaModal';
 
 type Role = string;
@@ -95,7 +95,46 @@ const extractShortcodeToken = (value: string): string | null => {
   return normalizedToken || null;
 };
 
-const stripShortcodeText = (value: string): string => value.replace(ASCIINEMA_SHORTCODE_PATTERN, '').trim();
+const renderInlineShortcodeText = (
+  value: string,
+  hasRecording: boolean,
+  onOpenRecording: () => void,
+) => {
+  const segments = value.split(ASCIINEMA_SHORTCODE_PATTERN);
+
+  if (segments.length === 1) {
+    return value;
+  }
+
+  return segments.reduce<Array<string | ReactNode>>((parts, segment, index) => {
+    if (index % 2 === 0) {
+      if (segment) {
+        parts.push(segment);
+      }
+      return parts;
+    }
+
+    if (!hasRecording) {
+      return parts;
+    }
+
+    parts.push(
+      <a
+        key={`asciinema-link-${index}`}
+        href="#"
+        onClick={(event) => {
+          event.preventDefault();
+          onOpenRecording();
+        }}
+        className="mx-1 inline-flex items-center rounded-md border border-cyan-400/60 bg-cyan-500/10 px-2 py-0.5 align-middle text-[0.8em] font-semibold text-cyan-200 no-underline transition-colors hover:border-cyan-300 hover:bg-cyan-400/20 hover:text-cyan-100"
+      >
+        ▶ Watch terminal demo
+      </a>,
+    );
+
+    return parts;
+  }, []);
+};
 
 const DEFAULT_CAMPAIGN_CARDS: CampaignCard[] = [
   {
@@ -487,17 +526,12 @@ export function InterestForm() {
           <p className="mt-8 mb-0 text-cyan-300">Info card {introIndex + 1} of {introSlides.length}</p>
           <div key={`intro-${introIndex}`} className={`will-change-[transform,opacity,filter] ${motionClass} motion-reduce:animate-none`}>
             <section className="grid content-center">
-              <h2 className="font-display mb-4 text-[clamp(1.6rem,3.5vw,2.8rem)] font-bold leading-[1.2]">{stripShortcodeText(introSlides[introIndex].title)}</h2>
-              <p className="font-onboarding-lead mb-8 text-[clamp(1.2rem,2.3vw,1.8rem)] font-light leading-[1.15] text-slate-200">{stripShortcodeText(introSlides[introIndex].body)}</p>
-              {resolvedIntroRecording && (
-                <button
-                  type="button"
-                  className={primaryButtonClass}
-                  onClick={() => setIsAsciinemaOpen(true)}
-                >
-                  ▶ Watch terminal demo
-                </button>
-              )}
+              <h2 className="font-display mb-4 text-[clamp(1.6rem,3.5vw,2.8rem)] font-bold leading-[1.2]">
+                {renderInlineShortcodeText(introSlides[introIndex].title, Boolean(resolvedIntroRecording), () => setIsAsciinemaOpen(true))}
+              </h2>
+              <p className="font-onboarding-lead mb-8 text-[clamp(1.2rem,2.3vw,1.8rem)] font-light leading-[1.15] text-slate-200">
+                {renderInlineShortcodeText(introSlides[introIndex].body, Boolean(resolvedIntroRecording), () => setIsAsciinemaOpen(true))}
+              </p>
             </section>
           </div>
 
