@@ -47,12 +47,6 @@ export class FormSettings {
   roles!: RoleOption[];
 
 
-  @Column({ length: 500, default: '' })
-  asciinemaCastUrl!: string;
-
-  @Column({ length: 80, default: 'onboarding-demo' })
-  asciinemaShortcode!: string;
-
   @UpdateDateColumn()
   updatedAt!: Date;
 }
