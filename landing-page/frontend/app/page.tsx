@@ -7,6 +7,12 @@ import { AsciinemaModal } from '@/components/AsciinemaModal';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
 
+const normalizeShortcodeToken = (token: string): string => token
+  .trim()
+  .toLowerCase()
+  .replace(/[^a-z0-9-]+/g, '-')
+  .replace(/^-+|-+$/g, '');
+
 const toAbsoluteUrl = (url: string) => {
   if (!url) return '';
   if (url.startsWith('http://') || url.startsWith('https://')) {
@@ -37,7 +43,7 @@ export default function HomePage() {
 
         const settings = (await response.json()) as { asciinemaCastUrl?: string; asciinemaShortcode?: string };
         const absoluteCastUrl = settings.asciinemaCastUrl?.trim() ? toAbsoluteUrl(settings.asciinemaCastUrl) : '';
-        const shortcode = settings.asciinemaShortcode?.trim();
+        const shortcode = normalizeShortcodeToken(settings.asciinemaShortcode ?? '');
 
         if (shortcode && absoluteCastUrl) {
           setShortcodeMap({ [shortcode]: absoluteCastUrl });
