@@ -33,8 +33,6 @@ interface PublicFormSettings {
   subtitle: string;
   roles: RoleOption[];
   campaignCards: CampaignCard[];
-  asciinemaCastUrl?: string;
-  asciinemaShortcode?: string;
 }
 
 const ISO_COUNTRY_CODES = [
@@ -272,6 +270,7 @@ export function InterestForm() {
   const [submittedThankYouNote, setSubmittedThankYouNote] = useState('');
   const [submittedRole, setSubmittedRole] = useState<string | null>(null);
   const [isAsciinemaOpen, setIsAsciinemaOpen] = useState(false);
+  const [shortcodeMap, setShortcodeMap] = useState<Record<string, string>>({});
 
   const validCountryNames = useMemo(() => {
     const displayNames = new Intl.DisplayNames(['en'], { type: 'region' });
@@ -298,14 +297,39 @@ export function InterestForm() {
           subtitle: data.subtitle ?? prev.subtitle,
           campaignCards: Array.isArray(data.campaignCards) ? data.campaignCards : prev.campaignCards,
           roles: Array.isArray(data.roles) && data.roles.length > 0 ? data.roles : prev.roles,
-          asciinemaCastUrl: data.asciinemaCastUrl ?? prev.asciinemaCastUrl,
-          asciinemaShortcode: data.asciinemaShortcode ?? prev.asciinemaShortcode,
         }));
       } catch {
         // Keep defaults if settings endpoint is unavailable
       }
     };
     loadSettings();
+  }, []);
+
+
+  useEffect(() => {
+    const loadAsciinemaRecordings = async () => {
+      try {
+        const response = await fetch(`${API_URL}/interest/asciinema-recordings/public`);
+        if (!response.ok) return;
+
+        const recordings = (await response.json()) as Record<string, string>;
+        const normalizedMap = Object.entries(recordings).reduce<Record<string, string>>((accumulator, [shortcode, castUrl]) => {
+          const normalizedShortcode = normalizeShortcodeToken(shortcode);
+          if (!normalizedShortcode || !castUrl?.trim()) {
+            return accumulator;
+          }
+
+          accumulator[normalizedShortcode] = toAbsoluteUrl(castUrl);
+          return accumulator;
+        }, {});
+
+        setShortcodeMap(normalizedMap);
+      } catch {
+        // Keep empty recording map if endpoint is unavailable
+      }
+    };
+
+    void loadAsciinemaRecordings();
   }, []);
 
   const introSlides = useMemo(() => settings.campaignCards
@@ -354,16 +378,6 @@ export function InterestForm() {
     setIntroIndex((prev) => Math.min(prev, introSlides.length - 1));
   }, [introSlides.length]);
 
-  const shortcodeMap = useMemo(() => {
-    const shortcode = normalizeShortcodeToken(settings.asciinemaShortcode ?? '');
-    const castUrl = settings.asciinemaCastUrl?.trim();
-
-    if (!shortcode || !castUrl) {
-      return {};
-    }
-
-    return { [shortcode]: toAbsoluteUrl(castUrl) };
-  }, [settings.asciinemaCastUrl, settings.asciinemaShortcode]);
 
   const activeIntroCard = introSlides[introIndex];
   const activeIntroShortcode = useMemo(() => {

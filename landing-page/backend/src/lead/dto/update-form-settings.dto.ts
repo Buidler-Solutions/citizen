@@ -79,14 +79,4 @@ export class UpdateFormSettingsDto {
   @ValidateNested({ each: true })
   @Type(() => RoleOptionDto)
   roles?: RoleOptionDto[];
-  @IsOptional()
-  @IsString()
-  @MaxLength(500)
-  asciinemaCastUrl?: string;
-
-  @IsOptional()
-  @IsString()
-  @MinLength(2)
-  @MaxLength(80)
-  asciinemaShortcode?: string;
 }
