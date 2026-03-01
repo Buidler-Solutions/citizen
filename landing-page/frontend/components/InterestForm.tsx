@@ -390,7 +390,7 @@ export function InterestForm() {
   const activeIntroLabel = useMemo(() => {
     const labelFromBody = extractShortcodeLabel(activeIntroCard?.body ?? '');
     const labelFromTitle = extractShortcodeLabel(activeIntroCard?.title ?? '');
-    return labelFromBody ?? labelFromTitle ?? 'Watch terminal demo';
+    return labelFromBody ?? labelFromTitle ?? 'Watch terminal';
   }, [activeIntroCard]);
 
   const availableRoles = useMemo(() => {
