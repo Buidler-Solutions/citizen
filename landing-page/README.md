@@ -98,3 +98,8 @@ curl http://localhost:3001/interest/stats \
   "missionNeed": "National procurement audit trail with independent public verification"
 }
 ```
+
+## Asciinema Docs
+
+- How-to (install + record): `landing-page/howtos/installing-asciinema-for-recording.md`
+- Runbook (upload + shortcode): `landing-page/runbook/asciinema-admin-upload-and-onboarding-shortcode.md`
