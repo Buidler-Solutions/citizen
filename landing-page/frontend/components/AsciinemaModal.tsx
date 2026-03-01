@@ -47,6 +47,7 @@ interface AsciinemaModalProps {
   isOpen: boolean;
   recordingUrl: string;
   onClose: () => void;
+  modalTitle?: string;
   shortcodeMap?: Record<string, string>;
 }
 
@@ -142,7 +143,13 @@ const ensurePlayerAssets = async (): Promise<void> => {
   throw lastError ?? new Error('Unable to load Asciinema player script');
 };
 
-export function AsciinemaModal({ isOpen, recordingUrl, onClose, shortcodeMap = {} }: AsciinemaModalProps) {
+export function AsciinemaModal({
+  isOpen,
+  recordingUrl,
+  onClose,
+  modalTitle = 'Terminal walkthrough',
+  shortcodeMap = {},
+}: AsciinemaModalProps) {
   const modalRef = useRef<HTMLDivElement>(null);
   const playerContainerRef = useRef<HTMLDivElement>(null);
   const playerInstanceRef = useRef<AsciinemaPlayerInstance | null>(null);
@@ -273,12 +280,12 @@ export function AsciinemaModal({ isOpen, recordingUrl, onClose, shortcodeMap = {
         ref={modalRef}
         role="dialog"
         aria-modal="true"
-        aria-label="Asciinema terminal recording"
+        aria-label={modalTitle}
         className="flex h-screen w-screen flex-col bg-slate-950 p-4 sm:p-6"
         tabIndex={-1}
       >
         <div className="mb-4 flex items-center justify-between border-b border-slate-800 pb-4">
-          <h2 className="text-base font-semibold text-slate-100 sm:text-lg">Terminal walkthrough</h2>
+          <h2 className="text-base font-semibold text-slate-100 sm:text-lg">{modalTitle}</h2>
           <button
             type="button"
             onClick={onClose}
