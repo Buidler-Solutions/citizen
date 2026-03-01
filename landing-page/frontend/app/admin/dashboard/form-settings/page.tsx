@@ -408,7 +408,7 @@ export default function FormSettingsPage() {
                     onChange={(event) => setSettings((prev) => ({ ...prev, asciinemaShortcode: event.target.value }))}
                     placeholder="onboarding-demo"
                   />
-                  <p className="mt-1 text-xs text-slate-500">Use this in content as: [asciinema:{settings.asciinemaShortcode || 'onboarding-demo'}]</p>
+                  <p className="mt-1 text-xs text-slate-500">Use this in content as: [asciinema:{settings.asciinemaShortcode || 'onboarding-demo'}] or [asciinema:{settings.asciinemaShortcode || 'onboarding-demo'}|Custom label]</p>
                 </div>
                 {settings.asciinemaCastUrl && (
                   <p className="mt-2 text-xs text-emerald-700">Current file: {settings.asciinemaCastUrl}</p>
