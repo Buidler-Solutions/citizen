@@ -281,7 +281,7 @@ export function AsciinemaModal({
         role="dialog"
         aria-modal="true"
         aria-label={modalTitle}
-        className="flex h-screen w-screen flex-col bg-slate-950 p-4 sm:p-6"
+        className="flex h-screen w-screen flex-col bg-slate-950/10 p-4 sm:p-6"
         tabIndex={-1}
       >
         <div className="mb-4 flex items-center justify-between border-b border-slate-800 pb-4">
@@ -289,14 +289,14 @@ export function AsciinemaModal({
           <button
             type="button"
             onClick={onClose}
-            className="rounded-full border border-slate-600 p-2 text-slate-200 transition-colors hover:border-slate-400 hover:text-white"
+            className="rounded-full p-2 text-slate-200 transition-colors hover:border-slate-400 hover:text-white"
             aria-label="Close terminal recording modal"
           >
             ✕
           </button>
         </div>
 
-        <div className="flex-1 overflow-hidden rounded-xl border border-slate-800 bg-black p-2 sm:p-3">
+        <div className="flex-1 overflow-hidden rounded-xl p-2 sm:p-3 bg-slate-950/10">
           {playerError ? (
             <div className="grid min-h-[240px] place-items-center p-4 text-center text-sm text-red-200 sm:min-h-[320px]">
               <p>{playerError}</p>
@@ -306,6 +306,6 @@ export function AsciinemaModal({
           )}
         </div>
       </div>
-    </div>
+    </div >
   );
 }
