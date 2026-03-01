@@ -8,6 +8,26 @@ This folder contains the standalone wallet CLI binary backed by the
 cargo run -p citizen-wallet-cli -- --help
 ```
 
+## Run without `cargo run`
+
+If you want to invoke the CLI directly as `citizen-wallet-cli`, install it once
+from the workspace (or from the monorepo root with a manifest path):
+
+```bash
+# from citizen-protocol/
+cargo install --path wallet/cli
+
+# from monorepo root (/workspace/citizen)
+cargo install --path citizen-protocol/wallet/cli --root "$HOME/.local"
+export PATH="$HOME/.local/bin:$PATH"
+```
+
+Then run:
+
+```bash
+citizen-wallet-cli --help
+```
+
 ## Implemented command groups
 - Key lifecycle: `init`, `keygen`, `import-key`, `list-keys`, `public-key`, `export-key`
 - Entry signing: `sign-entry`, `sign-identity-register`, `sign-governance-vote`,
