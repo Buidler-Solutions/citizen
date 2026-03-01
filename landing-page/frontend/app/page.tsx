@@ -34,32 +34,32 @@ export default function HomePage() {
   const [shortcodeMap, setShortcodeMap] = useState<Record<string, string>>({});
 
   useEffect(() => {
-    const loadSettings = async () => {
+    const loadRecordings = async () => {
       try {
-        const response = await fetch(`${API_URL}/interest/form-settings`);
+        const response = await fetch(`${API_URL}/interest/asciinema-recordings/public`);
         if (!response.ok) {
           return;
         }
 
-        const settings = (await response.json()) as { asciinemaCastUrl?: string; asciinemaShortcode?: string };
-        const absoluteCastUrl = settings.asciinemaCastUrl?.trim() ? toAbsoluteUrl(settings.asciinemaCastUrl) : '';
-        const shortcode = normalizeShortcodeToken(settings.asciinemaShortcode ?? '');
+        const shortcodeToUrlMap = (await response.json()) as Record<string, string>;
+        const normalizedEntries = Object.entries(shortcodeToUrlMap)
+          .map(([shortcode, url]) => [normalizeShortcodeToken(shortcode), toAbsoluteUrl(url)] as const)
+          .filter(([shortcode, url]) => Boolean(shortcode) && Boolean(url));
 
-        if (shortcode && absoluteCastUrl) {
-          setShortcodeMap({ [shortcode]: absoluteCastUrl });
-          setOnboardingRecordingUrl(`[asciinema:${shortcode}]`);
+        if (normalizedEntries.length === 0) {
           return;
         }
 
-        if (absoluteCastUrl) {
-          setOnboardingRecordingUrl(absoluteCastUrl);
-        }
+        const normalizedMap = Object.fromEntries(normalizedEntries);
+        const [defaultShortcode, defaultUrl] = normalizedEntries[0];
+        setShortcodeMap(normalizedMap);
+        setOnboardingRecordingUrl(defaultShortcode ? `[asciinema:${defaultShortcode}]` : defaultUrl);
       } catch {
         // fallback to env/default URL
       }
     };
 
-    void loadSettings();
+    void loadRecordings();
   }, []);
 
   return (

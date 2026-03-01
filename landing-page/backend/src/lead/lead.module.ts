@@ -6,9 +6,10 @@ import { LeadController } from './lead.controller';
 import { LeadInterest } from './lead.entity';
 import { LeadService } from './lead.service';
 import { FormSettings } from './form-settings.entity';
+import { AsciinemaRecording } from './asciinema-recording.entity';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([LeadInterest, FormSettings]), AuthModule],
+  imports: [TypeOrmModule.forFeature([LeadInterest, FormSettings, AsciinemaRecording]), AuthModule],
   providers: [LeadService, JwtAuthGuard],
   controllers: [LeadController],
 })

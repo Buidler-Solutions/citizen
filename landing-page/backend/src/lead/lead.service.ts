@@ -1,10 +1,11 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { CreateLeadDto } from './dto/create-lead.dto';
 import { LeadInterest } from './lead.entity';
 import { FormSettings } from './form-settings.entity';
 import { UpdateFormSettingsDto } from './dto/update-form-settings.dto';
+import { AsciinemaRecording } from './asciinema-recording.entity';
 
 const DEFAULT_CAMPAIGN_CARDS = [
   {
@@ -23,7 +24,6 @@ const DEFAULT_CAMPAIGN_CARDS = [
     body: 'We reduce record fraud, strengthen governance transparency, and improve institutional trust across agencies.',
   },
 ];
-
 
 const DEFAULT_ROLE_OPTIONS = [
   {
@@ -56,6 +56,8 @@ export class LeadService {
     private readonly leadRepository: Repository<LeadInterest>,
     @InjectRepository(FormSettings)
     private readonly formSettingsRepository: Repository<FormSettings>,
+    @InjectRepository(AsciinemaRecording)
+    private readonly asciinemaRecordingRepository: Repository<AsciinemaRecording>,
   ) {}
 
   async create(payload: CreateLeadDto): Promise<LeadInterest> {
@@ -142,7 +144,6 @@ export class LeadService {
     });
   }
 
-
   private normalizeShortcode(value: string | undefined): string {
     const raw = (value ?? '').trim().toLowerCase();
     const token = raw
@@ -175,17 +176,6 @@ export class LeadService {
         existing.roles = this.normalizeRoleOptions(existing.roles);
       }
 
-      if (typeof existing.asciinemaCastUrl !== 'string') {
-        existing.asciinemaCastUrl = '';
-        needsSave = true;
-      }
-
-      const normalizedShortcode = this.normalizeShortcode(existing.asciinemaShortcode);
-      if (existing.asciinemaShortcode !== normalizedShortcode) {
-        existing.asciinemaShortcode = normalizedShortcode;
-        needsSave = true;
-      }
-
       return needsSave ? this.formSettingsRepository.save(existing) : existing;
     }
 
@@ -193,18 +183,65 @@ export class LeadService {
       id: 'default',
       campaignCards: DEFAULT_CAMPAIGN_CARDS,
       roles: DEFAULT_ROLE_OPTIONS,
-      asciinemaCastUrl: '',
-      asciinemaShortcode: 'onboarding-demo',
     });
     return this.formSettingsRepository.save(created);
   }
 
+  async getAsciinemaRecordings(): Promise<AsciinemaRecording[]> {
+    return this.asciinemaRecordingRepository.find({
+      order: {
+        updatedAt: 'DESC',
+      },
+    });
+  }
 
-  async setAsciinemaCastUrl(asciinemaCastUrl: string): Promise<FormSettings> {
-    const settings = await this.getFormSettings();
-    settings.asciinemaCastUrl = asciinemaCastUrl.trim();
-    settings.asciinemaShortcode = this.normalizeShortcode(settings.asciinemaShortcode);
-    return this.formSettingsRepository.save(settings);
+  async getAsciinemaShortcodeMap(): Promise<Record<string, string>> {
+    const recordings = await this.getAsciinemaRecordings();
+    return recordings.reduce<Record<string, string>>((accumulator, recording) => {
+      accumulator[recording.shortcode] = recording.castUrl;
+      return accumulator;
+    }, {});
+  }
+
+  async uploadAsciinemaRecording(castUrl: string, shortcode: string, filename: string, label?: string): Promise<AsciinemaRecording> {
+    const normalizedShortcode = this.normalizeShortcode(shortcode);
+    const normalizedUrl = castUrl.trim();
+
+    if (!normalizedUrl) {
+      throw new BadRequestException('Cast URL is required.');
+    }
+
+    const existing = await this.asciinemaRecordingRepository.findOne({
+      where: {
+        shortcode: normalizedShortcode,
+      },
+    });
+
+    if (existing) {
+      existing.castUrl = normalizedUrl;
+      existing.filename = filename;
+      existing.label = label?.trim() ?? existing.label;
+      return this.asciinemaRecordingRepository.save(existing);
+    }
+
+    const recording = this.asciinemaRecordingRepository.create({
+      shortcode: normalizedShortcode,
+      castUrl: normalizedUrl,
+      filename,
+      label: label?.trim() ?? '',
+    });
+
+    return this.asciinemaRecordingRepository.save(recording);
+  }
+
+  async deleteAsciinemaRecording(id: string): Promise<{ deleted: true }> {
+    const result = await this.asciinemaRecordingRepository.delete({ id });
+
+    if (!result.affected) {
+      throw new NotFoundException('Asciinema recording not found.');
+    }
+
+    return { deleted: true };
   }
 
   async updateFormSettings(payload: UpdateFormSettingsDto): Promise<FormSettings> {
@@ -217,9 +254,6 @@ export class LeadService {
       roles: payload.roles
         ? this.normalizeRoleOptions(payload.roles)
         : payload.roles,
-      asciinemaShortcode: payload.asciinemaShortcode
-        ? this.normalizeShortcode(payload.asciinemaShortcode)
-        : payload.asciinemaShortcode,
     };
     const updated = this.formSettingsRepository.merge(settings, sanitizedPayload);
     return this.formSettingsRepository.save(updated);
