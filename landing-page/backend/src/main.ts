@@ -5,6 +5,10 @@ import { existsSync, mkdirSync } from 'fs';
 import { join } from 'path';
 import { AppModule } from './app.module';
 
+const parseCorsOrigins = (): string[] => (process.env.CORS_ORIGIN?.split(',') ?? ['http://localhost:3000'])
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
 
@@ -15,12 +19,17 @@ async function bootstrap() {
     mkdirSync(castsRoot, { recursive: true });
   }
 
+  const allowedOrigins = parseCorsOrigins();
+
   app.useStaticAssets(uploadsRoot, {
     prefix: '/uploads/',
+    setHeaders: (response) => {
+      response.setHeader('Access-Control-Allow-Origin', '*');
+    },
   });
 
   app.enableCors({
-    origin: process.env.CORS_ORIGIN?.split(',') ?? ['http://localhost:3000'],
+    origin: allowedOrigins,
     credentials: true,
   });
 
