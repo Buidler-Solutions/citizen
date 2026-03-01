@@ -79,15 +79,6 @@ export default function HomePage() {
                     <a href="#" className="transition-colors hover:text-cyan-300">{item}</a>
                   </li>
                 ))}
-                <li>
-                  <button
-                    type="button"
-                    onClick={() => setIsAsciinemaOpen(true)}
-                    className="rounded-full border border-cyan-300/40 px-3 py-1 text-xs font-semibold uppercase tracking-[0.08em] text-cyan-200 transition-colors hover:border-cyan-200 hover:text-cyan-100"
-                  >
-                    Watch terminal demo
-                  </button>
-                </li>
               </ul>
             </nav>
 
