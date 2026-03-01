@@ -20,11 +20,9 @@ interface FormSettingsResponse {
   title: string;
   subtitle: string;
   roles: RoleOption[];
-  asciinemaCastUrl: string;
-  asciinemaShortcode: string;
 }
 
-type FormSettingsPayload = Pick<FormSettingsResponse, 'title' | 'subtitle' | 'roles' | 'asciinemaShortcode'>;
+type FormSettingsPayload = Pick<FormSettingsResponse, 'title' | 'subtitle' | 'roles'>;
 
 const DEFAULT_ROLES: RoleOption[] = [
   {
@@ -54,8 +52,6 @@ const DEFAULT_SETTINGS: FormSettingsResponse = {
   title: 'Build Public Truth with Citizen',
   subtitle: 'Validator · Builder · Observer onboarding',
   roles: DEFAULT_ROLES,
-  asciinemaCastUrl: '',
-  asciinemaShortcode: 'onboarding-demo',
 };
 
 export default function FormSettingsPage() {
@@ -76,8 +72,6 @@ export default function FormSettingsPage() {
     weight: 1,
   });
   const [addRoleError, setAddRoleError] = useState('');
-  const [castFile, setCastFile] = useState<File | null>(null);
-  const [uploadingCast, setUploadingCast] = useState(false);
 
   useEffect(() => {
     const token = localStorage.getItem(ADMIN_TOKEN_KEY);
@@ -106,8 +100,6 @@ export default function FormSettingsPage() {
             roles: Array.isArray(settingsData.roles) && settingsData.roles.length > 0
               ? settingsData.roles
               : prev.roles,
-            asciinemaCastUrl: settingsData.asciinemaCastUrl ?? prev.asciinemaCastUrl,
-            asciinemaShortcode: settingsData.asciinemaShortcode ?? prev.asciinemaShortcode,
           }));
         }
       } catch (loadError) {
@@ -146,7 +138,6 @@ export default function FormSettingsPage() {
           id: sanitizeRoleId(role.id || role.label || `role-${index + 1}`),
           weight: index + 1,
         })),
-        asciinemaShortcode: settings.asciinemaShortcode.trim(),
       };
 
       const response = await fetch(`${API_URL}/interest/form-settings`, {
@@ -177,57 +168,6 @@ export default function FormSettingsPage() {
     }
   };
 
-  const uploadCastFile = async () => {
-    const token = localStorage.getItem(ADMIN_TOKEN_KEY);
-
-    if (!token) {
-      router.replace('/admin/login');
-      return;
-    }
-
-    if (!castFile) {
-      setSaveStatus('Please choose a .cast file before uploading.');
-      return;
-    }
-
-    const formData = new FormData();
-    formData.append('castFile', castFile);
-
-    try {
-      setUploadingCast(true);
-      setSaveStatus('Uploading cast file...');
-
-      const response = await fetch(`${API_URL}/interest/form-settings/asciinema-upload`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-        body: formData,
-      });
-
-      if (response.status === 401) {
-        localStorage.removeItem(ADMIN_TOKEN_KEY);
-        router.replace('/admin/login');
-        return;
-      }
-
-      if (!response.ok) {
-        const details = await response.text();
-        throw new Error(details || 'Unable to upload cast file.');
-      }
-
-      const updated = (await response.json()) as Partial<FormSettingsResponse>;
-      if (updated.asciinemaCastUrl) {
-        setSettings((prev) => ({ ...prev, asciinemaCastUrl: updated.asciinemaCastUrl ?? prev.asciinemaCastUrl }));
-      }
-      setCastFile(null);
-      setSaveStatus('Cast file uploaded successfully!');
-    } catch (uploadError) {
-      setSaveStatus(uploadError instanceof Error ? uploadError.message : 'Unknown error');
-    } finally {
-      setUploadingCast(false);
-    }
-  };
 
   const openAddRoleModal = () => {
     const nextIndex = settings.roles.length + 1;
@@ -398,33 +338,6 @@ export default function FormSettingsPage() {
                 />
               </div>
 
-              <div className="rounded-2xl border border-slate-200 bg-white p-5">
-                <h4 className="text-sm font-bold uppercase tracking-wide text-slate-700">Asciinema Recording</h4>
-                <p className="mt-1 text-sm text-slate-600">Upload a .cast (or JSON cast) file and publish it for the onboarding modal.</p>
-                <div className="mt-4 max-w-md">
-                  <Input
-                    label="Shortcode"
-                    value={settings.asciinemaShortcode}
-                    onChange={(event) => setSettings((prev) => ({ ...prev, asciinemaShortcode: event.target.value }))}
-                    placeholder="onboarding-demo"
-                  />
-                  <p className="mt-1 text-xs text-slate-500">Use this in content as: [asciinema:{settings.asciinemaShortcode || 'onboarding-demo'}] or [asciinema:{settings.asciinemaShortcode || 'onboarding-demo'}|Custom label]</p>
-                </div>
-                {settings.asciinemaCastUrl && (
-                  <p className="mt-2 text-xs text-emerald-700">Current file: {settings.asciinemaCastUrl}</p>
-                )}
-                <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center">
-                  <Input
-                    type="file"
-                    accept=".cast,application/json"
-                    onChange={(event) => setCastFile(event.target.files?.[0] ?? null)}
-                    className="sm:max-w-md"
-                  />
-                  <Button onClick={uploadCastFile} disabled={!castFile || uploadingCast} isLoading={uploadingCast}>
-                    Upload Cast
-                  </Button>
-                </div>
-              </div>
             </div>
           )}
 

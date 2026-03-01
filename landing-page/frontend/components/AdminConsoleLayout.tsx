@@ -29,6 +29,7 @@ const NAV_GROUPS = [
     label: 'Configuration',
     items: [
       { href: '/admin/dashboard/form-settings', label: 'Form Settings', icon: Settings },
+      { href: '/admin/dashboard/asciinema-storage', label: 'Asciinema Storage', icon: FileSearch },
       { href: '/admin/dashboard/campaign-cards', label: 'Info Cards', icon: RectangleEllipsis },
       { href: '/admin/dashboard/site-setting', label: 'Site Settings', icon: Settings },
     ],

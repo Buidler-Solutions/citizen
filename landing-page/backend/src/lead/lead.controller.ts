@@ -33,14 +33,19 @@ export class LeadController {
     return this.leadService.getFormSettings();
   }
 
-  @UseGuards(JwtAuthGuard)
-  @Put('form-settings')
-  updateFormSettings(@Body() payload: UpdateFormSettingsDto) {
-    return this.leadService.updateFormSettings(payload);
+  @Get('asciinema-recordings/public')
+  getAsciinemaPublicMap() {
+    return this.leadService.getAsciinemaShortcodeMap();
   }
 
   @UseGuards(JwtAuthGuard)
-  @Post('form-settings/asciinema-upload')
+  @Get('asciinema-recordings')
+  getAsciinemaRecordings() {
+    return this.leadService.getAsciinemaRecordings();
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('asciinema-recordings/upload')
   @UseInterceptors(FileInterceptor('castFile', {
     storage: diskStorage({
       destination: 'uploads/casts',
@@ -59,12 +64,32 @@ export class LeadController {
       callback(null, true);
     },
   }))
-  uploadAsciinemaCast(@UploadedFile() castFile?: { filename: string }) {
+  uploadAsciinemaCast(
+    @UploadedFile() castFile?: { filename: string },
+    @Body() payload?: { shortcode?: string; label?: string },
+  ) {
     if (!castFile) {
       throw new BadRequestException('Missing castFile upload.');
     }
 
-    return this.leadService.setAsciinemaCastUrl(`/uploads/casts/${castFile.filename}`);
+    return this.leadService.uploadAsciinemaRecording(
+      `/uploads/casts/${castFile.filename}`,
+      payload?.shortcode ?? '',
+      castFile.filename,
+      payload?.label,
+    );
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Delete('asciinema-recordings/:id')
+  deleteAsciinemaRecording(@Param('id') id: string) {
+    return this.leadService.deleteAsciinemaRecording(id);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Put('form-settings')
+  updateFormSettings(@Body() payload: UpdateFormSettingsDto) {
+    return this.leadService.updateFormSettings(payload);
   }
 
   @UseGuards(JwtAuthGuard)
