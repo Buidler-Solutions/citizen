@@ -72,6 +72,12 @@ const isValidEmail = (email: string) => {
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
 const ASCIINEMA_SHORTCODE_PATTERN = /\[asciinema:([a-zA-Z0-9_-]+)\]/;
 
+const normalizeShortcodeToken = (token: string): string => token
+  .trim()
+  .toLowerCase()
+  .replace(/[^a-z0-9-]+/g, '-')
+  .replace(/^-+|-+$/g, '');
+
 const toAbsoluteUrl = (url: string) => {
   if (!url) return '';
   if (url.startsWith('http://') || url.startsWith('https://')) return url;
@@ -81,7 +87,12 @@ const toAbsoluteUrl = (url: string) => {
 
 const extractShortcodeToken = (value: string): string | null => {
   const match = value.match(ASCIINEMA_SHORTCODE_PATTERN);
-  return match?.[1] ?? null;
+  if (!match) {
+    return null;
+  }
+
+  const normalizedToken = normalizeShortcodeToken(match[1]);
+  return normalizedToken || null;
 };
 
 const stripShortcodeText = (value: string): string => value.replace(ASCIINEMA_SHORTCODE_PATTERN, '').trim();
@@ -287,7 +298,7 @@ export function InterestForm() {
   }, [introSlides.length]);
 
   const shortcodeMap = useMemo(() => {
-    const shortcode = settings.asciinemaShortcode?.trim();
+    const shortcode = normalizeShortcodeToken(settings.asciinemaShortcode ?? '');
     const castUrl = settings.asciinemaCastUrl?.trim();
 
     if (!shortcode || !castUrl) {
