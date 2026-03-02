@@ -6,9 +6,10 @@ const DESKTOP_FRAMES = 640;
 
 type UseResponsiveFrameSetOptions = {
   preferredDesktopFrameCount?: number;
+  frameAssetByNumber?: Record<number, string>;
 };
 
-export function useResponsiveFrameSet({ preferredDesktopFrameCount }: UseResponsiveFrameSetOptions = {}) {
+export function useResponsiveFrameSet({ preferredDesktopFrameCount, frameAssetByNumber = {} }: UseResponsiveFrameSetOptions = {}) {
   const [isMobile, setIsMobile] = useState(false);
 
   useEffect(() => {
@@ -32,12 +33,25 @@ export function useResponsiveFrameSet({ preferredDesktopFrameCount }: UseRespons
       isMobile,
       totalFrames: isMobile ? mobileFrameCount : desktopFrameCount,
       framePath: (frame: number) => {
-        const padded = frame.toString().padStart(4, '0');
         const assetBaseUrl = process.env.NEXT_PUBLIC_ASSET_BASE_URL?.replace(/\/$/, '') ?? '';
+
+        if (!isMobile) {
+          const mappedFilename = frameAssetByNumber[frame] ?? frameAssetByNumber[frame + 1];
+          if (mappedFilename) {
+            if (/^https?:\/\//.test(mappedFilename)) {
+              return mappedFilename;
+            }
+
+            const normalized = mappedFilename.startsWith('/') ? mappedFilename : `/${mappedFilename}`;
+            return `${assetBaseUrl}${normalized}`;
+          }
+        }
+
+        const padded = frame.toString().padStart(4, '0');
         const folder = isMobile ? '/frames/mobile' : '/frames/desktop';
         return `${assetBaseUrl}${folder}/frame-${padded}.webp`;
       },
     }),
-    [desktopFrameCount, isMobile, mobileFrameCount],
+    [desktopFrameCount, frameAssetByNumber, isMobile, mobileFrameCount],
   );
 }

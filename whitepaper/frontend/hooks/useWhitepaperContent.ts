@@ -13,6 +13,18 @@ type WhitepaperSectionsResponse = {
   data?: Chapter[];
 };
 
+type WhitepaperFrameAsset = {
+  frameNumber: number;
+  filename: string;
+};
+
+type WhitepaperFramesResponse = {
+  data?: WhitepaperFrameAsset[];
+  meta?: {
+    hasNextPage?: boolean;
+  };
+};
+
 const DEFAULT_FRAME_COUNT = 640;
 
 const asValidChapters = (candidate: unknown): Chapter[] | null => {
@@ -40,6 +52,7 @@ const asValidChapters = (candidate: unknown): Chapter[] | null => {
 export function useWhitepaperContent() {
   const [chapters, setChapters] = useState<Chapter[]>(CHAPTERS);
   const [desktopFrameCount, setDesktopFrameCount] = useState(DEFAULT_FRAME_COUNT);
+  const [frameAssetByNumber, setFrameAssetByNumber] = useState<Record<number, string>>({});
 
   useEffect(() => {
     const apiBaseUrl = process.env.NEXT_PUBLIC_WHITEPAPER_API_BASE_URL;
@@ -68,6 +81,36 @@ export function useWhitepaperContent() {
             setChapters(nextChapters);
           }
         }
+
+        const frameLookup: Record<number, string> = {};
+        let page = 1;
+        let hasNextPage = true;
+
+        while (hasNextPage && !abortController.signal.aborted) {
+          const framesResponse = await fetch(`${apiBaseUrl}/whitepaper/frames?page=${page}&limit=200`, {
+            signal: abortController.signal,
+          });
+
+          if (!framesResponse.ok) {
+            break;
+          }
+
+          const framesPayload = (await framesResponse.json()) as WhitepaperFramesResponse;
+          const frameRows = Array.isArray(framesPayload.data) ? framesPayload.data : [];
+
+          frameRows.forEach((frame) => {
+            if (typeof frame.frameNumber === 'number' && typeof frame.filename === 'string') {
+              frameLookup[frame.frameNumber] = frame.filename;
+            }
+          });
+
+          hasNextPage = Boolean(framesPayload.meta?.hasNextPage);
+          page += 1;
+        }
+
+        if (Object.keys(frameLookup).length > 0) {
+          setFrameAssetByNumber(frameLookup);
+        }
       } catch {
         // fallback to static content when API is unavailable
       }
@@ -84,7 +127,8 @@ export function useWhitepaperContent() {
     () => ({
       chapters,
       desktopFrameCount,
+      frameAssetByNumber,
     }),
-    [chapters, desktopFrameCount],
+    [chapters, desktopFrameCount, frameAssetByNumber],
   );
 }
