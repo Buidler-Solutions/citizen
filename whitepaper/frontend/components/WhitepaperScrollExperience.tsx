@@ -16,8 +16,11 @@ export function WhitepaperScrollExperience() {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [activeFrame, setActiveFrame] = useState(0);
-  const { chapters, desktopFrameCount } = useWhitepaperContent();
-  const { isMobile, totalFrames, framePath } = useResponsiveFrameSet({ preferredDesktopFrameCount: desktopFrameCount });
+  const { chapters, desktopFrameCount, frameAssetByNumber } = useWhitepaperContent();
+  const { isMobile, totalFrames, framePath } = useResponsiveFrameSet({
+    preferredDesktopFrameCount: desktopFrameCount,
+    frameAssetByNumber,
+  });
   const { isReady, getFrame } = useImageSequencePreloader({ totalFrames, framePath });
 
   const chapter = useMemo(
