@@ -13,6 +13,9 @@ export class WhitepaperSectionEntity {
   @Column({ type: 'text' })
   description!: string;
 
+  @Column({ type: 'text', default: '' })
+  content!: string;
+
   @Column({ type: 'integer', name: 'start_frame' })
   startFrame!: number;
 
