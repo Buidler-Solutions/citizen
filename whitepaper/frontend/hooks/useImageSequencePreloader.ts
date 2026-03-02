@@ -30,6 +30,16 @@ export function useImageSequencePreloader({ totalFrames, framePath }: UseImageSe
         setIsReady(true);
       });
 
+    const scheduleIdle = (cb: () => void) => {
+      if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
+        const idleCallback = window.requestIdleCallback as (handler: IdleRequestCallback) => number;
+        idleCallback(() => cb());
+        return;
+      }
+
+      globalThis.setTimeout(cb, 16);
+    };
+
     const preloadBatch = (startIndex: number, batchSize = 12) => {
       const endIndex = Math.min(totalFrames, startIndex + batchSize);
 
@@ -40,11 +50,11 @@ export function useImageSequencePreloader({ totalFrames, framePath }: UseImageSe
       }
 
       if (endIndex < totalFrames) {
-        requestIdleCallback(() => preloadBatch(endIndex, batchSize));
+        scheduleIdle(() => preloadBatch(endIndex, batchSize));
       }
     };
 
-    requestIdleCallback(() => preloadBatch(1));
+    scheduleIdle(() => preloadBatch(1));
 
     return () => {
       mounted = false;
