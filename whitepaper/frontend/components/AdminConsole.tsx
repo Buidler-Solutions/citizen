@@ -22,6 +22,10 @@ const createEmptySection = (): Omit<Chapter, 'id'> => ({
   orderIndex: 1,
 });
 
+
+const buildApiUnavailableMessage = (apiBaseUrl: string): string =>
+  `Cannot connect to the whitepaper backend at ${apiBaseUrl}. Start the NestJS backend first; if it is running, verify CORS_ORIGIN includes this frontend URL.`;
+
 export function AdminConsole() {
   const apiBaseUrl = useMemo(() => process.env.NEXT_PUBLIC_WHITEPAPER_API_BASE_URL?.replace(/\/$/, '') ?? '', []);
   const [password, setPassword] = useState('');
@@ -38,7 +42,7 @@ export function AdminConsole() {
       .then((payload) => {
         setSections(Array.isArray(payload.data) ? payload.data : []);
       })
-      .catch(() => setStatus('Failed to fetch whitepaper sections.'));
+      .catch(() => setStatus(buildApiUnavailableMessage(apiBaseUrl)));
   }, [apiBaseUrl, token]);
 
   const handleLogin = async (event: FormEvent<HTMLFormElement>) => {
@@ -48,11 +52,17 @@ export function AdminConsole() {
       return;
     }
 
-    const response = await fetch(`${apiBaseUrl}/admin/login`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ password }),
-    });
+    let response: Response;
+    try {
+      response = await fetch(`${apiBaseUrl}/admin/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password }),
+      });
+    } catch {
+      setStatus(buildApiUnavailableMessage(apiBaseUrl));
+      return;
+    }
 
     if (!response.ok) {
       setStatus('Login failed. Check admin password setup.');
@@ -76,23 +86,34 @@ export function AdminConsole() {
       ? `${apiBaseUrl}/admin/whitepaper/sections/${sectionId}`
       : `${apiBaseUrl}/admin/whitepaper/sections`;
 
-    const response = await fetch(endpoint, {
-      method: sectionId ? 'PATCH' : 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify(draft),
-    });
+    let response: Response;
+    try {
+      response = await fetch(endpoint, {
+        method: sectionId ? 'PATCH' : 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(draft),
+      });
+    } catch {
+      setStatus(buildApiUnavailableMessage(apiBaseUrl));
+      return;
+    }
 
     if (!response.ok) {
       setStatus('Unable to save section. Verify frame range and payload.');
       return;
     }
 
-    const refreshed = await fetch(`${apiBaseUrl}/whitepaper/sections`);
-    const payload = (await refreshed.json()) as SectionsResponse;
-    setSections(Array.isArray(payload.data) ? payload.data : []);
+    try {
+      const refreshed = await fetch(`${apiBaseUrl}/whitepaper/sections`);
+      const payload = (await refreshed.json()) as SectionsResponse;
+      setSections(Array.isArray(payload.data) ? payload.data : []);
+    } catch {
+      setStatus('Section saved, but failed to refresh sections list.');
+      return;
+    }
     setDraft(createEmptySection());
     setStatus('Whitepaper section saved.');
   };
@@ -100,12 +121,18 @@ export function AdminConsole() {
   const deleteSection = async (sectionId: string) => {
     if (!token || !apiBaseUrl) return;
 
-    const response = await fetch(`${apiBaseUrl}/admin/whitepaper/sections/${sectionId}`, {
-      method: 'DELETE',
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    });
+    let response: Response;
+    try {
+      response = await fetch(`${apiBaseUrl}/admin/whitepaper/sections/${sectionId}`, {
+        method: 'DELETE',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+    } catch {
+      setStatus(buildApiUnavailableMessage(apiBaseUrl));
+      return;
+    }
 
     if (!response.ok) {
       setStatus('Unable to delete section.');
