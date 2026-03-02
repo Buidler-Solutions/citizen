@@ -4,9 +4,9 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { ChapterOverlay } from '@/components/ChapterOverlay';
-import { CHAPTERS } from '@/lib/chapters';
 import { useImageSequencePreloader } from '@/hooks/useImageSequencePreloader';
 import { useResponsiveFrameSet } from '@/hooks/useResponsiveFrameSet';
+import { useWhitepaperContent } from '@/hooks/useWhitepaperContent';
 
 gsap.registerPlugin(ScrollTrigger);
 
@@ -16,12 +16,13 @@ export function WhitepaperScrollExperience() {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [activeFrame, setActiveFrame] = useState(0);
-  const { isMobile, totalFrames, framePath } = useResponsiveFrameSet();
+  const { chapters, desktopFrameCount } = useWhitepaperContent();
+  const { isMobile, totalFrames, framePath } = useResponsiveFrameSet({ preferredDesktopFrameCount: desktopFrameCount });
   const { isReady, getFrame } = useImageSequencePreloader({ totalFrames, framePath });
 
   const chapter = useMemo(
-    () => CHAPTERS.find((item) => activeFrame >= item.startFrame && activeFrame <= item.endFrame) ?? null,
-    [activeFrame],
+    () => chapters.find((item) => activeFrame >= item.startFrame && activeFrame <= item.endFrame) ?? null,
+    [activeFrame, chapters],
   );
 
   const chapterProgress = useMemo(() => {
