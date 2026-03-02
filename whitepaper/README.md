@@ -51,86 +51,151 @@ psql "$DATABASE_URL" -f backend/db/schema.sql
 
 ## Implementation Plan: Nest Hosting + Admin-Controlled Whitepaper Content
 
-This plan keeps the existing scroll animation system intact while moving chapter/frame content control into a NestJS + PostgreSQL admin workflow.
+This rollout keeps the existing GSAP + canvas scroll animation architecture unchanged while moving content ownership to a governed backend workflow (NestJS + PostgreSQL + admin console).
 
-### 1) Deploy Topology
+### 1) Target Architecture (Production)
 
-- Host **NestJS API** and **PostgreSQL** as the system of record for whitepaper sections and frame metadata.
-- Host the **Next.js whitepaper frontend** separately (or behind the same gateway) and fetch content from the Nest API.
-- Keep frame images in object storage/CDN (S3, R2, or equivalent) and store normalized file metadata in PostgreSQL.
+```text
+Admin Console (Next.js) ──JWT──> NestJS Admin API ──> PostgreSQL
+                                     │
+Public Whitepaper Frontend ─HTTP─────┤
+                                     └──> CDN/Object Storage (frame images)
+```
 
-### 2) Backend API Expansion (Admin CRUD)
+- **NestJS + PostgreSQL** is the source of truth for chapters, frame metadata, publish states, and audit logs.
+- **Object storage/CDN** serves frame image files; DB stores canonical paths and sequencing metadata.
+- **Public whitepaper frontend** only reads `published` content and keeps the same scroll-scrub animation runtime.
 
-Keep existing public read routes and add authenticated admin routes:
+### 2) Data Model Rollout (Draft/Publish Safe)
 
+Add explicit publishing state and version grouping:
+
+- `whitepaper_releases` (id, label, status: `draft|published|archived`, published_at)
+- `whitepaper_sections` linked to release_id
+- `whitepaper_frames` linked to release_id + section_id
+- `whitepaper_audit_log` (actor, action, entity_type, entity_id, before_json, after_json, created_at)
+
+Constraints:
+
+- `start_frame <= end_frame`
+- unique `order_index` per release
+- unique `(release_id, frame_number)`
+- optional exclusion constraint to prevent overlapping ranges inside the same release
+
+### 3) Backend API Contract
+
+Keep public read APIs, but make them release-aware:
+
+- `GET /whitepaper/metadata` -> active published release + frame bounds
+- `GET /whitepaper/sections` -> sections for published release (sorted)
+- `GET /whitepaper/frames?page=1&limit=50` -> paginated frames for published release
+
+Admin APIs (JWT + `admin` role):
+
+- `POST /admin/whitepaper/releases`
+- `POST /admin/whitepaper/releases/:id/publish` (transactional: one active published release)
 - `POST /admin/whitepaper/sections`
 - `PATCH /admin/whitepaper/sections/:id`
 - `DELETE /admin/whitepaper/sections/:id`
-- `POST /admin/whitepaper/frames` (single)
-- `POST /admin/whitepaper/frames/bulk` (batch import)
+- `POST /admin/whitepaper/frames`
+- `POST /admin/whitepaper/frames/bulk`
 - `DELETE /admin/whitepaper/frames/:id`
 
-Validation constraints to enforce server-side:
+Operational rules:
 
-- `start_frame <= end_frame`
-- no overlapping chapter frame ranges unless explicitly allowed
-- `order_index` uniqueness
-- frame number uniqueness per chapter (already modeled in schema)
+- publish endpoint invalidates read caches (`sections`, `frames`, `metadata`)
+- bulk frame import validates continuity (`1..N` or approved gaps)
+- all writes create immutable audit-log events
 
-### 3) Admin Console Responsibilities
+### 4) Admin Console Scope
 
-Build or integrate an admin UI that allows:
+Deliver an admin surface purpose-built for editorial control:
 
-- chapter create/edit/reorder
-- frame assignment and batch upload management
-- publish flow (draft -> published flag)
-- metadata preview (frame ranges, chapter boundaries, ordering)
+- release management (create draft, clone previous release, publish)
+- section editor (title/body/frame-range/order)
+- frame manager (single + CSV/JSON bulk import, missing-frame detection)
+- preview mode using draft release data without affecting public site
+- validation dashboard (range overlaps, duplicate frame numbers, ordering issues)
 
-Recommended pattern:
+### 5) Frontend Integration (Animation Preservation Rules)
 
-- admin writes to `draft` records
-- explicit `publish` action atomically promotes content to live
-- frontend reads only `published` records
+Non-negotiable compatibility rules:
 
-### 4) Frontend Integration (Preserve Scroll Animation)
+- keep **GSAP ScrollTrigger timeline math unchanged**
+- keep **canvas renderer contract unchanged** (`progress -> frameIndex -> image URL`)
+- only replace static chapter/frame config with API-driven metadata
 
-To maintain the scroll animation system:
+Integration steps:
 
-- keep GSAP ScrollTrigger + canvas renderer unchanged
-- replace hard-coded chapter source with API-fetched chapter data
-- derive `totalFrames` and chapter boundaries from metadata/sections API
-- preserve deterministic frame URL mapping for smooth scrub behavior
+1. fetch `metadata` at boot and set `totalFrames`
+2. fetch `sections` and map to chapter overlays
+3. resolve frame URLs via `ASSET_BASE_URL + frame.path`
+4. preserve preloading strategy (first frame eager, remainder idle/batched)
 
-### 5) Environment Variables (.env)
+### 6) Concrete Rollout Timeline
 
-Use `.env` for local/dev and secret management in production.
+#### Sprint 1 - Foundation (Backend + DB)
+- add release/audit schema via migrations
+- wire Nest module services for release-scoped queries
+- expose release-aware public read endpoints
 
-Suggested Nest variables:
+Exit criteria:
+- public site can read a seeded published release end-to-end
+
+#### Sprint 2 - Admin API + Security
+- implement admin CRUD + publish endpoint
+- add JWT auth, role guards, and write rate limits
+- add structured audit logging middleware/interceptor
+
+Exit criteria:
+- admin can create draft content and publish safely with full audit trail
+
+#### Sprint 3 - Admin Console
+- build release/section/frame management UI
+- add bulk upload + validation surfaces
+- add draft preview endpoint and preview mode toggle
+
+Exit criteria:
+- non-developer operator can manage full whitepaper lifecycle
+
+#### Sprint 4 - Frontend Data Migration
+- switch frontend to API-driven metadata/sections
+- preserve scroll performance and frame determinism
+- add fallback behavior for API outages (last known metadata)
+
+Exit criteria:
+- visual/parity check confirms identical animation behavior vs baseline
+
+#### Sprint 5 - Hardening + Launch
+- add integration/e2e tests for publish flow and read APIs
+- add cache invalidation + warmup job on publish
+- production deploy + monitoring dashboards/alerts
+
+Exit criteria:
+- SLOs met and launch checklist completed
+
+### 7) Launch Checklist
+
+- DB migrations applied and reversible
+- at least one validated published release exists
+- CDN cache headers tuned for frame assets
+- admin JWT rotation policy documented
+- alerting enabled for API latency/error rate
+- runbook includes rollback to prior published release
+
+### 8) Environment Variables (.env)
+
+Backend:
 
 - `DATABASE_URL`
 - `JWT_SECRET`
 - `ADMIN_JWT_AUDIENCE`
 - `CORS_ORIGIN`
 - `ASSET_BASE_URL`
+- `CACHE_TTL_SECONDS`
 - `PORT`
 
-Suggested frontend variables:
+Frontend:
 
 - `NEXT_PUBLIC_WHITEPAPER_API_BASE_URL`
 - `NEXT_PUBLIC_ASSET_BASE_URL`
-
-### 6) Security & Operations
-
-- protect admin routes with JWT + role-based guard (`admin` role)
-- enable audit logging for all content mutations
-- rate-limit write routes and validate payload size for bulk uploads
-- use DB migrations for schema evolution
-- add cache invalidation on publish to keep read APIs fresh
-
-### 7) Delivery Phases
-
-1. **Phase A:** wire TypeORM + PostgreSQL + existing read endpoints in your Nest host app.
-2. **Phase B:** add admin CRUD endpoints + auth/roles.
-3. **Phase C:** build admin UI and publish workflow.
-4. **Phase D:** migrate frontend from static chapters to API-driven chapters.
-5. **Phase E:** harden with tests, audit logs, and cache invalidation.
