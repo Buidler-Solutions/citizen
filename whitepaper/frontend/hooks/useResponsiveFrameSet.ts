@@ -3,9 +3,12 @@
 import { useEffect, useMemo, useState } from 'react';
 
 const DESKTOP_FRAMES = 640;
-const MOBILE_FRAMES = 320;
 
-export function useResponsiveFrameSet() {
+type UseResponsiveFrameSetOptions = {
+  preferredDesktopFrameCount?: number;
+};
+
+export function useResponsiveFrameSet({ preferredDesktopFrameCount }: UseResponsiveFrameSetOptions = {}) {
   const [isMobile, setIsMobile] = useState(false);
 
   useEffect(() => {
@@ -18,16 +21,23 @@ export function useResponsiveFrameSet() {
     return () => mediaQuery.removeEventListener('change', syncMobile);
   }, []);
 
+  const desktopFrameCount = preferredDesktopFrameCount && preferredDesktopFrameCount > 0
+    ? preferredDesktopFrameCount
+    : DESKTOP_FRAMES;
+
+  const mobileFrameCount = Math.max(1, Math.floor(desktopFrameCount / 2));
+
   return useMemo(
     () => ({
       isMobile,
-      totalFrames: isMobile ? MOBILE_FRAMES : DESKTOP_FRAMES,
+      totalFrames: isMobile ? mobileFrameCount : desktopFrameCount,
       framePath: (frame: number) => {
         const padded = frame.toString().padStart(4, '0');
+        const assetBaseUrl = process.env.NEXT_PUBLIC_ASSET_BASE_URL?.replace(/\/$/, '') ?? '';
         const folder = isMobile ? '/frames/mobile' : '/frames/desktop';
-        return `${folder}/frame-${padded}.webp`;
+        return `${assetBaseUrl}${folder}/frame-${padded}.webp`;
       },
     }),
-    [isMobile],
+    [desktopFrameCount, isMobile, mobileFrameCount],
   );
 }
