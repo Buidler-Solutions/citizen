@@ -1,0 +1,90 @@
+'use client';
+
+import { useEffect, useMemo, useState } from 'react';
+import { CHAPTERS, Chapter } from '@/lib/chapters';
+
+type WhitepaperMetadataResponse = {
+  data?: {
+    frameCount?: number;
+  };
+};
+
+type WhitepaperSectionsResponse = {
+  data?: Chapter[];
+};
+
+const DEFAULT_FRAME_COUNT = 640;
+
+const asValidChapters = (candidate: unknown): Chapter[] | null => {
+  if (!Array.isArray(candidate)) {
+    return null;
+  }
+
+  const chapters = candidate.filter((item): item is Chapter => {
+    if (!item || typeof item !== 'object') return false;
+
+    const chapter = item as Partial<Chapter>;
+    return (
+      typeof chapter.id === 'string' &&
+      typeof chapter.title === 'string' &&
+      typeof chapter.description === 'string' &&
+      typeof chapter.startFrame === 'number' &&
+      typeof chapter.endFrame === 'number' &&
+      typeof chapter.orderIndex === 'number'
+    );
+  });
+
+  return chapters.length > 0 ? chapters.sort((a, b) => a.orderIndex - b.orderIndex) : null;
+};
+
+export function useWhitepaperContent() {
+  const [chapters, setChapters] = useState<Chapter[]>(CHAPTERS);
+  const [desktopFrameCount, setDesktopFrameCount] = useState(DEFAULT_FRAME_COUNT);
+
+  useEffect(() => {
+    const apiBaseUrl = process.env.NEXT_PUBLIC_WHITEPAPER_API_BASE_URL;
+    if (!apiBaseUrl) return;
+
+    const abortController = new AbortController();
+
+    const syncContent = async () => {
+      try {
+        const [metadataResponse, sectionsResponse] = await Promise.all([
+          fetch(`${apiBaseUrl}/whitepaper/metadata`, { signal: abortController.signal }),
+          fetch(`${apiBaseUrl}/whitepaper/sections`, { signal: abortController.signal }),
+        ]);
+
+        if (metadataResponse.ok) {
+          const metadata = (await metadataResponse.json()) as WhitepaperMetadataResponse;
+          if (metadata.data?.frameCount && metadata.data.frameCount > 0) {
+            setDesktopFrameCount(metadata.data.frameCount);
+          }
+        }
+
+        if (sectionsResponse.ok) {
+          const sections = (await sectionsResponse.json()) as WhitepaperSectionsResponse;
+          const nextChapters = asValidChapters(sections.data);
+          if (nextChapters) {
+            setChapters(nextChapters);
+          }
+        }
+      } catch {
+        // fallback to static content when API is unavailable
+      }
+    };
+
+    void syncContent();
+
+    return () => {
+      abortController.abort();
+    };
+  }, []);
+
+  return useMemo(
+    () => ({
+      chapters,
+      desktopFrameCount,
+    }),
+    [chapters, desktopFrameCount],
+  );
+}
