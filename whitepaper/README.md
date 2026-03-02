@@ -199,3 +199,9 @@ Frontend:
 
 - `NEXT_PUBLIC_WHITEPAPER_API_BASE_URL`
 - `NEXT_PUBLIC_ASSET_BASE_URL`
+
+Sample files and bootstrap credentials:
+
+- `backend/.env.example`
+- `frontend/.env.example`
+- `admin-console.sample-credentials.md`
