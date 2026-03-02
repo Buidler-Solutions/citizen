@@ -6,3 +6,9 @@ citizen-protocol/.tmp-wallet-e2e/
 
 citizen-protocol/data/
 compilation/
+
+landing-page/backend/uploads/
+whitepaper/backend/.env
+whitepaper/backend/dist/
+whitepaper/backend/node_modules/
+whitepaper/frontend/.env.local
