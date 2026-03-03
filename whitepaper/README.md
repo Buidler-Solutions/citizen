@@ -39,14 +39,33 @@ npm install
 npm run dev
 ```
 
-### Backend
+### Backend (NestJS)
 
-Integrate `WhitepaperModule` into your Nest application root module and configure TypeORM for PostgreSQL.
+```bash
+cd backend
+npm install
+cp .env.example .env
+```
+
+Edit `backend/.env` with your local values (especially `DATABASE_URL`, `WHITEPAPER_ADMIN_PASSWORD`, and `CORS_ORIGIN`).
 
 Apply schema:
 
 ```bash
-psql "$DATABASE_URL" -f backend/db/schema.sql
+psql "$DATABASE_URL" -f db/schema.sql
+```
+
+Run the NestJS API:
+
+```bash
+npm run start:dev
+```
+
+Health check (examples):
+
+```bash
+curl http://localhost:4000/whitepaper/metadata
+curl -X POST http://localhost:4000/admin/login   -H 'Content-Type: application/json'   -d '{"password":"CitizenAdmin123!"}'
 ```
 
 ## Implementation Plan: Nest Hosting + Admin-Controlled Whitepaper Content
@@ -199,3 +218,9 @@ Frontend:
 
 - `NEXT_PUBLIC_WHITEPAPER_API_BASE_URL`
 - `NEXT_PUBLIC_ASSET_BASE_URL`
+
+Sample files and bootstrap credentials:
+
+- `backend/.env.example`
+- `frontend/.env.example`
+- `admin-console.sample-credentials.md`
