@@ -23,6 +23,12 @@ This runbook gives you a repeatable sequence to avoid those failures.
 
 ## 2) Prerequisites
 
+Complete key generation first (required):
+
+- Follow `docs/NODE_OPERATOR_KEYGEN_RUNBOOK.md` to generate:
+  - validator/operator keypairs (for `validator_allowlist[].public_key`), and
+  - manifest signer keypair (for manifest signing).
+
 Required tools:
 
 - `python3`
@@ -40,6 +46,8 @@ bash scripts/generate_signed_manifest.sh --help
 ---
 
 ## 3) Gather required inputs
+
+> Note: key material from `docs/NODE_OPERATOR_KEYGEN_RUNBOOK.md` is mandatory input for this section.
 
 You need four operator-controlled artifacts:
 

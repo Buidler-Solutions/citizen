@@ -196,6 +196,10 @@ If you leave the placeholder untouched, startup fails by design with
 
 ### Generate a signed admission manifest (one-liner)
 
+Before this step, generate operator + manifest signer keys using:
+
+- `docs/NODE_OPERATOR_KEYGEN_RUNBOOK.md`
+
 Use the helper script to produce `signed-manifest.json` from a payload +
 Ed25519 private key:
 
