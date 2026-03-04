@@ -1,4 +1,4 @@
-# Citizen-Protocol V0.1.0 Documentation
+# Citizen-Protocol Version-0.1.0 Documentation
 
 This index organizes all `docs/` markdown files into an ordered reading path for GitHub Pages.
 
