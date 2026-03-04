@@ -68,6 +68,17 @@ confirm the same value on at least one additional independent node.
 3. Record that value as `CANONICAL_GENESIS_HASH_HEX` only after independent
    node-to-node confirmation.
 
+### Clarification: first-network actor vs. joining validators
+
+- The first actor (or bootstrap ceremony) establishes the network's canonical
+  genesis artifact and produces the initial candidate `genesis_hash`.
+- Every succeeding validator **still recomputes local genesis hash at startup**
+  from its own storage and must match the expected/manifest hash to pass
+  admission.
+- So, joining validators do not invent a new canonical genesis, but they do
+  re-derive and verify the same genesis commitment locally as a mandatory
+  safety gate.
+
 Example launch command (monorepo root):
 
 ```bash
