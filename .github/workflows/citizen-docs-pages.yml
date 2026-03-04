@@ -4,9 +4,10 @@ on:
   push:
     branches: [github-pages]
     paths:
-      - 'citizen-protocol/docs/**'
+      - 'docs/**'
       - 'citizen-protocol/mkdocs.yml'
       - 'citizen-protocol/requirements-docs.txt'
+      - 'citizen-protocol/README.md'
       - '.github/workflows/citizen-docs-pages.yml'
   workflow_dispatch:
 
