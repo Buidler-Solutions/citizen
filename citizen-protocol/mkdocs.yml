@@ -66,25 +66,29 @@ nav:
 theme:
   name: material
   features:
+    - navigation.instant
     - navigation.sections
     - navigation.expand
+    - navigation.indexes
     - navigation.top
+    - toc.integrate
     - content.code.copy
   palette:
-    - media: "(prefers-color-scheme: light)"
-      scheme: default
+    - scheme: default
       primary: indigo
       accent: indigo
       toggle:
         icon: material/weather-night
         name: Switch to dark mode
-    - media: "(prefers-color-scheme: dark)"
-      scheme: slate
+    - scheme: slate
       primary: indigo
       accent: indigo
       toggle:
         icon: material/weather-sunny
         name: Switch to light mode
+
+extra_css:
+  - assets/stylesheets/dark-mode.css
 
 markdown_extensions:
   - admonition
