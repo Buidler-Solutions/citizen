@@ -1,0 +1,76 @@
+site_name: CITIZEN Protocol Docs
+site_description: Governance-first ledger documentation for builders, operators, and reviewers
+
+docs_dir: docs
+
+nav:
+  - Home: index.md
+  - Foundation:
+      - Deep Research Architecture Baseline: DEEP_RESEARCH_ARCHITECTURE_BASELINE.md
+      - Citizen Whitepaper: CITIZEN_WHITEPAPER.md
+      - Citizen Manifesto: CITIZEN_MANIFESTO.md
+      - Governance Charter v1: GOVERNANCE_CHARTER_V1.md
+      - Networks: NETWORKS.md
+      - Government Adoption Pitch: GOVERNMENT_ADOPTION_PITCH.md
+  - Architecture:
+      - Developer Experience Blueprint: DEVELOPER_EXPERIENCE_BLUEPRINT.md
+      - Credit Grant Write Gating Model: CREDIT_GRANT_WRITE_GATING_MODEL.md
+      - Node.js SDK Release Gate Spec: NODEJS_SDK_RELEASE_GATE_SPEC.md
+  - Builder Guides:
+      - Namespace Builder Guide: NAMESPACE_BUILDER_GUIDE.md
+      - Stack Testing Guide: STACK_TESTING_GUIDE.md
+      - Wallet Generation Guide: WALLET_GENERATION_GUIDE.md
+      - Admission Manifest Generation How-To: ADMISSION_MANIFEST_GENERATION_HOWTO.md
+      - Multisig 3 of 5 Implementation How-To: MULTISIG_3_OF_5_IMPLEMENTATION_HOWTO.md
+  - Operations Runbooks:
+      - Genesis Hashing Runbook: GENESIS_HASHING_RUNBOOK.md
+      - Localnet Runbook: LOCALNET_RUNBOOK.md
+      - Localnet 80% Quorum Multisig Runbook: LOCALNET_80_QUORUM_MULTISIG_RUNBOOK.md
+      - Node Operator Keygen Runbook: NODE_OPERATOR_KEYGEN_RUNBOOK.md
+      - Observer Node Runbook: OBSERVER_NODE_RUNBOOK.md
+      - On-chain Policy Runtime Sync Runbook: ONCHAIN_POLICY_RUNTIME_SYNC_RUNBOOK.md
+      - Operator Disaster Recovery Runbook: OPERATOR_DISASTER_RECOVERY_RUNBOOK.md
+      - Real Node Runtime Runbook: REAL_NODE_RUNTIME_RUNBOOK.md
+      - Validator Builder API Key Issuance Runbook: VALIDATOR_BUILDER_API_KEY_ISSUANCE_RUNBOOK.md
+      - ACL/DEK Implementation Double Check: ACL_DEK_IMPLEMENTATION_DOUBLE_CHECK.md
+  - Network Admission:
+      - Network Admission Control Plan: NETWORK_ADMISSION_CONTROL_PLAN.md
+      - Network Admission Implementation Task List: NETWORK_ADMISSION_IMPLEMENTATION_TASK_LIST.md
+      - Network Admission Localnet Staged Rollout: NETWORK_ADMISSION_LOCALNET_STAGED_ROLLOUT.md
+      - Network Admission Rollout Completion: NETWORK_ADMISSION_ROLLOUT_COMPLETION.md
+      - Network Admission Troubleshooting Runbook: NETWORK_ADMISSION_TROUBLESHOOTING_RUNBOOK.md
+      - Network Identity Change Runbook: NETWORK_IDENTITY_CHANGE_RUNBOOK.md
+      - Validator Rollout Readiness: VALIDATOR_ROLLOUT_READINESS.md
+  - Wallet Program:
+      - Wallet System Plan: WALLET_SYSTEM_PLAN.md
+      - Wallet Decisions: WALLET_DECISIONS.md
+      - Wallet Implementation Tasks: WALLET_IMPLEMENTATION_TASKS.md
+      - Wallet Security Review: WALLET_SECURITY_REVIEW.md
+      - Wallet Readiness Review: WALLET_READINESS_REVIEW.md
+      - Wallet Task Status Review: WALLET_TASK_STATUS_REVIEW.md
+  - Readiness Reviews:
+      - Phase 2 Readiness Review: PHASE2_READINESS_REVIEW.md
+      - Phase 3 Readiness Review: PHASE3_READINESS_REVIEW.md
+      - Phase 4 Readiness Review: PHASE4_READINESS_REVIEW.md
+      - Phase 5 Readiness Review: PHASE5_READINESS_REVIEW.md
+  - Implementation Tracking:
+      - Phase Implementation Tracker: PHASE_IMPLEMENTATION_TRACKER.md
+      - Active/Standby Implementation Double Check: ACTIVE_STANDBY_IMPLEMENTATION_DOUBLE_CHECK.md
+  - Security Models:
+      - Asset Clawback Behavior Matrix: ASSET_CLAWBACK_BEHAVIOR_MATRIX.md
+  - Reference Examples:
+      - On-chain Policy Runtime Sync Sample: ONCHAIN_POLICY_RUNTIME_SYNC_SAMPLE.md
+  - SDK:
+      - Node.js SDK Docs: SDK_NODEJS_DOCS.md
+
+theme:
+  name: mkdocs
+
+extra_css:
+  - assets/stylesheets/dark-mode.css
+
+markdown_extensions:
+  - admonition
+  - tables
+  - toc:
+      permalink: true

@@ -66,6 +66,26 @@ Current delivery includes Phase 2 identity/data ownership primitives, Phase 3 bu
 - Hybrid privacy mode enforces reader ACL + DEK wrapping semantics for both full-payload and per-field commit workflows: each authorized reader receives an X25519-wrapped DEK, `field_reader_acls` scopes access by field, and all flows keep deterministic `payload_commitment` anchoring so node, wallet, and explorer contracts stay verifiable.
 - Privacy options are now documented as four operator/builder choices: `none` (default clear-text), `passphrase` encrypt-then-commit, `hybrid_full_payload` (ACL + DEK), and `hybrid_selective_fields` (ACL + DEK + per-field visibility).
 
+
+## Documentation Site (MkDocs)
+
+The `citizen-protocol/docs/` markdown set is now wired for **MkDocs** and ready for GitHub Pages deployment from the dedicated `github-pages` branch (not `main`).
+
+```bash
+cd citizen-protocol
+python -m pip install -r requirements-docs.txt
+mkdocs serve
+```
+
+For a production build artifact (used by the GitHub Pages workflow):
+
+```bash
+cd citizen-protocol
+mkdocs build
+```
+
+The docs site uses the default MkDocs theme with an included CSS dark-mode stylesheet (based on `prefers-color-scheme`) so dark mode is available without installing third-party themes.
+
 ## Getting Started
 
 1. Install the Rust toolchain (`rustup` with stable compiler).
