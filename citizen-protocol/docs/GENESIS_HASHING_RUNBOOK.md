@@ -1,88 +1,126 @@
-# Genesis Hashing Runbook (Citizen Protocol)
+# Genesis Hashing & Runtime Bring-Up Runbook (Citizen Protocol)
 
-This runbook defines the operator workflow to derive, verify, and publish the
-`genesis_hash` used in signed admission manifests when starting a
-Citizen Protocol network.
+This runbook is a complete operator guide for deriving, validating, and enforcing
+`genesis_hash` so a Citizen Protocol runtime can start cleanly and join peers
+without network-identity rejection.
 
-`genesis_hash` is a required network-identity field and must match across:
+It expands the minimal checklist into a full lifecycle:
 
-- local node storage,
-- signed admission manifest payload,
-- peer handshake identity tuple.
+1. prepare trusted genesis and manifest inputs,
+2. derive canonical hash evidence,
+3. build and sign the admission manifest,
+4. configure node runtime enforcement,
+5. validate startup preflight and cross-peer identity parity,
+6. resolve failures and execute controlled identity transitions.
 
-If it does not match, startup preflight and peer admission are expected to fail.
+`genesis_hash` is a mandatory network-identity input and must remain consistent
+across local storage, manifest payload, and peer handshake identity.
 
 ---
 
-## 1) Why this matters
+## 1) Why `genesis_hash` is a hard runtime gate
 
-Citizen admission controls bind network identity to:
+Citizen startup admission and transport admission bind runtime identity to:
 
 - `network_id`
 - `genesis_hash`
 - `manifest_digest`
 
-This prevents accidental or malicious cross-network peering.
+A mismatch in any field causes deterministic rejection of startup and/or peer
+admission to prevent accidental cross-network peering and malicious replay.
 
 ---
 
-## 2) Canonical source of truth
+## 2) Runtime source of truth (implementation-aligned)
 
-At runtime, the node computes local genesis hash as follows:
+At startup preflight, local genesis hash is computed from storage:
 
-1. Read block at height `1` from local ledger storage.
-2. If block exists, compute `hash_block_header(block.header)`.
-3. If block does not exist, use `blake3("GENESIS::EMPTY")`.
+1. read block at height `1`,
+2. if present, hash only deterministic header fields,
+3. if absent, use `blake3("GENESIS::EMPTY")`.
 
-`hash_block_header` is deterministic SHA-256 over these header fields in order:
+Header hash function (`hash_block_header`) uses SHA-256 over this exact order:
 
-- `height` (big-endian bytes)
-- `prev_hash` (UTF-8 bytes)
-- `entry_root` (UTF-8 bytes)
-- `proposer` (UTF-8 bytes)
-- `timestamp` (big-endian bytes)
+1. `height` (big-endian bytes)
+2. `prev_hash` (UTF-8 bytes)
+3. `entry_root` (UTF-8 bytes)
+4. `proposer` (UTF-8 bytes)
+5. `timestamp` (big-endian bytes)
 
-`commit_proof` is intentionally excluded from hash-critical fields.
+`commit_proof` is intentionally excluded so the hash is stable before/after
+signature aggregation.
 
----
+### Important implementation note
 
-## 3) Prerequisites
-
-- Finalized genesis artifact and bootstrap process for target network.
-- `manifest.payload.json` draft prepared for signing.
-- Access to at least one correctly bootstrapped node data directory.
-- Tooling:
-  - `cargo`
-  - `python3`
-  - `openssl` (for manifest signing flow)
+The fallback `GENESIS::EMPTY` hash is deterministic and valid only for nodes
+with no height-1 block yet. For shared testnet/futurenet/mainnet-like startup,
+operators should still bootstrap from approved genesis artifacts and avoid
+assuming empty-state fallback equals approved network genesis.
 
 ---
 
-## 4) Procedure to derive `genesis_hash`
+## 3) Prerequisites for production-safe derivation
 
-### Step A — Bootstrap a reference node to genesis
+Before touching manifests, ensure you have:
 
-Start a clean node once so local storage contains the canonical genesis state for
-that network.
+- governance-approved genesis artifact/snapshot for the target network,
+- trusted node config template with real key material (no placeholders),
+- draft `manifest.payload.json`,
+- approved signer key(s) for manifest signatures,
+- one reference node host (or isolated VM/container) for canonical preflight
+  evidence capture.
 
-Use your normal validator/observer startup command with the intended network config.
+Tooling:
 
-### Step B — Read hash from node preflight context
+- `cargo` (if running through workspace),
+- runtime binary (`citizen-node`) or `cargo run` path,
+- `openssl` (manifest helper key-id derivation/signing flow),
+- `jq` (recommended for JSON evidence checks).
 
-During startup admission preflight, the node computes local genesis hash and compares
-it against expected identity values. Use startup logs/diagnostics from this phase as
-operator evidence.
+---
 
-If your organization has metrics/log collection, capture:
+## 4) End-to-end operator procedure
 
-- local genesis hash evidence,
-- manifest digest,
-- configured network ID,
-- node role and validator ID.
+## Phase A — Bootstrap trusted reference node
 
-### Step C — Populate manifest payload
+1. Start from clean data dir (or audited trusted snapshot).
+2. Launch node against intended network config.
+3. Ensure node reaches startup preflight phase.
 
-Set this exact value in:
+From monorepo root (example testnet profile):
+
+```bash
+RUST_LOG=info cargo run --release -p citizen-node --manifest-path citizen-protocol/Cargo.toml -- citizen-protocol/config/testnet/validator-sample.toml
+```
+
+Prebuilt binary form:
+
+```bash
+RUST_LOG=info ./citizen-node /etc/citizen/node.toml
+```
+
+If config has `manifest_path`, path must resolve from process working directory
+or be absolute.
+
+## Phase B — Capture canonical `genesis_hash` evidence
+
+Capture from startup preflight diagnostics/logs on the trusted reference node.
+Store evidence records with:
+
+- node hostname/instance id,
+- timestamp (UTC),
+- `network_id`,
+- derived local `genesis_hash`,
+- manifest digest (if present),
+- validator id / node role,
+- config commit/version provenance.
+
+Operational best practice: capture at least two independent trusted nodes and
+compare values before manifest publication.
+
+## Phase C — Update manifest payload
+
+Set exact canonical hash in payload:
 
 ```json
 {
@@ -90,98 +128,157 @@ Set this exact value in:
 }
 ```
 
-Then generate signed manifest artifact using the standard manifest runbook.
-
----
-
-## 5) Verification gates before production start
-
-### Gate 1 — Manifest payload correctness
-
-Confirm `manifest.payload.json` includes:
+Also ensure payload has required fields:
 
 - `network_id`
 - `genesis_hash`
 - `boot_nodes`
 - `validator_allowlist`
-- `issued_at`, `version`, `manifest_id`
+- `issued_at`
+- `version`
+- `manifest_id`
 
-### Gate 2 — Node preflight success
+## Phase D — Sign manifest with approved keys
 
-Run node startup with:
+Example helper command:
 
-- `manifest_enforce = true`
-- `manifest_path` set to signed manifest JSON
+```bash
+scripts/generate_signed_manifest.sh --payload ./manifest.payload.json --private-key ./manifest-signer-ed25519.pem --key-id "$(openssl pkey -in ./manifest-signer-ed25519.pem -pubout -outform DER | tail -c 32 | od -An -v -tx1 | tr -d ' \n')" --output ./signed-manifest.json
+```
 
-Expected result:
+Treat signed manifest as controlled release artifact:
 
-- no `manifest_genesis_mismatch`
-- no `local_genesis_mismatch`
-- node continues past admission preflight
+- immutable checksum published to operators,
+- signer key provenance recorded,
+- issuance timestamp verified against policy windows.
 
-### Gate 3 — Peer identity parity
+## Phase E — Enforce manifest in every node config
 
-Across at least two peers, confirm identity tuple parity:
+Set in each node configuration:
+
+```toml
+manifest_enforce = true
+manifest_path = "/absolute/path/to/signed-manifest.json"
+```
+
+Do not leave sample placeholder values such as
+`REPLACE_WITH_SIGNED_MANIFEST_JSON_PATH`.
+
+## Phase F — Startup preflight validation
+
+Restart nodes and validate startup passes with no mismatch reason codes.
+
+Required clean-state expectations:
+
+- no `manifest_genesis_mismatch`,
+- no `local_genesis_mismatch`,
+- no `manifest_network_mismatch`,
+- no `manifest_required` / `manifest_path_placeholder`.
+
+## Phase G — Cross-peer identity tuple parity checks
+
+Across at least two peers per region/cluster, confirm tuple parity:
 
 - `network_id`
 - `genesis_hash`
 - `manifest_digest`
 
+Any disparity means network identity split risk; halt rollout until reconciled.
+
 ---
 
-## 6) Failure map
+## 5) Runtime completion criteria (what “running” means)
 
-### `manifest_genesis_mismatch`
+A Citizen runtime is considered correctly brought up when all are true:
+
+1. Node startup preflight succeeds under `manifest_enforce = true`.
+2. Each node reports same `network_id` and `genesis_hash`.
+3. Each peering node presents same `manifest_digest` identity component.
+4. Peers admit each other without identity mismatch rejection.
+5. Block production/verification continues after admission stage.
+
+This runbook covers identity bring-up gates; pair with network and validator
+readiness runbooks for full production acceptance.
+
+---
+
+## 6) Failure reason map and deterministic remediation
+
+## `manifest_genesis_mismatch`
 
 Meaning:
+- Signed manifest `payload.genesis_hash` differs from runtime expected genesis.
 
-- Signed manifest `payload.genesis_hash` differs from expected genesis.
+Remediation:
+1. Re-verify approved genesis artifact provenance.
+2. Re-capture canonical hash from trusted preflight evidence.
+3. Patch `manifest.payload.json`.
+4. Re-sign and redeploy manifest.
+5. Restart and re-verify.
 
-Actions:
-
-1. Reconfirm genesis provenance (correct network/bootstrap artifact).
-2. Recompute/recapture canonical hash from trusted reference node.
-3. Regenerate manifest payload and re-sign.
-4. Redeploy manifest and restart nodes.
-
-### `local_genesis_mismatch`
+## `local_genesis_mismatch`
 
 Meaning:
+- Local storage hash differs from expected genesis in admission context.
 
-- Local storage genesis differs from configured/manifest expected value.
-
-Actions:
-
-1. Quarantine the node data directory.
+Remediation:
+1. Quarantine node data dir immediately.
 2. Restore from trusted snapshot or re-bootstrap from approved genesis.
-3. Restart and verify preflight.
+3. Re-run preflight and compare tuple values.
 
-### `storage`
+## `manifest_network_mismatch`
 
 Meaning:
+- Manifest `network_id` differs from configured runtime `network_id`.
 
-- Storage read failed while computing local genesis hash.
+Remediation:
+1. Validate operator config target network.
+2. Validate signed manifest artifact distribution channel.
+3. Align config/manifest pair and restart.
 
-Actions:
+## `manifest_required`
 
-1. Check RocksDB/disk health and permissions.
-2. Repair or restore data.
-3. Repeat preflight checks.
+Meaning:
+- `manifest_enforce=true` without usable manifest.
+
+Remediation:
+1. Ensure manifest file exists/readable.
+2. Set valid absolute `manifest_path`.
+3. Restart and verify.
+
+## `manifest_path_placeholder`
+
+Meaning:
+- Sample placeholder path still present in config.
+
+Remediation:
+1. Replace placeholder with real signed manifest path.
+2. Re-run startup preflight.
+
+## `storage`
+
+Meaning:
+- Storage read failure while deriving local genesis hash.
+
+Remediation:
+1. Check disk, file permissions, RocksDB health.
+2. Repair or restore from backup.
+3. Repeat preflight and tuple verification.
 
 ---
 
-## 7) Genesis reset / governance-driven change
+## 7) Controlled genesis identity transitions
 
-When changing `genesis_hash` (for governance-approved reset/fork):
+For governance-approved resets/forks that change identity tuple:
 
-1. Obtain governance approval (>=80%) for identity transition.
-2. Build new signed manifest using new (`network_id`, `genesis_hash`) tuple.
-3. Canary rollout validators.
-4. Roll observers.
-5. Complete full validator rollout.
-6. Keep rollback artifact set for previous identity tuple until transition closes.
+1. secure governance approval (>=80%) for transition,
+2. create new signed manifest with new (`network_id`, `genesis_hash`) pair,
+3. canary validator rollout,
+4. observer rollout,
+5. full validator rollout,
+6. retain rollback artifacts for previous tuple until closure criteria are met.
 
-Do not perform ad-hoc genesis identity changes outside the governance runbook.
+Never perform ad-hoc genesis identity changes outside governance process.
 
 ---
 
@@ -197,9 +294,20 @@ Do not perform ad-hoc genesis identity changes outside the governance runbook.
 
 ---
 
-## 9) Related runbooks
+## 9) Expanded operational evidence checklist (recommended)
 
-- `docs/NODE_OPERATOR_KEYGEN_RUNBOOK.md`
+- [ ] Manifest checksum published via trusted release channel.
+- [ ] Signer key-id and approval ticket linked in ops record.
+- [ ] At least two-node independent genesis hash confirmation archived.
+- [ ] Rollout batch report includes tuple parity snapshots.
+- [ ] Incident rollback package includes prior signed manifest and snapshots.
+
+---
+
+## 10) Related runbooks
+
 - `docs/ADMISSION_MANIFEST_GENERATION_HOWTO.md`
 - `docs/NETWORK_ADMISSION_TROUBLESHOOTING_RUNBOOK.md`
 - `docs/NETWORK_IDENTITY_CHANGE_RUNBOOK.md`
+- `docs/NODE_OPERATOR_KEYGEN_RUNBOOK.md`
+- `docs/VALIDATOR_ROLLOUT_READINESS.md`
