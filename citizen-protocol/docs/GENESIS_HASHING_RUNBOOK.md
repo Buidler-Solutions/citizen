@@ -57,6 +57,47 @@ with no height-1 block yet. For shared testnet/futurenet/mainnet-like startup,
 operators should still bootstrap from approved genesis artifacts and avoid
 assuming empty-state fallback equals approved network genesis.
 
+### How to generate `CANONICAL_GENESIS_HASH_HEX`
+
+Use one trusted reference node to produce the first candidate hash, then
+confirm the same value on at least one additional independent node.
+
+1. Start the node and wait for startup preflight logging.
+2. Capture the `genesis_hash` field from the
+   `"admission preflight passed"` log event.
+3. Record that value as `CANONICAL_GENESIS_HASH_HEX` only after independent
+   node-to-node confirmation.
+
+Example launch command (monorepo root):
+
+```bash
+RUST_LOG=info cargo run --release -p citizen-node --manifest-path citizen-protocol/Cargo.toml -- citizen-protocol/config/testnet/validator-sample.toml
+```
+
+Example log extraction from captured output:
+
+```bash
+rg 'admission preflight passed' ./node.log
+```
+
+Expected structured fields include `network_id`, `genesis_hash`, and
+`manifest_digest`.
+
+#### Empty-state fallback value (lab/dev only)
+
+If no height-1 block exists yet, runtime uses `blake3("GENESIS::EMPTY")`.
+You can reproduce the expected value with:
+
+```bash
+python - <<'PY'
+import blake3
+print(blake3.blake3(b"GENESIS::EMPTY").hexdigest())
+PY
+```
+
+Do not treat empty-state fallback as production network canonical genesis unless
+governance and release procedures explicitly designate it.
+
 ---
 
 ## 3) Prerequisites for production-safe derivation
