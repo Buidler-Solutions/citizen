@@ -27,5 +27,8 @@
     "ts-loader": "^9.5.4",
     "ts-node": "^10.9.2",
     "typescript": "^5.9.2"
+  },
+  "overrides": {
+    "ajv": "8.18.0"
   }
 }
