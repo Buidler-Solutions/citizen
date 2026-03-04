@@ -13,7 +13,16 @@ Working Draft – Non-Currency, Governance-First Ledger
 v0.2 – Deep Research Alignment (Authoritative for current implementation planning)
 
 The repository is now aligned to the deep-research baseline in:
-- `citizen-protocol/docs/DEEP_RESEARCH_ARCHITECTURE_BASELINE.md`
+- `docs/DEEP_RESEARCH_ARCHITECTURE_BASELINE.md`
+
+### Monorepo Documentation Boundary (Mandatory)
+
+The root-level `docs/` directory is reserved exclusively for the `citizen-protocol/` project documentation.
+
+- Treat `/docs` as the published documentation surface for `citizen-protocol/` only.
+- Do **not** place `landing-page/` or `whitepaper/` documentation into root `/docs`.
+- Documentation for `landing-page/` and `whitepaper/` must remain inside their own subfolders.
+- Any future GitHub Pages or doc-link updates must preserve this boundary.
 
 All contributors and agents should treat the following as active direction:
 
@@ -1030,5 +1039,4 @@ Stress testing at 50–100 validators is a **mandatory gate** before real-world 
 ---
 
 *End of Specification*
-
 
