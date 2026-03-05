@@ -90,8 +90,14 @@ theme:
 extra_css:
   - assets/stylesheets/dark-mode.css
 
+extra_javascript:
+  - https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js
+  - assets/javascripts/mathjax.js
+
 markdown_extensions:
   - admonition
   - tables
+  - pymdownx.arithmatex:
+      generic: true
   - toc:
       permalink: true

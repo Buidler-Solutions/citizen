@@ -86,6 +86,8 @@ mkdocs build
 
 The docs site uses the default MkDocs theme with an included CSS dark-mode stylesheet (based on `prefers-color-scheme`) so dark mode is available without installing third-party themes.
 
+LaTeX-style math formulas are supported in docs via MathJax (inline: `$...$` or `\(...\)`, block: `$$...$$` or `\[...\]`).
+
 ## Getting Started
 
 1. Install the Rust toolchain (`rustup` with stable compiler).
