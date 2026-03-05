@@ -1,0 +1,5 @@
+INHERIT: citizen-protocol/mkdocs.yml
+
+# Root-level wrapper so `mkdocs build --strict` works when run from repository root.
+# All authoritative docs configuration remains in citizen-protocol/mkdocs.yml.
+docs_dir: docs

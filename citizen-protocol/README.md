@@ -84,7 +84,7 @@ cd citizen-protocol
 mkdocs build
 ```
 
-The docs site uses the default MkDocs theme with an included CSS dark-mode stylesheet (based on `prefers-color-scheme`) so dark mode is available without installing third-party themes.
+The docs site uses the **MkDocs Material** theme with persistent light/dark palette toggles, left navigation sidebar sections, and a right-side table-of-contents sidebar for easier browsing on GitHub Pages.
 
 LaTeX-style math formulas are supported in docs via MathJax (inline: `$...$` or `\(...\)`, block: `$$...$$` or `\[...\]`).
 
