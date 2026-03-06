@@ -1,0 +1,16 @@
+{
+  "network_id": "testnet-local",
+  "genesis_hash": "REPLACE_WITH_CANONICAL_GENESIS_HASH",
+  "boot_nodes": [
+    "127.0.0.1:9100"
+  ],
+  "validator_allowlist": [
+    {
+      "validator_id": "did:ledger:validator:local-01",
+      "public_key": "REPLACE_WITH_VALIDATOR_ED25519_PUBLIC_KEY_HEX"
+    }
+  ],
+  "issued_at": 1736500000,
+  "version": 1,
+  "manifest_id": "runtime-stack-sample-manifest-v1"
+}
