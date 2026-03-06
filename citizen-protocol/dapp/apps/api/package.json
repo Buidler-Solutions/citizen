@@ -26,9 +26,9 @@
     "typescript": "^5.4.5"
   },
   "overrides": {
-    "multer": "2.1.0",
+    "multer": "2.1.1",
     "@nestjs/platform-express": {
-      "multer": "2.1.0"
+      "multer": "2.1.1"
     }
   }
 }
