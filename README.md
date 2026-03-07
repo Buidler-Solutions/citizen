@@ -17,7 +17,7 @@ The protocol mission is to provide verifiable public truth infrastructure (recor
 .
 ├── citizen-protocol/    # Core protocol workspace (Rust node, crates, docs, SDKs, demo/explorer/wallet)
 ├── landing-page/        # Government adoption landing page (frontend + backend)
-├── LICENSE              # GNU Affero General Public License v3 (repository-level)
+├── LICENSE              # Citizen Protocol Non-Commercial License (CPNCL) v1.0
 └── README.md            # This file
 ```
 
@@ -72,7 +72,8 @@ cd landing-page
 
 ## Licensing
 
-- Repository-level license text is available at [`LICENSE`](./LICENSE) (AGPL-3.0).
+- Repository-level license text is available at [`LICENSE`](./LICENSE) (Citizen Protocol Non-Commercial License v1.0).
+- `citizen-protocol/` includes its own [`LICENSE`](./citizen-protocol/LICENSE) (Apache License 2.0).
 - Some subprojects may include additional license files and metadata; verify each subtree as needed for distribution/compliance workflows.
 
 ## Contributing
