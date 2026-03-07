@@ -1,0 +1,44 @@
+name: Browser Wallet Quality Gates
+
+on:
+  pull_request:
+    paths:
+      - "citizen-protocol/wallet/browser/**"
+      - ".github/workflows/browser-wallet-quality-gates.yml"
+      - "citizen-protocol/.github/workflows/browser-wallet-quality-gates.yml"
+  push:
+    branches: ["main"]
+    paths:
+      - "citizen-protocol/wallet/browser/**"
+      - ".github/workflows/browser-wallet-quality-gates.yml"
+      - "citizen-protocol/.github/workflows/browser-wallet-quality-gates.yml"
+
+jobs:
+  quality-gates:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: citizen-protocol/wallet/browser
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: citizen-protocol/wallet/browser/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint (type-aware)
+        run: npm run lint
+
+      - name: Test (provider injection + signing smoke)
+        run: npm run test
+
+      - name: Build
+        run: npm run build
