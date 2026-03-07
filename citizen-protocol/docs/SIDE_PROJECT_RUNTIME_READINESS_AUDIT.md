@@ -72,16 +72,13 @@ Required completion items:
 
 Status: ✅ Ready for runtime-connected use.
 
-### 6) Browser extension wallet (`wallet/browser`) — **Builds, but lacks explicit test/lint gates**
+### 6) Browser extension wallet (`wallet/browser`) — **Ready with explicit quality gates**
 
-- Extension project builds successfully.
-- Package scripts currently expose `dev/build/preview` only (no automated lint/test scripts).
+- Extension project includes explicit `lint` and `test` scripts in package automation.
+- Automated smoke coverage exists for provider injection + signing flow (`src/inpage.test.ts`).
+- Dedicated CI workflow executes install, lint, test, and build on wallet/browser changes.
 
-Status: ⚠️ Operational for manual use; quality automation is incomplete.
-
-Required completion items:
-1. Add lint script and CI execution.
-2. Add at least one automated smoke/integration test for provider injection + signing flow.
+Status: ✅ Ready for runtime integration with baseline CI enforcement.
 
 ### 7) Demo app for builders (`demo`) — **Runtime integration present, but no automated verification gates**
 
@@ -116,4 +113,4 @@ Before declaring full-stack deployment readiness across all side projects, close
 1. `laboratory/` MVP implementation.
 2. dApp lint/CI quality gate fixes.
 3. Explorer frontend offline/prerender resilience.
-4. Automated validation for browser wallet + demo app.
+4. Automated validation for demo app.
