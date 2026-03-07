@@ -82,8 +82,12 @@ describe('browser wallet provider injection and signing smoke flow', () => {
 
     let contentMessageListener: ((event: MessageEvent) => void) | null = null;
     const originalAddEventListener = window.addEventListener.bind(window);
-    vi.spyOn(window, 'addEventListener').mockImplementation((type, listener, options) => {
-      if (type === 'message' && contentMessageListener === null) {
+    vi.spyOn(window, 'addEventListener').mockImplementation((
+      type: string,
+      listener: EventListenerOrEventListenerObject,
+      options?: boolean | AddEventListenerOptions,
+    ) => {
+      if (type === 'message' && contentMessageListener === null && typeof listener === 'function') {
         contentMessageListener = listener as (event: MessageEvent) => void;
       }
       return originalAddEventListener(type, listener, options);
