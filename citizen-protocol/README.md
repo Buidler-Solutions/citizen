@@ -403,4 +403,4 @@ The harness covers the RFC scenarios: normal operation, partial outages, quorum 
 
 ## License
 
-Licensed under [Apache License 2.0](LICENSE).
+Licensed under [Citizen Protocol Non-Commercial License (CPNCL) v1.0](LICENSE).
