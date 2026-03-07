@@ -25,6 +25,15 @@ npm install
 npm run dev
 ```
 
+## Quality gates
+
+```bash
+npm run lint
+npm run test
+```
+
+These commands are the baseline CI gates for the extension workspace (type-check/lint and smoke tests for provider injection + signing flow).
+
 ## Build extension bundle
 
 ```bash
