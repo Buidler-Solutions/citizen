@@ -8,6 +8,19 @@ The runtime stack expected a signed admission manifest (via `manifest_path` in `
 
 - `manifest.payload.sample.json` — sample payload that matches the node admission manifest schema.
 
+## Signed manifest is the recommended default
+
+For any shared, staged, or production-style runtime, keep admission enforcement
+enabled:
+
+```toml
+manifest_enforce = true
+manifest_path = "/absolute/path/to/signed-manifest.json"
+```
+
+Use `manifest_enforce = false` only for local/dev-only sandbox scenarios where
+you explicitly accept bypassing signed admission checks.
+
 ## Generate a signed manifest from the sample payload
 
 1. Copy and edit the sample payload:
@@ -32,11 +45,20 @@ scripts/generate_signed_manifest.sh \
   --output ./signed-manifest.json
 ```
 
-4. Point your node config to the generated file:
+4. Point your node config to the generated file (recommended default):
 
 ```toml
 manifest_enforce = true
 manifest_path = "/absolute/path/to/signed-manifest.json"
+```
+
+5. If running through Docker Compose, mount the signed manifest into the
+   container at the same path used in `manifest_path`:
+
+```yaml
+volumes:
+  - ../../config/node.toml:/etc/citizen/node.toml:ro
+  - ../../config/signed-manifest.json:/etc/citizen/signed-manifest.json:ro
 ```
 
 ## Runtime stack path fixes

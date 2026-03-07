@@ -315,6 +315,15 @@ cd dist/runtime-stack/node-runtime/docker
 docker compose up --build
 ```
 
+Admission policy note: the generated runtime bundle defaults to
+`manifest_enforce = false` for local/dev convenience only. For shared, staged,
+and production environments, the recommended setup is `manifest_enforce = true`
+with `manifest_path` set to a signed admission manifest that is mounted or
+copied into the runtime at that exact path.
+
+You can generate a signed manifest payload and signature using the workflow in
+`deploy/runtime-stack/README.md`.
+
 ## Transport Admission & Key Rotation
 
 - Incoming QUIC/libp2p peers are validated against the configured validator snapshot in `node.toml`. Use
