@@ -102,11 +102,16 @@ The packaged `node-runtime/config/node.toml` sets `manifest_enforce = false`
 for local/dev convenience because this runtime bundle does not ship with a
 signed admission manifest JSON.
 
-For shared/staged/production environments, re-enable admission enforcement:
+Recommended default for shared/staged/production environments: keep signed
+admission enforcement enabled.
+
+For shared/staged/production environments:
 
 1. Set `manifest_enforce = true` in `node-runtime/config/node.toml`.
 2. Add `manifest_path = "/path/to/signed-manifest.json"`.
-3. Ensure the manifest includes:
+3. Mount or copy the signed manifest into the runtime container/filesystem so
+   that it is available at the exact `manifest_path` location.
+4. Ensure the manifest includes:
    - `payload.network_id`, `payload.genesis_hash`, `payload.boot_nodes`
    - `payload.validator_allowlist` (`validator_id` + `public_key` entries)
    - `payload.issued_at`, `payload.version`, `payload.manifest_id`
