@@ -61,6 +61,41 @@ volumes:
   - ../../config/signed-manifest.json:/etc/citizen/signed-manifest.json:ro
 ```
 
+
+## Runbook script for Docker + signed manifest
+
+Use the helper script to run the runtime stack with signed-manifest mounting and
+container path alignment:
+
+```bash
+./deploy/runtime-stack/runbook-docker-signed-manifest.sh compose-up \
+  --node-config ./config/node.toml \
+  --manifest ./config/signed-manifest.json
+```
+
+The same script also supports direct `docker run` mode:
+
+```bash
+./deploy/runtime-stack/runbook-docker-signed-manifest.sh docker-run \
+  --node-config ./config/node.toml \
+  --manifest ./config/signed-manifest.json
+```
+
+Useful follow-up commands:
+
+```bash
+./deploy/runtime-stack/runbook-docker-signed-manifest.sh compose-down
+./deploy/runtime-stack/runbook-docker-signed-manifest.sh docker-stop
+```
+
+By default, `docker-compose.yml` now accepts optional env var overrides so the
+runbook can inject host/container paths:
+
+- `NODE_CONFIG_HOST_PATH`
+- `SIGNED_MANIFEST_HOST_PATH`
+- `CONTAINER_NODE_CONFIG_PATH`
+- `CONTAINER_MANIFEST_PATH`
+
 ## Runtime stack path fixes
 
 `docker-compose.yml` and `Dockerfile` are wired so the compose build context is the repository root, and image copy paths resolve against that context.
