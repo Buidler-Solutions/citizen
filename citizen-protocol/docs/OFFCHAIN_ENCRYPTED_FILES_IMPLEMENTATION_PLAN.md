@@ -258,7 +258,7 @@ This work is complete only when all of the following are true:
 - [ ] A builder can verify per-payload encrypted field commitments from receipt + field blob hashes.
 - [ ] Only wallets with active grants can decrypt; decrypt attempts from non-granted wallets always fail.
 - [x] All authorized participating wallets for a shared record can decrypt via their own wallet-specific key wraps. ✅ Added wallet test coverage (`hybrid_entry_all_authorized_readers_can_decrypt_with_individual_wraps`) proving each authorized reader decrypts with its own DEK wrap while non-participants remain blocked by grant checks.
-- [ ] Reader ACL changes and revocations are reflected in on-chain events and enforced in retrieval paths.
+- [x] Reader ACL changes and revocations are reflected in on-chain events and enforced in retrieval paths. ✅ Added API revocation route `POST /api/v1/files/revoke` that requires `ENCRYPTED_FILE_REVOKE` envelopes and verifies `manifest_id`/`reader_did` binding, while `/api/v1/files/read` and manifest metadata now consistently reflect revocation outcomes in tests.
 - [ ] Explorer exposes auditable file metadata while revealing no sensitive plaintext.
 - [ ] Security review signs off cryptography, key handling, and abuse controls.
 - [ ] Runbooks exist for operator deployment, rotation, backup, and incident response.
