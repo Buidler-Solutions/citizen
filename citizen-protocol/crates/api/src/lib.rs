@@ -12,7 +12,7 @@ use citizen_types::{
     DeterministicReceipt, DidDocument, DidStatus, FinalityProof, LedgerEntry, ProtocolError,
     ReceiptStatus, SignedEnvelope, ValidationSummary,
 };
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 use std::collections::HashSet;
@@ -82,6 +82,17 @@ struct ApiError {
     error: String,
 }
 
+#[derive(Clone, Debug, Deserialize)]
+struct FileIntentRequest {
+    namespace: String,
+    object_id: String,
+    author_did: String,
+    mime_type: String,
+    file_size_bytes: u64,
+    encryption_mode: String,
+    consent_receipt: ConsentReceipt,
+}
+
 impl<S: LedgerStorage + 'static> ApiServer<S> {
     pub fn new(ledger: Arc<Ledger<S>>) -> Self {
         Self::with_edge_config(ledger, ApiEdgeConfig::default())
@@ -119,6 +130,8 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
         let submit_edge = Arc::clone(&self.edge);
         let submit_envelope_ledger = Arc::clone(&self.ledger);
         let submit_envelope_edge = Arc::clone(&self.edge);
+        let file_intent_ledger = Arc::clone(&self.ledger);
+        let file_intent_edge = Arc::clone(&self.edge);
         let get_receipt_ledger = Arc::clone(&self.ledger);
         let builder_credits_ledger = Arc::clone(&self.ledger);
         let asset_positions_ledger = Arc::clone(&self.ledger);
@@ -177,6 +190,18 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
                         let edge = Arc::clone(&submit_envelope_edge);
                         async move {
                             Self::handle_submit_envelope(ledger, edge, headers, envelope).await
+                        }
+                    },
+                ),
+            )
+            .route(
+                "/api/v1/files/intents",
+                post(
+                    move |headers: HeaderMap, Json(request): Json<FileIntentRequest>| {
+                        let ledger = Arc::clone(&file_intent_ledger);
+                        let edge = Arc::clone(&file_intent_edge);
+                        async move {
+                            Self::handle_create_file_intent(ledger, edge, headers, request).await
                         }
                     },
                 ),
@@ -296,6 +321,153 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
         receipt: ConsentReceipt,
     ) -> (StatusCode, Json<serde_json::Value>) {
         let now = Utc::now().timestamp();
+        let check = Self::evaluate_consent_receipt(ledger, &receipt, now);
+        let status = if check.valid {
+            StatusCode::OK
+        } else {
+            StatusCode::UNPROCESSABLE_ENTITY
+        };
+        (status, Json(serde_json::json!({"result": check})))
+    }
+
+    async fn handle_submit_envelope(
+        ledger: Arc<Ledger<S>>,
+        edge: Arc<ApiEdgeState>,
+        headers: HeaderMap,
+        envelope: SignedEnvelope<LedgerEntry>,
+    ) -> (StatusCode, Json<serde_json::Value>) {
+        if let Err(response) = Self::authorize_write(edge, &headers, "envelopes.submit").await {
+            return response;
+        }
+        Self::process_envelope_submission(ledger, envelope).await
+    }
+
+    async fn handle_create_file_intent(
+        ledger: Arc<Ledger<S>>,
+        edge: Arc<ApiEdgeState>,
+        headers: HeaderMap,
+        request: FileIntentRequest,
+    ) -> (StatusCode, Json<serde_json::Value>) {
+        if let Err(response) = Self::authorize_write(edge, &headers, "files.intents.create").await {
+            return response;
+        }
+
+        let Some(ruleset) = ledger.namespace_ruleset(&request.namespace) else {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({"error": "namespace not found"})),
+            );
+        };
+
+        let Some(policy) = ruleset
+            .validators
+            .iter()
+            .find(|rule| rule.name == "offchain_encrypted_file_policy")
+            .map(|rule| &rule.config)
+        else {
+            return (
+                StatusCode::UNPROCESSABLE_ENTITY,
+                Json(serde_json::json!({
+                    "error": "namespace is missing offchain_encrypted_file_policy"
+                })),
+            );
+        };
+
+        if policy.get("enabled").and_then(|value| value.as_bool()) == Some(false) {
+            return (
+                StatusCode::FORBIDDEN,
+                Json(
+                    serde_json::json!({"error": "off-chain encrypted files are disabled for namespace"}),
+                ),
+            );
+        }
+
+        if let Some(max_size) = policy
+            .get("max_file_size_bytes")
+            .and_then(|value| value.as_u64())
+        {
+            if request.file_size_bytes > max_size {
+                return (
+                    StatusCode::UNPROCESSABLE_ENTITY,
+                    Json(serde_json::json!({
+                        "error": "file size exceeds namespace policy limit",
+                        "max_file_size_bytes": max_size
+                    })),
+                );
+            }
+        }
+
+        if let Some(allowed_mimes) = policy
+            .get("allowed_mime_types")
+            .and_then(|value| value.as_array())
+        {
+            let mime_allowed = allowed_mimes
+                .iter()
+                .filter_map(|value| value.as_str())
+                .any(|value| value == request.mime_type);
+            if !mime_allowed {
+                return (
+                    StatusCode::UNPROCESSABLE_ENTITY,
+                    Json(
+                        serde_json::json!({"error": "mime type is not allowed by namespace policy"}),
+                    ),
+                );
+            }
+        }
+
+        if let Some(allowed_modes) = policy
+            .get("allowed_encryption_modes")
+            .and_then(|value| value.as_array())
+        {
+            let mode_allowed = allowed_modes
+                .iter()
+                .filter_map(|value| value.as_str())
+                .any(|value| value == request.encryption_mode);
+            if !mode_allowed {
+                return (
+                    StatusCode::UNPROCESSABLE_ENTITY,
+                    Json(
+                        serde_json::json!({"error": "encryption mode is not allowed by namespace policy"}),
+                    ),
+                );
+            }
+        }
+
+        let now = Utc::now().timestamp();
+        let consent_status =
+            Self::evaluate_consent_receipt(Arc::clone(&ledger), &request.consent_receipt, now);
+        if !consent_status.valid {
+            return (
+                StatusCode::UNPROCESSABLE_ENTITY,
+                Json(serde_json::json!({
+                    "error": consent_status
+                        .reason
+                        .unwrap_or_else(|| "consent check failed".to_string())
+                })),
+            );
+        }
+
+        (
+            StatusCode::CREATED,
+            Json(serde_json::json!({
+                "intent_id": Uuid::new_v4(),
+                "namespace": request.namespace,
+                "object_id": request.object_id,
+                "author_did": request.author_did,
+                "constraints": {
+                    "max_file_size_bytes": policy.get("max_file_size_bytes").cloned().unwrap_or(serde_json::Value::Null),
+                    "allowed_mime_types": policy.get("allowed_mime_types").cloned().unwrap_or_else(|| serde_json::json!([])),
+                    "allowed_encryption_modes": policy.get("allowed_encryption_modes").cloned().unwrap_or_else(|| serde_json::json!([])),
+                }
+            })),
+        )
+    }
+
+    fn evaluate_consent_receipt(
+        ledger: Arc<Ledger<S>>,
+        receipt: &ConsentReceipt,
+        now: i64,
+    ) -> ConsentPolicyCheck {
         let exists = ledger
             .storage()
             .namespace_entries(&"consent.receipt".to_string())
@@ -317,49 +489,35 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
             })
             .max_by_key(|entry| entry.timestamp);
 
-        let check = if latest.is_none() {
-            ConsentPolicyCheck {
+        if latest.is_none() {
+            return ConsentPolicyCheck {
                 valid: false,
                 reason: Some("consent receipt not found on-chain".to_string()),
-            }
-        } else if receipt.expires_at <= now {
-            ConsentPolicyCheck {
+            };
+        }
+
+        if receipt.expires_at <= now {
+            return ConsentPolicyCheck {
                 valid: false,
                 reason: Some("consent receipt expired".to_string()),
-            }
-        } else if latest
+            };
+        }
+
+        if latest
             .as_ref()
             .map(|entry| entry.action.as_str() == "CONSENT_REVOKED")
             .unwrap_or(false)
         {
-            ConsentPolicyCheck {
+            return ConsentPolicyCheck {
                 valid: false,
                 reason: Some("consent receipt revoked".to_string()),
-            }
-        } else {
-            ConsentPolicyCheck {
-                valid: true,
-                reason: None,
-            }
-        };
-        let status = if check.valid {
-            StatusCode::OK
-        } else {
-            StatusCode::UNPROCESSABLE_ENTITY
-        };
-        (status, Json(serde_json::json!({"result": check})))
-    }
-
-    async fn handle_submit_envelope(
-        ledger: Arc<Ledger<S>>,
-        edge: Arc<ApiEdgeState>,
-        headers: HeaderMap,
-        envelope: SignedEnvelope<LedgerEntry>,
-    ) -> (StatusCode, Json<serde_json::Value>) {
-        if let Err(response) = Self::authorize_write(edge, &headers, "envelopes.submit").await {
-            return response;
+            };
         }
-        Self::process_envelope_submission(ledger, envelope).await
+
+        ConsentPolicyCheck {
+            valid: true,
+            reason: None,
+        }
     }
 
     async fn process_envelope_submission(
@@ -962,6 +1120,24 @@ mod tests {
         }]);
         ledger.bootstrap_namespaces(vec![NamespaceRuleset {
             descriptor: NamespaceDescriptor {
+                namespace: "files.secure".to_string(),
+                version: 1,
+                rules_hash: "files-secure-v1".to_string(),
+                governed_by: "governance".to_string(),
+            },
+            writers: BTreeSet::new(),
+            validators: vec![NamespaceRule {
+                name: "offchain_encrypted_file_policy".to_string(),
+                config: json!({
+                    "enabled": true,
+                    "max_file_size_bytes": 10_485_760,
+                    "allowed_mime_types": ["application/pdf", "application/json"],
+                    "allowed_encryption_modes": ["passphrase", "hybrid-acl"]
+                }),
+            }],
+        }]);
+        ledger.bootstrap_namespaces(vec![NamespaceRuleset {
+            descriptor: NamespaceDescriptor {
                 namespace: "identity.citizen".to_string(),
                 version: 1,
                 rules_hash: "identity-v1".to_string(),
@@ -1202,12 +1378,18 @@ mod tests {
             object_id: "PROC-001".to_string(),
             payload: json!({"event":"BID_OPENED"}),
             privacy_flag: false,
+            privacy_mode: citizen_types::PrivacyMode::None,
             payload_commitment: None,
             ciphertext_hex: None,
             nonce_hex: None,
             salt_hex: None,
             kdf_params: None,
             consent_receipt: None,
+            authorized_readers: vec![],
+            custodian_policy_id: None,
+            field_reader_acls: BTreeMap::new(),
+            key_wrapped_secrets: vec![],
+            revocation_events: vec![],
             author: "did:author:a".to_string(),
             signature: String::new(),
             timestamp: chrono::Utc::now().timestamp(),
@@ -1387,12 +1569,18 @@ mod tests {
             object_id: "did:ledger:alice".to_string(),
             payload: json!({"claims_hash":"0xabc"}),
             privacy_flag: false,
+            privacy_mode: citizen_types::PrivacyMode::None,
             payload_commitment: None,
             ciphertext_hex: None,
             nonce_hex: None,
             salt_hex: None,
             kdf_params: None,
             consent_receipt: None,
+            authorized_readers: vec![],
+            custodian_policy_id: None,
+            field_reader_acls: BTreeMap::new(),
+            key_wrapped_secrets: vec![],
+            revocation_events: vec![],
             author: "did:ledger:alice".to_string(),
             signature: "sig".to_string(),
             timestamp: now,
@@ -1453,6 +1641,19 @@ mod tests {
                 "policy_ref":"policy:v1",
                 "expires_at": now + 600
             }),
+            privacy_flag: false,
+            privacy_mode: citizen_types::PrivacyMode::None,
+            payload_commitment: None,
+            ciphertext_hex: None,
+            nonce_hex: None,
+            salt_hex: None,
+            kdf_params: None,
+            consent_receipt: None,
+            authorized_readers: vec![],
+            custodian_policy_id: None,
+            field_reader_acls: BTreeMap::new(),
+            key_wrapped_secrets: vec![],
+            revocation_events: vec![],
             author: "did:ledger:alice".to_string(),
             signature: "sig".to_string(),
             timestamp: now,
@@ -1523,6 +1724,19 @@ mod tests {
                 "policy_ref":"policy:v1",
                 "expires_at": now + 600
             }),
+            privacy_flag: false,
+            privacy_mode: citizen_types::PrivacyMode::None,
+            payload_commitment: None,
+            ciphertext_hex: None,
+            nonce_hex: None,
+            salt_hex: None,
+            kdf_params: None,
+            consent_receipt: None,
+            authorized_readers: vec![],
+            custodian_policy_id: None,
+            field_reader_acls: BTreeMap::new(),
+            key_wrapped_secrets: vec![],
+            revocation_events: vec![],
             author: "did:ledger:alice".to_string(),
             signature: "sig".to_string(),
             timestamp: now,
@@ -1537,6 +1751,19 @@ mod tests {
                 "policy_ref":"policy:v1",
                 "expires_at": now + 600
             }),
+            privacy_flag: false,
+            privacy_mode: citizen_types::PrivacyMode::None,
+            payload_commitment: None,
+            ciphertext_hex: None,
+            nonce_hex: None,
+            salt_hex: None,
+            kdf_params: None,
+            consent_receipt: None,
+            authorized_readers: vec![],
+            custodian_policy_id: None,
+            field_reader_acls: BTreeMap::new(),
+            key_wrapped_secrets: vec![],
+            revocation_events: vec![],
             author: "did:ledger:alice".to_string(),
             signature: "sig".to_string(),
             timestamp: now + 1,
@@ -1606,12 +1833,18 @@ mod tests {
             object_id: "builder:alpha".to_string(),
             payload: json!({"amount": 100_u64}),
             privacy_flag: false,
+            privacy_mode: citizen_types::PrivacyMode::None,
             payload_commitment: None,
             ciphertext_hex: None,
             nonce_hex: None,
             salt_hex: None,
             kdf_params: None,
             consent_receipt: None,
+            authorized_readers: vec![],
+            custodian_policy_id: None,
+            field_reader_acls: BTreeMap::new(),
+            key_wrapped_secrets: vec![],
+            revocation_events: vec![],
             author: "governance:ops".to_string(),
             signature: "sig".to_string(),
             timestamp: now,
@@ -1627,14 +1860,20 @@ mod tests {
             namespace: "builder.credits".to_string(),
             action: "SPONSOR_USAGE".to_string(),
             object_id: "builder:alpha".to_string(),
-            payload: json!({"amount": 30_u64, "sponsorship_id":"spn-1", "sponsored_did":"did:ledger:user1"}),
+            payload: json!({"amount": 30_u64, "credit_grant_id": grant_entry.entry_id.to_string(), "sponsorship_id":"spn-1", "sponsored_did":"did:ledger:user1"}),
             privacy_flag: false,
+            privacy_mode: citizen_types::PrivacyMode::None,
             payload_commitment: None,
             ciphertext_hex: None,
             nonce_hex: None,
             salt_hex: None,
             kdf_params: None,
             consent_receipt: None,
+            authorized_readers: vec![],
+            custodian_policy_id: None,
+            field_reader_acls: BTreeMap::new(),
+            key_wrapped_secrets: vec![],
+            revocation_events: vec![],
             author: "builder:alpha".to_string(),
             signature: "sig".to_string(),
             timestamp: now + 1,
@@ -1708,6 +1947,19 @@ mod tests {
                 "policy_flags":["kyc_required", "clawback_enabled"],
                 "disclosure":{"mode":"hashed", "commitment":"0xabc"}
             }),
+            privacy_flag: false,
+            privacy_mode: citizen_types::PrivacyMode::None,
+            payload_commitment: None,
+            ciphertext_hex: None,
+            nonce_hex: None,
+            salt_hex: None,
+            kdf_params: None,
+            consent_receipt: None,
+            authorized_readers: vec![],
+            custodian_policy_id: None,
+            field_reader_acls: BTreeMap::new(),
+            key_wrapped_secrets: vec![],
+            revocation_events: vec![],
             author: "did:ledger:alice".to_string(),
             signature: "sig".to_string(),
             timestamp: now,
@@ -1724,6 +1976,19 @@ mod tests {
                 "policy_flags":["kyc_required"],
                 "disclosure":{"mode":"public"}
             }),
+            privacy_flag: false,
+            privacy_mode: citizen_types::PrivacyMode::None,
+            payload_commitment: None,
+            ciphertext_hex: None,
+            nonce_hex: None,
+            salt_hex: None,
+            kdf_params: None,
+            consent_receipt: None,
+            authorized_readers: vec![],
+            custodian_policy_id: None,
+            field_reader_acls: BTreeMap::new(),
+            key_wrapped_secrets: vec![],
+            revocation_events: vec![],
             author: "issuer:treasury".to_string(),
             signature: "sig".to_string(),
             timestamp: now + 1,
@@ -1741,6 +2006,19 @@ mod tests {
                 "policy_flags":["kyc_required", "clawback_enabled"],
                 "disclosure":{"mode":"public"}
             }),
+            privacy_flag: false,
+            privacy_mode: citizen_types::PrivacyMode::None,
+            payload_commitment: None,
+            ciphertext_hex: None,
+            nonce_hex: None,
+            salt_hex: None,
+            kdf_params: None,
+            consent_receipt: None,
+            authorized_readers: vec![],
+            custodian_policy_id: None,
+            field_reader_acls: BTreeMap::new(),
+            key_wrapped_secrets: vec![],
+            revocation_events: vec![],
             author: "issuer:treasury".to_string(),
             signature: "sig".to_string(),
             timestamp: now + 2,
@@ -1810,6 +2088,19 @@ mod tests {
                 "wasm_hash": "wasm:abc",
                 "audit_hash": "audit:abc"
             }),
+            privacy_flag: false,
+            privacy_mode: citizen_types::PrivacyMode::None,
+            payload_commitment: None,
+            ciphertext_hex: None,
+            nonce_hex: None,
+            salt_hex: None,
+            kdf_params: None,
+            consent_receipt: None,
+            authorized_readers: vec![],
+            custodian_policy_id: None,
+            field_reader_acls: BTreeMap::new(),
+            key_wrapped_secrets: vec![],
+            revocation_events: vec![],
             author: "did:ledger:maintainer".to_string(),
             signature: "sig".to_string(),
             timestamp: 1_736_500_200,
@@ -1823,6 +2114,19 @@ mod tests {
                 "module_id": "module.asset.v1",
                 "governance_approvals": 1
             }),
+            privacy_flag: false,
+            privacy_mode: citizen_types::PrivacyMode::None,
+            payload_commitment: None,
+            ciphertext_hex: None,
+            nonce_hex: None,
+            salt_hex: None,
+            kdf_params: None,
+            consent_receipt: None,
+            authorized_readers: vec![],
+            custodian_policy_id: None,
+            field_reader_acls: BTreeMap::new(),
+            key_wrapped_secrets: vec![],
+            revocation_events: vec![],
             author: "governance:vote".to_string(),
             signature: "sig".to_string(),
             timestamp: 1_736_500_201,
@@ -1889,6 +2193,19 @@ mod tests {
                 "standard":"did-core",
                 "remote_id":"did:web:example.com:alice"
             }),
+            privacy_flag: false,
+            privacy_mode: citizen_types::PrivacyMode::None,
+            payload_commitment: None,
+            ciphertext_hex: None,
+            nonce_hex: None,
+            salt_hex: None,
+            kdf_params: None,
+            consent_receipt: None,
+            authorized_readers: vec![],
+            custodian_policy_id: None,
+            field_reader_acls: BTreeMap::new(),
+            key_wrapped_secrets: vec![],
+            revocation_events: vec![],
             author: "did:ledger:alice".to_string(),
             signature: "sig".to_string(),
             timestamp: 1_736_500_210,
@@ -1902,6 +2219,19 @@ mod tests {
                 "standard":"did-core",
                 "proof_hash":"proof:0xabc"
             }),
+            privacy_flag: false,
+            privacy_mode: citizen_types::PrivacyMode::None,
+            payload_commitment: None,
+            ciphertext_hex: None,
+            nonce_hex: None,
+            salt_hex: None,
+            kdf_params: None,
+            consent_receipt: None,
+            authorized_readers: vec![],
+            custodian_policy_id: None,
+            field_reader_acls: BTreeMap::new(),
+            key_wrapped_secrets: vec![],
+            revocation_events: vec![],
             author: "did:ledger:alice".to_string(),
             signature: "sig".to_string(),
             timestamp: 1_736_500_211,
@@ -2175,5 +2505,151 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(read_response.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn file_intent_precheck_accepts_valid_policy_and_consent() {
+        let app = build_server().router();
+        let now = chrono::Utc::now().timestamp();
+
+        let signer = ValidatorKeypair::generate("did:citizen:holder-1".to_string());
+        let mut consent_entry = LedgerEntry {
+            entry_id: Uuid::new_v4(),
+            namespace: "consent.receipt".to_string(),
+            action: "CONSENT_GRANTED".to_string(),
+            object_id: "did:citizen:holder-1".to_string(),
+            payload: json!({
+                "data_hash": "sha256:payload-001",
+                "policy_ref": "policy:offchain:v1",
+                "expires_at": now + 3_600
+            }),
+            privacy_flag: false,
+            privacy_mode: citizen_types::PrivacyMode::None,
+            payload_commitment: None,
+            ciphertext_hex: None,
+            nonce_hex: None,
+            salt_hex: None,
+            kdf_params: None,
+            consent_receipt: None,
+            authorized_readers: vec![],
+            custodian_policy_id: None,
+            field_reader_acls: BTreeMap::new(),
+            key_wrapped_secrets: vec![],
+            revocation_events: vec![],
+            author: "did:citizen:holder-1".to_string(),
+            signature: String::new(),
+            timestamp: now,
+        };
+        sign_entry_for_tests(&mut consent_entry, &signer);
+        let consent_envelope = SignedEnvelope {
+            envelope_id: Uuid::new_v4(),
+            signer: consent_entry.author.clone(),
+            signature: consent_entry.signature.clone(),
+            submitted_at: chrono::Utc::now(),
+            payload: consent_entry,
+        };
+
+        let consent_response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/envelopes/submit")
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        serde_json::to_vec(&consent_envelope).expect("serialize envelope"),
+                    ))
+                    .expect("request"),
+            )
+            .await
+            .expect("submit response");
+        assert_eq!(consent_response.status(), StatusCode::ACCEPTED);
+
+        let intent_request = json!({
+            "namespace": "files.secure",
+            "object_id": "PROC-001",
+            "author_did": "did:author:a",
+            "mime_type": "application/pdf",
+            "file_size_bytes": 1024,
+            "encryption_mode": "hybrid-acl",
+            "consent_receipt": {
+                "subject_did": "did:citizen:holder-1",
+                "data_hash": "sha256:payload-001",
+                "policy_ref": "policy:offchain:v1",
+                "granted_at": now,
+                "expires_at": now + 3_600,
+                "authorized_readers": ["did:author:a"]
+            }
+        });
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/files/intents")
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        serde_json::to_vec(&intent_request).expect("intent body"),
+                    ))
+                    .expect("request"),
+            )
+            .await
+            .expect("intent response");
+        assert_eq!(response.status(), StatusCode::CREATED);
+
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("intent body bytes");
+        let payload: Value = serde_json::from_slice(&body).expect("intent payload");
+        assert_eq!(payload["namespace"], "files.secure");
+        assert_eq!(payload["constraints"]["max_file_size_bytes"], 10_485_760);
+    }
+
+    #[tokio::test]
+    async fn file_intent_requires_matching_scope_when_auth_enabled() {
+        let mut clients = BTreeMap::new();
+        clients.insert(
+            "entries-only".to_string(),
+            ApiClientProfile::with_scopes(["entries.submit"]),
+        );
+        let app = build_server_with_edge(ApiEdgeConfig {
+            write_enabled: true,
+            auth_required: true,
+            max_write_requests_per_minute: 10,
+            clients,
+        })
+        .router();
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/files/intents")
+                    .header("content-type", "application/json")
+                    .header("x-api-key", "entries-only")
+                    .body(Body::from(
+                        serde_json::to_vec(&json!({
+                            "namespace": "files.secure",
+                            "object_id": "PROC-001",
+                            "author_did": "did:author:a",
+                            "mime_type": "application/pdf",
+                            "file_size_bytes": 512,
+                            "encryption_mode": "passphrase",
+                            "consent_receipt": {
+                                "subject_did": "did:citizen:holder-1",
+                                "data_hash": "sha256:payload-001",
+                                "policy_ref": "policy:offchain:v1",
+                                "granted_at": 1_736_500_000,
+                                "expires_at": 1_736_503_600
+                            }
+                        }))
+                        .expect("intent body"),
+                    ))
+                    .expect("request"),
+            )
+            .await
+            .expect("intent response");
+
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
     }
 }
