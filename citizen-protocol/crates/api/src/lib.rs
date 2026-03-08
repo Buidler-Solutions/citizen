@@ -683,15 +683,6 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
             );
         }
 
-        if request.envelope.payload.action != "ENCRYPTED_FILE_UPLOAD" {
-            return (
-                StatusCode::UNPROCESSABLE_ENTITY,
-                Json(serde_json::json!({
-                    "error": "file commit envelope action must be ENCRYPTED_FILE_UPLOAD"
-                })),
-            );
-        }
-
         let Some(ruleset) = ledger.namespace_ruleset(&intent.request.namespace) else {
             return (
                 StatusCode::BAD_REQUEST,
@@ -712,6 +703,20 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
                 })),
             );
         };
+
+        let allowed_actions = Self::allowed_file_actions(policy);
+        if !allowed_actions
+            .iter()
+            .any(|action| action == request.envelope.payload.action.as_str())
+        {
+            return (
+                StatusCode::UNPROCESSABLE_ENTITY,
+                Json(serde_json::json!({
+                    "error": "file commit envelope action is not allowed by namespace policy",
+                    "allowed_actions": allowed_actions,
+                })),
+            );
+        }
 
         if let Err(message) = Self::validate_manifest_against_intent(
             &request.manifest,
@@ -1101,6 +1106,25 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
         object_store.validate_object_ref(&intent.namespace, manifest_file_ref)?;
 
         Ok(())
+    }
+
+    fn allowed_file_actions(policy: &serde_json::Value) -> Vec<String> {
+        let configured: Vec<String> = policy
+            .get("allowed_actions")
+            .and_then(|value| value.as_array())
+            .map(|values| {
+                values
+                    .iter()
+                    .filter_map(|value| value.as_str().map(ToOwned::to_owned))
+                    .collect::<Vec<String>>()
+            })
+            .unwrap_or_default();
+
+        if configured.is_empty() {
+            return vec!["ENCRYPTED_FILE_UPLOAD".to_string()];
+        }
+
+        configured
     }
 
     fn evaluate_consent_receipt(
@@ -1737,6 +1761,13 @@ mod tests {
     fn build_server_with_grant_keys(
         grant_keys: &HashMap<String, ValidatorKeypair>,
     ) -> ApiServer<MemoryStorage> {
+        build_server_with_grant_keys_and_file_actions(grant_keys, &["ENCRYPTED_FILE_UPLOAD"])
+    }
+
+    fn build_server_with_grant_keys_and_file_actions(
+        grant_keys: &HashMap<String, ValidatorKeypair>,
+        allowed_file_actions: &[&str],
+    ) -> ApiServer<MemoryStorage> {
         let storage = Arc::new(MemoryStorage::new());
         let ledger = Arc::new(Ledger::new(storage, KeyRegistry::new()));
         ledger.register_rule_handler(
@@ -1781,7 +1812,8 @@ mod tests {
                         "enabled": true,
                         "max_file_size_bytes": 10_485_760,
                         "allowed_mime_types": ["application/pdf", "application/json"],
-                        "allowed_encryption_modes": ["passphrase", "hybrid-acl"]
+                        "allowed_encryption_modes": ["passphrase", "hybrid-acl"],
+                        "allowed_actions": allowed_file_actions
                     }),
                 },
                 NamespaceRule {
@@ -3175,8 +3207,8 @@ mod tests {
     async fn file_intent_precheck_accepts_valid_policy_and_consent() {
         let app = build_server().router();
         let now = chrono::Utc::now().timestamp();
-
         let signer = ValidatorKeypair::generate("did:citizen:holder-1".to_string());
+
         let mut consent_entry = LedgerEntry {
             entry_id: Uuid::new_v4(),
             namespace: "consent.receipt".to_string(),
@@ -3273,8 +3305,8 @@ mod tests {
     async fn file_commit_enforces_idempotency_and_persists_manifest() {
         let app = build_server().router();
         let now = chrono::Utc::now().timestamp();
-
         let signer = ValidatorKeypair::generate("did:citizen:holder-1".to_string());
+
         let mut consent_entry = LedgerEntry {
             entry_id: Uuid::new_v4(),
             namespace: "consent.receipt".to_string(),
@@ -3463,8 +3495,8 @@ mod tests {
     async fn file_commit_rejects_manifest_mismatch_with_intent() {
         let app = build_server().router();
         let now = chrono::Utc::now().timestamp();
-
         let signer = ValidatorKeypair::generate("did:citizen:holder-1".to_string());
+
         let mut consent_entry = LedgerEntry {
             entry_id: Uuid::new_v4(),
             namespace: "consent.receipt".to_string(),
@@ -3622,8 +3654,8 @@ mod tests {
     async fn payload_commit_rejects_missing_required_fields() {
         let app = build_server().router();
         let now = chrono::Utc::now().timestamp();
-
         let signer = ValidatorKeypair::generate("did:citizen:holder-1".to_string());
+
         let mut consent_entry = LedgerEntry {
             entry_id: Uuid::new_v4(),
             namespace: "consent.receipt".to_string(),
@@ -4036,7 +4068,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn file_commit_rejects_non_upload_action() {
+    async fn file_commit_rejects_action_not_allowed_by_namespace_policy() {
         let app = build_server().router();
         let now = chrono::Utc::now().timestamp();
 
@@ -4189,6 +4221,186 @@ mod tests {
             .expect("commit response");
 
         assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("response body bytes");
+        let payload: Value = serde_json::from_slice(&body).expect("response payload");
+        assert_eq!(
+            payload["error"],
+            "file commit envelope action is not allowed by namespace policy"
+        );
+        assert_eq!(payload["allowed_actions"], json!(["ENCRYPTED_FILE_UPLOAD"]));
+    }
+
+    #[tokio::test]
+    async fn file_commit_allows_governance_enabled_share_action() {
+        let grant_keys = grant_approver_keys(&[
+            "grant:ops-1",
+            "grant:ops-2",
+            "grant:ops-3",
+            "grant:ops-4",
+            "grant:ops-5",
+        ]);
+        let app = build_server_with_grant_keys_and_file_actions(
+            &grant_keys,
+            &[
+                "ENCRYPTED_FILE_UPLOAD",
+                "ENCRYPTED_FILE_SHARE",
+                "ENCRYPTED_FILE_REVOKE",
+            ],
+        )
+        .router();
+        let now = chrono::Utc::now().timestamp();
+
+        let mut consent_entry = LedgerEntry {
+            entry_id: Uuid::new_v4(),
+            namespace: "consent.receipt".to_string(),
+            action: "CONSENT_GRANTED".to_string(),
+            object_id: "did:citizen:holder-1".to_string(),
+            payload: json!({
+                "data_hash": "sha256:file-share-ok",
+                "policy_ref": "policy:offchain:v1",
+                "expires_at": now + 3_600
+            }),
+            privacy_flag: false,
+            privacy_mode: citizen_types::PrivacyMode::None,
+            payload_commitment: None,
+            ciphertext_hex: None,
+            nonce_hex: None,
+            salt_hex: None,
+            kdf_params: None,
+            consent_receipt: None,
+            authorized_readers: vec![],
+            custodian_policy_id: None,
+            field_reader_acls: BTreeMap::new(),
+            key_wrapped_secrets: vec![],
+            revocation_events: vec![],
+            author: "did:citizen:holder-1".to_string(),
+            signature: String::new(),
+            timestamp: now,
+        };
+        consent_entry.signature = "sig-consent-share".to_string();
+
+        let consent_envelope = SignedEnvelope {
+            envelope_id: Uuid::new_v4(),
+            signer: "did:citizen:holder-1".to_string(),
+            signature: consent_entry.signature.clone(),
+            submitted_at: chrono::Utc::now(),
+            payload: consent_entry,
+        };
+        let _ = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/envelopes/submit")
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        serde_json::to_vec(&consent_envelope).expect("serialize envelope"),
+                    ))
+                    .expect("request"),
+            )
+            .await
+            .expect("submit response");
+
+        let intent_response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/files/intents")
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        serde_json::to_vec(&json!({
+                            "namespace": "files.secure",
+                            "object_id": "PROC-ACT-2",
+                            "author_did": "did:author:a",
+                            "mime_type": "application/pdf",
+                            "file_size_bytes": 256,
+                            "encryption_mode": "passphrase",
+                            "consent_receipt": {
+                                "subject_did": "did:citizen:holder-1",
+                                "data_hash": "sha256:file-share-ok",
+                                "policy_ref": "policy:offchain:v1",
+                                "granted_at": now,
+                                "expires_at": now + 3_600,
+                                "authorized_readers": ["did:author:a"]
+                            }
+                        }))
+                        .expect("intent body"),
+                    ))
+                    .expect("request"),
+            )
+            .await
+            .expect("intent response");
+        assert_eq!(intent_response.status(), StatusCode::CREATED);
+        let body = axum::body::to_bytes(intent_response.into_body(), usize::MAX)
+            .await
+            .expect("intent body bytes");
+        let payload: Value = serde_json::from_slice(&body).expect("intent payload");
+
+        let envelope = SignedEnvelope {
+            envelope_id: Uuid::new_v4(),
+            signer: "did:author:a".to_string(),
+            signature: "sig-share-allowed".to_string(),
+            submitted_at: chrono::Utc::now(),
+            payload: LedgerEntry {
+                entry_id: Uuid::new_v4(),
+                namespace: "files.secure".to_string(),
+                action: "ENCRYPTED_FILE_SHARE".to_string(),
+                object_id: "PROC-ACT-2".to_string(),
+                payload: json!({"manifest_id": "manifest-2"}),
+                privacy_flag: false,
+                privacy_mode: citizen_types::PrivacyMode::None,
+                payload_commitment: None,
+                ciphertext_hex: None,
+                nonce_hex: None,
+                salt_hex: None,
+                kdf_params: None,
+                consent_receipt: None,
+                authorized_readers: vec![],
+                custodian_policy_id: None,
+                field_reader_acls: BTreeMap::new(),
+                key_wrapped_secrets: vec![],
+                revocation_events: vec![],
+                author: "did:author:a".to_string(),
+                signature: "sig-share-allowed".to_string(),
+                timestamp: now,
+            },
+        };
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/files/commit")
+                    .header("content-type", "application/json")
+                    .header("idempotency-key", "file-share-ok")
+                    .body(Body::from(
+                        serde_json::to_vec(&json!({
+                            "intent_id": payload["intent_id"],
+                            "manifest": {
+                                "namespace": "files.secure",
+                                "object_id": "PROC-ACT-2",
+                                "author_did": "did:author:a",
+                                "mime_type": "application/pdf",
+                                "file_size_bytes": 256,
+                                "encryption_mode": "passphrase",
+                                "file_ref": payload["upload"]["object_ref"],
+                                "ciphertext_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                                "payload_commitment": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                                "consent_receipt_ref": "consent:receipt:file-share-ok"
+                            },
+                            "envelope": envelope
+                        }))
+                        .expect("commit body"),
+                    ))
+                    .expect("request"),
+            )
+            .await
+            .expect("commit response");
+
+        assert_eq!(response.status(), StatusCode::ACCEPTED);
     }
 
     #[tokio::test]
