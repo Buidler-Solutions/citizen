@@ -232,7 +232,7 @@ Checklist:
 
 ### API / Node
 - [x] Implement file intent + commit endpoints.
-- [ ] Add storage adapter interfaces and policy hooks.
+- [x] Add storage adapter interfaces and policy hooks. ✅ Implemented API-level off-chain object-store trait with local adapter and manifest `file_ref` policy enforcement.
 - [ ] Add rate limits and abuse controls for file flows.
 - [ ] Enforce namespace field policy at submission time (reject missing encrypted off-chain refs).
 
