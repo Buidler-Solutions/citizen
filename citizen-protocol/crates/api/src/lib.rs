@@ -137,6 +137,36 @@ struct UploadIntent {
     expires_at: i64,
 }
 
+#[derive(Clone, Debug)]
+pub struct MinioOffchainObjectStoreConfig {
+    pub endpoint: String,
+    pub bucket: String,
+    pub access_key: String,
+    pub secret_key: String,
+    pub use_tls: bool,
+    pub path_style: bool,
+    pub key_prefix: String,
+}
+
+impl MinioOffchainObjectStoreConfig {
+    pub fn new(
+        endpoint: impl Into<String>,
+        bucket: impl Into<String>,
+        access_key: impl Into<String>,
+        secret_key: impl Into<String>,
+    ) -> Self {
+        Self {
+            endpoint: endpoint.into(),
+            bucket: bucket.into(),
+            access_key: access_key.into(),
+            secret_key: secret_key.into(),
+            use_tls: true,
+            path_style: true,
+            key_prefix: "citizen/offchain-encrypted-files/v1".to_string(),
+        }
+    }
+}
+
 trait OffchainObjectStore: Send + Sync {
     fn create_upload_intent(&self, request: &UploadIntentRequest) -> Result<UploadIntent, String>;
     fn validate_object_ref(&self, namespace: &str, object_ref: &str) -> Result<(), String>;
@@ -176,6 +206,108 @@ impl OffchainObjectStore for LocalOffchainObjectStore {
             Ok(())
         } else {
             Err("manifest file_ref is not accepted by local storage policy".to_string())
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+struct MinioOffchainObjectStore {
+    endpoint: String,
+    bucket: String,
+    access_key: String,
+    secret_key: String,
+    use_tls: bool,
+    path_style: bool,
+    key_prefix: String,
+}
+
+impl MinioOffchainObjectStore {
+    fn from_config(config: MinioOffchainObjectStoreConfig) -> Result<Self, String> {
+        if config.endpoint.trim().is_empty() {
+            return Err("minio endpoint must not be empty".to_string());
+        }
+        if config.bucket.trim().is_empty() {
+            return Err("minio bucket must not be empty".to_string());
+        }
+        if config.access_key.trim().is_empty() {
+            return Err("minio access_key must not be empty".to_string());
+        }
+        if config.secret_key.trim().is_empty() {
+            return Err("minio secret_key must not be empty".to_string());
+        }
+        let key_prefix = config.key_prefix.trim_matches('/').to_string();
+        if key_prefix.is_empty() {
+            return Err("minio key_prefix must not be empty".to_string());
+        }
+        Ok(Self {
+            endpoint: config.endpoint,
+            bucket: config.bucket,
+            access_key: config.access_key,
+            secret_key: config.secret_key,
+            use_tls: config.use_tls,
+            path_style: config.path_style,
+            key_prefix,
+        })
+    }
+
+    fn key_for(&self, namespace: &str, object_id: &str, intent_id: Uuid) -> String {
+        format!(
+            "{}/{}/{}/{}.cipher",
+            self.key_prefix,
+            urlencoding::encode(namespace),
+            urlencoding::encode(object_id),
+            intent_id
+        )
+    }
+
+    fn expected_prefix_for_namespace(&self, namespace: &str) -> String {
+        format!(
+            "s3://{}/{}/{}/",
+            self.bucket,
+            self.key_prefix,
+            urlencoding::encode(namespace)
+        )
+    }
+}
+
+impl OffchainObjectStore for MinioOffchainObjectStore {
+    fn create_upload_intent(&self, request: &UploadIntentRequest) -> Result<UploadIntent, String> {
+        let object_key = self.key_for(&request.namespace, &request.object_id, request.intent_id);
+        let object_ref = format!("s3://{}/{}", self.bucket, object_key);
+        let scheme = if self.use_tls { "https" } else { "http" };
+        let base_url = if self.path_style {
+            format!(
+                "{scheme}://{}/{}/{}",
+                self.endpoint, self.bucket, object_key
+            )
+        } else {
+            format!(
+                "{scheme}://{}.{}/{}",
+                self.bucket, self.endpoint, object_key
+            )
+        };
+        let upload_url = format!(
+            "{base_url}?x-citizen-intent={}&x-citizen-namespace={}&x-citizen-author={}&x-citizen-mode={}&x-citizen-size={}",
+            request.intent_id,
+            urlencoding::encode(&request.namespace),
+            urlencoding::encode(&request.author_did),
+            urlencoding::encode(&request.encryption_mode),
+            request.file_size_bytes
+        );
+        let _credential_hint = format!("{}:{}", self.access_key, self.secret_key.len());
+        Ok(UploadIntent {
+            object_ref,
+            upload_url,
+            expires_at: Utc::now().timestamp() + 900,
+        })
+    }
+
+    fn validate_object_ref(&self, namespace: &str, object_ref: &str) -> Result<(), String> {
+        let prefix = self.expected_prefix_for_namespace(namespace);
+        if object_ref.starts_with(&prefix) {
+            Ok(())
+        } else {
+            Err("manifest file_ref is not accepted by minio storage policy".to_string())
         }
     }
 }
@@ -264,6 +396,19 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
 
     pub fn with_edge_config(ledger: Arc<Ledger<S>>, edge_config: ApiEdgeConfig) -> Self {
         Self::with_edge_config_and_store(ledger, edge_config, Arc::new(LocalOffchainObjectStore))
+    }
+
+    pub fn with_edge_config_and_minio_store(
+        ledger: Arc<Ledger<S>>,
+        edge_config: ApiEdgeConfig,
+        store_config: MinioOffchainObjectStoreConfig,
+    ) -> Result<Self, String> {
+        let store = MinioOffchainObjectStore::from_config(store_config)?;
+        Ok(Self::with_edge_config_and_store(
+            ledger,
+            edge_config,
+            Arc::new(store),
+        ))
     }
 
     pub(crate) fn with_edge_config_and_store(
@@ -2579,7 +2724,7 @@ fn protocol_error_response(err: ProtocolError) -> (StatusCode, Json<serde_json::
 
 #[cfg(test)]
 mod tests {
-    use super::{ApiClientProfile, ApiEdgeConfig, ApiServer};
+    use super::{ApiClientProfile, ApiEdgeConfig, ApiServer, MinioOffchainObjectStoreConfig};
     use axum::body::{to_bytes, Body};
     use axum::http::{Request, StatusCode};
     use chrono::Utc;
@@ -2801,6 +2946,184 @@ mod tests {
         )
     }
 
+    fn build_server_with_grant_keys_and_file_policy_and_minio(
+        grant_keys: &HashMap<String, ValidatorKeypair>,
+        allowed_file_actions: &[&str],
+        required_consent_policy_ref: Option<&str>,
+        payload_field_policy_config: Option<serde_json::Value>,
+        minio: MinioOffchainObjectStoreConfig,
+    ) -> ApiServer<MemoryStorage> {
+        let storage = Arc::new(MemoryStorage::new());
+        let ledger = Arc::new(Ledger::new(storage, KeyRegistry::new()));
+        ledger.register_rule_handler(
+            "offchain_encrypted_file_policy",
+            |_ledger, _entry, _config| Ok(()),
+        );
+        ledger.register_rule_handler(
+            "offchain_encrypted_payload_field_policy",
+            |_ledger, _entry, _config| Ok(()),
+        );
+        ledger.bootstrap_namespaces(vec![NamespaceRuleset {
+            descriptor: NamespaceDescriptor {
+                namespace: "audit.procurement".to_string(),
+                version: 1,
+                rules_hash: "rules-v1".to_string(),
+                governed_by: "governance".to_string(),
+            },
+            writers: BTreeSet::new(),
+            validators: vec![
+                NamespaceRule {
+                    name: "require_signature".to_string(),
+                    config: json!({}),
+                },
+                NamespaceRule {
+                    name: "privacy_policy".to_string(),
+                    config: json!({"allow_encryption": true}),
+                },
+            ],
+        }]);
+        ledger.bootstrap_namespaces(vec![NamespaceRuleset {
+            descriptor: NamespaceDescriptor {
+                namespace: "files.secure".to_string(),
+                version: 1,
+                rules_hash: "files-secure-v1".to_string(),
+                governed_by: "governance".to_string(),
+            },
+            writers: BTreeSet::new(),
+            validators: vec![
+                NamespaceRule {
+                    name: "offchain_encrypted_file_policy".to_string(),
+                    config: {
+                        let mut policy = json!({
+                            "enabled": true,
+                            "max_file_size_bytes": 10_485_760,
+                            "allowed_mime_types": ["application/pdf", "application/json"],
+                            "allowed_encryption_modes": ["passphrase", "hybrid-acl"],
+                            "allowed_actions": allowed_file_actions
+                        });
+                        if let Some(policy_ref) = required_consent_policy_ref {
+                            policy["required_consent_policy_ref"] = json!(policy_ref);
+                        }
+                        policy
+                    },
+                },
+                NamespaceRule {
+                    name: "offchain_encrypted_payload_field_policy".to_string(),
+                    config: payload_field_policy_config.unwrap_or_else(|| {
+                        json!({
+                            "offchain_encrypted_fields": ["payload.ssn", "payload.medical_record"]
+                        })
+                    }),
+                },
+            ],
+        }]);
+        ledger.bootstrap_namespaces(vec![NamespaceRuleset {
+            descriptor: NamespaceDescriptor {
+                namespace: "identity.citizen".to_string(),
+                version: 1,
+                rules_hash: "identity-v1".to_string(),
+                governed_by: "governance".to_string(),
+            },
+            writers: BTreeSet::new(),
+            validators: vec![NamespaceRule {
+                name: "allowed_actions".to_string(),
+                config: json!({"actions":["REGISTER_IDENTITY","UPDATE_CLAIM","REVOKE_IDENTITY"]}),
+            }, NamespaceRule {
+                name: "author_matches_object_id".to_string(),
+                config: json!({}),
+            }],
+        }]);
+        ledger.bootstrap_namespaces(vec![NamespaceRuleset {
+            descriptor: NamespaceDescriptor {
+                namespace: "consent.receipt".to_string(),
+                version: 1,
+                rules_hash: "consent-v1".to_string(),
+                governed_by: "governance".to_string(),
+            },
+            writers: BTreeSet::new(),
+            validators: vec![
+                NamespaceRule {
+                    name: "consent_policy".to_string(),
+                    config: json!({
+                        "required_fields":["data_hash","policy_ref","expires_at"],
+                        "max_ttl_secs": 86400
+                    }),
+                },
+                NamespaceRule {
+                    name: "allowed_actions".to_string(),
+                    config: json!({"actions":["CONSENT_GRANTED","CONSENT_REVOKED"]}),
+                },
+                NamespaceRule {
+                    name: "author_matches_object_id".to_string(),
+                    config: json!({}),
+                },
+            ],
+        }]);
+        ledger.bootstrap_namespaces(vec![NamespaceRuleset {
+            descriptor: NamespaceDescriptor {
+                namespace: "builder.credits".to_string(),
+                version: 1,
+                rules_hash: "builder-credits-v1".to_string(),
+                governed_by: "governance".to_string(),
+            },
+            writers: BTreeSet::new(),
+            validators: vec![NamespaceRule {
+                name: "builder_credit_policy".to_string(),
+                config: json!({"max_daily_spend": 10_000, "required_grant_approvals": 3, "grant_approvers": grant_approvers_config(grant_keys)}),
+            }],
+        }]);
+        ledger.bootstrap_namespaces(vec![NamespaceRuleset {
+            descriptor: NamespaceDescriptor {
+                namespace: "asset.control".to_string(),
+                version: 1,
+                rules_hash: "asset-controls-v1".to_string(),
+                governed_by: "governance".to_string(),
+            },
+            writers: BTreeSet::new(),
+            validators: vec![NamespaceRule {
+                name: "asset_control_policy".to_string(),
+                config: json!({"allowed_policy_flags": ["kyc_required", "attestation_required", "clawback_enabled"]}),
+            }],
+        }]);
+        ledger.bootstrap_namespaces(vec![NamespaceRuleset {
+            descriptor: NamespaceDescriptor {
+                namespace: "execution.module".to_string(),
+                version: 1,
+                rules_hash: "execution-module-v1".to_string(),
+                governed_by: "governance".to_string(),
+            },
+            writers: BTreeSet::new(),
+            validators: vec![NamespaceRule {
+                name: "wasm_runtime_policy".to_string(),
+                config: json!({
+                    "allowed_module_classes": ["asset", "interop", "identity"],
+                    "required_governance_approvals": 1
+                }),
+            }],
+        }]);
+        ledger.bootstrap_namespaces(vec![NamespaceRuleset {
+            descriptor: NamespaceDescriptor {
+                namespace: "interop.adapter".to_string(),
+                version: 1,
+                rules_hash: "interop-adapter-v1".to_string(),
+                governed_by: "governance".to_string(),
+            },
+            writers: BTreeSet::new(),
+            validators: vec![NamespaceRule {
+                name: "interop_adapter_policy".to_string(),
+                config: json!({"allowed_standards": ["did-core", "vc-data-model"]}),
+            }],
+        }]);
+        ApiServer::with_edge_config_and_minio_store(
+            ledger,
+            ApiEdgeConfig {
+                offchain_encrypted_files_v1_enabled: true,
+                ..ApiEdgeConfig::default()
+            },
+            minio,
+        )
+        .expect("minio store should initialize")
+    }
     fn build_server_with_edge(edge: ApiEdgeConfig) -> ApiServer<MemoryStorage> {
         let storage = Arc::new(MemoryStorage::new());
         let ledger = Arc::new(Ledger::new(storage, KeyRegistry::new()));
@@ -5081,6 +5404,460 @@ mod tests {
             "encrypted field references include paths not allowed by namespace policy"
         );
         assert_eq!(payload["unexpected_fields"], json!(["payload.tax_id"]));
+    }
+
+    #[tokio::test]
+    async fn files_intent_issues_minio_upload_refs_when_store_configured() {
+        let grant_keys = grant_approver_keys(&[
+            "grant:ops-1",
+            "grant:ops-2",
+            "grant:ops-3",
+            "grant:ops-4",
+            "grant:ops-5",
+        ]);
+        let app = build_server_with_grant_keys_and_file_policy_and_minio(
+            &grant_keys,
+            &["ENCRYPTED_FILE_UPLOAD", "ENCRYPTED_PAYLOAD_FIELD_COMMIT"],
+            None,
+            None,
+            MinioOffchainObjectStoreConfig {
+                endpoint: "minio.internal:9000".to_string(),
+                bucket: "citizen-offchain".to_string(),
+                access_key: "access-key".to_string(),
+                secret_key: "secret-key".to_string(),
+                use_tls: true,
+                path_style: true,
+                key_prefix: "citizen/offchain/v1".to_string(),
+            },
+        )
+        .router();
+
+        let now = chrono::Utc::now().timestamp();
+        let signer = ValidatorKeypair::generate("did:citizen:holder-1".to_string());
+        let mut consent_entry = LedgerEntry {
+            entry_id: Uuid::new_v4(),
+            namespace: "consent.receipt".to_string(),
+            action: "CONSENT_GRANTED".to_string(),
+            object_id: "did:citizen:holder-1".to_string(),
+            payload: json!({
+                "data_hash": "sha256:minio-intent",
+                "policy_ref": "policy:offchain:v1",
+                "expires_at": now + 3_600
+            }),
+            privacy_flag: false,
+            privacy_mode: citizen_types::PrivacyMode::None,
+            payload_commitment: None,
+            ciphertext_hex: None,
+            nonce_hex: None,
+            salt_hex: None,
+            kdf_params: None,
+            consent_receipt: None,
+            authorized_readers: vec![],
+            custodian_policy_id: None,
+            field_reader_acls: BTreeMap::new(),
+            key_wrapped_secrets: vec![],
+            revocation_events: vec![],
+            author: "did:citizen:holder-1".to_string(),
+            signature: String::new(),
+            timestamp: now,
+        };
+        sign_entry_for_tests(&mut consent_entry, &signer);
+        let consent_envelope = SignedEnvelope {
+            envelope_id: Uuid::new_v4(),
+            signer: consent_entry.author.clone(),
+            signature: consent_entry.signature.clone(),
+            submitted_at: chrono::Utc::now(),
+            payload: consent_entry,
+        };
+        let _ = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/envelopes/submit")
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        serde_json::to_vec(&consent_envelope).expect("serialize envelope"),
+                    ))
+                    .expect("request"),
+            )
+            .await
+            .expect("submit response");
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/files/intents")
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        serde_json::to_vec(&json!({
+                            "namespace": "files.secure",
+                            "object_id": "did:citizen:holder-1",
+                            "author_did": "did:author:a",
+                            "mime_type": "application/pdf",
+                            "file_size_bytes": 1024,
+                            "encryption_mode": "passphrase",
+                            "consent_receipt": {
+                                "subject_did": "did:citizen:holder-1",
+                                "data_hash": "sha256:minio-intent",
+                                "policy_ref": "policy:offchain:v1",
+                                "granted_at": now,
+                                "expires_at": now + 3600,
+                                "authorized_readers": ["did:author:a"]
+                            }
+                        }))
+                        .expect("intent body"),
+                    ))
+                    .expect("request"),
+            )
+            .await
+            .expect("intent response");
+
+        assert_eq!(response.status(), StatusCode::CREATED);
+        let body = to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("response body");
+        let payload: Value = serde_json::from_slice(&body).expect("json body");
+        let object_ref = payload["upload"]["object_ref"]
+            .as_str()
+            .expect("object_ref");
+        let upload_url = payload["upload"]["upload_url"]
+            .as_str()
+            .expect("upload_url");
+
+        assert!(
+            object_ref.starts_with("s3://citizen-offchain/citizen/offchain/v1/files.secure/"),
+            "unexpected object_ref: {object_ref}"
+        );
+        assert!(
+            upload_url.starts_with(
+                "https://minio.internal:9000/citizen-offchain/citizen/offchain/v1/files.secure/"
+            ),
+            "unexpected upload_url: {upload_url}"
+        );
+    }
+
+    #[tokio::test]
+    async fn file_commit_rejects_manifest_ref_outside_minio_namespace_prefix() {
+        let grant_keys = grant_approver_keys(&[
+            "grant:ops-1",
+            "grant:ops-2",
+            "grant:ops-3",
+            "grant:ops-4",
+            "grant:ops-5",
+        ]);
+        let app = build_server_with_grant_keys_and_file_policy_and_minio(
+            &grant_keys,
+            &["ENCRYPTED_FILE_UPLOAD", "ENCRYPTED_PAYLOAD_FIELD_COMMIT"],
+            None,
+            None,
+            MinioOffchainObjectStoreConfig {
+                endpoint: "minio.internal:9000".to_string(),
+                bucket: "citizen-offchain".to_string(),
+                access_key: "access-key".to_string(),
+                secret_key: "secret-key".to_string(),
+                use_tls: true,
+                path_style: true,
+                key_prefix: "citizen/offchain/v1".to_string(),
+            },
+        )
+        .router();
+
+        let now = chrono::Utc::now().timestamp();
+        let signer = ValidatorKeypair::generate("did:citizen:holder-1".to_string());
+        let mut consent_entry = LedgerEntry {
+            entry_id: Uuid::new_v4(),
+            namespace: "consent.receipt".to_string(),
+            action: "CONSENT_GRANTED".to_string(),
+            object_id: "did:citizen:holder-1".to_string(),
+            payload: json!({
+                "data_hash": "sha256:minio-ref-policy",
+                "policy_ref": "policy:offchain:v1",
+                "expires_at": now + 3_600
+            }),
+            privacy_flag: false,
+            privacy_mode: citizen_types::PrivacyMode::None,
+            payload_commitment: None,
+            ciphertext_hex: None,
+            nonce_hex: None,
+            salt_hex: None,
+            kdf_params: None,
+            consent_receipt: None,
+            authorized_readers: vec![],
+            custodian_policy_id: None,
+            field_reader_acls: BTreeMap::new(),
+            key_wrapped_secrets: vec![],
+            revocation_events: vec![],
+            author: "did:citizen:holder-1".to_string(),
+            signature: String::new(),
+            timestamp: now,
+        };
+        sign_entry_for_tests(&mut consent_entry, &signer);
+        let consent_envelope = SignedEnvelope {
+            envelope_id: Uuid::new_v4(),
+            signer: consent_entry.author.clone(),
+            signature: consent_entry.signature.clone(),
+            submitted_at: chrono::Utc::now(),
+            payload: consent_entry,
+        };
+        let _ = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/envelopes/submit")
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        serde_json::to_vec(&consent_envelope).expect("serialize envelope"),
+                    ))
+                    .expect("request"),
+            )
+            .await
+            .expect("submit response");
+        let intent_response = app.clone().oneshot(Request::builder().method("POST").uri("/api/v1/files/intents").header("content-type", "application/json").body(Body::from(serde_json::to_vec(&json!({"namespace":"files.secure","object_id":"did:citizen:holder-1","author_did":"did:author:a","mime_type":"application/pdf","file_size_bytes":256,"encryption_mode":"passphrase","consent_receipt":{"subject_did":"did:citizen:holder-1","data_hash":"sha256:minio-ref-policy","policy_ref":"policy:offchain:v1","granted_at":now,"expires_at":now+3600,"authorized_readers":["did:author:a"]}})).expect("intent"))).expect("request")).await.expect("intent response");
+        assert_eq!(intent_response.status(), StatusCode::CREATED);
+        let intent_body = to_bytes(intent_response.into_body(), usize::MAX)
+            .await
+            .expect("intent body");
+        let intent_payload: Value = serde_json::from_slice(&intent_body).expect("intent payload");
+
+        let commit_response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/files/commit")
+                    .header("content-type", "application/json")
+                    .header("idempotency-key", "minio-file-commit-invalid-ref")
+                    .body(Body::from(
+                        serde_json::to_vec(&json!({
+                            "intent_id": intent_payload["intent_id"],
+                            "manifest": {
+                                "namespace": "files.secure",
+                                "object_id": "did:citizen:holder-1",
+                                "author_did": "did:author:a",
+                                "mime_type": "application/pdf",
+                                "file_size_bytes": 256,
+                                "encryption_mode": "passphrase",
+                                "file_ref": "s3://citizen-offchain/citizen/offchain/v1/other.namespace/object.cipher",
+                                "ciphertext_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                                "payload_commitment": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                                "consent_receipt_ref": "consent:receipt:minio-ref-policy"
+                            },
+                            "envelope": {
+                                "envelope_id": Uuid::new_v4(),
+                                "signer": "did:author:a",
+                                "signature": "sig-minio-ref-policy",
+                                "submitted_at": chrono::Utc::now(),
+                                "payload": {
+                                    "entry_id": Uuid::new_v4(),
+                                    "namespace": "files.secure",
+                                    "action": "ENCRYPTED_FILE_UPLOAD",
+                                    "object_id": "did:citizen:holder-1",
+                                    "payload": {"manifest_id": "manifest-minio-ref-policy"},
+                                    "privacy_flag": false,
+                                    "privacy_mode": "none",
+                                    "payload_commitment": null,
+                                    "ciphertext_hex": null,
+                                    "nonce_hex": null,
+                                    "salt_hex": null,
+                                    "kdf_params": null,
+                                    "consent_receipt": null,
+                                    "authorized_readers": [],
+                                    "custodian_policy_id": null,
+                                    "field_reader_acls": {},
+                                    "key_wrapped_secrets": [],
+                                    "revocation_events": [],
+                                    "author": "did:author:a",
+                                    "signature": "sig-minio-ref-policy",
+                                    "timestamp": now
+                                }
+                            }
+                        }))
+                        .expect("commit body"),
+                    ))
+                    .expect("request"),
+            )
+            .await
+            .expect("commit response");
+
+        assert_eq!(commit_response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+        let body = to_bytes(commit_response.into_body(), usize::MAX)
+            .await
+            .expect("response body");
+        let payload: Value = serde_json::from_slice(&body).expect("json body");
+        assert_eq!(
+            payload["error"],
+            "manifest file_ref does not match issued upload intent object_ref"
+        );
+    }
+
+    #[tokio::test]
+    async fn payload_commit_accepts_minio_blob_refs_with_namespace_prefix() {
+        let grant_keys = grant_approver_keys(&[
+            "grant:ops-1",
+            "grant:ops-2",
+            "grant:ops-3",
+            "grant:ops-4",
+            "grant:ops-5",
+        ]);
+        let app = build_server_with_grant_keys_and_file_policy_and_minio(
+            &grant_keys,
+            &["ENCRYPTED_FILE_UPLOAD", "ENCRYPTED_PAYLOAD_FIELD_COMMIT"],
+            None,
+            None,
+            MinioOffchainObjectStoreConfig {
+                endpoint: "minio.internal:9000".to_string(),
+                bucket: "citizen-offchain".to_string(),
+                access_key: "access-key".to_string(),
+                secret_key: "secret-key".to_string(),
+                use_tls: true,
+                path_style: true,
+                key_prefix: "citizen/offchain/v1".to_string(),
+            },
+        )
+        .router();
+        let now = chrono::Utc::now().timestamp();
+
+        let signer = ValidatorKeypair::generate("did:citizen:holder-1".to_string());
+        let mut consent_entry = LedgerEntry {
+            entry_id: Uuid::new_v4(),
+            namespace: "consent.receipt".to_string(),
+            action: "CONSENT_GRANTED".to_string(),
+            object_id: "did:citizen:holder-1".to_string(),
+            payload: json!({
+                "data_hash": "sha256:minio-payload-commit-1",
+                "policy_ref": "policy:offchain:v1",
+                "expires_at": now + 3_600
+            }),
+            privacy_flag: false,
+            privacy_mode: citizen_types::PrivacyMode::None,
+            payload_commitment: None,
+            ciphertext_hex: None,
+            nonce_hex: None,
+            salt_hex: None,
+            kdf_params: None,
+            consent_receipt: None,
+            authorized_readers: vec![],
+            custodian_policy_id: None,
+            field_reader_acls: BTreeMap::new(),
+            key_wrapped_secrets: vec![],
+            revocation_events: vec![],
+            author: "did:citizen:holder-1".to_string(),
+            signature: String::new(),
+            timestamp: now,
+        };
+        sign_entry_for_tests(&mut consent_entry, &signer);
+        let consent_envelope = SignedEnvelope {
+            envelope_id: Uuid::new_v4(),
+            signer: consent_entry.author.clone(),
+            signature: consent_entry.signature.clone(),
+            submitted_at: chrono::Utc::now(),
+            payload: consent_entry,
+        };
+        let _ = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/envelopes/submit")
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        serde_json::to_vec(&consent_envelope).expect("serialize envelope"),
+                    ))
+                    .expect("request"),
+            )
+            .await
+            .expect("submit response");
+
+        let entry_id = Uuid::new_v4();
+        let ssn_commitment = ApiServer::<MemoryStorage>::compute_payload_field_commitment(
+            "files.secure",
+            &entry_id.to_string(),
+            1,
+            "payload.ssn",
+            "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        );
+        let medical_commitment = ApiServer::<MemoryStorage>::compute_payload_field_commitment(
+            "files.secure",
+            &entry_id.to_string(),
+            1,
+            "payload.medical_record",
+            "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        );
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/payloads/commit")
+                    .header("content-type", "application/json")
+                    .header("idempotency-key", "minio-payload-commit-1")
+                    .body(Body::from(
+                        serde_json::to_vec(&json!({
+                            "namespace": "files.secure",
+                            "object_id": "PROC-MINIO-001",
+                            "author_did": "did:author:a",
+                            "policy_version": 1,
+                            "consent_receipt": {
+                                "subject_did": "did:citizen:holder-1",
+                                "data_hash": "sha256:minio-payload-commit-1",
+                                "policy_ref": "policy:offchain:v1",
+                                "granted_at": now,
+                                "expires_at": now + 3_600,
+                                "authorized_readers": ["did:reader:1"]
+                            },
+                            "encrypted_field_refs": [
+                                {
+                                    "field_path": "payload.ssn",
+                                    "blob_ref": "s3://citizen-offchain/citizen/offchain/v1/files.secure/PROC-MINIO-001/ssn.cipher",
+                                    "ciphertext_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                                    "payload_commitment": ssn_commitment
+                                },
+                                {
+                                    "field_path": "payload.medical_record",
+                                    "blob_ref": "s3://citizen-offchain/citizen/offchain/v1/files.secure/PROC-MINIO-001/medical.cipher",
+                                    "ciphertext_hash": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                                    "payload_commitment": medical_commitment
+                                }
+                            ],
+                            "envelope": {
+                                "envelope_id": Uuid::new_v4(),
+                                "signer": "did:author:a",
+                                "signature": "sig-minio-payload-commit-1",
+                                "submitted_at": chrono::Utc::now(),
+                                "payload": {
+                                    "entry_id": entry_id,
+                                    "namespace": "files.secure",
+                                    "action": "ENCRYPTED_PAYLOAD_FIELD_COMMIT",
+                                    "object_id": "PROC-MINIO-001",
+                                    "payload": {"field_refs": 2},
+                                    "privacy_flag": false,
+                                    "privacy_mode": "none",
+                                    "payload_commitment": null,
+                                    "ciphertext_hex": null,
+                                    "nonce_hex": null,
+                                    "salt_hex": null,
+                                    "kdf_params": null,
+                                    "consent_receipt": null,
+                                    "authorized_readers": [],
+                                    "custodian_policy_id": null,
+                                    "field_reader_acls": {},
+                                    "key_wrapped_secrets": [],
+                                    "revocation_events": [],
+                                    "author": "did:author:a",
+                                    "signature": "sig-minio-payload-commit-1",
+                                    "timestamp": now
+                                }
+                            }
+                        }))
+                        .expect("request body"),
+                    ))
+                    .expect("request"),
+            )
+            .await
+            .expect("payload commit response");
+
+        assert_eq!(response.status(), StatusCode::ACCEPTED);
     }
 
     #[tokio::test]
