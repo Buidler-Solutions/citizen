@@ -185,7 +185,7 @@ Checklist:
 - [x] Add governance-managed constraints (max file size, allowed encryption modes, required consent class via `required_consent_policy_ref`).
 - [x] Add governance-managed field-policy versioning and migration rules. ✅ API `POST /api/v1/payloads/commit` now enforces `policy_version`/`min_supported_policy_version` from `offchain_encrypted_payload_field_policy` and returns migration guidance via `migration_guide_ref` on mismatches.
 - [x] Add revocation semantics that invalidate future reads while preserving audit history. ✅ Added `POST /api/v1/files/read` grant-aware access checks that deny reads after matching `ENCRYPTED_FILE_REVOKE` events while retaining committed manifest metadata for audit verification.
-- [ ] Add admission/runbook docs for operators handling storage credentials.
+- [x] Add admission/runbook docs for operators handling storage credentials. ✅ Added `docs/OFFCHAIN_ENCRYPTED_FILES_CREDENTIAL_CUSTODY_RUNBOOK.md` with admission, rotation, backup, and incident-response controls for storage/KMS credentials.
 
 ## Phase E — Explorer + Verification Tooling
 
@@ -242,7 +242,7 @@ Checklist:
 - [ ] Index and display encrypted payload field references by namespace and field path (never plaintext).
 
 ### Operations / Governance
-- [ ] Add credential custody runbook for storage/KMS secrets.
+- [x] Add credential custody runbook for storage/KMS secrets. ✅ Published `docs/OFFCHAIN_ENCRYPTED_FILES_CREDENTIAL_CUSTODY_RUNBOOK.md` with least-privilege custody, rotation intervals, audit evidence requirements, and compromise response workflow.
 - [ ] Add incident response playbook for encrypted-file compromise scenarios.
 - [ ] Add governance proposal templates for file-policy changes.
 
