@@ -37,6 +37,22 @@ type NamespaceEntries = {
   }>;
 };
 
+
+
+type FileManifestMetadata = {
+  manifest_id: string;
+  namespace: string;
+  object_id: string;
+  committed_at: number;
+  encryption_mode: string | null;
+  ciphertext_hash: string | null;
+  payload_commitment: string | null;
+  consent_receipt_ref: string | null;
+  consent_state: string;
+  consent_state_reason: string | null;
+  revoked_readers: string[];
+};
+
 type ReceiptLookup = {
   receipt: {
     receipt_id: string;
@@ -83,6 +99,12 @@ export class CitizenService {
   async getReceipt(receiptId: string): Promise<ApiSource<ReceiptLookup>> {
     const endpoint = `${this.baseUrl.replace(/\/$/, '')}/api/v1/receipts/${receiptId}`;
     return this.fetchJson<ReceiptLookup>(endpoint);
+  }
+
+
+  async getFileManifest(manifestId: string): Promise<ApiSource<FileManifestMetadata>> {
+    const endpoint = `${this.baseUrl.replace(/\/$/, '')}/api/v1/files/manifests/${manifestId}`;
+    return this.fetchJson<FileManifestMetadata>(endpoint);
   }
 
   private async fetchJson<T>(endpoint: string): Promise<ApiSource<T>> {

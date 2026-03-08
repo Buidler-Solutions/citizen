@@ -281,6 +281,8 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
         let payload_commit_edge = Arc::clone(&self.edge);
         let file_read_ledger = Arc::clone(&self.ledger);
         let file_read_edge = Arc::clone(&self.edge);
+        let file_manifest_metadata_ledger = Arc::clone(&self.ledger);
+        let file_manifest_metadata_edge = Arc::clone(&self.edge);
         let get_receipt_ledger = Arc::clone(&self.ledger);
         let builder_credits_ledger = Arc::clone(&self.ledger);
         let asset_positions_ledger = Arc::clone(&self.ledger);
@@ -379,6 +381,14 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
                     let ledger = Arc::clone(&file_read_ledger);
                     let edge = Arc::clone(&file_read_edge);
                     async move { Self::handle_read_file(ledger, edge, headers, request).await }
+                }),
+            )
+            .route(
+                "/api/v1/files/manifests/:manifest_id",
+                get(move |Path(manifest_id): Path<String>| {
+                    let ledger = Arc::clone(&file_manifest_metadata_ledger);
+                    let edge = Arc::clone(&file_manifest_metadata_edge);
+                    async move { Self::handle_get_file_manifest_metadata(ledger, edge, manifest_id).await }
                 }),
             )
             .route(
@@ -1195,6 +1205,73 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
                 "file_ref": file_ref,
                 "ciphertext_hash": ciphertext_hash,
                 "revoked": false,
+            })),
+        )
+    }
+
+    async fn handle_get_file_manifest_metadata(
+        ledger: Arc<Ledger<S>>,
+        edge: Arc<ApiEdgeState>,
+        manifest_id: String,
+    ) -> (StatusCode, Json<serde_json::Value>) {
+        let stored_manifest = {
+            let manifests = edge.file_manifests.lock().await;
+            manifests.get(&manifest_id).cloned()
+        };
+
+        let Some(stored_manifest) = stored_manifest else {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(serde_json::json!({"error": "file manifest not found"})),
+            );
+        };
+
+        let now = Utc::now().timestamp();
+        let consent_status = Self::evaluate_consent_receipt(
+            Arc::clone(&ledger),
+            &stored_manifest.intent.consent_receipt,
+            now,
+        );
+
+        let revoked_readers = ledger
+            .storage()
+            .namespace_entries(&stored_manifest.intent.namespace)
+            .unwrap_or_default()
+            .into_iter()
+            .filter(|entry| {
+                entry.object_id == stored_manifest.intent.object_id
+                    && entry.action == "ENCRYPTED_FILE_REVOKE"
+            })
+            .filter(|entry| {
+                entry
+                    .payload
+                    .get("manifest_id")
+                    .and_then(|value| value.as_str())
+                    == Some(manifest_id.as_str())
+            })
+            .filter_map(|entry| {
+                entry
+                    .payload
+                    .get("reader_did")
+                    .and_then(|value| value.as_str().map(ToOwned::to_owned))
+            })
+            .collect::<Vec<String>>();
+
+        let manifest = stored_manifest.manifest;
+        (
+            StatusCode::OK,
+            Json(serde_json::json!({
+                "manifest_id": manifest_id,
+                "namespace": stored_manifest.intent.namespace,
+                "object_id": stored_manifest.intent.object_id,
+                "committed_at": stored_manifest.committed_at,
+                "encryption_mode": manifest.get("encryption_mode").cloned().unwrap_or(serde_json::Value::Null),
+                "ciphertext_hash": manifest.get("ciphertext_hash").cloned().unwrap_or(serde_json::Value::Null),
+                "payload_commitment": manifest.get("payload_commitment").cloned().unwrap_or(serde_json::Value::Null),
+                "consent_receipt_ref": manifest.get("consent_receipt_ref").cloned().unwrap_or(serde_json::Value::Null),
+                "consent_state": if consent_status.valid { "active" } else { "invalid" },
+                "consent_state_reason": consent_status.reason,
+                "revoked_readers": revoked_readers,
             })),
         )
     }
@@ -5777,6 +5854,65 @@ mod tests {
 
         let read_response = app.oneshot(Request::builder().method("POST").uri("/api/v1/files/read").header("content-type", "application/json").body(Body::from(serde_json::to_vec(&json!({"manifest_id":commit_payload["manifest_id"],"reader_did":"did:reader:1","consent_receipt":{"subject_did":"did:citizen:holder-1","data_hash":"sha256:file-revoke-read","policy_ref":"policy:offchain:v1","granted_at":now,"expires_at":now+3600,"authorized_readers":["did:reader:1"]}})).expect("read"))).expect("request")).await.expect("read response");
         assert_eq!(read_response.status(), StatusCode::FORBIDDEN);
+    }
+
+    #[tokio::test]
+    async fn file_manifest_metadata_returns_consent_and_revocation_status() {
+        let grant_keys = grant_approver_keys(&[
+            "grant:ops-1",
+            "grant:ops-2",
+            "grant:ops-3",
+            "grant:ops-4",
+            "grant:ops-5",
+        ]);
+        let app = build_server_with_grant_keys_and_file_actions(
+            &grant_keys,
+            &[
+                "ENCRYPTED_FILE_UPLOAD",
+                "ENCRYPTED_FILE_SHARE",
+                "ENCRYPTED_FILE_REVOKE",
+            ],
+        )
+        .router();
+        let now = chrono::Utc::now().timestamp();
+
+        let _ = app.clone().oneshot(Request::builder().method("POST").uri("/api/v1/envelopes/submit").header("content-type", "application/json").body(Body::from(serde_json::to_vec(&json!({"envelope_id":Uuid::new_v4(),"signer":"did:citizen:holder-1","signature":"sig-consent-manifest-meta","submitted_at":chrono::Utc::now(),"payload":{"entry_id":Uuid::new_v4(),"namespace":"consent.receipt","action":"CONSENT_GRANTED","object_id":"did:citizen:holder-1","payload":{"data_hash":"sha256:file-manifest-meta","policy_ref":"policy:offchain:v1","expires_at":now+3600},"privacy_flag":false,"privacy_mode":"none","payload_commitment":null,"ciphertext_hex":null,"nonce_hex":null,"salt_hex":null,"kdf_params":null,"consent_receipt":null,"authorized_readers":[],"custodian_policy_id":null,"field_reader_acls":{},"key_wrapped_secrets":[],"revocation_events":[],"author":"did:citizen:holder-1","signature":"sig-consent-manifest-meta","timestamp":now}})).expect("consent"))).expect("request")).await.expect("consent response");
+
+        let intent_response = app.clone().oneshot(Request::builder().method("POST").uri("/api/v1/files/intents").header("content-type", "application/json").body(Body::from(serde_json::to_vec(&json!({"namespace":"files.secure","object_id":"did:citizen:holder-1","author_did":"did:author:a","mime_type":"application/pdf","file_size_bytes":256,"encryption_mode":"passphrase","consent_receipt":{"subject_did":"did:citizen:holder-1","data_hash":"sha256:file-manifest-meta","policy_ref":"policy:offchain:v1","granted_at":now,"expires_at":now+3600,"authorized_readers":["did:reader:1"]}})).expect("intent"))).expect("request")).await.expect("intent response");
+        let intent_body = axum::body::to_bytes(intent_response.into_body(), usize::MAX)
+            .await
+            .expect("intent body");
+        let intent_payload: Value = serde_json::from_slice(&intent_body).expect("intent payload");
+
+        let commit_response = app.clone().oneshot(Request::builder().method("POST").uri("/api/v1/files/commit").header("content-type", "application/json").header("idempotency-key", "file-manifest-meta-commit").body(Body::from(serde_json::to_vec(&json!({"intent_id": intent_payload["intent_id"],"manifest":{"namespace":"files.secure","object_id":"did:citizen:holder-1","author_did":"did:author:a","mime_type":"application/pdf","file_size_bytes":256,"encryption_mode":"passphrase","file_ref":intent_payload["upload"]["object_ref"],"ciphertext_hash":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","payload_commitment":"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","consent_receipt_ref":"consent:receipt:file-manifest-meta"},"envelope":{"envelope_id":Uuid::new_v4(),"signer":"did:author:a","signature":"sig-file-manifest-meta","submitted_at":chrono::Utc::now(),"payload":{"entry_id":Uuid::new_v4(),"namespace":"files.secure","action":"ENCRYPTED_FILE_UPLOAD","object_id":"did:citizen:holder-1","payload":{"manifest_id":"manifest-manifest-meta"},"privacy_flag":false,"privacy_mode":"none","payload_commitment":null,"ciphertext_hex":null,"nonce_hex":null,"salt_hex":null,"kdf_params":null,"consent_receipt":null,"authorized_readers":[],"custodian_policy_id":null,"field_reader_acls":{},"key_wrapped_secrets":[],"revocation_events":[],"author":"did:author:a","signature":"sig-file-manifest-meta","timestamp":now}}})).expect("commit"))).expect("request")).await.expect("commit response");
+        let commit_body = axum::body::to_bytes(commit_response.into_body(), usize::MAX)
+            .await
+            .expect("commit body");
+        let commit_payload: Value = serde_json::from_slice(&commit_body).expect("commit payload");
+
+        let _ = app.clone().oneshot(Request::builder().method("POST").uri("/api/v1/envelopes/submit").header("content-type", "application/json").body(Body::from(serde_json::to_vec(&json!({"envelope_id":Uuid::new_v4(),"signer":"did:author:a","signature":"sig-revoke-manifest-meta","submitted_at":chrono::Utc::now(),"payload":{"entry_id":Uuid::new_v4(),"namespace":"files.secure","action":"ENCRYPTED_FILE_REVOKE","object_id":"did:citizen:holder-1","payload":{"manifest_id":commit_payload["manifest_id"],"reader_did":"did:reader:1","reason":"manual revocation"},"privacy_flag":false,"privacy_mode":"none","payload_commitment":null,"ciphertext_hex":null,"nonce_hex":null,"salt_hex":null,"kdf_params":null,"consent_receipt":null,"authorized_readers":[],"custodian_policy_id":null,"field_reader_acls":{},"key_wrapped_secrets":[],"revocation_events":[],"author":"did:author:a","signature":"sig-revoke-manifest-meta","timestamp":now}})).expect("revoke"))).expect("request")).await.expect("revoke response");
+
+        let metadata_response = app
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri(format!(
+                        "/api/v1/files/manifests/{}",
+                        commit_payload["manifest_id"].as_str().expect("manifest id")
+                    ))
+                    .body(Body::empty())
+                    .expect("request"),
+            )
+            .await
+            .expect("metadata response");
+        assert_eq!(metadata_response.status(), StatusCode::OK);
+        let metadata_body = axum::body::to_bytes(metadata_response.into_body(), usize::MAX)
+            .await
+            .expect("metadata body");
+        let metadata_payload: Value =
+            serde_json::from_slice(&metadata_body).expect("metadata payload");
+        assert_eq!(metadata_payload["consent_state"], json!("active"));
+        assert_eq!(metadata_payload["revoked_readers"], json!(["did:reader:1"]));
     }
 
     #[tokio::test]

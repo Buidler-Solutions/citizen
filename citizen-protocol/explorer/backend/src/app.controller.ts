@@ -29,4 +29,9 @@ export class AppController {
   async receipt(@Param('receiptId') receiptId: string) {
     return this.citizenService.getReceipt(receiptId);
   }
+
+  @Get('files/manifests/:manifestId')
+  async fileManifest(@Param('manifestId') manifestId: string) {
+    return this.citizenService.getFileManifest(manifestId);
+  }
 }

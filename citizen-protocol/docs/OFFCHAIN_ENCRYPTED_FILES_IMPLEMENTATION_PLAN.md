@@ -194,8 +194,8 @@ Deliverables:
 - CLI/SDK verification command for `receipt_id -> file_commitment -> storage object hash`.
 
 Checklist:
-- [ ] Add explorer panels for file manifest metadata (hashes, mode, consent state).
-- [ ] Ensure no plaintext or secret key material is rendered/logged.
+- [x] Add explorer panels for file manifest metadata (hashes, mode, consent state). ✅ Explorer backend now proxies `/files/manifests/:manifestId` to the canonical API and frontend renders an `Encrypted File Manifest Metadata` card keyed by `NEXT_PUBLIC_FILE_MANIFEST_ID`.
+- [x] Ensure no plaintext or secret key material is rendered/logged. ✅ Explorer manifest panel only renders commitment metadata (`manifest_id`, `ciphertext_hash`, `payload_commitment`, consent state, revoked-reader count) and does not request or display plaintext payload bytes.
 - [ ] Add verifier command examples in docs and runbooks.
 - [ ] Add operator alerting for commitment mismatch/revocation conflicts.
 
