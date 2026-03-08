@@ -67,6 +67,7 @@ struct ApiEdgeState {
     object_store: Arc<dyn OffchainObjectStore>,
     write_windows: Mutex<BTreeMap<String, Vec<i64>>>,
     file_intents: Mutex<BTreeMap<Uuid, StoredFileIntent>>,
+    committed_file_intents: Mutex<BTreeMap<Uuid, String>>,
     file_commit_idempotency: Mutex<BTreeMap<String, serde_json::Value>>,
     payload_commit_idempotency: Mutex<BTreeMap<String, serde_json::Value>>,
     file_manifests: Mutex<BTreeMap<String, StoredFileManifest>>,
@@ -87,6 +88,7 @@ impl ApiEdgeState {
             object_store,
             write_windows: Mutex::new(BTreeMap::new()),
             file_intents: Mutex::new(BTreeMap::new()),
+            committed_file_intents: Mutex::new(BTreeMap::new()),
             file_commit_idempotency: Mutex::new(BTreeMap::new()),
             payload_commit_idempotency: Mutex::new(BTreeMap::new()),
             file_manifests: Mutex::new(BTreeMap::new()),
@@ -707,6 +709,23 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
             return (StatusCode::OK, Json(cached));
         }
 
+        if let Some(manifest_id) = edge
+            .committed_file_intents
+            .lock()
+            .await
+            .get(&request.intent_id)
+            .cloned()
+        {
+            return (
+                StatusCode::CONFLICT,
+                Json(serde_json::json!({
+                    "error": "file intent already committed",
+                    "intent_id": request.intent_id,
+                    "manifest_id": manifest_id,
+                })),
+            );
+        }
+
         let intent = {
             let intents = edge.file_intents.lock().await;
             intents.get(&request.intent_id).cloned()
@@ -795,6 +814,11 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
                 committed_at: now,
             },
         );
+        edge.file_intents.lock().await.remove(&request.intent_id);
+        edge.committed_file_intents
+            .lock()
+            .await
+            .insert(request.intent_id, manifest_id.clone());
 
         let response = serde_json::json!({
             "status": "accepted",
@@ -3320,6 +3344,7 @@ mod tests {
         assert_eq!(first.status(), StatusCode::ACCEPTED);
 
         let second = app
+            .clone()
             .oneshot(
                 Request::builder()
                     .method("POST")
@@ -3434,6 +3459,7 @@ mod tests {
         assert_eq!(first.status(), StatusCode::ACCEPTED);
 
         let second = app
+            .clone()
             .oneshot(
                 Request::builder()
                     .method("POST")
@@ -3764,6 +3790,7 @@ mod tests {
             .expect("body");
 
         let second = app
+            .clone()
             .oneshot(
                 Request::builder()
                     .method("POST")
@@ -3782,6 +3809,28 @@ mod tests {
             .await
             .expect("body");
         assert_eq!(first_body, second_body);
+
+        let third = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/files/commit")
+                    .header("content-type", "application/json")
+                    .header("idempotency-key", "file-commit-2")
+                    .body(Body::from(
+                        serde_json::to_vec(&commit_request).expect("commit body"),
+                    ))
+                    .expect("request"),
+            )
+            .await
+            .expect("third commit");
+        assert_eq!(third.status(), StatusCode::CONFLICT);
+        let third_body = axum::body::to_bytes(third.into_body(), usize::MAX)
+            .await
+            .expect("third body");
+        let third_payload: Value = serde_json::from_slice(&third_body).expect("third payload");
+        assert_eq!(third_payload["error"], "file intent already committed");
+        assert_eq!(third_payload["intent_id"], intent_id);
     }
 
     #[tokio::test]
