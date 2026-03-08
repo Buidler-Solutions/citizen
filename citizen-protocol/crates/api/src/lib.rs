@@ -35,6 +35,7 @@ pub struct ApiEdgeConfig {
     pub write_enabled: bool,
     pub auth_required: bool,
     pub max_write_requests_per_minute: usize,
+    pub offchain_encrypted_files_v1_enabled: bool,
     pub clients: BTreeMap<String, ApiClientProfile>,
 }
 
@@ -57,6 +58,7 @@ impl Default for ApiEdgeConfig {
             write_enabled: true,
             auth_required: false,
             max_write_requests_per_minute: 120,
+            offchain_encrypted_files_v1_enabled: false,
             clients: BTreeMap::new(),
         }
     }
@@ -564,6 +566,10 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
         headers: HeaderMap,
         request: FileIntentRequest,
     ) -> (StatusCode, Json<serde_json::Value>) {
+        if !edge.config.offchain_encrypted_files_v1_enabled {
+            return Self::offchain_feature_disabled_response();
+        }
+
         if let Err(response) =
             Self::authorize_write(Arc::clone(&edge), &headers, "files.intents.create").await
         {
@@ -730,6 +736,10 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
         headers: HeaderMap,
         request: FileCommitRequest,
     ) -> (StatusCode, Json<serde_json::Value>) {
+        if !edge.config.offchain_encrypted_files_v1_enabled {
+            return Self::offchain_feature_disabled_response();
+        }
+
         if let Err(response) =
             Self::authorize_write(Arc::clone(&edge), &headers, "files.commit").await
         {
@@ -884,6 +894,10 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
         headers: HeaderMap,
         request: PayloadCommitRequest,
     ) -> (StatusCode, Json<serde_json::Value>) {
+        if !edge.config.offchain_encrypted_files_v1_enabled {
+            return Self::offchain_feature_disabled_response();
+        }
+
         if let Err(response) =
             Self::authorize_write(Arc::clone(&edge), &headers, "payloads.commit").await
         {
@@ -1147,6 +1161,10 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
         headers: HeaderMap,
         request: FileReadRequest,
     ) -> (StatusCode, Json<serde_json::Value>) {
+        if !edge.config.offchain_encrypted_files_v1_enabled {
+            return Self::offchain_feature_disabled_response();
+        }
+
         if let Err(response) =
             Self::authorize_write(Arc::clone(&edge), &headers, "files.read").await
         {
@@ -1309,6 +1327,10 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
         edge: Arc<ApiEdgeState>,
         manifest_id: String,
     ) -> (StatusCode, Json<serde_json::Value>) {
+        if !edge.config.offchain_encrypted_files_v1_enabled {
+            return Self::offchain_feature_disabled_response();
+        }
+
         let stored_manifest = {
             let manifests = edge.file_manifests.lock().await;
             manifests.get(&manifest_id).cloned()
@@ -1375,6 +1397,10 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
         edge: Arc<ApiEdgeState>,
         headers: HeaderMap,
     ) -> (StatusCode, Json<serde_json::Value>) {
+        if !edge.config.offchain_encrypted_files_v1_enabled {
+            return Self::offchain_feature_disabled_response();
+        }
+
         if let Err(response) =
             Self::authorize_scope(Arc::clone(&edge), &headers, "files.alerts.read", false).await
         {
@@ -1395,6 +1421,10 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
         entry_id: Uuid,
         namespace: String,
     ) -> (StatusCode, Json<serde_json::Value>) {
+        if !edge.config.offchain_encrypted_files_v1_enabled {
+            return Self::offchain_feature_disabled_response();
+        }
+
         let refs = edge.payload_field_refs.lock().await;
         let prefix = format!("{entry_id}:{namespace}:");
         let mut field_refs: Vec<EncryptedFieldRef> = refs
@@ -2284,6 +2314,16 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
         Ok(())
     }
 
+    fn offchain_feature_disabled_response() -> (StatusCode, Json<serde_json::Value>) {
+        (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(serde_json::json!({
+                "error": "offchain encrypted files feature is disabled",
+                "feature_flag": "offchain_encrypted_files_v1",
+            })),
+        )
+    }
+
     async fn record_file_access_alert(edge: Arc<ApiEdgeState>, alert: FileAccessAlert) {
         const MAX_ALERTS: usize = 500;
         let mut alerts = edge.file_access_alerts.lock().await;
@@ -2315,8 +2355,9 @@ fn protocol_error_response(err: ProtocolError) -> (StatusCode, Json<serde_json::
 #[cfg(test)]
 mod tests {
     use super::{ApiClientProfile, ApiEdgeConfig, ApiServer};
-    use axum::body::Body;
+    use axum::body::{to_bytes, Body};
     use axum::http::{Request, StatusCode};
+    use chrono::Utc;
     use citizen_crypto::{sign_message, verifying_key_to_string, KeyRegistry, ValidatorKeypair};
     use citizen_ledger::Ledger;
     use citizen_storage::MemoryStorage;
@@ -2526,7 +2567,13 @@ mod tests {
                 config: json!({"allowed_standards": ["did-core", "vc-data-model"]}),
             }],
         }]);
-        ApiServer::new(ledger)
+        ApiServer::with_edge_config(
+            ledger,
+            ApiEdgeConfig {
+                offchain_encrypted_files_v1_enabled: true,
+                ..ApiEdgeConfig::default()
+            },
+        )
     }
 
     fn build_server_with_edge(edge: ApiEdgeConfig) -> ApiServer<MemoryStorage> {
@@ -3610,6 +3657,7 @@ mod tests {
             write_enabled: true,
             auth_required: false,
             max_write_requests_per_minute: 1,
+            offchain_encrypted_files_v1_enabled: true,
             clients: BTreeMap::new(),
         })
         .router();
@@ -3660,6 +3708,7 @@ mod tests {
             write_enabled: true,
             auth_required: true,
             max_write_requests_per_minute: 10,
+            offchain_encrypted_files_v1_enabled: true,
             clients,
         })
         .router();
@@ -3692,6 +3741,7 @@ mod tests {
             write_enabled: true,
             auth_required: true,
             max_write_requests_per_minute: 10,
+            offchain_encrypted_files_v1_enabled: true,
             clients,
         })
         .router();
@@ -3725,6 +3775,7 @@ mod tests {
             write_enabled: true,
             auth_required: true,
             max_write_requests_per_minute: 1,
+            offchain_encrypted_files_v1_enabled: true,
             clients,
         })
         .router();
@@ -3775,6 +3826,7 @@ mod tests {
             write_enabled: false,
             auth_required: true,
             max_write_requests_per_minute: 10,
+            offchain_encrypted_files_v1_enabled: true,
             clients,
         });
 
@@ -3809,6 +3861,81 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(read_response.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn offchain_endpoints_return_service_unavailable_when_feature_flag_disabled() {
+        let app = build_server_with_edge(ApiEdgeConfig {
+            write_enabled: true,
+            auth_required: false,
+            max_write_requests_per_minute: 10,
+            offchain_encrypted_files_v1_enabled: false,
+            clients: BTreeMap::new(),
+        })
+        .router();
+
+        let now = Utc::now().timestamp();
+        let intent_response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/files/intents")
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        serde_json::to_vec(&json!({
+                            "namespace":"files.secure",
+                            "object_id":"did:citizen:holder-1",
+                            "author_did":"did:author:a",
+                            "mime_type":"application/pdf",
+                            "file_size_bytes":256,
+                            "encryption_mode":"passphrase",
+                            "consent_receipt":{
+                                "subject_did":"did:citizen:holder-1",
+                                "data_hash":"sha256:file-disabled",
+                                "policy_ref":"policy:offchain:v1",
+                                "granted_at":now,
+                                "expires_at":now+3600,
+                                "authorized_readers":["did:reader:1"]
+                            }
+                        }))
+                        .expect("intent"),
+                    ))
+                    .expect("request"),
+            )
+            .await
+            .expect("intent response");
+
+        assert_eq!(intent_response.status(), StatusCode::SERVICE_UNAVAILABLE);
+        let payload: serde_json::Value = serde_json::from_slice(
+            &to_bytes(intent_response.into_body(), usize::MAX)
+                .await
+                .expect("intent body"),
+        )
+        .expect("parse intent body");
+        assert_eq!(
+            payload,
+            json!({
+                "error": "offchain encrypted files feature is disabled",
+                "feature_flag": "offchain_encrypted_files_v1"
+            })
+        );
+
+        let fields_response = app
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri(format!(
+                        "/api/v1/payloads/fields/{}/files.secure",
+                        Uuid::new_v4()
+                    ))
+                    .body(Body::empty())
+                    .expect("request"),
+            )
+            .await
+            .expect("fields response");
+
+        assert_eq!(fields_response.status(), StatusCode::SERVICE_UNAVAILABLE);
     }
 
     #[tokio::test]
@@ -7275,6 +7402,7 @@ mod tests {
             write_enabled: true,
             auth_required: true,
             max_write_requests_per_minute: 10,
+            offchain_encrypted_files_v1_enabled: true,
             clients,
         })
         .router();
@@ -7318,6 +7446,7 @@ mod tests {
             write_enabled: true,
             auth_required: true,
             max_write_requests_per_minute: 10,
+            offchain_encrypted_files_v1_enabled: true,
             clients,
         })
         .router();
