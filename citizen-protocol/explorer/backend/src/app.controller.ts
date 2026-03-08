@@ -34,4 +34,12 @@ export class AppController {
   async fileManifest(@Param('manifestId') manifestId: string) {
     return this.citizenService.getFileManifest(manifestId);
   }
+
+  @Get('payloads/fields/:entryId/:namespace')
+  async payloadFieldRefs(
+    @Param('entryId') entryId: string,
+    @Param('namespace') namespace: string,
+  ) {
+    return this.citizenService.getPayloadFieldRefs(entryId, namespace);
+  }
 }

@@ -53,6 +53,20 @@ type FileManifestMetadata = {
   revoked_readers: string[];
 };
 
+
+
+type PayloadFieldRefs = {
+  entry_id: string;
+  namespace: string;
+  field_refs: Array<{
+    field_path: string;
+    blob_ref: string;
+    ciphertext_hash: string;
+    payload_commitment: string;
+  }>;
+};
+
+
 type ReceiptLookup = {
   receipt: {
     receipt_id: string;
@@ -99,6 +113,12 @@ export class CitizenService {
   async getReceipt(receiptId: string): Promise<ApiSource<ReceiptLookup>> {
     const endpoint = `${this.baseUrl.replace(/\/$/, '')}/api/v1/receipts/${receiptId}`;
     return this.fetchJson<ReceiptLookup>(endpoint);
+  }
+
+
+  async getPayloadFieldRefs(entryId: string, namespace: string): Promise<ApiSource<PayloadFieldRefs>> {
+    const endpoint = `${this.baseUrl.replace(/\/$/, '')}/api/v1/payloads/fields/${encodeURIComponent(entryId)}/${encodeURIComponent(namespace)}`;
+    return this.fetchJson<PayloadFieldRefs>(endpoint);
   }
 
 

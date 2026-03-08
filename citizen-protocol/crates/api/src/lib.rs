@@ -292,6 +292,7 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
         let file_commit_edge = Arc::clone(&self.edge);
         let payload_commit_ledger = Arc::clone(&self.ledger);
         let payload_commit_edge = Arc::clone(&self.edge);
+        let payload_fields_edge = Arc::clone(&self.edge);
         let file_read_ledger = Arc::clone(&self.ledger);
         let file_read_edge = Arc::clone(&self.edge);
         let file_manifest_metadata_ledger = Arc::clone(&self.ledger);
@@ -384,7 +385,7 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
                 post(
                     move |headers: HeaderMap, Json(request): Json<PayloadCommitRequest>| {
                         let ledger = Arc::clone(&payload_commit_ledger);
-                        let edge = Arc::clone(&payload_commit_edge);
+                        let edge = Arc::clone(&payload_fields_edge);
                         async move { Self::handle_commit_payload(ledger, edge, headers, request).await }
                     },
                 ),
@@ -410,6 +411,15 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
                 get(move |headers: HeaderMap| {
                     let edge = Arc::clone(&file_alerts_edge);
                     async move { Self::handle_list_file_access_alerts(edge, headers).await }
+                }),
+            )
+            .route(
+                "/api/v1/payloads/fields/:entry_id/:namespace",
+                get(move |Path((entry_id, namespace)): Path<(Uuid, String)>| {
+                    let edge = Arc::clone(&payload_commit_edge);
+                    async move {
+                        Self::handle_get_payload_field_refs(edge, entry_id, namespace).await
+                    }
                 }),
             )
             .route(
@@ -1343,6 +1353,47 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
             StatusCode::OK,
             Json(serde_json::json!({
                 "alerts": alerts,
+            })),
+        )
+    }
+
+    async fn handle_get_payload_field_refs(
+        edge: Arc<ApiEdgeState>,
+        entry_id: Uuid,
+        namespace: String,
+    ) -> (StatusCode, Json<serde_json::Value>) {
+        let refs = edge.payload_field_refs.lock().await;
+        let prefix = format!("{entry_id}:{namespace}:");
+        let mut field_refs: Vec<EncryptedFieldRef> = refs
+            .iter()
+            .filter_map(|(key, value)| {
+                if key.starts_with(&prefix) {
+                    Some(value.clone())
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        if field_refs.is_empty() {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(serde_json::json!({
+                    "error": "encrypted payload field refs not found",
+                    "entry_id": entry_id,
+                    "namespace": namespace,
+                })),
+            );
+        }
+
+        field_refs.sort_by(|left, right| left.field_path.cmp(&right.field_path));
+
+        (
+            StatusCode::OK,
+            Json(serde_json::json!({
+                "entry_id": entry_id,
+                "namespace": namespace,
+                "field_refs": field_refs,
             })),
         )
     }
@@ -6244,6 +6295,171 @@ mod tests {
             payload["encrypted_field_refs"].as_array().map(Vec::len),
             Some(2)
         );
+    }
+
+    #[tokio::test]
+    async fn payload_field_refs_endpoint_returns_committed_refs() {
+        let grant_keys = grant_approver_keys(&[
+            "grant:ops-1",
+            "grant:ops-2",
+            "grant:ops-3",
+            "grant:ops-4",
+            "grant:ops-5",
+        ]);
+        let app = build_server_with_grant_keys_and_file_actions(
+            &grant_keys,
+            &["ENCRYPTED_FILE_UPLOAD", "ENCRYPTED_PAYLOAD_FIELD_COMMIT"],
+        )
+        .router();
+        let now = chrono::Utc::now().timestamp();
+        let entry_id = Uuid::new_v4();
+
+        let _ = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/envelopes/submit")
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        serde_json::to_vec(&json!({
+                            "envelope_id": Uuid::new_v4(),
+                            "signer": "did:citizen:holder-1",
+                            "signature": "sig-consent-payload-field-refs",
+                            "submitted_at": chrono::Utc::now(),
+                            "payload": {
+                                "entry_id": Uuid::new_v4(),
+                                "namespace": "consent.receipt",
+                                "action": "CONSENT_GRANTED",
+                                "object_id": "did:citizen:holder-1",
+                                "payload": {
+                                    "data_hash": "sha256:payload-field-refs",
+                                    "policy_ref": "policy:offchain:v1",
+                                    "expires_at": now + 3_600
+                                },
+                                "privacy_flag": false,
+                                "privacy_mode": "none",
+                                "payload_commitment": null,
+                                "ciphertext_hex": null,
+                                "nonce_hex": null,
+                                "salt_hex": null,
+                                "kdf_params": null,
+                                "consent_receipt": null,
+                                "authorized_readers": [],
+                                "custodian_policy_id": null,
+                                "field_reader_acls": {},
+                                "key_wrapped_secrets": [],
+                                "revocation_events": [],
+                                "author": "did:citizen:holder-1",
+                                "signature": "sig-consent-payload-field-refs",
+                                "timestamp": now
+                            }
+                        }))
+                        .expect("consent body"),
+                    ))
+                    .expect("request"),
+            )
+            .await
+            .expect("consent response");
+
+        let commit_response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/payloads/commit")
+                    .header("content-type", "application/json")
+                    .header("idempotency-key", "payload-field-refs-commit")
+                    .body(Body::from(
+                        serde_json::to_vec(&json!({
+                            "namespace": "files.secure",
+                            "object_id": "PROC-PAYLOAD-FIELD-REFS",
+                            "author_did": "did:author:a",
+                            "policy_version": 1,
+                            "consent_receipt": {
+                                "subject_did": "did:citizen:holder-1",
+                                "data_hash": "sha256:payload-field-refs",
+                                "policy_ref": "policy:offchain:v1",
+                                "granted_at": now,
+                                "expires_at": now + 3_600,
+                                "authorized_readers": ["did:reader:1"]
+                            },
+                            "encrypted_field_refs": [
+                                {
+                                    "field_path": "payload.medical_record",
+                                    "ciphertext_hash": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                                    "blob_ref": "blob://local/files.secure/PROC-PAYLOAD-FIELD-REFS/field-medical.cipher",
+                                    "payload_commitment": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+                                },
+                                {
+                                    "field_path": "payload.ssn",
+                                    "ciphertext_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                                    "blob_ref": "blob://local/files.secure/PROC-PAYLOAD-FIELD-REFS/field-ssn.cipher",
+                                    "payload_commitment": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+                                }
+                            ],
+                            "envelope": {
+                                "envelope_id": Uuid::new_v4(),
+                                "signer": "did:author:a",
+                                "signature": "sig-payload-field-refs",
+                                "submitted_at": chrono::Utc::now(),
+                                "payload": {
+                                    "entry_id": entry_id,
+                                    "namespace": "files.secure",
+                                    "action": "ENCRYPTED_PAYLOAD_FIELD_COMMIT",
+                                    "object_id": "PROC-PAYLOAD-FIELD-REFS",
+                                    "payload": {"record_type": "medical_claim"},
+                                    "privacy_flag": false,
+                                    "privacy_mode": "none",
+                                    "payload_commitment": null,
+                                    "ciphertext_hex": null,
+                                    "nonce_hex": null,
+                                    "salt_hex": null,
+                                    "kdf_params": null,
+                                    "consent_receipt": null,
+                                    "authorized_readers": [],
+                                    "custodian_policy_id": null,
+                                    "field_reader_acls": {},
+                                    "key_wrapped_secrets": [],
+                                    "revocation_events": [],
+                                    "author": "did:author:a",
+                                    "signature": "sig-payload-field-refs",
+                                    "timestamp": now
+                                }
+                            }
+                        }))
+                        .expect("commit body"),
+                    ))
+                    .expect("request"),
+            )
+            .await
+            .expect("commit response");
+        assert_eq!(commit_response.status(), StatusCode::ACCEPTED);
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri(format!("/api/v1/payloads/fields/{entry_id}/files.secure"))
+                    .body(Body::empty())
+                    .expect("request"),
+            )
+            .await
+            .expect("refs response");
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("refs body");
+        let payload: Value = serde_json::from_slice(&body).expect("refs payload");
+        assert_eq!(payload["entry_id"], json!(entry_id));
+        assert_eq!(payload["namespace"], json!("files.secure"));
+        assert_eq!(payload["field_refs"].as_array().map(Vec::len), Some(2));
+        assert_eq!(
+            payload["field_refs"][0]["field_path"],
+            json!("payload.medical_record")
+        );
+        assert_eq!(payload["field_refs"][1]["field_path"], json!("payload.ssn"));
     }
 
     #[tokio::test]
