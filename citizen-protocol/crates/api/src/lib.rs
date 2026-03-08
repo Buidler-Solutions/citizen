@@ -924,6 +924,21 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
             );
         }
 
+        let unexpected: Vec<String> = submitted_fields
+            .iter()
+            .filter(|field| !required_fields.iter().any(|required| required == *field))
+            .cloned()
+            .collect();
+        if !unexpected.is_empty() {
+            return (
+                StatusCode::UNPROCESSABLE_ENTITY,
+                Json(serde_json::json!({
+                    "error": "encrypted field references include paths not allowed by namespace policy",
+                    "unexpected_fields": unexpected,
+                })),
+            );
+        }
+
         let plaintext_conflicts: Vec<String> = required_fields
             .iter()
             .filter(|field| Self::json_path_exists(&request.envelope.payload.payload, field))
@@ -4048,6 +4063,154 @@ mod tests {
             "required encrypted fields must not appear in plaintext payload"
         );
         assert_eq!(payload["plaintext_fields"], json!(["payload.ssn"]));
+    }
+
+    #[tokio::test]
+    async fn payload_commit_rejects_unexpected_field_refs_not_allowed_by_policy() {
+        let app = build_server().router();
+        let now = chrono::Utc::now().timestamp();
+
+        let signer = ValidatorKeypair::generate("did:citizen:holder-1".to_string());
+        let mut consent_entry = LedgerEntry {
+            entry_id: Uuid::new_v4(),
+            namespace: "consent.receipt".to_string(),
+            action: "CONSENT_GRANTED".to_string(),
+            object_id: "did:citizen:holder-1".to_string(),
+            payload: json!({
+                "data_hash": "sha256:payload-policy-subset-1",
+                "policy_ref": "policy:offchain:v1",
+                "expires_at": now + 3_600
+            }),
+            privacy_flag: false,
+            privacy_mode: citizen_types::PrivacyMode::None,
+            payload_commitment: None,
+            ciphertext_hex: None,
+            nonce_hex: None,
+            salt_hex: None,
+            kdf_params: None,
+            consent_receipt: None,
+            authorized_readers: vec![],
+            custodian_policy_id: None,
+            field_reader_acls: BTreeMap::new(),
+            key_wrapped_secrets: vec![],
+            revocation_events: vec![],
+            author: "did:citizen:holder-1".to_string(),
+            signature: String::new(),
+            timestamp: now,
+        };
+        sign_entry_for_tests(&mut consent_entry, &signer);
+        let consent_envelope = SignedEnvelope {
+            envelope_id: Uuid::new_v4(),
+            signer: consent_entry.author.clone(),
+            signature: consent_entry.signature.clone(),
+            submitted_at: chrono::Utc::now(),
+            payload: consent_entry,
+        };
+        let _ = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/envelopes/submit")
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        serde_json::to_vec(&consent_envelope).expect("serialize envelope"),
+                    ))
+                    .expect("request"),
+            )
+            .await
+            .expect("submit response");
+
+        let entry = LedgerEntry {
+            entry_id: Uuid::new_v4(),
+            namespace: "files.secure".to_string(),
+            action: "ENCRYPTED_PAYLOAD_FIELD_COMMIT".to_string(),
+            object_id: "PROC-002-extra".to_string(),
+            payload: json!({"field_refs": "subset-check"}),
+            privacy_flag: false,
+            privacy_mode: citizen_types::PrivacyMode::None,
+            payload_commitment: None,
+            ciphertext_hex: None,
+            nonce_hex: None,
+            salt_hex: None,
+            kdf_params: None,
+            consent_receipt: None,
+            authorized_readers: vec![],
+            custodian_policy_id: None,
+            field_reader_acls: BTreeMap::new(),
+            key_wrapped_secrets: vec![],
+            revocation_events: vec![],
+            author: "did:author:a".to_string(),
+            signature: "sig-payload-extra".to_string(),
+            timestamp: now,
+        };
+        let envelope = SignedEnvelope {
+            envelope_id: Uuid::new_v4(),
+            signer: "did:author:a".to_string(),
+            signature: "sig-payload-extra".to_string(),
+            submitted_at: chrono::Utc::now(),
+            payload: entry,
+        };
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/payloads/commit")
+                    .header("content-type", "application/json")
+                    .header("idempotency-key", "payload-policy-subset-1")
+                    .body(Body::from(
+                        serde_json::to_vec(&json!({
+                            "namespace": "files.secure",
+                            "object_id": "PROC-002-extra",
+                            "author_did": "did:author:a",
+                            "consent_receipt": {
+                                "subject_did": "did:citizen:holder-1",
+                                "data_hash": "sha256:payload-policy-subset-1",
+                                "policy_ref": "policy:offchain:v1",
+                                "granted_at": now,
+                                "expires_at": now + 3_600,
+                                "authorized_readers": ["did:author:a"]
+                            },
+                            "encrypted_field_refs": [
+                                {
+                                    "field_path": "payload.ssn",
+                                    "blob_ref": "blob://local/files.secure/PROC-002-extra/ssn.cipher",
+                                    "ciphertext_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                                    "payload_commitment": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+                                },
+                                {
+                                    "field_path": "payload.medical_record",
+                                    "blob_ref": "blob://local/files.secure/PROC-002-extra/med.cipher",
+                                    "ciphertext_hash": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                                    "payload_commitment": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+                                },
+                                {
+                                    "field_path": "payload.tax_id",
+                                    "blob_ref": "blob://local/files.secure/PROC-002-extra/tax.cipher",
+                                    "ciphertext_hash": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+                                    "payload_commitment": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+                                }
+                            ],
+                            "envelope": envelope
+                        }))
+                        .expect("payload request body"),
+                    ))
+                    .expect("request"),
+            )
+            .await
+            .expect("payload response");
+
+        assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("response body");
+        let payload: Value = serde_json::from_slice(&body).expect("json body");
+        assert_eq!(
+            payload["error"],
+            "encrypted field references include paths not allowed by namespace policy"
+        );
+        assert_eq!(payload["unexpected_fields"], json!(["payload.tax_id"]));
     }
 
     #[tokio::test]
