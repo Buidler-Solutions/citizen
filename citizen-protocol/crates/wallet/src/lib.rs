@@ -16,6 +16,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet, HashSet};
+use std::io::{Cursor, Read};
 use uuid::Uuid;
 use x25519_dalek::{PublicKey as X25519PublicKey, StaticSecret};
 
@@ -1024,13 +1025,33 @@ pub fn compute_file_manifest_commitment(manifest: &Value) -> Result<String> {
 }
 
 pub fn verify_offchain_file_object_hash(manifest: &Value, ciphertext_bytes: &[u8]) -> Result<()> {
+    let mut cursor = Cursor::new(ciphertext_bytes);
+    verify_offchain_file_object_hash_reader(manifest, &mut cursor)
+}
+
+pub fn verify_offchain_file_object_hash_reader<R: Read>(
+    manifest: &Value,
+    reader: &mut R,
+) -> Result<()> {
     let expected_hash = manifest
         .get("ciphertext_hash")
         .and_then(Value::as_str)
         .ok_or_else(|| {
             ProtocolError::ValidationFailed("manifest.ciphertext_hash is required".into())
         })?;
-    let computed_hash = format!("sha256:{}", hex::encode(Sha256::digest(ciphertext_bytes)));
+
+    let mut hasher = Sha256::new();
+    let mut chunk = [0_u8; 1024 * 1024];
+    loop {
+        let read = reader.read(&mut chunk).map_err(|err| {
+            ProtocolError::ValidationFailed(format!("ciphertext read failed: {err}"))
+        })?;
+        if read == 0 {
+            break;
+        }
+        hasher.update(&chunk[..read]);
+    }
+    let computed_hash = format!("sha256:{}", hex::encode(hasher.finalize()));
     if computed_hash != expected_hash {
         return Err(ProtocolError::ValidationFailed(
             "off-chain ciphertext hash mismatch".into(),
@@ -1200,6 +1221,7 @@ fn normalize_value(value: &Value) -> Value {
 mod tests {
     use super::*;
     use serde_json::json;
+    use std::io::Read;
 
     #[test]
     fn canonical_json_sorts_object_keys() {
@@ -1726,5 +1748,100 @@ mod tests {
         assert!(mismatch
             .to_string()
             .contains("manifest commitment mismatch"));
+    }
+
+    struct PatternReader {
+        remaining: usize,
+        pattern: u8,
+    }
+
+    impl PatternReader {
+        fn new(total_bytes: usize, pattern: u8) -> Self {
+            Self {
+                remaining: total_bytes,
+                pattern,
+            }
+        }
+    }
+
+    impl Read for PatternReader {
+        fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+            if self.remaining == 0 {
+                return Ok(0);
+            }
+            let to_fill = self.remaining.min(buf.len());
+            buf[..to_fill].fill(self.pattern);
+            self.remaining -= to_fill;
+            Ok(to_fill)
+        }
+    }
+
+    fn hash_pattern_bytes(total_bytes: usize, pattern: u8) -> String {
+        let mut reader = PatternReader::new(total_bytes, pattern);
+        let mut hasher = Sha256::new();
+        let mut chunk = [0_u8; 1024 * 1024];
+        loop {
+            let read = reader.read(&mut chunk).expect("read pattern bytes");
+            if read == 0 {
+                break;
+            }
+            hasher.update(&chunk[..read]);
+        }
+        format!("sha256:{}", hex::encode(hasher.finalize()))
+    }
+
+    #[test]
+    #[ignore = "performance validation for large off-chain blobs"]
+    fn verifies_offchain_file_object_hash_for_large_ciphertext_streams() {
+        for (label, size_bytes) in [
+            ("10MB", 10 * 1024 * 1024usize),
+            ("100MB", 100 * 1024 * 1024usize),
+            ("1GB", 1024 * 1024 * 1024usize),
+        ] {
+            let expected_hash = hash_pattern_bytes(size_bytes, 0xAB);
+            let manifest = json!({
+                "ciphertext_hash": expected_hash,
+                "file_ref": format!("perf://{label}")
+            });
+            let mut reader = PatternReader::new(size_bytes, 0xAB);
+            verify_offchain_file_object_hash_reader(&manifest, &mut reader)
+                .unwrap_or_else(|_| panic!("{label} stream hash verification should pass"));
+        }
+    }
+
+    #[test]
+    #[ignore = "performance validation for high-field-count payload partitioning"]
+    fn partitions_high_field_count_payload_with_mixed_visibility_sets() {
+        let field_count = 4_000;
+        let mut record = serde_json::Map::new();
+        let mut public_fields = Vec::new();
+        let mut committed_fields = Vec::new();
+        let mut encrypted_fields = Vec::new();
+
+        for index in 0..field_count {
+            let field_name = format!("field_{index}");
+            record.insert(field_name.clone(), json!(index));
+            let path = format!("record.{field_name}");
+            match index % 3 {
+                0 => public_fields.push(path),
+                1 => committed_fields.push(path),
+                _ => encrypted_fields.push(path),
+            }
+        }
+
+        let payload = json!({ "record": Value::Object(record) });
+        let policy = NamespaceFieldPolicy {
+            namespace: "audit.procurement".to_string(),
+            policy_version: 3,
+            public_fields,
+            committed_fields,
+            offchain_encrypted_fields: encrypted_fields,
+        };
+
+        let partitioned = partition_payload_by_field_policy("audit.procurement", &payload, &policy)
+            .expect("partition large mixed payload");
+        assert_eq!(partitioned.public_fields.len(), 1_334);
+        assert_eq!(partitioned.committed_fields.len(), 1_333);
+        assert_eq!(partitioned.offchain_encrypted_fields.len(), 1_333);
     }
 }
