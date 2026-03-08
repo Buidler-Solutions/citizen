@@ -274,7 +274,7 @@ Ship **Gate 0 complete** and open **Gate 1 crypto core PR**.
 - [x] Merge schemas + deterministic vectors as the first implementation PR.
 - [x] Wire CI job to validate vectors in both Rust and TypeScript SDK paths.
 - [x] Open wallet crypto-core PR (streaming encryption + grant-aware unwrap checks).
-- [ ] Schedule security design review focused on DEK wrapping, revocation, and replay resistance.
+- [x] Schedule security design review focused on DEK wrapping, revocation, and replay resistance. ✅ Published `docs/OFFCHAIN_ENCRYPTED_FILES_SECURITY_DESIGN_REVIEW_SCHEDULE.md` with scope, attendees, agenda, pre-read checklist, and exit criteria for the Gate 1 → Gate 2 transition.
 
 ### Hard sprint guardrails
 - [ ] No API/storage endpoint merges until Gate 0 artifacts are merged.
