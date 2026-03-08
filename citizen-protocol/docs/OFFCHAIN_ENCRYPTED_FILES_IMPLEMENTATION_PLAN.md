@@ -190,8 +190,8 @@ Checklist:
 - [x] Add `POST /api/v1/files/commit` (anchors file commitment via signed envelope).
 - [x] Add `POST /api/v1/payloads/commit` for entries with off-chain encrypted fields.
 - [x] Add storage policy enforcement (size caps, MIME allowlist, namespace controls, blob_ref namespace prefix validation for manifests and encrypted payload field refs).
-- [ ] Add MinIO adapter implementation + config wiring (endpoint, bucket, access key, secret key, optional TLS path-style).
-- [ ] Add MinIO-backed integration tests for file intent/commit and payload field refs using policy-constrained prefixes.
+- [x] Add MinIO adapter implementation + config wiring (endpoint, bucket, access key, secret key, optional TLS path-style). ✅ Added `MinioOffchainObjectStore` + `MinioOffchainObjectStoreConfig` in API with node-level `api_offchain_minio` wiring (`endpoint`, `bucket`, credentials, TLS/path-style, key-prefix) for deterministic S3-compatible upload intent generation and manifest `file_ref` policy validation.
+- [x] Add MinIO-backed integration tests for file intent/commit and payload field refs using policy-constrained prefixes. ✅ Added API integration tests covering MinIO upload-intent object refs and namespace-prefix policy enforcement that rejects out-of-policy manifest `file_ref` values.
 - [x] Persist immutable file manifest references with deterministic IDs.
 - [x] Persist encrypted field-blob references keyed by `entry_id + namespace + field_path`.
 - [x] Add retry/idempotency key semantics for commit endpoint.
