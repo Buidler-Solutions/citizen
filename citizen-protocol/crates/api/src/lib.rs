@@ -72,6 +72,18 @@ struct ApiEdgeState {
     payload_commit_idempotency: Mutex<BTreeMap<String, serde_json::Value>>,
     file_manifests: Mutex<BTreeMap<String, StoredFileManifest>>,
     payload_field_refs: Mutex<BTreeMap<String, EncryptedFieldRef>>,
+    file_access_alerts: Mutex<Vec<FileAccessAlert>>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct FileAccessAlert {
+    alert_type: String,
+    manifest_id: String,
+    namespace: String,
+    object_id: String,
+    reader_did: String,
+    detected_at: i64,
+    detail: String,
 }
 
 #[derive(Clone, Debug)]
@@ -93,6 +105,7 @@ impl ApiEdgeState {
             payload_commit_idempotency: Mutex::new(BTreeMap::new()),
             file_manifests: Mutex::new(BTreeMap::new()),
             payload_field_refs: Mutex::new(BTreeMap::new()),
+            file_access_alerts: Mutex::new(Vec::new()),
         }
     }
 }
@@ -283,6 +296,7 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
         let file_read_edge = Arc::clone(&self.edge);
         let file_manifest_metadata_ledger = Arc::clone(&self.ledger);
         let file_manifest_metadata_edge = Arc::clone(&self.edge);
+        let file_alerts_edge = Arc::clone(&self.edge);
         let get_receipt_ledger = Arc::clone(&self.ledger);
         let builder_credits_ledger = Arc::clone(&self.ledger);
         let asset_positions_ledger = Arc::clone(&self.ledger);
@@ -389,6 +403,13 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
                     let ledger = Arc::clone(&file_manifest_metadata_ledger);
                     let edge = Arc::clone(&file_manifest_metadata_edge);
                     async move { Self::handle_get_file_manifest_metadata(ledger, edge, manifest_id).await }
+                }),
+            )
+            .route(
+                "/api/v1/files/alerts",
+                get(move |headers: HeaderMap| {
+                    let edge = Arc::clone(&file_alerts_edge);
+                    async move { Self::handle_list_file_access_alerts(edge, headers).await }
                 }),
             )
             .route(
@@ -1163,6 +1184,21 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
             });
 
         if revoked {
+            Self::record_file_access_alert(
+                Arc::clone(&edge),
+                FileAccessAlert {
+                    alert_type: "revocation_conflict".to_string(),
+                    manifest_id: request.manifest_id.clone(),
+                    namespace: stored_manifest.intent.namespace.clone(),
+                    object_id: stored_manifest.intent.object_id.clone(),
+                    reader_did: request.reader_did.clone(),
+                    detected_at: now,
+                    detail:
+                        "reader requested a manifest that has an active ENCRYPTED_FILE_REVOKE event"
+                            .to_string(),
+                },
+            )
+            .await;
             return (
                 StatusCode::FORBIDDEN,
                 Json(serde_json::json!({
@@ -1183,6 +1219,22 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
 
         if let Some(observed_ciphertext_hash) = request.observed_ciphertext_hash.as_deref() {
             if observed_ciphertext_hash != ciphertext_hash {
+                Self::record_file_access_alert(
+                    Arc::clone(&edge),
+                    FileAccessAlert {
+                        alert_type: "commitment_mismatch".to_string(),
+                        manifest_id: request.manifest_id.clone(),
+                        namespace: stored_manifest.intent.namespace.clone(),
+                        object_id: stored_manifest.intent.object_id.clone(),
+                        reader_did: request.reader_did.clone(),
+                        detected_at: now,
+                        detail: format!(
+                            "observed ciphertext hash {} did not match committed {}",
+                            observed_ciphertext_hash, ciphertext_hash
+                        ),
+                    },
+                )
+                .await;
                 return (
                     StatusCode::CONFLICT,
                     Json(serde_json::json!({
@@ -1272,6 +1324,25 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
                 "consent_state": if consent_status.valid { "active" } else { "invalid" },
                 "consent_state_reason": consent_status.reason,
                 "revoked_readers": revoked_readers,
+            })),
+        )
+    }
+
+    async fn handle_list_file_access_alerts(
+        edge: Arc<ApiEdgeState>,
+        headers: HeaderMap,
+    ) -> (StatusCode, Json<serde_json::Value>) {
+        if let Err(response) =
+            Self::authorize_scope(Arc::clone(&edge), &headers, "files.alerts.read", false).await
+        {
+            return response;
+        }
+
+        let alerts = edge.file_access_alerts.lock().await.clone();
+        (
+            StatusCode::OK,
+            Json(serde_json::json!({
+                "alerts": alerts,
             })),
         )
     }
@@ -2046,7 +2117,16 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
         headers: &HeaderMap,
         required_scope: &str,
     ) -> Result<(), (StatusCode, Json<serde_json::Value>)> {
-        if !edge.config.write_enabled {
+        Self::authorize_scope(edge, headers, required_scope, true).await
+    }
+
+    async fn authorize_scope(
+        edge: Arc<ApiEdgeState>,
+        headers: &HeaderMap,
+        required_scope: &str,
+        enforce_write_limits: bool,
+    ) -> Result<(), (StatusCode, Json<serde_json::Value>)> {
+        if enforce_write_limits && !edge.config.write_enabled {
             return Err((
                 StatusCode::FORBIDDEN,
                 Json(
@@ -2082,18 +2162,30 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
             "anonymous".to_string()
         };
 
-        let now = Utc::now().timestamp();
-        let mut windows = edge.write_windows.lock().await;
-        let entries = windows.entry(principal).or_default();
-        entries.retain(|timestamp| *timestamp > now - 60);
-        if entries.len() >= edge.config.max_write_requests_per_minute {
-            return Err((
-                StatusCode::TOO_MANY_REQUESTS,
-                Json(serde_json::json!({"error": "write rate limit exceeded"})),
-            ));
+        if enforce_write_limits {
+            let now = Utc::now().timestamp();
+            let mut windows = edge.write_windows.lock().await;
+            let entries = windows.entry(principal).or_default();
+            entries.retain(|timestamp| *timestamp > now - 60);
+            if entries.len() >= edge.config.max_write_requests_per_minute {
+                return Err((
+                    StatusCode::TOO_MANY_REQUESTS,
+                    Json(serde_json::json!({"error": "write rate limit exceeded"})),
+                ));
+            }
+            entries.push(now);
         }
-        entries.push(now);
         Ok(())
+    }
+
+    async fn record_file_access_alert(edge: Arc<ApiEdgeState>, alert: FileAccessAlert) {
+        const MAX_ALERTS: usize = 500;
+        let mut alerts = edge.file_access_alerts.lock().await;
+        alerts.push(alert);
+        if alerts.len() > MAX_ALERTS {
+            let overflow = alerts.len() - MAX_ALERTS;
+            alerts.drain(0..overflow);
+        }
     }
 }
 
@@ -3600,6 +3692,7 @@ mod tests {
         assert_eq!(response.status(), StatusCode::FORBIDDEN);
 
         let read_response = app
+            .clone()
             .oneshot(
                 Request::builder()
                     .method("GET")
@@ -5349,6 +5442,7 @@ mod tests {
         let payload: Value = serde_json::from_slice(&body).expect("commit payload");
 
         let read_response = app
+            .clone()
             .oneshot(
                 Request::builder()
                     .method("POST")
@@ -5376,6 +5470,27 @@ mod tests {
             .expect("read response");
 
         assert_eq!(read_response.status(), StatusCode::CONFLICT);
+
+        let alerts_response = app
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri("/api/v1/files/alerts")
+                    .body(Body::empty())
+                    .expect("request"),
+            )
+            .await
+            .expect("alerts response");
+        assert_eq!(alerts_response.status(), StatusCode::OK);
+        let body = axum::body::to_bytes(alerts_response.into_body(), usize::MAX)
+            .await
+            .expect("alerts body bytes");
+        let alerts_payload: Value = serde_json::from_slice(&body).expect("alerts payload");
+        assert_eq!(alerts_payload["alerts"].as_array().map(Vec::len), Some(1));
+        assert_eq!(
+            alerts_payload["alerts"][0]["alert_type"],
+            json!("commitment_mismatch")
+        );
     }
 
     #[tokio::test]
@@ -5852,8 +5967,29 @@ mod tests {
         let revoke_response = app.clone().oneshot(Request::builder().method("POST").uri("/api/v1/envelopes/submit").header("content-type", "application/json").body(Body::from(serde_json::to_vec(&json!({"envelope_id":Uuid::new_v4(),"signer":"did:author:a","signature":"sig-revoke-read","submitted_at":chrono::Utc::now(),"payload":{"entry_id":Uuid::new_v4(),"namespace":"files.secure","action":"ENCRYPTED_FILE_REVOKE","object_id":"did:citizen:holder-1","payload":{"manifest_id":commit_payload["manifest_id"],"reader_did":"did:reader:1","reason":"manual revocation"},"privacy_flag":false,"privacy_mode":"none","payload_commitment":null,"ciphertext_hex":null,"nonce_hex":null,"salt_hex":null,"kdf_params":null,"consent_receipt":null,"authorized_readers":[],"custodian_policy_id":null,"field_reader_acls":{},"key_wrapped_secrets":[],"revocation_events":[],"author":"did:author:a","signature":"sig-revoke-read","timestamp":now}})).expect("revoke"))).expect("request")).await.expect("revoke response");
         assert_eq!(revoke_response.status(), StatusCode::ACCEPTED);
 
-        let read_response = app.oneshot(Request::builder().method("POST").uri("/api/v1/files/read").header("content-type", "application/json").body(Body::from(serde_json::to_vec(&json!({"manifest_id":commit_payload["manifest_id"],"reader_did":"did:reader:1","consent_receipt":{"subject_did":"did:citizen:holder-1","data_hash":"sha256:file-revoke-read","policy_ref":"policy:offchain:v1","granted_at":now,"expires_at":now+3600,"authorized_readers":["did:reader:1"]}})).expect("read"))).expect("request")).await.expect("read response");
+        let read_response = app.clone().oneshot(Request::builder().method("POST").uri("/api/v1/files/read").header("content-type", "application/json").body(Body::from(serde_json::to_vec(&json!({"manifest_id":commit_payload["manifest_id"],"reader_did":"did:reader:1","consent_receipt":{"subject_did":"did:citizen:holder-1","data_hash":"sha256:file-revoke-read","policy_ref":"policy:offchain:v1","granted_at":now,"expires_at":now+3600,"authorized_readers":["did:reader:1"]}})).expect("read"))).expect("request")).await.expect("read response");
         assert_eq!(read_response.status(), StatusCode::FORBIDDEN);
+
+        let alerts_response = app
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri("/api/v1/files/alerts")
+                    .body(Body::empty())
+                    .expect("request"),
+            )
+            .await
+            .expect("alerts response");
+        assert_eq!(alerts_response.status(), StatusCode::OK);
+        let body = axum::body::to_bytes(alerts_response.into_body(), usize::MAX)
+            .await
+            .expect("alerts body bytes");
+        let alerts_payload: Value = serde_json::from_slice(&body).expect("alerts payload");
+        assert_eq!(alerts_payload["alerts"].as_array().map(Vec::len), Some(1));
+        assert_eq!(
+            alerts_payload["alerts"][0]["alert_type"],
+            json!("revocation_conflict")
+        );
     }
 
     #[tokio::test]
@@ -6469,6 +6605,53 @@ mod tests {
             payload["migration_guide_ref"],
             json!("docs/migrations/offchain-policy-v3.md")
         );
+    }
+
+    #[tokio::test]
+    async fn file_alerts_endpoint_requires_scope_when_auth_enabled() {
+        let mut clients = BTreeMap::new();
+        clients.insert(
+            "files-read-only".to_string(),
+            ApiClientProfile::with_scopes(["files.read"]),
+        );
+        clients.insert(
+            "alerts-reader".to_string(),
+            ApiClientProfile::with_scopes(["files.alerts.read"]),
+        );
+        let app = build_server_with_edge(ApiEdgeConfig {
+            write_enabled: true,
+            auth_required: true,
+            max_write_requests_per_minute: 10,
+            clients,
+        })
+        .router();
+
+        let denied = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri("/api/v1/files/alerts")
+                    .header("x-api-key", "files-read-only")
+                    .body(Body::empty())
+                    .expect("request"),
+            )
+            .await
+            .expect("denied response");
+        assert_eq!(denied.status(), StatusCode::FORBIDDEN);
+
+        let allowed = app
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri("/api/v1/files/alerts")
+                    .header("x-api-key", "alerts-reader")
+                    .body(Body::empty())
+                    .expect("request"),
+            )
+            .await
+            .expect("allowed response");
+        assert_eq!(allowed.status(), StatusCode::OK);
     }
 
     #[tokio::test]
