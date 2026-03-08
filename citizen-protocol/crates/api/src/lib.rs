@@ -683,33 +683,47 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
             );
         }
 
-        if let Some(ruleset) = ledger.namespace_ruleset(&intent.request.namespace) {
-            let Some(policy) = ruleset
-                .validators
-                .iter()
-                .find(|rule| rule.name == "offchain_encrypted_file_policy")
-                .map(|rule| &rule.config)
-            else {
-                return (
-                    StatusCode::UNPROCESSABLE_ENTITY,
-                    Json(serde_json::json!({
-                        "error": "namespace is missing offchain_encrypted_file_policy"
-                    })),
-                );
-            };
+        if request.envelope.payload.action != "ENCRYPTED_FILE_UPLOAD" {
+            return (
+                StatusCode::UNPROCESSABLE_ENTITY,
+                Json(serde_json::json!({
+                    "error": "file commit envelope action must be ENCRYPTED_FILE_UPLOAD"
+                })),
+            );
+        }
 
-            if let Err(message) = Self::validate_manifest_against_intent(
-                &request.manifest,
-                &intent.request,
-                policy,
-                &intent.object_ref,
-                edge.object_store.as_ref(),
-            ) {
-                return (
-                    StatusCode::UNPROCESSABLE_ENTITY,
-                    Json(serde_json::json!({ "error": message })),
-                );
-            }
+        let Some(ruleset) = ledger.namespace_ruleset(&intent.request.namespace) else {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({"error": "namespace not found"})),
+            );
+        };
+
+        let Some(policy) = ruleset
+            .validators
+            .iter()
+            .find(|rule| rule.name == "offchain_encrypted_file_policy")
+            .map(|rule| &rule.config)
+        else {
+            return (
+                StatusCode::UNPROCESSABLE_ENTITY,
+                Json(serde_json::json!({
+                    "error": "namespace is missing offchain_encrypted_file_policy"
+                })),
+            );
+        };
+
+        if let Err(message) = Self::validate_manifest_against_intent(
+            &request.manifest,
+            &intent.request,
+            policy,
+            &intent.object_ref,
+            edge.object_store.as_ref(),
+        ) {
+            return (
+                StatusCode::UNPROCESSABLE_ENTITY,
+                Json(serde_json::json!({ "error": message })),
+            );
         }
 
         let manifest_commitment = sha256_hex(&canonical_json(&request.manifest));
@@ -795,59 +809,80 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
             );
         }
 
-        if let Some(ruleset) = ledger.namespace_ruleset(&request.namespace) {
-            let required_fields = ruleset
-                .validators
-                .iter()
-                .find(|rule| rule.name == "offchain_encrypted_payload_field_policy")
-                .and_then(|rule| {
-                    rule.config
-                        .get("offchain_encrypted_fields")
-                        .and_then(|value| value.as_array())
-                        .map(|fields| {
-                            fields
-                                .iter()
-                                .filter_map(|value| value.as_str().map(ToOwned::to_owned))
-                                .collect::<Vec<String>>()
-                        })
-                })
-                .unwrap_or_default();
+        if request.envelope.payload.action != "ENCRYPTED_PAYLOAD_FIELD_COMMIT" {
+            return (
+                StatusCode::UNPROCESSABLE_ENTITY,
+                Json(serde_json::json!({
+                    "error": "payload commit envelope action must be ENCRYPTED_PAYLOAD_FIELD_COMMIT"
+                })),
+            );
+        }
 
-            let submitted_fields: BTreeSet<String> = request
-                .encrypted_field_refs
-                .iter()
-                .map(|field| field.field_path.clone())
-                .collect();
+        let Some(ruleset) = ledger.namespace_ruleset(&request.namespace) else {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({"error": "namespace not found"})),
+            );
+        };
 
-            let missing: Vec<String> = required_fields
-                .iter()
-                .filter(|field| !submitted_fields.contains(field.as_str()))
-                .cloned()
-                .collect();
-            if !missing.is_empty() {
-                return (
-                    StatusCode::UNPROCESSABLE_ENTITY,
-                    Json(serde_json::json!({
-                        "error": "missing encrypted field references required by namespace policy",
-                        "missing_fields": missing,
-                    })),
-                );
-            }
+        let Some(required_fields) = ruleset
+            .validators
+            .iter()
+            .find(|rule| rule.name == "offchain_encrypted_payload_field_policy")
+            .and_then(|rule| {
+                rule.config
+                    .get("offchain_encrypted_fields")
+                    .and_then(|value| value.as_array())
+                    .map(|fields| {
+                        fields
+                            .iter()
+                            .filter_map(|value| value.as_str().map(ToOwned::to_owned))
+                            .collect::<Vec<String>>()
+                    })
+            })
+        else {
+            return (
+                StatusCode::UNPROCESSABLE_ENTITY,
+                Json(serde_json::json!({
+                    "error": "namespace is missing offchain_encrypted_payload_field_policy"
+                })),
+            );
+        };
 
-            let plaintext_conflicts: Vec<String> = required_fields
-                .iter()
-                .filter(|field| Self::json_path_exists(&request.envelope.payload.payload, field))
-                .cloned()
-                .collect();
-            if !plaintext_conflicts.is_empty() {
-                return (
-                    StatusCode::UNPROCESSABLE_ENTITY,
-                    Json(serde_json::json!({
-                        "error": "required encrypted fields must not appear in plaintext payload",
-                        "plaintext_fields": plaintext_conflicts,
-                    })),
-                );
-            }
+        let submitted_fields: BTreeSet<String> = request
+            .encrypted_field_refs
+            .iter()
+            .map(|field| field.field_path.clone())
+            .collect();
+
+        let missing: Vec<String> = required_fields
+            .iter()
+            .filter(|field| !submitted_fields.contains(field.as_str()))
+            .cloned()
+            .collect();
+        if !missing.is_empty() {
+            return (
+                StatusCode::UNPROCESSABLE_ENTITY,
+                Json(serde_json::json!({
+                    "error": "missing encrypted field references required by namespace policy",
+                    "missing_fields": missing,
+                })),
+            );
+        }
+
+        let plaintext_conflicts: Vec<String> = required_fields
+            .iter()
+            .filter(|field| Self::json_path_exists(&request.envelope.payload.payload, field))
+            .cloned()
+            .collect();
+        if !plaintext_conflicts.is_empty() {
+            return (
+                StatusCode::UNPROCESSABLE_ENTITY,
+                Json(serde_json::json!({
+                    "error": "required encrypted fields must not appear in plaintext payload",
+                    "plaintext_fields": plaintext_conflicts,
+                })),
+            );
         }
 
         let entry_id = request.envelope.payload.entry_id;
@@ -3826,6 +3861,292 @@ mod tests {
             "required encrypted fields must not appear in plaintext payload"
         );
         assert_eq!(payload["plaintext_fields"], json!(["payload.ssn"]));
+    }
+
+    #[tokio::test]
+    async fn file_commit_rejects_non_upload_action() {
+        let app = build_server().router();
+        let now = chrono::Utc::now().timestamp();
+
+        let signer = ValidatorKeypair::generate("did:citizen:holder-1".to_string());
+        let mut consent_entry = LedgerEntry {
+            entry_id: Uuid::new_v4(),
+            namespace: "consent.receipt".to_string(),
+            action: "CONSENT_GRANTED".to_string(),
+            object_id: "did:citizen:holder-1".to_string(),
+            payload: json!({
+                "data_hash": "sha256:file-action-check",
+                "policy_ref": "policy:offchain:v1",
+                "expires_at": now + 3_600
+            }),
+            privacy_flag: false,
+            privacy_mode: citizen_types::PrivacyMode::None,
+            payload_commitment: None,
+            ciphertext_hex: None,
+            nonce_hex: None,
+            salt_hex: None,
+            kdf_params: None,
+            consent_receipt: None,
+            authorized_readers: vec![],
+            custodian_policy_id: None,
+            field_reader_acls: BTreeMap::new(),
+            key_wrapped_secrets: vec![],
+            revocation_events: vec![],
+            author: "did:citizen:holder-1".to_string(),
+            signature: String::new(),
+            timestamp: now,
+        };
+        sign_entry_for_tests(&mut consent_entry, &signer);
+        let consent_envelope = SignedEnvelope {
+            envelope_id: Uuid::new_v4(),
+            signer: consent_entry.author.clone(),
+            signature: consent_entry.signature.clone(),
+            submitted_at: chrono::Utc::now(),
+            payload: consent_entry,
+        };
+        let _ = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/envelopes/submit")
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        serde_json::to_vec(&consent_envelope).expect("serialize envelope"),
+                    ))
+                    .expect("request"),
+            )
+            .await
+            .expect("submit response");
+
+        let intent_response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/files/intents")
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        serde_json::to_vec(&json!({
+                            "namespace": "files.secure",
+                            "object_id": "PROC-ACT-1",
+                            "author_did": "did:author:a",
+                            "mime_type": "application/pdf",
+                            "file_size_bytes": 256,
+                            "encryption_mode": "passphrase",
+                            "consent_receipt": {
+                                "subject_did": "did:citizen:holder-1",
+                                "data_hash": "sha256:file-action-check",
+                                "policy_ref": "policy:offchain:v1",
+                                "granted_at": now,
+                                "expires_at": now + 3_600,
+                                "authorized_readers": ["did:author:a"]
+                            }
+                        }))
+                        .expect("intent body"),
+                    ))
+                    .expect("request"),
+            )
+            .await
+            .expect("intent response");
+        assert_eq!(intent_response.status(), StatusCode::CREATED);
+        let body = axum::body::to_bytes(intent_response.into_body(), usize::MAX)
+            .await
+            .expect("intent body bytes");
+        let payload: Value = serde_json::from_slice(&body).expect("intent payload");
+
+        let envelope = SignedEnvelope {
+            envelope_id: Uuid::new_v4(),
+            signer: "did:author:a".to_string(),
+            signature: "sig-invalid-action".to_string(),
+            submitted_at: chrono::Utc::now(),
+            payload: LedgerEntry {
+                entry_id: Uuid::new_v4(),
+                namespace: "files.secure".to_string(),
+                action: "ENCRYPTED_FILE_SHARE".to_string(),
+                object_id: "PROC-ACT-1".to_string(),
+                payload: json!({"manifest_id": "manifest-1"}),
+                privacy_flag: false,
+                privacy_mode: citizen_types::PrivacyMode::None,
+                payload_commitment: None,
+                ciphertext_hex: None,
+                nonce_hex: None,
+                salt_hex: None,
+                kdf_params: None,
+                consent_receipt: None,
+                authorized_readers: vec![],
+                custodian_policy_id: None,
+                field_reader_acls: BTreeMap::new(),
+                key_wrapped_secrets: vec![],
+                revocation_events: vec![],
+                author: "did:author:a".to_string(),
+                signature: "sig-invalid-action".to_string(),
+                timestamp: now,
+            },
+        };
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/files/commit")
+                    .header("content-type", "application/json")
+                    .header("idempotency-key", "file-action-check")
+                    .body(Body::from(
+                        serde_json::to_vec(&json!({
+                            "intent_id": payload["intent_id"],
+                            "manifest": {
+                                "namespace": "files.secure",
+                                "object_id": "PROC-ACT-1",
+                                "author_did": "did:author:a",
+                                "mime_type": "application/pdf",
+                                "file_size_bytes": 256,
+                                "encryption_mode": "passphrase",
+                                "file_ref": payload["upload"]["object_ref"],
+                                "ciphertext_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                                "payload_commitment": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                                "consent_receipt_ref": "consent:receipt:file-action-check"
+                            },
+                            "envelope": envelope
+                        }))
+                        .expect("commit body"),
+                    ))
+                    .expect("request"),
+            )
+            .await
+            .expect("commit response");
+
+        assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    }
+
+    #[tokio::test]
+    async fn payload_commit_rejects_non_payload_commit_action() {
+        let app = build_server().router();
+        let now = chrono::Utc::now().timestamp();
+
+        let signer = ValidatorKeypair::generate("did:citizen:holder-1".to_string());
+        let mut consent_entry = LedgerEntry {
+            entry_id: Uuid::new_v4(),
+            namespace: "consent.receipt".to_string(),
+            action: "CONSENT_GRANTED".to_string(),
+            object_id: "did:citizen:holder-1".to_string(),
+            payload: json!({
+                "data_hash": "sha256:payload-action-check",
+                "policy_ref": "policy:offchain:v1",
+                "expires_at": now + 3_600
+            }),
+            privacy_flag: false,
+            privacy_mode: citizen_types::PrivacyMode::None,
+            payload_commitment: None,
+            ciphertext_hex: None,
+            nonce_hex: None,
+            salt_hex: None,
+            kdf_params: None,
+            consent_receipt: None,
+            authorized_readers: vec![],
+            custodian_policy_id: None,
+            field_reader_acls: BTreeMap::new(),
+            key_wrapped_secrets: vec![],
+            revocation_events: vec![],
+            author: "did:citizen:holder-1".to_string(),
+            signature: String::new(),
+            timestamp: now,
+        };
+        sign_entry_for_tests(&mut consent_entry, &signer);
+        let consent_envelope = SignedEnvelope {
+            envelope_id: Uuid::new_v4(),
+            signer: consent_entry.author.clone(),
+            signature: consent_entry.signature.clone(),
+            submitted_at: chrono::Utc::now(),
+            payload: consent_entry,
+        };
+        let _ = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/envelopes/submit")
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        serde_json::to_vec(&consent_envelope).expect("serialize envelope"),
+                    ))
+                    .expect("request"),
+            )
+            .await
+            .expect("submit response");
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/payloads/commit")
+                    .header("content-type", "application/json")
+                    .header("idempotency-key", "payload-action-check")
+                    .body(Body::from(
+                        serde_json::to_vec(&json!({
+                            "namespace": "files.secure",
+                            "object_id": "PROC-ACT-2",
+                            "author_did": "did:author:a",
+                            "consent_receipt": {
+                                "subject_did": "did:citizen:holder-1",
+                                "data_hash": "sha256:payload-action-check",
+                                "policy_ref": "policy:offchain:v1",
+                                "granted_at": now,
+                                "expires_at": now + 3_600,
+                                "authorized_readers": ["did:author:a"]
+                            },
+                            "encrypted_field_refs": [
+                                {
+                                    "field_path": "payload.ssn",
+                                    "blob_ref": "blob://a",
+                                    "ciphertext_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                                    "payload_commitment": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+                                },
+                                {
+                                    "field_path": "payload.medical_record",
+                                    "blob_ref": "blob://b",
+                                    "ciphertext_hash": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                                    "payload_commitment": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+                                }
+                            ],
+                            "envelope": {
+                                "envelope_id": Uuid::new_v4(),
+                                "signer": "did:author:a",
+                                "signature": "sig-payload-action",
+                                "submitted_at": chrono::Utc::now(),
+                                "payload": {
+                                    "entry_id": Uuid::new_v4(),
+                                    "namespace": "files.secure",
+                                    "action": "ENCRYPTED_FILE_UPLOAD",
+                                    "object_id": "PROC-ACT-2",
+                                    "payload": {"field_refs": 2},
+                                    "privacy_flag": false,
+                                    "privacy_mode": "none",
+                                    "payload_commitment": null,
+                                    "ciphertext_hex": null,
+                                    "nonce_hex": null,
+                                    "salt_hex": null,
+                                    "kdf_params": null,
+                                    "consent_receipt": null,
+                                    "authorized_readers": [],
+                                    "custodian_policy_id": null,
+                                    "field_reader_acls": {},
+                                    "key_wrapped_secrets": [],
+                                    "revocation_events": [],
+                                    "author": "did:author:a",
+                                    "signature": "sig-payload-action",
+                                    "timestamp": now
+                                }
+                            }
+                        }))
+                        .expect("request body"),
+                    ))
+                    .expect("request"),
+            )
+            .await
+            .expect("response");
+
+        assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
     }
 
     #[tokio::test]
