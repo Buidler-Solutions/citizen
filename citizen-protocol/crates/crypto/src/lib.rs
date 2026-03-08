@@ -117,8 +117,8 @@ pub fn canonical_json(value: &Value) -> String {
             let encoded_entries: Vec<String> = keys
                 .iter()
                 .map(|key| {
-                    let encoded_key = serde_json::to_string(key)
-                        .expect("canonical object key serialization");
+                    let encoded_key =
+                        serde_json::to_string(key).expect("canonical object key serialization");
                     let encoded_value = canonical_json(&map[*key]);
                     format!("{encoded_key}:{encoded_value}")
                 })
