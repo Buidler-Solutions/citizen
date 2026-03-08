@@ -10,6 +10,7 @@ This registry defines stable, typed error codes for consent, key-wrap, and names
 |---|---|---:|---|
 | `OFFCHAIN_POLICY_NOT_FOUND` | policy | 400 | Namespace field policy is missing for a namespace requiring encrypted fields. |
 | `OFFCHAIN_POLICY_VERSION_UNSUPPORTED` | policy | 400 | Submitted policy version does not match the active governance policy. |
+| `OFFCHAIN_POLICY_VERSION_BELOW_MIN_SUPPORTED` | policy | 422 | Submitted policy version is below namespace `min_supported_policy_version`; migration is required before commit. |
 | `OFFCHAIN_FIELD_REQUIRED_ENCRYPTED` | policy | 422 | Required `offchain_encrypted_fields` were not provided as encrypted references. |
 | `OFFCHAIN_FIELD_CLASSIFICATION_CONFLICT` | policy | 422 | A field appears in incompatible policy classes for the same namespace version. |
 | `OFFCHAIN_CONSENT_RECEIPT_MISSING` | consent | 400 | Consent receipt reference was not provided for encrypted file or encrypted field commit. |
