@@ -874,7 +874,7 @@ pub fn decrypt_payload_with_hybrid(
     author_public_key_hex: &str,
     now: UnixTimestamp,
 ) -> Result<Value> {
-    enforce_active_reader_grant(entry, caller_did, now)?;
+    ensure_active_reader_grant(entry, caller_did, now)?;
     let key_wrap = entry
         .key_wrapped_secrets
         .iter()
@@ -911,7 +911,7 @@ pub fn decrypt_payload_with_hybrid(
     decrypt_payload_with_dek(&encrypted, &dek)
 }
 
-fn enforce_active_reader_grant(
+pub fn ensure_active_reader_grant(
     entry: &LedgerEntry,
     caller_did: &str,
     now: UnixTimestamp,
@@ -1767,6 +1767,41 @@ mod tests {
         assert!(denied
             .to_string()
             .contains("caller DID is not present in entry authorized_readers"));
+    }
+
+    #[test]
+    fn ensure_active_reader_grant_accepts_active_grant() {
+        let author = WalletKeypair::generate();
+        let reader_secret = StaticSecret::from([17u8; 32]);
+        let reader_public = X25519PublicKey::from(&reader_secret);
+
+        let mut reader_public_keys = BTreeMap::new();
+        reader_public_keys.insert(
+            "did:ledger:reader".to_string(),
+            hex::encode(reader_public.as_bytes()),
+        );
+
+        let draft = EntryDraft {
+            namespace: "audit.procurement".to_string(),
+            action: "RECORD_EVENT".to_string(),
+            object_id: "AUD-6A".to_string(),
+            payload: json!({"document_hash":"abc123","event":"BID_OPENED"}),
+            privacy_flag: true,
+            privacy_mode: PrivacyMode::Hybrid,
+            encryption_passphrase: None,
+            authorized_readers: vec!["did:ledger:reader".to_string()],
+            custodian_policy_id: None,
+            key_wrapped_secrets: vec![],
+            revocation_events: vec![],
+            field_reader_acls: Default::default(),
+            reader_public_keys,
+            author: "did:ledger:auditor".to_string(),
+            timestamp: 1_736_500_130,
+        };
+
+        let entry = sign_entry(draft, &author).expect("sign hybrid entry");
+        ensure_active_reader_grant(&entry, "did:ledger:reader", 1_736_500_131)
+            .expect("active grant should verify");
     }
 
     #[test]
