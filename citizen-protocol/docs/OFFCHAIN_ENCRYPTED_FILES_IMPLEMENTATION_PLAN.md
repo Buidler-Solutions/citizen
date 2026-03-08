@@ -133,8 +133,8 @@ Deliverables:
 Checklist:
 - [x] Add `ENCRYPTED_FILE_*` action set to namespace policy docs. ✅ Added namespace policy extension guidance with the canonical encrypted-file action set in `docs/NAMESPACE_BUILDER_GUIDE.md`.
 - [x] Add `ENCRYPTED_PAYLOAD_FIELD_*` policy fields to namespace specifications. ✅ Added `offchain_encrypted_payload_field_policy` configuration guidance (including policy versioning + required encrypted field paths) in `docs/NAMESPACE_BUILDER_GUIDE.md`.
-- [ ] Publish canonical JSON examples for passphrase and ACL/DEK modes.
-- [ ] Publish canonical examples showing per-namespace payload split (public vs off-chain encrypted fields).
+- [x] Publish canonical JSON examples for passphrase and ACL/DEK modes. ✅ Added `docs/OFFCHAIN_ENCRYPTED_FILES_CANONICAL_EXAMPLES.md` with schema-aligned canonical manifests for `passphrase_file` and `hybrid_file_acl_dek` encryption modes.
+- [x] Publish canonical examples showing per-namespace payload split (public vs off-chain encrypted fields). ✅ Added canonical namespace policy + payload partitioning examples (`public`, `committed_only`, `offchain_encrypted`) in `docs/OFFCHAIN_ENCRYPTED_FILES_CANONICAL_EXAMPLES.md`.
 - [x] Define deterministic commitment test vectors.
 - [x] Define error code table for invalid/expired/missing consent or key wraps.
 
