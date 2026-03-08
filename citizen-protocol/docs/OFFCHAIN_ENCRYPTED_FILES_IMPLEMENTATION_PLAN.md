@@ -240,7 +240,7 @@ Checklist:
 
 ### Explorer / Indexer
 - [ ] Index encrypted-file events and consent status transitions.
-- [ ] Add high-signal privacy + revocation UI labels.
+- [x] Add high-signal privacy + revocation UI labels. ✅ Updated explorer frontend manifest + payload-field panels with explicit privacy labels and consent/revocation status chips that highlight active vs revoked/invalid grant states without exposing plaintext.
 - [x] Index and display encrypted payload field references by namespace and field path (never plaintext). ✅ Added API `GET /api/v1/payloads/fields/:entry_id/:namespace` plus explorer backend/frontend views to display only `field_path`, `blob_ref`, and ciphertext commitment hashes.
 
 ### Operations / Governance
