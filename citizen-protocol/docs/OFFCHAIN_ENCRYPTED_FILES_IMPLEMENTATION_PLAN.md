@@ -61,7 +61,7 @@ Deliver in third PR slice:
 - `POST /api/v1/files/intents`, `POST /api/v1/files/commit`, `POST /api/v1/payloads/commit`.
 - Local + S3-compatible storage adapters enforcing policy constraints.
 - Idempotency semantics + audit logging for file/payload commit flows.
-- Feature flag: `offchain_encrypted_files_v1` (default OFF in production).
+- Feature flag: `offchain_encrypted_files_v1` (default OFF in production). ✅ API edge now enforces this flag across off-chain file/payload routes, returning explicit `SERVICE_UNAVAILABLE` + `feature_flag` metadata when disabled.
 
 Exit criteria:
 - End-to-end verification path (`receipt -> commitment -> object hash`) passes.
