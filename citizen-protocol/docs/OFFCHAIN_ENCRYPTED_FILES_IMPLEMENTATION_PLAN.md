@@ -149,7 +149,7 @@ Checklist:
 - [ ] Implement streaming encryption path for large files (avoid full-memory buffering).
 - [ ] Reuse Argon2id + ChaCha20-Poly1305 standards for passphrase mode.
 - [ ] Implement per-reader X25519 DEK wrapping for hybrid mode.
-- [ ] Enforce grant validation before unwrap/decrypt in wallet SDK APIs.
+- [x] Enforce grant validation before unwrap/decrypt in wallet SDK APIs.
 - [ ] Ensure participating wallets receive deterministic per-wallet key wraps when policy requires multi-party readability.
 - [ ] Implement deterministic payload field canonicalization before per-field encryption.
 - [ ] Add wallet UX guardrails: explicit opt-in warnings + mode disclosure.
@@ -209,7 +209,7 @@ Checklist:
 - [ ] Add integration tests for happy path (upload, commit, verify, retrieve, revoke).
 - [ ] Add integration tests for per-namespace payload field encryption (serialize -> encrypt off-chain -> commit -> verify).
 - [ ] Add adversarial tests (tampered ciphertext, stale consent, unauthorized reader, replayed intent).
-- [ ] Add adversarial tests ensuring non-granted wallets cannot decrypt and granted participant wallets can decrypt.
+- [x] Add adversarial tests ensuring non-granted wallets cannot decrypt and granted participant wallets can decrypt.
 - [ ] Add performance tests for 10MB / 100MB / 1GB encrypted file paths.
 - [ ] Add performance tests for high-field-count payloads with mixed clear/encrypted fields.
 - [ ] Complete cryptography review + key lifecycle review.
@@ -226,7 +226,7 @@ Checklist:
 ### Wallet / SDK
 - [ ] Implement file encryption/decryption APIs.
 - [ ] Implement reader ACL + DEK wrapping flows.
-- [ ] Enforce "grant required" decrypt checks in wallet runtime and SDK helpers.
+- [x] Enforce "grant required" decrypt checks in wallet runtime and SDK helpers.
 - [ ] Ship verification helper for off-chain object hash reconciliation.
 - [ ] Implement namespace-aware payload partitioning and field-level off-chain encryption helper.
 

@@ -643,7 +643,9 @@ pub fn decrypt_payload_with_hybrid(
     caller_did: &str,
     caller_private_key_hex: &str,
     author_public_key_hex: &str,
+    now: UnixTimestamp,
 ) -> Result<Value> {
+    enforce_active_reader_grant(entry, caller_did, now)?;
     let key_wrap = entry
         .key_wrapped_secrets
         .iter()
@@ -676,6 +678,53 @@ pub fn decrypt_payload_with_hybrid(
         },
     };
     decrypt_payload_with_dek(&encrypted, &dek)
+}
+
+fn enforce_active_reader_grant(entry: &LedgerEntry, caller_did: &str, now: UnixTimestamp) -> Result<()> {
+    if entry.privacy_mode != PrivacyMode::Hybrid {
+        return Err(ProtocolError::ValidationFailed(
+            "grant checks are only supported for hybrid encrypted entries".into(),
+        ));
+    }
+
+    let consent = entry.consent_receipt.as_ref().ok_or_else(|| {
+        ProtocolError::ValidationFailed("hybrid entry missing consent receipt".into())
+    })?;
+
+    if consent.expires_at <= now {
+        return Err(ProtocolError::ValidationFailed(
+            "consent grant is expired for caller DID".into(),
+        ));
+    }
+
+    if !entry.authorized_readers.iter().any(|reader| reader == caller_did) {
+        return Err(ProtocolError::ValidationFailed(
+            "caller DID is not present in entry authorized_readers".into(),
+        ));
+    }
+
+    if !consent.authorized_readers.is_empty()
+        && !consent
+            .authorized_readers
+            .iter()
+            .any(|reader| reader == caller_did)
+    {
+        return Err(ProtocolError::ValidationFailed(
+            "caller DID is not present in consent authorized_readers".into(),
+        ));
+    }
+
+    if entry
+        .revocation_events
+        .iter()
+        .any(|event| event.reader_id == caller_did && event.timestamp <= now)
+    {
+        return Err(ProtocolError::ValidationFailed(
+            "caller DID grant has been revoked".into(),
+        ));
+    }
+
+    Ok(())
 }
 
 fn encrypt_payload_with_dek(payload: &Value, dek: &[u8; 32]) -> Result<EncryptedPayload> {
@@ -1089,6 +1138,7 @@ mod tests {
             "did:ledger:reader",
             &hex::encode(reader_secret.to_bytes()),
             &hex::encode(X25519PublicKey::from(&x25519_secret_from_wallet(&author)).as_bytes()),
+            1_736_500_112,
         )
         .expect("decrypt hybrid entry");
         assert_eq!(decrypted, json!({"document_hash":"abc123","event":"BID_OPENED"}));
@@ -1142,6 +1192,118 @@ mod tests {
             "SAMPLE_PER_FIELD_ENTRY={}\n",
             serde_json::to_string_pretty(&entry).expect("serialize per-field entry sample")
         );
+    }
+
+    #[test]
+    fn hybrid_decrypt_rejects_non_granted_reader() {
+        let author = WalletKeypair::generate();
+        let allowed_secret = StaticSecret::from([11u8; 32]);
+        let allowed_public = X25519PublicKey::from(&allowed_secret);
+
+        let mut reader_public_keys = BTreeMap::new();
+        reader_public_keys.insert(
+            "did:ledger:allowed".to_string(),
+            hex::encode(allowed_public.as_bytes()),
+        );
+
+        let draft = EntryDraft {
+            namespace: "audit.procurement".to_string(),
+            action: "RECORD_EVENT".to_string(),
+            object_id: "AUD-5".to_string(),
+            payload: json!({"document_hash":"abc123","event":"BID_OPENED"}),
+            privacy_flag: true,
+            privacy_mode: PrivacyMode::Hybrid,
+            encryption_passphrase: None,
+            authorized_readers: vec!["did:ledger:allowed".to_string()],
+            custodian_policy_id: None,
+            key_wrapped_secrets: vec![],
+            revocation_events: vec![],
+            field_reader_acls: Default::default(),
+            reader_public_keys,
+            author: "did:ledger:auditor".to_string(),
+            timestamp: 1_736_500_120,
+        };
+
+        let entry = sign_entry(draft, &author).expect("sign hybrid entry with single grant");
+        let denied = decrypt_payload_with_hybrid(
+            &entry,
+            "did:ledger:denied",
+            &hex::encode(allowed_secret.to_bytes()),
+            &hex::encode(X25519PublicKey::from(&x25519_secret_from_wallet(&author)).as_bytes()),
+            1_736_500_121,
+        )
+        .expect_err("non-granted reader must be denied");
+        assert!(
+            denied
+                .to_string()
+                .contains("caller DID is not present in entry authorized_readers")
+        );
+    }
+
+    #[test]
+    fn hybrid_decrypt_rejects_expired_or_revoked_grant() {
+        let author = WalletKeypair::generate();
+        let reader_secret = StaticSecret::from([13u8; 32]);
+        let reader_public = X25519PublicKey::from(&reader_secret);
+
+        let mut reader_public_keys = BTreeMap::new();
+        reader_public_keys.insert(
+            "did:ledger:reader".to_string(),
+            hex::encode(reader_public.as_bytes()),
+        );
+
+        let draft = EntryDraft {
+            namespace: "audit.procurement".to_string(),
+            action: "RECORD_EVENT".to_string(),
+            object_id: "AUD-6".to_string(),
+            payload: json!({"document_hash":"abc123","event":"BID_OPENED"}),
+            privacy_flag: true,
+            privacy_mode: PrivacyMode::Hybrid,
+            encryption_passphrase: None,
+            authorized_readers: vec!["did:ledger:reader".to_string()],
+            custodian_policy_id: None,
+            key_wrapped_secrets: vec![],
+            revocation_events: vec![],
+            field_reader_acls: Default::default(),
+            reader_public_keys,
+            author: "did:ledger:auditor".to_string(),
+            timestamp: 1_736_500_130,
+        };
+
+        let entry = sign_entry(draft, &author).expect("sign hybrid entry");
+
+        let expired = decrypt_payload_with_hybrid(
+            &entry,
+            "did:ledger:reader",
+            &hex::encode(reader_secret.to_bytes()),
+            &hex::encode(X25519PublicKey::from(&x25519_secret_from_wallet(&author)).as_bytes()),
+            1_739_180_731,
+        )
+        .expect_err("expired grant must be denied");
+        let expired_msg = expired.to_string();
+        assert!(
+            expired_msg.contains("consent receipt expired")
+                || expired_msg.contains("consent grant is expired")
+        );
+
+        let mut revoked_entry = entry.clone();
+        revoked_entry.revocation_events.push(RevocationEvent {
+            event_id: "rev-1".to_string(),
+            data_hash: "deadbeef".to_string(),
+            reader_id: "did:ledger:reader".to_string(),
+            timestamp: 1_736_500_131,
+            threshold_signatures: vec![],
+        });
+
+        let revoked = decrypt_payload_with_hybrid(
+            &revoked_entry,
+            "did:ledger:reader",
+            &hex::encode(reader_secret.to_bytes()),
+            &hex::encode(X25519PublicKey::from(&x25519_secret_from_wallet(&author)).as_bytes()),
+            1_736_500_132,
+        )
+        .expect_err("revoked grant must be denied");
+        assert!(revoked.to_string().contains("grant has been revoked"));
     }
 
     #[test]
