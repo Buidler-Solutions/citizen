@@ -1024,6 +1024,28 @@ pub fn compute_file_manifest_commitment(manifest: &Value) -> Result<String> {
     ))
 }
 
+pub fn compute_payload_field_commitment(field_commitment_input: &Value) -> Result<String> {
+    let canonical_input = canonical_json(field_commitment_input);
+    Ok(format!(
+        "sha256:{}",
+        hex::encode(Sha256::digest(canonical_input.as_bytes()))
+    ))
+}
+
+pub fn verify_payload_field_commitment(
+    field_commitment_input: &Value,
+    expected_commitment: &str,
+) -> Result<()> {
+    let computed = compute_payload_field_commitment(field_commitment_input)?;
+    if computed == expected_commitment {
+        return Ok(());
+    }
+
+    Err(ProtocolError::ValidationFailed(
+        "off-chain payload field commitment mismatch".into(),
+    ))
+}
+
 pub fn verify_offchain_file_object_hash(manifest: &Value, ciphertext_bytes: &[u8]) -> Result<()> {
     let mut cursor = Cursor::new(ciphertext_bytes);
     verify_offchain_file_object_hash_reader(manifest, &mut cursor)
@@ -1725,6 +1747,53 @@ mod tests {
                 compute_file_manifest_commitment(manifest).expect("compute manifest commitment");
             assert_eq!(computed, expected);
         }
+    }
+
+    #[test]
+    fn computes_payload_field_commitments_from_shared_vectors() {
+        let fixture: Value = serde_json::from_slice(include_bytes!(
+            "../../../docs/test-vectors/payload_field_commitment_test_vectors.json"
+        ))
+        .expect("parse payload field commitment vectors");
+        let vectors = fixture["vectors"]
+            .as_array()
+            .expect("vectors should be an array");
+
+        for vector in vectors {
+            let input = vector
+                .get("field_commitment_input")
+                .expect("field commitment fixture");
+            let expected = vector["expected_sha256"]
+                .as_str()
+                .expect("expected hash fixture");
+            let computed =
+                compute_payload_field_commitment(input).expect("compute payload field commitment");
+            assert_eq!(computed, expected);
+            verify_payload_field_commitment(input, expected)
+                .expect("verify payload field commitment");
+        }
+    }
+
+    #[test]
+    fn rejects_payload_field_commitment_mismatch() {
+        let input = json!({
+            "schema_version": "1.0.0",
+            "namespace": "identity.citizen",
+            "entry_id": "entry-2001",
+            "policy_version": 1,
+            "fields": [
+                {
+                    "field_path": "claims.address",
+                    "ciphertext_hash": "sha256:3c8c1af6f9d6e2f6de53726d97cf3dc2e31de4d12888da265fa1f49f8f465f4f"
+                }
+            ]
+        });
+
+        let err = verify_payload_field_commitment(&input, "sha256:00")
+            .expect_err("mismatched payload field commitment should fail");
+        assert!(err
+            .to_string()
+            .contains("payload field commitment mismatch"));
     }
 
     #[test]
