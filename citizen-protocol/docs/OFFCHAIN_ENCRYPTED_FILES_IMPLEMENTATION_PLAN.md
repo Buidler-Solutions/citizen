@@ -1,6 +1,6 @@
 # Off-Chain Encrypted Files Implementation Plan
 
-Status: 🚧 Planned (not yet implemented)
+Status: 🚧 In progress (Gate 0 contracts + vectors implemented)
 
 Owner: Protocol + Wallet + API + Explorer teams
 
@@ -135,8 +135,8 @@ Checklist:
 - [ ] Add `ENCRYPTED_PAYLOAD_FIELD_*` policy fields to namespace specifications.
 - [ ] Publish canonical JSON examples for passphrase and ACL/DEK modes.
 - [ ] Publish canonical examples showing per-namespace payload split (public vs off-chain encrypted fields).
-- [ ] Define deterministic commitment test vectors.
-- [ ] Define error code table for invalid/expired/missing consent or key wraps.
+- [x] Define deterministic commitment test vectors.
+- [x] Define error code table for invalid/expired/missing consent or key wraps.
 
 ## Phase B — Wallet + SDK Crypto Path
 
@@ -269,8 +269,8 @@ Ship **Gate 0 complete** and open **Gate 1 crypto core PR**.
 ### Committed outcomes
 - [ ] Approve this implementation order in governance/architecture review.
 - [ ] Create and assign the first 10 tickets above with owners and due dates.
-- [ ] Merge schemas + deterministic vectors as the first implementation PR.
-- [ ] Wire CI job to validate vectors in both Rust and TypeScript SDK paths.
+- [x] Merge schemas + deterministic vectors as the first implementation PR.
+- [x] Wire CI job to validate vectors in both Rust and TypeScript SDK paths.
 - [ ] Open wallet crypto-core PR (streaming encryption + grant-aware unwrap checks).
 - [ ] Schedule security design review focused on DEK wrapping, revocation, and replay resistance.
 
