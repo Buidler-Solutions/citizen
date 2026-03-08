@@ -9,8 +9,8 @@ use citizen_ledger::Ledger;
 use citizen_storage::LedgerStorage;
 use citizen_types::{
     Block, BlockHeader, BlockHeight, CommitProof, ConsentPolicyCheck, ConsentReceipt,
-    DeterministicReceipt, DidDocument, DidStatus, FinalityProof, LedgerEntry, ProtocolError,
-    ReceiptStatus, SignedEnvelope, ValidationSummary,
+    DeterministicReceipt, DidDocument, DidStatus, FinalityProof, LedgerEntry, NamespaceRuleset,
+    ProtocolError, ReceiptStatus, SignedEnvelope, ValidationSummary,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -177,9 +177,23 @@ struct PayloadCommitRequest {
     namespace: String,
     object_id: String,
     author_did: String,
+    #[serde(default = "default_payload_policy_version")]
+    policy_version: u32,
     consent_receipt: ConsentReceipt,
     encrypted_field_refs: Vec<EncryptedFieldRef>,
     envelope: SignedEnvelope<LedgerEntry>,
+}
+
+#[derive(Clone, Debug)]
+struct PayloadFieldPolicyConfig {
+    policy_version: u32,
+    min_supported_policy_version: u32,
+    migration_guide_ref: Option<String>,
+    offchain_encrypted_fields: Vec<String>,
+}
+
+fn default_payload_policy_version() -> u32 {
+    1
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -854,22 +868,7 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
             }
         }
 
-        let Some(required_fields) = ruleset
-            .validators
-            .iter()
-            .find(|rule| rule.name == "offchain_encrypted_payload_field_policy")
-            .and_then(|rule| {
-                rule.config
-                    .get("offchain_encrypted_fields")
-                    .and_then(|value| value.as_array())
-                    .map(|fields| {
-                        fields
-                            .iter()
-                            .filter_map(|value| value.as_str().map(ToOwned::to_owned))
-                            .collect::<Vec<String>>()
-                    })
-            })
-        else {
+        let Some(payload_field_policy) = Self::parse_payload_field_policy(&ruleset) else {
             return (
                 StatusCode::UNPROCESSABLE_ENTITY,
                 Json(serde_json::json!({
@@ -877,6 +876,32 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
                 })),
             );
         };
+
+        if request.policy_version < payload_field_policy.min_supported_policy_version {
+            return (
+                StatusCode::UNPROCESSABLE_ENTITY,
+                Json(serde_json::json!({
+                    "error": "submitted payload policy version is below namespace minimum",
+                    "submitted_policy_version": request.policy_version,
+                    "min_supported_policy_version": payload_field_policy.min_supported_policy_version,
+                    "migration_guide_ref": payload_field_policy.migration_guide_ref,
+                })),
+            );
+        }
+
+        if request.policy_version != payload_field_policy.policy_version {
+            return (
+                StatusCode::UNPROCESSABLE_ENTITY,
+                Json(serde_json::json!({
+                    "error": "submitted payload policy version does not match namespace policy",
+                    "submitted_policy_version": request.policy_version,
+                    "expected_policy_version": payload_field_policy.policy_version,
+                    "migration_guide_ref": payload_field_policy.migration_guide_ref,
+                })),
+            );
+        }
+
+        let required_fields = payload_field_policy.offchain_encrypted_fields;
 
         let submitted_fields: BTreeSet<String> = request
             .encrypted_field_refs
@@ -971,6 +996,46 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
             .insert(idempotency_key, response.clone());
 
         (StatusCode::ACCEPTED, Json(response))
+    }
+
+    fn parse_payload_field_policy(ruleset: &NamespaceRuleset) -> Option<PayloadFieldPolicyConfig> {
+        let config = ruleset
+            .validators
+            .iter()
+            .find(|rule| rule.name == "offchain_encrypted_payload_field_policy")
+            .map(|rule| &rule.config)?;
+
+        let offchain_encrypted_fields = config
+            .get("offchain_encrypted_fields")
+            .and_then(|value| value.as_array())
+            .map(|fields| {
+                fields
+                    .iter()
+                    .filter_map(|value| value.as_str().map(ToOwned::to_owned))
+                    .collect::<Vec<String>>()
+            })?;
+
+        let policy_version = config
+            .get("policy_version")
+            .and_then(serde_json::Value::as_u64)
+            .and_then(|value| u32::try_from(value).ok())
+            .unwrap_or(1);
+        let min_supported_policy_version = config
+            .get("min_supported_policy_version")
+            .and_then(serde_json::Value::as_u64)
+            .and_then(|value| u32::try_from(value).ok())
+            .unwrap_or(policy_version);
+        let migration_guide_ref = config
+            .get("migration_guide_ref")
+            .and_then(serde_json::Value::as_str)
+            .map(ToOwned::to_owned);
+
+        Some(PayloadFieldPolicyConfig {
+            policy_version,
+            min_supported_policy_version,
+            migration_guide_ref,
+            offchain_encrypted_fields,
+        })
     }
 
     fn required_idempotency_key(
@@ -1803,20 +1868,26 @@ mod tests {
     fn build_server_with_grant_keys(
         grant_keys: &HashMap<String, ValidatorKeypair>,
     ) -> ApiServer<MemoryStorage> {
-        build_server_with_grant_keys_and_file_policy(grant_keys, &["ENCRYPTED_FILE_UPLOAD"], None)
+        build_server_with_grant_keys_and_file_policy(
+            grant_keys,
+            &["ENCRYPTED_FILE_UPLOAD"],
+            None,
+            None,
+        )
     }
 
     fn build_server_with_grant_keys_and_file_actions(
         grant_keys: &HashMap<String, ValidatorKeypair>,
         allowed_file_actions: &[&str],
     ) -> ApiServer<MemoryStorage> {
-        build_server_with_grant_keys_and_file_policy(grant_keys, allowed_file_actions, None)
+        build_server_with_grant_keys_and_file_policy(grant_keys, allowed_file_actions, None, None)
     }
 
     fn build_server_with_grant_keys_and_file_policy(
         grant_keys: &HashMap<String, ValidatorKeypair>,
         allowed_file_actions: &[&str],
         required_consent_policy_ref: Option<&str>,
+        payload_field_policy_config: Option<serde_json::Value>,
     ) -> ApiServer<MemoryStorage> {
         let storage = Arc::new(MemoryStorage::new());
         let ledger = Arc::new(Ledger::new(storage, KeyRegistry::new()));
@@ -1874,8 +1945,10 @@ mod tests {
                 },
                 NamespaceRule {
                     name: "offchain_encrypted_payload_field_policy".to_string(),
-                    config: json!({
-                        "offchain_encrypted_fields": ["payload.ssn", "payload.medical_record"]
+                    config: payload_field_policy_config.unwrap_or_else(|| {
+                        json!({
+                            "offchain_encrypted_fields": ["payload.ssn", "payload.medical_record"]
+                        })
                     }),
                 },
             ],
@@ -4602,6 +4675,7 @@ mod tests {
             &grant_keys,
             &["ENCRYPTED_FILE_UPLOAD"],
             Some("policy:offchain:strict:v1"),
+            None,
         )
         .router();
 
@@ -4712,6 +4786,7 @@ mod tests {
             &grant_keys,
             &["ENCRYPTED_FILE_UPLOAD"],
             Some("policy:offchain:strict:v1"),
+            None,
         )
         .router();
 
@@ -4847,6 +4922,169 @@ mod tests {
         assert_eq!(
             payload["error"],
             "consent receipt policy_ref does not satisfy namespace policy requirement: expected policy:offchain:strict:v1"
+        );
+    }
+
+    #[tokio::test]
+    async fn payload_commit_rejects_policy_version_mismatch() {
+        let grant_keys = grant_approver_keys(&[
+            "grant:ops-1",
+            "grant:ops-2",
+            "grant:ops-3",
+            "grant:ops-4",
+            "grant:ops-5",
+        ]);
+        let app = build_server_with_grant_keys_and_file_policy(
+            &grant_keys,
+            &["ENCRYPTED_FILE_UPLOAD"],
+            None,
+            Some(json!({
+                "policy_version": 3,
+                "min_supported_policy_version": 2,
+                "migration_guide_ref": "docs/migrations/offchain-policy-v3.md",
+                "offchain_encrypted_fields": ["payload.ssn", "payload.medical_record"]
+            })),
+        )
+        .router();
+
+        let now = chrono::Utc::now().timestamp();
+        let signer = ValidatorKeypair::generate("did:citizen:holder-1".to_string());
+        let mut consent_entry = LedgerEntry {
+            entry_id: Uuid::new_v4(),
+            namespace: "consent.receipt".to_string(),
+            action: "CONSENT_GRANTED".to_string(),
+            object_id: "did:citizen:holder-1".to_string(),
+            payload: json!({
+                "data_hash": "sha256:payload-policy-version-1",
+                "policy_ref": "policy:offchain:v1",
+                "expires_at": now + 3_600
+            }),
+            privacy_flag: false,
+            privacy_mode: citizen_types::PrivacyMode::None,
+            payload_commitment: None,
+            ciphertext_hex: None,
+            nonce_hex: None,
+            salt_hex: None,
+            kdf_params: None,
+            consent_receipt: None,
+            authorized_readers: vec![],
+            custodian_policy_id: None,
+            field_reader_acls: BTreeMap::new(),
+            key_wrapped_secrets: vec![],
+            revocation_events: vec![],
+            author: "did:citizen:holder-1".to_string(),
+            signature: String::new(),
+            timestamp: now,
+        };
+        sign_entry_for_tests(&mut consent_entry, &signer);
+        let consent_envelope = SignedEnvelope {
+            envelope_id: Uuid::new_v4(),
+            signer: consent_entry.author.clone(),
+            signature: consent_entry.signature.clone(),
+            submitted_at: chrono::Utc::now(),
+            payload: consent_entry,
+        };
+        let _ = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/envelopes/submit")
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        serde_json::to_vec(&consent_envelope).expect("serialize envelope"),
+                    ))
+                    .expect("request"),
+            )
+            .await
+            .expect("submit response");
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/payloads/commit")
+                    .header("content-type", "application/json")
+                    .header("idempotency-key", "payload-policy-version-1")
+                    .body(Body::from(
+                        serde_json::to_vec(&json!({
+                            "namespace": "files.secure",
+                            "object_id": "PROC-PAY-VERSION-1",
+                            "author_did": "did:author:a",
+                            "policy_version": 2,
+                            "consent_receipt": {
+                                "subject_did": "did:citizen:holder-1",
+                                "data_hash": "sha256:payload-policy-version-1",
+                                "policy_ref": "policy:offchain:v1",
+                                "granted_at": now,
+                                "expires_at": now + 3_600,
+                                "authorized_readers": ["did:author:a"]
+                            },
+                            "encrypted_field_refs": [
+                                {
+                                    "field_path": "payload.ssn",
+                                    "blob_ref": "blob://local/files.secure/PROC-PAY-VERSION-1/field-ssn.cipher",
+                                    "ciphertext_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                                    "payload_commitment": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+                                },
+                                {
+                                    "field_path": "payload.medical_record",
+                                    "blob_ref": "blob://local/files.secure/PROC-PAY-VERSION-1/field-medical.cipher",
+                                    "ciphertext_hash": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                                    "payload_commitment": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+                                }
+                            ],
+                            "envelope": {
+                                "envelope_id": Uuid::new_v4(),
+                                "signer": "did:author:a",
+                                "signature": "sig-payload-policy-version-1",
+                                "submitted_at": chrono::Utc::now(),
+                                "payload": {
+                                    "entry_id": Uuid::new_v4(),
+                                    "namespace": "files.secure",
+                                    "action": "ENCRYPTED_PAYLOAD_FIELD_COMMIT",
+                                    "object_id": "PROC-PAY-VERSION-1",
+                                    "payload": {"field_refs": 2},
+                                    "privacy_flag": false,
+                                    "privacy_mode": "none",
+                                    "payload_commitment": null,
+                                    "ciphertext_hex": null,
+                                    "nonce_hex": null,
+                                    "salt_hex": null,
+                                    "kdf_params": null,
+                                    "consent_receipt": null,
+                                    "authorized_readers": [],
+                                    "custodian_policy_id": null,
+                                    "field_reader_acls": {},
+                                    "key_wrapped_secrets": [],
+                                    "revocation_events": [],
+                                    "author": "did:author:a",
+                                    "signature": "sig-payload-policy-version-1",
+                                    "timestamp": now
+                                }
+                            }
+                        }))
+                        .expect("request body"),
+                    ))
+                    .expect("request"),
+            )
+            .await
+            .expect("response");
+
+        assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("response body");
+        let payload: Value = serde_json::from_slice(&body).expect("response json");
+        assert_eq!(
+            payload["error"],
+            "submitted payload policy version does not match namespace policy"
+        );
+        assert_eq!(payload["submitted_policy_version"], json!(2));
+        assert_eq!(payload["expected_policy_version"], json!(3));
+        assert_eq!(
+            payload["migration_guide_ref"],
+            json!("docs/migrations/offchain-policy-v3.md")
         );
     }
 
