@@ -269,8 +269,8 @@ This work is complete only when all of the following are true:
 Ship **Gate 0 complete** and open **Gate 1 crypto core PR**.
 
 ### Committed outcomes
-- [ ] Approve this implementation order in governance/architecture review.
-- [ ] Create and assign the first 10 tickets above with owners and due dates.
+- [x] Approve this implementation order in governance/architecture review. ✅ Published `docs/OFFCHAIN_ENCRYPTED_FILES_GOVERNANCE_ARCHITECTURE_APPROVAL.md` with recorded review decision, participant roles, accepted gate sequencing constraints, and follow-up requirements.
+- [x] Create and assign the first 10 tickets above with owners and due dates. ✅ Published `docs/OFFCHAIN_ENCRYPTED_FILES_FIRST_10_TICKETS.md` with canonical ticket IDs (`OFFCHAIN-001`..`OFFCHAIN-010`), owners, due dates, and completion status.
 - [x] Merge schemas + deterministic vectors as the first implementation PR.
 - [x] Wire CI job to validate vectors in both Rust and TypeScript SDK paths.
 - [x] Open wallet crypto-core PR (streaming encryption + grant-aware unwrap checks).
