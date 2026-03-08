@@ -6240,7 +6240,10 @@ mod tests {
         assert_eq!(payload["status"], json!("accepted"));
         assert_eq!(payload["namespace"], json!("files.secure"));
         assert_eq!(payload["object_id"], json!("PROC-PAYLOAD-HAPPY-PATH"));
-        assert_eq!(payload["encrypted_field_refs"].as_array().map(Vec::len), Some(2));
+        assert_eq!(
+            payload["encrypted_field_refs"].as_array().map(Vec::len),
+            Some(2)
+        );
     }
 
     #[tokio::test]
