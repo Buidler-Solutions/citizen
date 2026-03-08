@@ -79,6 +79,23 @@ type FileManifestResponse = {
   };
 };
 
+
+
+type PayloadFieldRefsResponse = {
+  source: string;
+  data: {
+    entry_id: string;
+    namespace: string;
+    field_refs: Array<{
+      field_path: string;
+      blob_ref: string;
+      ciphertext_hash: string;
+      payload_commitment: string;
+    }>;
+  };
+};
+
+
 type AssetPositionsResponse = {
   source: string;
   data: {
@@ -103,6 +120,8 @@ const namespace = process.env.NEXT_PUBLIC_NAMESPACE ?? 'governance.vote';
 const receiptId = process.env.NEXT_PUBLIC_RECEIPT_ID;
 const assetAccountId = process.env.NEXT_PUBLIC_ASSET_ACCOUNT_ID ?? 'did:ledger:alice';
 const fileManifestId = process.env.NEXT_PUBLIC_FILE_MANIFEST_ID;
+const payloadEntryId = process.env.NEXT_PUBLIC_PAYLOAD_ENTRY_ID;
+const payloadNamespace = process.env.NEXT_PUBLIC_PAYLOAD_NAMESPACE;
 
 async function loadBlock(): Promise<BlockResponse> {
   const response = await fetch(`${apiBase}/blocks/${blockHeight}`, {
@@ -144,6 +163,22 @@ async function loadFileManifest(manifestId: string): Promise<FileManifestRespons
   return response.json();
 }
 
+
+
+async function loadPayloadFieldRefs(
+  entryId: string,
+  namespaceName: string,
+): Promise<PayloadFieldRefsResponse | null> {
+  const response = await fetch(
+    `${apiBase}/payloads/fields/${encodeURIComponent(entryId)}/${encodeURIComponent(namespaceName)}`,
+    { next: { revalidate: 5 } },
+  );
+  if (!response.ok) {
+    return null;
+  }
+  return response.json();
+}
+
 async function loadAssetPositions(accountId: string): Promise<AssetPositionsResponse | null> {
   const response = await fetch(`${apiBase}/assets/${encodeURIComponent(accountId)}`, {
     next: { revalidate: 5 },
@@ -155,11 +190,14 @@ async function loadAssetPositions(accountId: string): Promise<AssetPositionsResp
 }
 
 export default async function HomePage() {
-  const [block, entries, receipt, fileManifest, assetPositions] = await Promise.all([
+  const [block, entries, receipt, fileManifest, payloadFieldRefs, assetPositions] = await Promise.all([
     loadBlock(),
     loadEntries(),
     receiptId ? loadReceipt(receiptId) : Promise.resolve(null),
     fileManifestId ? loadFileManifest(fileManifestId) : Promise.resolve(null),
+    payloadEntryId && payloadNamespace
+      ? loadPayloadFieldRefs(payloadEntryId, payloadNamespace)
+      : Promise.resolve(null),
     loadAssetPositions(assetAccountId),
   ]);
 
@@ -300,6 +338,41 @@ export default async function HomePage() {
             </p>
           )}
         </div>
+
+        <div className="card">
+          <h2>Encrypted Payload Field References</h2>
+          {payloadFieldRefs ? (
+            <>
+              <p className="subtitle">
+                Entry: <code>{payloadFieldRefs.data.entry_id}</code>
+              </p>
+              <ul>
+                {payloadFieldRefs.data.field_refs.map((fieldRef) => (
+                  <li key={fieldRef.field_path}>
+                    <div className="row">
+                      <span>Field path</span>
+                      <strong className="mono">{fieldRef.field_path}</strong>
+                    </div>
+                    <div className="row">
+                      <span>Blob ref</span>
+                      <strong className="mono">{fieldRef.blob_ref}</strong>
+                    </div>
+                    <div className="row">
+                      <span>Ciphertext hash</span>
+                      <strong className="mono">{fieldRef.ciphertext_hash}</strong>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </>
+          ) : (
+            <p>
+              Set <code>NEXT_PUBLIC_PAYLOAD_ENTRY_ID</code> and <code>NEXT_PUBLIC_PAYLOAD_NAMESPACE</code>{' '}
+              to inspect namespace-scoped encrypted payload field refs.
+            </p>
+          )}
+        </div>
+
 
         <div className="card">
           <h2>Builder-Issued Asset Policy Disclosure</h2>
