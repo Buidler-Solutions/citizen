@@ -229,6 +229,7 @@ Checklist:
 - [x] Enforce "grant required" decrypt checks in wallet runtime and SDK helpers.
 - [x] Ship verification helper for off-chain object hash reconciliation. ✅ Added wallet library verification helpers for deterministic manifest commitment + ciphertext object-hash reconciliation (`compute_file_manifest_commitment`, `verify_offchain_file_object_hash`, `verify_offchain_file_reconciliation`) with shared-vector test coverage.
 - [x] Implement namespace-aware payload partitioning and field-level off-chain encryption helper.
+- [x] Add wallet/SDK payload-field commitment verification helpers from shared vectors. ✅ Added deterministic wallet helpers (`compute_payload_field_commitment`, `verify_payload_field_commitment`) plus shared test-vector coverage for per-payload encrypted field commitments.
 
 ### API / Node
 - [x] Implement file intent + commit endpoints.
