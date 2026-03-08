@@ -277,6 +277,7 @@ struct EntrySigningPayload {
 
 pub fn sign_entry(draft: EntryDraft, keypair: &WalletKeypair) -> Result<LedgerEntry> {
     let entry_id = Uuid::new_v4();
+    let normalized_authorized_readers = normalize_authorized_readers(&draft.authorized_readers);
     let canonical_payload = canonical_json(&draft.payload);
     let payload_commitment = hex::encode(Sha256::digest(canonical_payload.as_bytes()));
     let resolved_privacy_mode = if draft.privacy_mode == PrivacyMode::None && draft.privacy_flag {
@@ -315,7 +316,7 @@ pub fn sign_entry(draft: EntryDraft, keypair: &WalletKeypair) -> Result<LedgerEn
                 policy_ref: "wallet:encrypt-then-commit:v1".to_string(),
                 granted_at: draft.timestamp,
                 expires_at: draft.timestamp + 30 * 24 * 60 * 60,
-                authorized_readers: draft.authorized_readers.clone(),
+                authorized_readers: normalized_authorized_readers.clone(),
                 custodian_policy_id: draft.custodian_policy_id.clone(),
                 field_reader_acls: field_reader_acls.clone(),
             };
@@ -335,7 +336,7 @@ pub fn sign_entry(draft: EntryDraft, keypair: &WalletKeypair) -> Result<LedgerEn
                 build_privacy_payload(&draft.payload, &payload_commitment)?;
             let field_reader_acls = normalize_field_reader_acls(
                 &draft.payload,
-                &draft.authorized_readers,
+                &normalized_authorized_readers,
                 &draft.field_reader_acls,
             )?;
             let dek = privacy::generate_dek();
@@ -343,15 +344,19 @@ pub fn sign_entry(draft: EntryDraft, keypair: &WalletKeypair) -> Result<LedgerEn
             let author_secret = x25519_secret_from_wallet(keypair);
 
             let mut wrapped = Vec::new();
-            for reader_id in &draft.authorized_readers {
+            for reader_id in &normalized_authorized_readers {
                 let reader_key_hex = draft.reader_public_keys.get(reader_id).ok_or_else(|| {
                     ProtocolError::ValidationFailed(format!(
                         "missing reader public key for authorized reader `{reader_id}`"
                     ))
                 })?;
                 let reader_pubkey = parse_x25519_public_key(reader_key_hex)?;
-                let wrapped_dek =
-                    privacy::wrap_dek_for_reader(&dek, &author_secret, &reader_pubkey)?;
+                let wrapped_dek = privacy::wrap_dek_for_reader(
+                    &dek,
+                    &author_secret,
+                    &reader_pubkey,
+                    &format!("{entry_id}:{reader_id}"),
+                )?;
                 wrapped.push(KeyWrap {
                     reader_id: reader_id.clone(),
                     wrapped_dek,
@@ -371,7 +376,7 @@ pub fn sign_entry(draft: EntryDraft, keypair: &WalletKeypair) -> Result<LedgerEn
                 policy_ref: "wallet:hybrid-encrypt-then-commit:v2".to_string(),
                 granted_at: draft.timestamp,
                 expires_at: draft.timestamp + 30 * 24 * 60 * 60,
-                authorized_readers: draft.authorized_readers.clone(),
+                authorized_readers: normalized_authorized_readers.clone(),
                 custodian_policy_id: draft.custodian_policy_id.clone(),
                 field_reader_acls: field_reader_acls.clone(),
             };
@@ -412,7 +417,7 @@ pub fn sign_entry(draft: EntryDraft, keypair: &WalletKeypair) -> Result<LedgerEn
         kdf_params: kdf_params.clone(),
         consent_receipt: consent_receipt.clone(),
         privacy_mode: resolved_privacy_mode.clone(),
-        authorized_readers: draft.authorized_readers.clone(),
+        authorized_readers: normalized_authorized_readers.clone(),
         custodian_policy_id: draft.custodian_policy_id.clone(),
         key_wrapped_secrets: key_wrapped_secrets.clone(),
         revocation_events: draft.revocation_events.clone(),
@@ -439,7 +444,7 @@ pub fn sign_entry(draft: EntryDraft, keypair: &WalletKeypair) -> Result<LedgerEn
         salt_hex,
         kdf_params,
         consent_receipt,
-        authorized_readers: draft.authorized_readers,
+        authorized_readers: normalized_authorized_readers,
         custodian_policy_id: draft.custodian_policy_id,
         key_wrapped_secrets,
         revocation_events: draft.revocation_events,
@@ -590,6 +595,13 @@ fn normalize_field_reader_acls(
         normalized.insert(field.clone(), list);
     }
     Ok(normalized)
+}
+
+fn normalize_authorized_readers(authorized_readers: &[String]) -> Vec<String> {
+    let mut normalized = authorized_readers.to_vec();
+    normalized.sort();
+    normalized.dedup();
+    normalized
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
