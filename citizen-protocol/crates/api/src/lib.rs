@@ -70,7 +70,7 @@ struct ApiEdgeState {
     file_commit_idempotency: Mutex<BTreeMap<String, serde_json::Value>>,
     payload_commit_idempotency: Mutex<BTreeMap<String, serde_json::Value>>,
     file_manifests: Mutex<BTreeMap<String, serde_json::Value>>,
-    payload_field_refs: Mutex<BTreeMap<String, Vec<EncryptedFieldRef>>>,
+    payload_field_refs: Mutex<BTreeMap<String, EncryptedFieldRef>>,
 }
 
 impl ApiEdgeState {
@@ -586,6 +586,31 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
             );
         }
 
+        if let Some(ruleset) = ledger.namespace_ruleset(&intent.request.namespace) {
+            let Some(policy) = ruleset
+                .validators
+                .iter()
+                .find(|rule| rule.name == "offchain_encrypted_file_policy")
+                .map(|rule| &rule.config)
+            else {
+                return (
+                    StatusCode::UNPROCESSABLE_ENTITY,
+                    Json(serde_json::json!({
+                        "error": "namespace is missing offchain_encrypted_file_policy"
+                    })),
+                );
+            };
+
+            if let Err(message) =
+                Self::validate_manifest_against_intent(&request.manifest, &intent.request, policy)
+            {
+                return (
+                    StatusCode::UNPROCESSABLE_ENTITY,
+                    Json(serde_json::json!({ "error": message })),
+                );
+            }
+        }
+
         let manifest_commitment = sha256_hex(&canonical_json(&request.manifest));
         let manifest_id = manifest_commitment.clone();
 
@@ -708,17 +733,23 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
             }
         }
 
+        let entry_id = request.envelope.payload.entry_id;
         let (status, Json(base)) =
             Self::process_envelope_submission(ledger, request.envelope).await;
         if status != StatusCode::ACCEPTED {
             return (status, Json(base));
         }
 
-        let refs_key = format!("{}:{}", request.namespace, request.object_id);
-        edge.payload_field_refs
-            .lock()
-            .await
-            .insert(refs_key, request.encrypted_field_refs.clone());
+        {
+            let mut refs = edge.payload_field_refs.lock().await;
+            for field_ref in &request.encrypted_field_refs {
+                let refs_key = format!(
+                    "{}:{}:{}",
+                    entry_id, request.namespace, field_ref.field_path
+                );
+                refs.insert(refs_key, field_ref.clone());
+            }
+        }
 
         let response = serde_json::json!({
             "status": "accepted",
@@ -749,6 +780,107 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
                     Json(serde_json::json!({"error": "missing required idempotency-key header"})),
                 )
             })
+    }
+
+    fn validate_manifest_against_intent(
+        manifest: &serde_json::Value,
+        intent: &FileIntentRequest,
+        policy: &serde_json::Value,
+    ) -> Result<(), String> {
+        if !manifest.is_object() {
+            return Err("manifest must be a JSON object".to_string());
+        }
+
+        let manifest_namespace = manifest
+            .get("namespace")
+            .and_then(|value| value.as_str())
+            .ok_or_else(|| "manifest missing namespace".to_string())?;
+        if manifest_namespace != intent.namespace {
+            return Err("manifest namespace does not match intent namespace".to_string());
+        }
+
+        let manifest_object = manifest
+            .get("object_id")
+            .and_then(|value| value.as_str())
+            .ok_or_else(|| "manifest missing object_id".to_string())?;
+        if manifest_object != intent.object_id {
+            return Err("manifest object_id does not match intent object_id".to_string());
+        }
+
+        let manifest_author = manifest
+            .get("author_did")
+            .and_then(|value| value.as_str())
+            .ok_or_else(|| "manifest missing author_did".to_string())?;
+        if manifest_author != intent.author_did {
+            return Err("manifest author_did does not match intent author_did".to_string());
+        }
+
+        let manifest_mime = manifest
+            .get("mime_type")
+            .and_then(|value| value.as_str())
+            .ok_or_else(|| "manifest missing mime_type".to_string())?;
+        if manifest_mime != intent.mime_type {
+            return Err("manifest mime_type does not match intent mime_type".to_string());
+        }
+
+        let manifest_mode = manifest
+            .get("encryption_mode")
+            .and_then(|value| value.as_str())
+            .ok_or_else(|| "manifest missing encryption_mode".to_string())?;
+        if manifest_mode != intent.encryption_mode {
+            return Err(
+                "manifest encryption_mode does not match intent encryption_mode".to_string(),
+            );
+        }
+
+        let manifest_size = manifest
+            .get("file_size_bytes")
+            .and_then(|value| value.as_u64())
+            .ok_or_else(|| "manifest missing file_size_bytes".to_string())?;
+        if manifest_size != intent.file_size_bytes {
+            return Err(
+                "manifest file_size_bytes does not match intent file_size_bytes".to_string(),
+            );
+        }
+
+        if let Some(max_size) = policy
+            .get("max_file_size_bytes")
+            .and_then(|value| value.as_u64())
+        {
+            if manifest_size > max_size {
+                return Err("manifest file size exceeds namespace policy limit".to_string());
+            }
+        }
+
+        if let Some(allowed_mimes) = policy
+            .get("allowed_mime_types")
+            .and_then(|value| value.as_array())
+        {
+            let mime_allowed = allowed_mimes
+                .iter()
+                .filter_map(|value| value.as_str())
+                .any(|value| value == manifest_mime);
+            if !mime_allowed {
+                return Err("manifest mime type is not allowed by namespace policy".to_string());
+            }
+        }
+
+        if let Some(allowed_modes) = policy
+            .get("allowed_encryption_modes")
+            .and_then(|value| value.as_array())
+        {
+            let mode_allowed = allowed_modes
+                .iter()
+                .filter_map(|value| value.as_str())
+                .any(|value| value == manifest_mode);
+            if !mode_allowed {
+                return Err(
+                    "manifest encryption mode is not allowed by namespace policy".to_string(),
+                );
+            }
+        }
+
+        Ok(())
     }
 
     fn evaluate_consent_receipt(
@@ -3048,11 +3180,17 @@ mod tests {
             "intent_id": intent_id,
             "manifest": {
                 "schema_version": "1.0.0",
+                "namespace": "files.secure",
+                "object_id": "PROC-001",
+                "author_did": "did:author:a",
+                "mime_type": "application/pdf",
+                "file_size_bytes": 1024,
+                "encryption_mode": "hybrid-acl",
                 "file_ref": "s3://bucket/proc-001.enc",
                 "ciphertext_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
                 "payload_commitment": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
                 "consent_receipt_ref": "receipt-1",
-                "encryption": {"mode": "passphrase_file", "kdf": {"name":"argon2id","params":{"memory_kib":8192,"iterations":1,"parallelism":1,"salt":"s"}}}
+                "encryption": {"mode": "hybrid-acl"}
             },
             "envelope": envelope
         });
@@ -3096,6 +3234,162 @@ mod tests {
             .await
             .expect("body");
         assert_eq!(first_body, second_body);
+    }
+
+    #[tokio::test]
+    async fn file_commit_rejects_manifest_mismatch_with_intent() {
+        let app = build_server().router();
+        let now = chrono::Utc::now().timestamp();
+
+        let signer = ValidatorKeypair::generate("did:citizen:holder-1".to_string());
+        let mut consent_entry = LedgerEntry {
+            entry_id: Uuid::new_v4(),
+            namespace: "consent.receipt".to_string(),
+            action: "CONSENT_GRANTED".to_string(),
+            object_id: "did:citizen:holder-1".to_string(),
+            payload: json!({
+                "data_hash": "sha256:file-002",
+                "policy_ref": "policy:offchain:v1",
+                "expires_at": now + 3_600
+            }),
+            privacy_flag: false,
+            privacy_mode: citizen_types::PrivacyMode::None,
+            payload_commitment: None,
+            ciphertext_hex: None,
+            nonce_hex: None,
+            salt_hex: None,
+            kdf_params: None,
+            consent_receipt: None,
+            authorized_readers: vec![],
+            custodian_policy_id: None,
+            field_reader_acls: BTreeMap::new(),
+            key_wrapped_secrets: vec![],
+            revocation_events: vec![],
+            author: "did:citizen:holder-1".to_string(),
+            signature: String::new(),
+            timestamp: now,
+        };
+        sign_entry_for_tests(&mut consent_entry, &signer);
+        let consent_envelope = SignedEnvelope {
+            envelope_id: Uuid::new_v4(),
+            signer: consent_entry.author.clone(),
+            signature: consent_entry.signature.clone(),
+            submitted_at: chrono::Utc::now(),
+            payload: consent_entry,
+        };
+
+        let _ = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/envelopes/submit")
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        serde_json::to_vec(&consent_envelope).expect("serialize envelope"),
+                    ))
+                    .expect("request"),
+            )
+            .await
+            .expect("submit response");
+
+        let intent_response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/files/intents")
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        serde_json::to_vec(&json!({
+                            "namespace": "files.secure",
+                            "object_id": "PROC-002",
+                            "author_did": "did:author:a",
+                            "mime_type": "application/pdf",
+                            "file_size_bytes": 2048,
+                            "encryption_mode": "hybrid-acl",
+                            "consent_receipt": {
+                                "subject_did": "did:citizen:holder-1",
+                                "data_hash": "sha256:file-002",
+                                "policy_ref": "policy:offchain:v1",
+                                "granted_at": now,
+                                "expires_at": now + 3_600,
+                                "authorized_readers": ["did:author:a"]
+                            }
+                        }))
+                        .expect("intent body"),
+                    ))
+                    .expect("request"),
+            )
+            .await
+            .expect("intent response");
+        assert_eq!(intent_response.status(), StatusCode::CREATED);
+        let intent_body = axum::body::to_bytes(intent_response.into_body(), usize::MAX)
+            .await
+            .expect("intent body");
+        let intent_payload: Value = serde_json::from_slice(&intent_body).expect("intent payload");
+        let intent_id = intent_payload["intent_id"].as_str().expect("intent id");
+
+        let entry = LedgerEntry {
+            entry_id: Uuid::new_v4(),
+            namespace: "files.secure".to_string(),
+            action: "ENCRYPTED_FILE_UPLOAD".to_string(),
+            object_id: "PROC-002".to_string(),
+            payload: json!({"manifest_ref":"obj-2"}),
+            privacy_flag: false,
+            privacy_mode: citizen_types::PrivacyMode::None,
+            payload_commitment: None,
+            ciphertext_hex: None,
+            nonce_hex: None,
+            salt_hex: None,
+            kdf_params: None,
+            consent_receipt: None,
+            authorized_readers: vec![],
+            custodian_policy_id: None,
+            field_reader_acls: BTreeMap::new(),
+            key_wrapped_secrets: vec![],
+            revocation_events: vec![],
+            author: "did:author:a".to_string(),
+            signature: "sig-file-2".to_string(),
+            timestamp: now,
+        };
+        let envelope = SignedEnvelope {
+            envelope_id: Uuid::new_v4(),
+            signer: "did:author:a".to_string(),
+            signature: "sig-file-2".to_string(),
+            submitted_at: chrono::Utc::now(),
+            payload: entry,
+        };
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/files/commit")
+                    .header("content-type", "application/json")
+                    .header("idempotency-key", "file-commit-mismatch")
+                    .body(Body::from(
+                        serde_json::to_vec(&json!({
+                            "intent_id": intent_id,
+                            "manifest": {
+                                "schema_version": "1.0.0",
+                                "namespace": "files.secure",
+                                "object_id": "PROC-002",
+                                "author_did": "did:author:a",
+                                "mime_type": "application/json",
+                                "file_size_bytes": 2048,
+                                "encryption_mode": "hybrid-acl"
+                            },
+                            "envelope": envelope
+                        }))
+                        .expect("commit body"),
+                    ))
+                    .expect("request"),
+            )
+            .await
+            .expect("file commit response");
+
+        assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
     }
 
     #[tokio::test]
