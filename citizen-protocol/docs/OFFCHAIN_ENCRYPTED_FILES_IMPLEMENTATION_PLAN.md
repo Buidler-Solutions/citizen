@@ -148,9 +148,9 @@ Deliverables:
 Checklist:
 - [x] Implement streaming encryption path for large files (avoid full-memory buffering). ✅ Added wallet streaming helpers `encrypt_offchain_file_reader_to_writer` and `decrypt_offchain_file_reader_to_writer` that process framed ciphertext chunks without full-file buffering.
 - [x] Reuse Argon2id + ChaCha20-Poly1305 standards for passphrase mode. ✅ Streaming file encryption now derives per-file keys with Argon2id and encrypts chunk frames with ChaCha20-Poly1305 nonces bound to chunk index AAD.
-- [ ] Implement per-reader X25519 DEK wrapping for hybrid mode.
+- [x] Implement per-reader X25519 DEK wrapping for hybrid mode. ✅ Wallet hybrid signing now emits per-reader X25519 + XChaCha20-Poly1305 DEK wraps and validates unwrap during decrypt flows.
 - [x] Enforce grant validation before unwrap/decrypt in wallet SDK APIs.
-- [ ] Ensure participating wallets receive deterministic per-wallet key wraps when policy requires multi-party readability.
+- [x] Ensure participating wallets receive deterministic per-wallet key wraps when policy requires multi-party readability. ✅ Wallet now normalizes participating reader sets and derives deterministic per-reader wrap context (`entry_id:reader_id`) so all authorized wallets receive stable, independently decryptable wraps.
 - [x] Implement deterministic payload field canonicalization before per-field encryption.
 - [ ] Add wallet UX guardrails: explicit opt-in warnings + mode disclosure.
 - [ ] Add golden tests for deterministic commitments across platforms.
@@ -225,7 +225,7 @@ Checklist:
 
 ### Wallet / SDK
 - [x] Implement file encryption/decryption APIs. ✅ Wallet crate now exposes streaming off-chain file encrypt/decrypt APIs with deterministic ciphertext hash metadata for manifest reconciliation.
-- [ ] Implement reader ACL + DEK wrapping flows.
+- [x] Implement reader ACL + DEK wrapping flows. ✅ Wallet hybrid mode now enforces normalized authorized-reader ACLs while generating and consuming per-reader DEK wraps for grant-scoped decrypt access.
 - [x] Enforce "grant required" decrypt checks in wallet runtime and SDK helpers.
 - [x] Ship verification helper for off-chain object hash reconciliation. ✅ Added wallet library verification helpers for deterministic manifest commitment + ciphertext object-hash reconciliation (`compute_file_manifest_commitment`, `verify_offchain_file_object_hash`, `verify_offchain_file_reconciliation`) with shared-vector test coverage.
 - [x] Implement namespace-aware payload partitioning and field-level off-chain encryption helper.
@@ -256,7 +256,7 @@ This work is complete only when all of the following are true:
 - [ ] Namespace field policy deterministically enforces which payload fields are off-chain encrypted.
 - [ ] A builder can verify file commitments deterministically from receipt + off-chain object hash.
 - [ ] A builder can verify per-payload encrypted field commitments from receipt + field blob hashes.
-- [ ] Only wallets with active grants can decrypt; decrypt attempts from non-granted wallets always fail.
+- [x] Only wallets with active grants can decrypt; decrypt attempts from non-granted wallets always fail. ✅ Wallet hybrid decrypt path enforces authorized-reader presence, consent validity windows, and revocation denial before DEK unwrap/decrypt execution.
 - [x] All authorized participating wallets for a shared record can decrypt via their own wallet-specific key wraps. ✅ Added wallet test coverage (`hybrid_entry_all_authorized_readers_can_decrypt_with_individual_wraps`) proving each authorized reader decrypts with its own DEK wrap while non-participants remain blocked by grant checks.
 - [x] Reader ACL changes and revocations are reflected in on-chain events and enforced in retrieval paths. ✅ Added API revocation route `POST /api/v1/files/revoke` that requires `ENCRYPTED_FILE_REVOKE` envelopes and verifies `manifest_id`/`reader_did` binding, while `/api/v1/files/read` and manifest metadata now consistently reflect revocation outcomes in tests.
 - [ ] Explorer exposes auditable file metadata while revealing no sensitive plaintext.
