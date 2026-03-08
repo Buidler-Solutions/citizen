@@ -15,7 +15,7 @@ use rand::RngCore;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use sha2::{Digest, Sha256};
-use std::collections::{BTreeMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 use uuid::Uuid;
 use x25519_dalek::{PublicKey as X25519PublicKey, StaticSecret};
 
@@ -23,6 +23,34 @@ pub type Result<T> = std::result::Result<T, ProtocolError>;
 
 pub mod cli;
 pub mod privacy;
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct NamespaceFieldPolicy {
+    pub namespace: String,
+    pub policy_version: u32,
+    #[serde(default)]
+    pub public_fields: Vec<String>,
+    #[serde(default)]
+    pub committed_fields: Vec<String>,
+    #[serde(default)]
+    pub offchain_encrypted_fields: Vec<String>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct PayloadFieldCommitment {
+    pub field_path: String,
+    pub canonical_value: String,
+    pub commitment_sha256: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub struct PolicyPartitionedPayload {
+    pub namespace: String,
+    pub policy_version: u32,
+    pub public_fields: BTreeMap<String, Value>,
+    pub committed_fields: BTreeMap<String, PayloadFieldCommitment>,
+    pub offchain_encrypted_fields: BTreeMap<String, Value>,
+}
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct EntryDraft {
@@ -321,7 +349,8 @@ pub fn sign_entry(draft: EntryDraft, keypair: &WalletKeypair) -> Result<LedgerEn
                     ))
                 })?;
                 let reader_pubkey = parse_x25519_public_key(reader_key_hex)?;
-                let wrapped_dek = privacy::wrap_dek_for_reader(&dek, &author_secret, &reader_pubkey)?;
+                let wrapped_dek =
+                    privacy::wrap_dek_for_reader(&dek, &author_secret, &reader_pubkey)?;
                 wrapped.push(KeyWrap {
                     reader_id: reader_id.clone(),
                     wrapped_dek,
@@ -357,7 +386,16 @@ pub fn sign_entry(draft: EntryDraft, keypair: &WalletKeypair) -> Result<LedgerEn
                 field_reader_acls,
             )
         }
-        PrivacyMode::None => (draft.payload.clone(), None, None, None, None, None, Vec::new(), BTreeMap::new()),
+        PrivacyMode::None => (
+            draft.payload.clone(),
+            None,
+            None,
+            None,
+            None,
+            None,
+            Vec::new(),
+            BTreeMap::new(),
+        ),
     };
     let signing_payload = EntrySigningPayload {
         entry_id,
@@ -523,10 +561,9 @@ fn normalize_field_reader_acls(
             "field_reader_acls requires selective payload with private_fields".into(),
         )
     })?;
-    let private = selective
-        .private_fields
-        .as_object()
-        .ok_or_else(|| ProtocolError::ValidationFailed("private_fields must be an object".into()))?;
+    let private = selective.private_fields.as_object().ok_or_else(|| {
+        ProtocolError::ValidationFailed("private_fields must be an object".into())
+    })?;
     let authorized: std::collections::HashSet<&str> =
         authorized_readers.iter().map(String::as_str).collect();
     let mut normalized = BTreeMap::new();
@@ -650,7 +687,9 @@ pub fn decrypt_payload_with_hybrid(
         .key_wrapped_secrets
         .iter()
         .find(|wrap| wrap.reader_id == caller_did)
-        .ok_or_else(|| ProtocolError::ValidationFailed("no DEK wrap found for caller DID".into()))?;
+        .ok_or_else(|| {
+            ProtocolError::ValidationFailed("no DEK wrap found for caller DID".into())
+        })?;
     if key_wrap.wrap_algorithm != "x25519-xchacha20poly1305" {
         return Err(ProtocolError::ValidationFailed(
             "unsupported DEK wrap algorithm".into(),
@@ -658,12 +697,12 @@ pub fn decrypt_payload_with_hybrid(
     }
     let caller_secret = parse_x25519_secret_key(caller_private_key_hex)?;
     let author_pubkey = parse_x25519_public_key(author_public_key_hex)?;
-    let dek = privacy::unwrap_dek_for_reader(&key_wrap.wrapped_dek, &caller_secret, &author_pubkey)?;
+    let dek =
+        privacy::unwrap_dek_for_reader(&key_wrap.wrapped_dek, &caller_secret, &author_pubkey)?;
     let encrypted = EncryptedPayload {
-        ciphertext_hex: entry
-            .ciphertext_hex
-            .clone()
-            .ok_or_else(|| ProtocolError::ValidationFailed("hybrid entry missing ciphertext".into()))?,
+        ciphertext_hex: entry.ciphertext_hex.clone().ok_or_else(|| {
+            ProtocolError::ValidationFailed("hybrid entry missing ciphertext".into())
+        })?,
         salt_hex: String::new(),
         nonce_hex: entry
             .nonce_hex
@@ -680,7 +719,11 @@ pub fn decrypt_payload_with_hybrid(
     decrypt_payload_with_dek(&encrypted, &dek)
 }
 
-fn enforce_active_reader_grant(entry: &LedgerEntry, caller_did: &str, now: UnixTimestamp) -> Result<()> {
+fn enforce_active_reader_grant(
+    entry: &LedgerEntry,
+    caller_did: &str,
+    now: UnixTimestamp,
+) -> Result<()> {
     if entry.privacy_mode != PrivacyMode::Hybrid {
         return Err(ProtocolError::ValidationFailed(
             "grant checks are only supported for hybrid encrypted entries".into(),
@@ -697,7 +740,11 @@ fn enforce_active_reader_grant(entry: &LedgerEntry, caller_did: &str, now: UnixT
         ));
     }
 
-    if !entry.authorized_readers.iter().any(|reader| reader == caller_did) {
+    if !entry
+        .authorized_readers
+        .iter()
+        .any(|reader| reader == caller_did)
+    {
         return Err(ProtocolError::ValidationFailed(
             "caller DID is not present in entry authorized_readers".into(),
         ));
@@ -735,7 +782,9 @@ fn encrypt_payload_with_dek(payload: &Value, dek: &[u8; 32]) -> Result<Encrypted
         .map_err(|err| ProtocolError::crypto(format!("invalid DEK: {err}")))?;
     let ciphertext = cipher
         .encrypt(XNonce::from_slice(&nonce), canonical_payload.as_bytes())
-        .map_err(|err| ProtocolError::crypto(format!("failed to encrypt payload with DEK: {err}")))?;
+        .map_err(|err| {
+            ProtocolError::crypto(format!("failed to encrypt payload with DEK: {err}"))
+        })?;
     Ok(EncryptedPayload {
         ciphertext_hex: hex::encode(ciphertext),
         salt_hex: String::new(),
@@ -884,18 +933,18 @@ pub fn verify_entry_signature(entry: &LedgerEntry, verifying_key: &VerifyingKey)
 fn parse_x25519_public_key(encoded: &str) -> Result<X25519PublicKey> {
     let bytes = hex::decode(encoded)
         .map_err(|err| ProtocolError::crypto(format!("invalid x25519 public key hex: {err}")))?;
-    let key_bytes: [u8; 32] = bytes.try_into().map_err(|_| {
-        ProtocolError::crypto("x25519 public key must be 32 bytes".to_string())
-    })?;
+    let key_bytes: [u8; 32] = bytes
+        .try_into()
+        .map_err(|_| ProtocolError::crypto("x25519 public key must be 32 bytes".to_string()))?;
     Ok(X25519PublicKey::from(key_bytes))
 }
 
 fn parse_x25519_secret_key(encoded: &str) -> Result<StaticSecret> {
     let bytes = hex::decode(encoded)
         .map_err(|err| ProtocolError::crypto(format!("invalid x25519 secret key hex: {err}")))?;
-    let key_bytes: [u8; 32] = bytes.try_into().map_err(|_| {
-        ProtocolError::crypto("x25519 secret key must be 32 bytes".to_string())
-    })?;
+    let key_bytes: [u8; 32] = bytes
+        .try_into()
+        .map_err(|_| ProtocolError::crypto("x25519 secret key must be 32 bytes".to_string()))?;
     Ok(StaticSecret::from(key_bytes))
 }
 
@@ -960,6 +1009,123 @@ pub fn verify_consent_receipt_offchain(
         ));
     }
     verify_claims_commitment(plaintext_data, &receipt.data_hash)
+}
+
+pub fn partition_payload_by_field_policy(
+    namespace: &str,
+    payload: &Value,
+    policy: &NamespaceFieldPolicy,
+) -> Result<PolicyPartitionedPayload> {
+    if namespace != policy.namespace {
+        return Err(ProtocolError::ValidationFailed(format!(
+            "namespace policy mismatch: expected `{}`, got `{namespace}`",
+            policy.namespace
+        )));
+    }
+
+    let public_fields = to_unique_paths(&policy.public_fields, "public_fields")?;
+    let committed_fields = to_unique_paths(&policy.committed_fields, "committed_fields")?;
+    let encrypted_fields = to_unique_paths(
+        &policy.offchain_encrypted_fields,
+        "offchain_encrypted_fields",
+    )?;
+
+    ensure_disjoint_sets(
+        &public_fields,
+        &committed_fields,
+        "public_fields",
+        "committed_fields",
+    )?;
+    ensure_disjoint_sets(
+        &public_fields,
+        &encrypted_fields,
+        "public_fields",
+        "offchain_encrypted_fields",
+    )?;
+    ensure_disjoint_sets(
+        &committed_fields,
+        &encrypted_fields,
+        "committed_fields",
+        "offchain_encrypted_fields",
+    )?;
+
+    let mut public_partition = BTreeMap::new();
+    for path in public_fields {
+        let value = value_at_field_path(payload, &path)?;
+        public_partition.insert(path, value);
+    }
+
+    let mut committed_partition = BTreeMap::new();
+    for path in committed_fields {
+        let value = value_at_field_path(payload, &path)?;
+        let canonical_value = canonical_json(&value);
+        committed_partition.insert(
+            path.clone(),
+            PayloadFieldCommitment {
+                field_path: path,
+                commitment_sha256: hex::encode(Sha256::digest(canonical_value.as_bytes())),
+                canonical_value,
+            },
+        );
+    }
+
+    let mut encrypted_partition = BTreeMap::new();
+    for path in encrypted_fields {
+        let value = value_at_field_path(payload, &path)?;
+        encrypted_partition.insert(path, value);
+    }
+
+    Ok(PolicyPartitionedPayload {
+        namespace: policy.namespace.clone(),
+        policy_version: policy.policy_version,
+        public_fields: public_partition,
+        committed_fields: committed_partition,
+        offchain_encrypted_fields: encrypted_partition,
+    })
+}
+
+fn to_unique_paths(paths: &[String], label: &str) -> Result<BTreeSet<String>> {
+    let mut unique = BTreeSet::new();
+    for path in paths {
+        if path.trim().is_empty() {
+            return Err(ProtocolError::ValidationFailed(format!(
+                "{label} cannot contain empty field paths"
+            )));
+        }
+        unique.insert(path.clone());
+    }
+    Ok(unique)
+}
+
+fn ensure_disjoint_sets(
+    left: &BTreeSet<String>,
+    right: &BTreeSet<String>,
+    left_name: &str,
+    right_name: &str,
+) -> Result<()> {
+    if let Some(overlap) = left.intersection(right).next() {
+        return Err(ProtocolError::ValidationFailed(format!(
+            "field path `{overlap}` cannot be present in both {left_name} and {right_name}"
+        )));
+    }
+    Ok(())
+}
+
+fn value_at_field_path(payload: &Value, field_path: &str) -> Result<Value> {
+    let mut current = payload;
+    for segment in field_path.split('.') {
+        let object = current.as_object().ok_or_else(|| {
+            ProtocolError::ValidationFailed(format!(
+                "field path `{field_path}` traverses non-object segment `{segment}`"
+            ))
+        })?;
+        current = object.get(segment).ok_or_else(|| {
+            ProtocolError::ValidationFailed(format!(
+                "field path `{field_path}` not found in payload"
+            ))
+        })?;
+    }
+    Ok(current.clone())
 }
 
 fn canonical_json(value: &Value) -> String {
@@ -1110,7 +1276,10 @@ mod tests {
         let reader_public = X25519PublicKey::from(&reader_secret);
 
         let mut reader_public_keys = BTreeMap::new();
-        reader_public_keys.insert("did:ledger:reader".to_string(), hex::encode(reader_public.as_bytes()));
+        reader_public_keys.insert(
+            "did:ledger:reader".to_string(),
+            hex::encode(reader_public.as_bytes()),
+        );
 
         let draft = EntryDraft {
             namespace: "audit.procurement".to_string(),
@@ -1141,14 +1310,16 @@ mod tests {
             1_736_500_112,
         )
         .expect("decrypt hybrid entry");
-        assert_eq!(decrypted, json!({"document_hash":"abc123","event":"BID_OPENED"}));
+        assert_eq!(
+            decrypted,
+            json!({"document_hash":"abc123","event":"BID_OPENED"})
+        );
 
         println!(
             "SAMPLE_WHOLE_PAYLOAD_ENTRY={}\n",
             serde_json::to_string_pretty(&entry).expect("serialize whole-payload entry sample")
         );
     }
-
 
     #[test]
     fn hybrid_selective_entry_supports_field_reader_acls() {
@@ -1157,10 +1328,16 @@ mod tests {
         let reader_public = X25519PublicKey::from(&reader_secret);
 
         let mut reader_public_keys = BTreeMap::new();
-        reader_public_keys.insert("did:ledger:reader".to_string(), hex::encode(reader_public.as_bytes()));
+        reader_public_keys.insert(
+            "did:ledger:reader".to_string(),
+            hex::encode(reader_public.as_bytes()),
+        );
 
         let mut field_reader_acls = BTreeMap::new();
-        field_reader_acls.insert("bidder_email".to_string(), vec!["did:ledger:reader".to_string()]);
+        field_reader_acls.insert(
+            "bidder_email".to_string(),
+            vec!["did:ledger:reader".to_string()],
+        );
 
         let draft = EntryDraft {
             namespace: "audit.procurement".to_string(),
@@ -1185,8 +1362,14 @@ mod tests {
         };
 
         let entry = sign_entry(draft, &author).expect("sign selective hybrid entry");
-        assert_eq!(entry.payload.get("privacy_mode").and_then(Value::as_str), Some("field_selective_v1"));
-        assert_eq!(entry.field_reader_acls.get("bidder_email").map(Vec::len), Some(1));
+        assert_eq!(
+            entry.payload.get("privacy_mode").and_then(Value::as_str),
+            Some("field_selective_v1")
+        );
+        assert_eq!(
+            entry.field_reader_acls.get("bidder_email").map(Vec::len),
+            Some(1)
+        );
 
         println!(
             "SAMPLE_PER_FIELD_ENTRY={}\n",
@@ -1233,11 +1416,9 @@ mod tests {
             1_736_500_121,
         )
         .expect_err("non-granted reader must be denied");
-        assert!(
-            denied
-                .to_string()
-                .contains("caller DID is not present in entry authorized_readers")
-        );
+        assert!(denied
+            .to_string()
+            .contains("caller DID is not present in entry authorized_readers"));
     }
 
     #[test]
@@ -1383,5 +1564,78 @@ mod tests {
         };
         verify_consent_receipt_offchain(&receipt, data, 1_736_500_100)
             .expect("consent receipt should verify");
+    }
+
+    #[test]
+    fn partitions_payload_by_namespace_policy_deterministically() {
+        let payload = json!({
+            "audit": {
+                "event": "BID_OPENED",
+                "meta": {"seq": 7, "region": "us-east"},
+                "private": {
+                    "bidder_email": "alice@example.org",
+                    "sealed": {"amount": 1200, "currency": "USD"}
+                }
+            }
+        });
+        let policy = NamespaceFieldPolicy {
+            namespace: "audit.procurement".to_string(),
+            policy_version: 1,
+            public_fields: vec!["audit.event".to_string(), "audit.meta.region".to_string()],
+            committed_fields: vec!["audit.meta".to_string()],
+            offchain_encrypted_fields: vec![
+                "audit.private.bidder_email".to_string(),
+                "audit.private.sealed".to_string(),
+            ],
+        };
+
+        let partitioned = partition_payload_by_field_policy("audit.procurement", &payload, &policy)
+            .expect("partition payload");
+
+        assert_eq!(
+            partitioned.public_fields.get("audit.event"),
+            Some(&json!("BID_OPENED"))
+        );
+        assert_eq!(
+            partitioned.public_fields.get("audit.meta.region"),
+            Some(&json!("us-east"))
+        );
+        assert_eq!(
+            partitioned
+                .offchain_encrypted_fields
+                .get("audit.private.bidder_email"),
+            Some(&json!("alice@example.org"))
+        );
+
+        let committed_meta = partitioned
+            .committed_fields
+            .get("audit.meta")
+            .expect("committed audit.meta field");
+        assert_eq!(
+            committed_meta.canonical_value,
+            r#"{"region":"us-east","seq":7}"#
+        );
+        assert_eq!(
+            committed_meta.commitment_sha256,
+            "0b0289363ff2fdebb5cf8b38a8d6c7244baa099df4ab28d59b13c144261a972c"
+        );
+    }
+
+    #[test]
+    fn rejects_overlapping_field_policy_sets() {
+        let payload = json!({"audit": {"event": "BID_OPENED"}});
+        let policy = NamespaceFieldPolicy {
+            namespace: "audit.procurement".to_string(),
+            policy_version: 1,
+            public_fields: vec!["audit.event".to_string()],
+            committed_fields: vec![],
+            offchain_encrypted_fields: vec!["audit.event".to_string()],
+        };
+
+        let err = partition_payload_by_field_policy("audit.procurement", &payload, &policy)
+            .expect_err("overlapping field path must fail");
+        assert!(err
+            .to_string()
+            .contains("cannot be present in both public_fields and offchain_encrypted_fields"));
     }
 }
