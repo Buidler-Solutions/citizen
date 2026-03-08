@@ -131,8 +131,8 @@ Deliverables:
 - Consent linkage rules for file upload/update/share/revoke events.
 
 Checklist:
-- [ ] Add `ENCRYPTED_FILE_*` action set to namespace policy docs.
-- [ ] Add `ENCRYPTED_PAYLOAD_FIELD_*` policy fields to namespace specifications.
+- [x] Add `ENCRYPTED_FILE_*` action set to namespace policy docs. ✅ Added namespace policy extension guidance with the canonical encrypted-file action set in `docs/NAMESPACE_BUILDER_GUIDE.md`.
+- [x] Add `ENCRYPTED_PAYLOAD_FIELD_*` policy fields to namespace specifications. ✅ Added `offchain_encrypted_payload_field_policy` configuration guidance (including policy versioning + required encrypted field paths) in `docs/NAMESPACE_BUILDER_GUIDE.md`.
 - [ ] Publish canonical JSON examples for passphrase and ACL/DEK modes.
 - [ ] Publish canonical examples showing per-namespace payload split (public vs off-chain encrypted fields).
 - [x] Define deterministic commitment test vectors.
