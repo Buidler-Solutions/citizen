@@ -239,7 +239,7 @@ Checklist:
 - [x] Enforce canonical payload-field commitment derivation at `/api/v1/payloads/commit` (reject non-canonical `payload_commitment` values per `field_path -> ciphertext_hash` input).
 
 ### Explorer / Indexer
-- [ ] Index encrypted-file events and consent status transitions.
+- [x] Index encrypted-file events and consent status transitions. ✅ Added explorer backend `GET /files/timeline/:manifestId` to compose namespace + consent receipt events into a deterministic timeline, and surfaced an explorer frontend timeline panel for consent/revocation transition visibility without plaintext exposure.
 - [x] Add high-signal privacy + revocation UI labels. ✅ Updated explorer frontend manifest + payload-field panels with explicit privacy labels and consent/revocation status chips that highlight active vs revoked/invalid grant states without exposing plaintext.
 - [x] Index and display encrypted payload field references by namespace and field path (never plaintext). ✅ Added API `GET /api/v1/payloads/fields/:entry_id/:namespace` plus explorer backend/frontend views to display only `field_path`, `blob_ref`, and ciphertext commitment hashes.
 
