@@ -152,7 +152,7 @@ Checklist:
 - [x] Enforce grant validation before unwrap/decrypt in wallet SDK APIs.
 - [x] Ensure participating wallets receive deterministic per-wallet key wraps when policy requires multi-party readability. ✅ Wallet now normalizes participating reader sets and derives deterministic per-reader wrap context (`entry_id:reader_id`) so all authorized wallets receive stable, independently decryptable wraps.
 - [x] Implement deterministic payload field canonicalization before per-field encryption.
-- [ ] Add wallet UX guardrails: explicit opt-in warnings + mode disclosure.
+- [x] Add wallet UX guardrails: explicit opt-in warnings + mode disclosure. ✅ Wallet CLI signing commands that support `--encrypt` now require explicit `--encryption-opt-in` acknowledgement and print a mode disclosure (`privacy_mode=passphrase`) before passphrase loading.
 - [x] Add golden tests for deterministic commitments across platforms. ✅ Shared file + payload commitment vectors are now validated in both Rust and TypeScript CI paths to lock cross-SDK deterministic outputs.
 
 ## Phase C — API + Storage Adapter
