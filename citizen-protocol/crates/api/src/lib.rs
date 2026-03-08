@@ -10,7 +10,8 @@ use citizen_storage::LedgerStorage;
 use citizen_types::{
     Block, BlockHeader, BlockHeight, CommitProof, ConsentPolicyCheck, ConsentReceipt,
     DeterministicReceipt, DidDocument, DidStatus, FinalityProof, LedgerEntry, NamespaceRuleset,
-    ProtocolError, ReceiptStatus, SignedEnvelope, ValidationSummary,
+    OffchainCommitmentSummary, PayloadFieldCommitmentSummary, ProtocolError, ReceiptStatus,
+    SignedEnvelope, ValidationSummary,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -1944,6 +1945,7 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
             return protocol_error_response(err);
         }
 
+        let offchain_commitments = extract_offchain_commitments(&entry);
         let finality = match Self::finalize_entry(Arc::clone(&ledger), entry).await {
             Ok(finality) => finality,
             Err(err) => return protocol_error_response(err),
@@ -1957,6 +1959,7 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
                 namespace: namespace.clone(),
                 action,
                 outcome: "namespace rules accepted and finalized".into(),
+                offchain_commitments,
             },
             finality: Some(finality),
             recorded_at: Utc::now(),
@@ -2461,6 +2464,44 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
             alerts.drain(0..overflow);
         }
     }
+}
+
+fn extract_offchain_commitments(entry: &LedgerEntry) -> Option<OffchainCommitmentSummary> {
+    let payload_commitment = entry.payload_commitment.clone()?;
+
+    let encrypted_field_commitments = entry
+        .payload
+        .get("encrypted_field_refs")
+        .and_then(serde_json::Value::as_array)
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(|item| {
+                    let field_path = item.get("field_path")?.as_str()?;
+                    let payload_commitment = item.get("payload_commitment")?.as_str()?;
+                    Some(PayloadFieldCommitmentSummary {
+                        field_path: field_path.to_string(),
+                        payload_commitment: payload_commitment.to_string(),
+                    })
+                })
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+
+    Some(OffchainCommitmentSummary {
+        payload_commitment,
+        manifest_id: entry
+            .payload
+            .get("manifest_id")
+            .and_then(serde_json::Value::as_str)
+            .map(ToOwned::to_owned),
+        ciphertext_hash: entry
+            .payload
+            .get("ciphertext_hash")
+            .and_then(serde_json::Value::as_str)
+            .map(ToOwned::to_owned),
+        encrypted_field_commitments,
+    })
 }
 
 fn protocol_error_response(err: ProtocolError) -> (StatusCode, Json<serde_json::Value>) {

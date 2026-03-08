@@ -220,7 +220,7 @@ Checklist:
 ### Protocol / Ledger
 - [ ] Define canonical commitment derivation for file manifests.
 - [ ] Add namespace action validation and revocation events.
-- [ ] Add deterministic receipt fields for file commitments.
+- [x] Add deterministic receipt fields for file commitments. ✅ `DeterministicReceipt.validation.offchain_commitments` now carries canonical `payload_commitment` plus optional `manifest_id`/`ciphertext_hash` and per-field encrypted commitments when present.
 - [ ] Define canonical commitment derivation for off-chain encrypted payload fields (`field_path -> ciphertext_hash`).
 
 ### Wallet / SDK
