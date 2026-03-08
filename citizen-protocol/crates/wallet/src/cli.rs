@@ -93,6 +93,8 @@ enum Commands {
         #[arg(long = "encrypt", alias = "private")]
         encrypt: bool,
         #[arg(long)]
+        encryption_opt_in: bool,
+        #[arg(long)]
         encryption_passphrase: Option<String>,
     },
     VerifyEntry {
@@ -147,6 +149,8 @@ enum Commands {
         #[arg(long = "encrypt", alias = "private")]
         encrypt: bool,
         #[arg(long)]
+        encryption_opt_in: bool,
+        #[arg(long)]
         encryption_passphrase: Option<String>,
     },
     SignGovernanceVote {
@@ -168,6 +172,8 @@ enum Commands {
         password: Option<String>,
         #[arg(long = "encrypt", alias = "private")]
         encrypt: bool,
+        #[arg(long)]
+        encryption_opt_in: bool,
         #[arg(long)]
         encryption_passphrase: Option<String>,
         #[arg(long)]
@@ -197,6 +203,8 @@ enum Commands {
         #[arg(long = "encrypt", alias = "private")]
         encrypt: bool,
         #[arg(long)]
+        encryption_opt_in: bool,
+        #[arg(long)]
         encryption_passphrase: Option<String>,
     },
     SignAuditRecord {
@@ -218,6 +226,8 @@ enum Commands {
         password: Option<String>,
         #[arg(long = "encrypt", alias = "private")]
         encrypt: bool,
+        #[arg(long)]
+        encryption_opt_in: bool,
         #[arg(long)]
         encryption_passphrase: Option<String>,
     },
@@ -517,6 +527,7 @@ pub fn run() -> anyhow::Result<()> {
             timestamp,
             password,
             encrypt,
+            encryption_opt_in,
             encryption_passphrase,
         } => {
             let store = Keystore::load_or_create(&path)?;
@@ -526,6 +537,7 @@ pub fn run() -> anyhow::Result<()> {
             let payload: Value = serde_json::from_str(&payload_json)?;
             let secret_bytes = load_secret_key_bytes(record, password)?;
             let keypair = WalletKeypair::from_secret_bytes(record.key_id, &secret_bytes)?;
+            enforce_encryption_opt_in(encrypt, encryption_opt_in)?;
             let draft = EntryDraft {
                 namespace,
                 action,
@@ -612,6 +624,7 @@ pub fn run() -> anyhow::Result<()> {
             timestamp,
             password,
             encrypt,
+            encryption_opt_in,
             encryption_passphrase,
         } => {
             let payload = serde_json::json!({
@@ -629,6 +642,7 @@ pub fn run() -> anyhow::Result<()> {
                 timestamp,
                 password,
                 encrypt,
+                encryption_opt_in,
                 encryption_passphrase,
             )?;
         }
@@ -645,6 +659,7 @@ pub fn run() -> anyhow::Result<()> {
             policy_approvers,
             approvals,
             encrypt,
+            encryption_opt_in,
             encryption_passphrase,
         } => {
             enforce_policy_for_action(
@@ -669,6 +684,7 @@ pub fn run() -> anyhow::Result<()> {
                 timestamp,
                 password,
                 encrypt,
+                encryption_opt_in,
                 encryption_passphrase,
             )?;
         }
@@ -682,6 +698,7 @@ pub fn run() -> anyhow::Result<()> {
             timestamp,
             password,
             encrypt,
+            encryption_opt_in,
             encryption_passphrase,
         } => {
             let payload = serde_json::json!({
@@ -700,6 +717,7 @@ pub fn run() -> anyhow::Result<()> {
                 timestamp,
                 password,
                 encrypt,
+                encryption_opt_in,
                 encryption_passphrase,
             )?;
         }
@@ -713,6 +731,7 @@ pub fn run() -> anyhow::Result<()> {
             timestamp,
             password,
             encrypt,
+            encryption_opt_in,
             encryption_passphrase,
         } => {
             let payload = serde_json::json!({
@@ -730,6 +749,7 @@ pub fn run() -> anyhow::Result<()> {
                 timestamp,
                 password,
                 encrypt,
+                encryption_opt_in,
                 encryption_passphrase,
             )?;
         }
@@ -793,6 +813,7 @@ fn sign_namespace_entry(
     timestamp: Option<i64>,
     password: Option<String>,
     encrypt: bool,
+    encryption_opt_in: bool,
     encryption_passphrase: Option<String>,
 ) -> anyhow::Result<()> {
     let store = Keystore::load_or_create(path)?;
@@ -801,6 +822,7 @@ fn sign_namespace_entry(
         .ok_or_else(|| anyhow::anyhow!("unknown key_id {key_id}"))?;
     let secret_bytes = load_secret_key_bytes(record, password)?;
     let keypair = WalletKeypair::from_secret_bytes(record.key_id, &secret_bytes)?;
+    enforce_encryption_opt_in(encrypt, encryption_opt_in)?;
     let draft = EntryDraft {
         namespace: namespace.to_string(),
         action: action.to_string(),
@@ -838,12 +860,24 @@ fn load_encryption_passphrase(
     eprintln!(
         "WARNING: --encrypt/--private stores only commitments on-chain; payload decryption requires this passphrase."
     );
+    eprintln!(
+        "MODE DISCLOSURE: privacy_mode=passphrase (single-holder decrypt unless shared grant/key-wrap mode is used)."
+    );
     if let Some(passphrase) = explicit {
         return Ok(Some(passphrase));
     }
     std::env::var("CITIZEN_ENTRY_ENCRYPTION_PASSPHRASE")
         .map(Some)
         .map_err(|_| anyhow::anyhow!("encryption passphrase required (--encryption-passphrase or CITIZEN_ENTRY_ENCRYPTION_PASSPHRASE)"))
+}
+
+fn enforce_encryption_opt_in(encrypt: bool, encryption_opt_in: bool) -> anyhow::Result<()> {
+    if encrypt && !encryption_opt_in {
+        return Err(anyhow::anyhow!(
+            "encryption opt-in acknowledgement required (--encryption-opt-in)"
+        ));
+    }
+    Ok(())
 }
 
 fn enforce_policy_for_action(
@@ -1112,5 +1146,16 @@ mod tests {
                 .contains("off-chain ciphertext hash mismatch"),
             "unexpected error: {err}"
         );
+    }
+
+    #[test]
+    fn encryption_opt_in_required_when_encrypt_flag_enabled() {
+        let err = enforce_encryption_opt_in(true, false).expect_err("missing opt-in should fail");
+        assert!(
+            err.to_string().contains("--encryption-opt-in"),
+            "unexpected error: {err}"
+        );
+        enforce_encryption_opt_in(true, true).expect("explicit opt-in should pass");
+        enforce_encryption_opt_in(false, false).expect("no encrypt should not require opt-in");
     }
 }
