@@ -98,6 +98,62 @@ This design is what makes namespaces modular for arbitrary business use cases.
 
 ## 5) Built-in rules you can use immediately
 
+## 5.0 Off-chain encrypted files policy extension (namespace-governed)
+
+For namespaces that support encrypted off-chain files and encrypted payload fields,
+include policy rules that declare explicit action allowlists and field-level
+encryption requirements.
+
+Recommended action set for encrypted-file flow:
+
+- `ENCRYPTED_FILE_UPLOAD`
+- `ENCRYPTED_FILE_SHARE`
+- `ENCRYPTED_FILE_REVOKE`
+- `ENCRYPTED_PAYLOAD_FIELD_COMMIT`
+
+Recommended namespace rule blocks:
+
+```json
+[
+  {
+    "name": "offchain_encrypted_file_policy",
+    "config": {
+      "enabled": true,
+      "allowed_actions": [
+        "ENCRYPTED_FILE_UPLOAD",
+        "ENCRYPTED_FILE_SHARE",
+        "ENCRYPTED_FILE_REVOKE"
+      ],
+      "max_file_size_bytes": 104857600,
+      "allowed_encryption_modes": ["passphrase_file", "hybrid_file_acl_dek"],
+      "required_consent_policy_ref": "consent.policy.encrypted-files.v1"
+    }
+  },
+  {
+    "name": "offchain_encrypted_payload_field_policy",
+    "config": {
+      "policy_version": 2,
+      "min_supported_policy_version": 1,
+      "migration_guide_ref": "docs/policies/offchain-payload-fields-v2",
+      "offchain_encrypted_fields": [
+        "payload.subject.ssn",
+        "payload.subject.medical_record"
+      ]
+    }
+  }
+]
+```
+
+Notes:
+
+- `offchain_encrypted_file_policy.allowed_actions` controls which
+  `ENCRYPTED_FILE_*` actions are accepted by nodes for the namespace.
+- `offchain_encrypted_payload_field_policy.offchain_encrypted_fields` declares
+  required field paths that must be supplied as encrypted off-chain refs (never
+  plaintext in payload).
+- Policy version fields (`policy_version`, `min_supported_policy_version`) must
+  be governance-managed and updated with migration guidance for client teams.
+
 ## 5.1 `require_signature`
 
 Ensures `entry.signature` is non-empty.
