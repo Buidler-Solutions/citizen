@@ -4,7 +4,7 @@ use axum::http::StatusCode;
 use axum::routing::{get, post};
 use axum::{serve, Json, Router};
 use chrono::Utc;
-use citizen_crypto::hash_block_header;
+use citizen_crypto::{canonical_json, hash_block_header, sha256_hex};
 use citizen_ledger::Ledger;
 use citizen_storage::LedgerStorage;
 use citizen_types::{
@@ -66,6 +66,11 @@ impl Default for ApiEdgeConfig {
 struct ApiEdgeState {
     config: ApiEdgeConfig,
     write_windows: Mutex<BTreeMap<String, Vec<i64>>>,
+    file_intents: Mutex<BTreeMap<Uuid, StoredFileIntent>>,
+    file_commit_idempotency: Mutex<BTreeMap<String, serde_json::Value>>,
+    payload_commit_idempotency: Mutex<BTreeMap<String, serde_json::Value>>,
+    file_manifests: Mutex<BTreeMap<String, serde_json::Value>>,
+    payload_field_refs: Mutex<BTreeMap<String, Vec<EncryptedFieldRef>>>,
 }
 
 impl ApiEdgeState {
@@ -73,6 +78,11 @@ impl ApiEdgeState {
         Self {
             config,
             write_windows: Mutex::new(BTreeMap::new()),
+            file_intents: Mutex::new(BTreeMap::new()),
+            file_commit_idempotency: Mutex::new(BTreeMap::new()),
+            payload_commit_idempotency: Mutex::new(BTreeMap::new()),
+            file_manifests: Mutex::new(BTreeMap::new()),
+            payload_field_refs: Mutex::new(BTreeMap::new()),
         }
     }
 }
@@ -91,6 +101,37 @@ struct FileIntentRequest {
     file_size_bytes: u64,
     encryption_mode: String,
     consent_receipt: ConsentReceipt,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+struct FileCommitRequest {
+    intent_id: Uuid,
+    manifest: serde_json::Value,
+    envelope: SignedEnvelope<LedgerEntry>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+struct PayloadCommitRequest {
+    namespace: String,
+    object_id: String,
+    author_did: String,
+    consent_receipt: ConsentReceipt,
+    encrypted_field_refs: Vec<EncryptedFieldRef>,
+    envelope: SignedEnvelope<LedgerEntry>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+struct EncryptedFieldRef {
+    field_path: String,
+    blob_ref: String,
+    ciphertext_hash: String,
+    payload_commitment: String,
+}
+
+#[derive(Clone, Debug)]
+struct StoredFileIntent {
+    request: FileIntentRequest,
+    created_at: i64,
 }
 
 impl<S: LedgerStorage + 'static> ApiServer<S> {
@@ -132,6 +173,10 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
         let submit_envelope_edge = Arc::clone(&self.edge);
         let file_intent_ledger = Arc::clone(&self.ledger);
         let file_intent_edge = Arc::clone(&self.edge);
+        let file_commit_ledger = Arc::clone(&self.ledger);
+        let file_commit_edge = Arc::clone(&self.edge);
+        let payload_commit_ledger = Arc::clone(&self.ledger);
+        let payload_commit_edge = Arc::clone(&self.edge);
         let get_receipt_ledger = Arc::clone(&self.ledger);
         let builder_credits_ledger = Arc::clone(&self.ledger);
         let asset_positions_ledger = Arc::clone(&self.ledger);
@@ -203,6 +248,24 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
                         async move {
                             Self::handle_create_file_intent(ledger, edge, headers, request).await
                         }
+                    },
+                ),
+            )
+            .route(
+                "/api/v1/files/commit",
+                post(move |headers: HeaderMap, Json(request): Json<FileCommitRequest>| {
+                    let ledger = Arc::clone(&file_commit_ledger);
+                    let edge = Arc::clone(&file_commit_edge);
+                    async move { Self::handle_commit_file(ledger, edge, headers, request).await }
+                }),
+            )
+            .route(
+                "/api/v1/payloads/commit",
+                post(
+                    move |headers: HeaderMap, Json(request): Json<PayloadCommitRequest>| {
+                        let ledger = Arc::clone(&payload_commit_ledger);
+                        let edge = Arc::clone(&payload_commit_edge);
+                        async move { Self::handle_commit_payload(ledger, edge, headers, request).await }
                     },
                 ),
             )
@@ -348,7 +411,9 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
         headers: HeaderMap,
         request: FileIntentRequest,
     ) -> (StatusCode, Json<serde_json::Value>) {
-        if let Err(response) = Self::authorize_write(edge, &headers, "files.intents.create").await {
+        if let Err(response) =
+            Self::authorize_write(Arc::clone(&edge), &headers, "files.intents.create").await
+        {
             return response;
         }
 
@@ -447,10 +512,19 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
             );
         }
 
+        let intent_id = Uuid::new_v4();
+        edge.file_intents.lock().await.insert(
+            intent_id,
+            StoredFileIntent {
+                request: request.clone(),
+                created_at: now,
+            },
+        );
+
         (
             StatusCode::CREATED,
             Json(serde_json::json!({
-                "intent_id": Uuid::new_v4(),
+                "intent_id": intent_id,
                 "namespace": request.namespace,
                 "object_id": request.object_id,
                 "author_did": request.author_did,
@@ -461,6 +535,220 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
                 }
             })),
         )
+    }
+
+    async fn handle_commit_file(
+        ledger: Arc<Ledger<S>>,
+        edge: Arc<ApiEdgeState>,
+        headers: HeaderMap,
+        request: FileCommitRequest,
+    ) -> (StatusCode, Json<serde_json::Value>) {
+        if let Err(response) =
+            Self::authorize_write(Arc::clone(&edge), &headers, "files.commit").await
+        {
+            return response;
+        }
+
+        let idempotency_key = match Self::required_idempotency_key(&headers) {
+            Ok(key) => key,
+            Err(response) => return response,
+        };
+
+        if let Some(cached) = edge
+            .file_commit_idempotency
+            .lock()
+            .await
+            .get(&idempotency_key)
+            .cloned()
+        {
+            return (StatusCode::OK, Json(cached));
+        }
+
+        let intent = {
+            let intents = edge.file_intents.lock().await;
+            intents.get(&request.intent_id).cloned()
+        };
+
+        let Some(intent) = intent else {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(serde_json::json!({"error": "file intent not found"})),
+            );
+        };
+
+        if request.envelope.payload.namespace != intent.request.namespace
+            || request.envelope.payload.object_id != intent.request.object_id
+            || request.envelope.payload.author != intent.request.author_did
+        {
+            return (
+                StatusCode::UNPROCESSABLE_ENTITY,
+                Json(serde_json::json!({"error": "file commit envelope does not match intent"})),
+            );
+        }
+
+        let manifest_commitment = sha256_hex(&canonical_json(&request.manifest));
+        let manifest_id = manifest_commitment.clone();
+
+        let (status, Json(base)) =
+            Self::process_envelope_submission(ledger, request.envelope).await;
+        if status != StatusCode::ACCEPTED {
+            return (status, Json(base));
+        }
+
+        edge.file_manifests
+            .lock()
+            .await
+            .insert(manifest_id.clone(), request.manifest.clone());
+
+        let response = serde_json::json!({
+            "status": "accepted",
+            "intent_id": request.intent_id,
+            "manifest_id": manifest_id,
+            "manifest_commitment": manifest_commitment,
+            "intent_created_at": intent.created_at,
+            "result": base,
+        });
+        edge.file_commit_idempotency
+            .lock()
+            .await
+            .insert(idempotency_key, response.clone());
+
+        (StatusCode::ACCEPTED, Json(response))
+    }
+
+    async fn handle_commit_payload(
+        ledger: Arc<Ledger<S>>,
+        edge: Arc<ApiEdgeState>,
+        headers: HeaderMap,
+        request: PayloadCommitRequest,
+    ) -> (StatusCode, Json<serde_json::Value>) {
+        if let Err(response) =
+            Self::authorize_write(Arc::clone(&edge), &headers, "payloads.commit").await
+        {
+            return response;
+        }
+
+        let idempotency_key = match Self::required_idempotency_key(&headers) {
+            Ok(key) => key,
+            Err(response) => return response,
+        };
+
+        if let Some(cached) = edge
+            .payload_commit_idempotency
+            .lock()
+            .await
+            .get(&idempotency_key)
+            .cloned()
+        {
+            return (StatusCode::OK, Json(cached));
+        }
+
+        let now = Utc::now().timestamp();
+        let consent_status =
+            Self::evaluate_consent_receipt(Arc::clone(&ledger), &request.consent_receipt, now);
+        if !consent_status.valid {
+            return (
+                StatusCode::UNPROCESSABLE_ENTITY,
+                Json(serde_json::json!({
+                    "error": consent_status
+                        .reason
+                        .unwrap_or_else(|| "consent check failed".to_string())
+                })),
+            );
+        }
+
+        if request.envelope.payload.namespace != request.namespace
+            || request.envelope.payload.object_id != request.object_id
+            || request.envelope.payload.author != request.author_did
+        {
+            return (
+                StatusCode::UNPROCESSABLE_ENTITY,
+                Json(
+                    serde_json::json!({"error": "payload commit envelope does not match request"}),
+                ),
+            );
+        }
+
+        if let Some(ruleset) = ledger.namespace_ruleset(&request.namespace) {
+            let required_fields = ruleset
+                .validators
+                .iter()
+                .find(|rule| rule.name == "offchain_encrypted_payload_field_policy")
+                .and_then(|rule| {
+                    rule.config
+                        .get("offchain_encrypted_fields")
+                        .and_then(|value| value.as_array())
+                        .map(|fields| {
+                            fields
+                                .iter()
+                                .filter_map(|value| value.as_str().map(ToOwned::to_owned))
+                                .collect::<Vec<String>>()
+                        })
+                })
+                .unwrap_or_default();
+
+            let submitted_fields: BTreeSet<String> = request
+                .encrypted_field_refs
+                .iter()
+                .map(|field| field.field_path.clone())
+                .collect();
+
+            let missing: Vec<String> = required_fields
+                .into_iter()
+                .filter(|field| !submitted_fields.contains(field))
+                .collect();
+            if !missing.is_empty() {
+                return (
+                    StatusCode::UNPROCESSABLE_ENTITY,
+                    Json(serde_json::json!({
+                        "error": "missing encrypted field references required by namespace policy",
+                        "missing_fields": missing,
+                    })),
+                );
+            }
+        }
+
+        let (status, Json(base)) =
+            Self::process_envelope_submission(ledger, request.envelope).await;
+        if status != StatusCode::ACCEPTED {
+            return (status, Json(base));
+        }
+
+        let refs_key = format!("{}:{}", request.namespace, request.object_id);
+        edge.payload_field_refs
+            .lock()
+            .await
+            .insert(refs_key, request.encrypted_field_refs.clone());
+
+        let response = serde_json::json!({
+            "status": "accepted",
+            "namespace": request.namespace,
+            "object_id": request.object_id,
+            "encrypted_field_refs": request.encrypted_field_refs,
+            "result": base,
+        });
+        edge.payload_commit_idempotency
+            .lock()
+            .await
+            .insert(idempotency_key, response.clone());
+
+        (StatusCode::ACCEPTED, Json(response))
+    }
+
+    fn required_idempotency_key(
+        headers: &HeaderMap,
+    ) -> Result<String, (StatusCode, Json<serde_json::Value>)> {
+        headers
+            .get("idempotency-key")
+            .and_then(|value| value.to_str().ok())
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty())
+            .ok_or_else(|| {
+                (
+                    StatusCode::BAD_REQUEST,
+                    Json(serde_json::json!({"error": "missing required idempotency-key header"})),
+                )
+            })
     }
 
     fn evaluate_consent_receipt(
@@ -1099,6 +1387,14 @@ mod tests {
     ) -> ApiServer<MemoryStorage> {
         let storage = Arc::new(MemoryStorage::new());
         let ledger = Arc::new(Ledger::new(storage, KeyRegistry::new()));
+        ledger.register_rule_handler(
+            "offchain_encrypted_file_policy",
+            |_ledger, _entry, _config| Ok(()),
+        );
+        ledger.register_rule_handler(
+            "offchain_encrypted_payload_field_policy",
+            |_ledger, _entry, _config| Ok(()),
+        );
         ledger.bootstrap_namespaces(vec![NamespaceRuleset {
             descriptor: NamespaceDescriptor {
                 namespace: "audit.procurement".to_string(),
@@ -1126,15 +1422,23 @@ mod tests {
                 governed_by: "governance".to_string(),
             },
             writers: BTreeSet::new(),
-            validators: vec![NamespaceRule {
-                name: "offchain_encrypted_file_policy".to_string(),
-                config: json!({
-                    "enabled": true,
-                    "max_file_size_bytes": 10_485_760,
-                    "allowed_mime_types": ["application/pdf", "application/json"],
-                    "allowed_encryption_modes": ["passphrase", "hybrid-acl"]
-                }),
-            }],
+            validators: vec![
+                NamespaceRule {
+                    name: "offchain_encrypted_file_policy".to_string(),
+                    config: json!({
+                        "enabled": true,
+                        "max_file_size_bytes": 10_485_760,
+                        "allowed_mime_types": ["application/pdf", "application/json"],
+                        "allowed_encryption_modes": ["passphrase", "hybrid-acl"]
+                    }),
+                },
+                NamespaceRule {
+                    name: "offchain_encrypted_payload_field_policy".to_string(),
+                    config: json!({
+                        "offchain_encrypted_fields": ["payload.ssn", "payload.medical_record"]
+                    }),
+                },
+            ],
         }]);
         ledger.bootstrap_namespaces(vec![NamespaceRuleset {
             descriptor: NamespaceDescriptor {
@@ -1239,6 +1543,14 @@ mod tests {
     fn build_server_with_edge(edge: ApiEdgeConfig) -> ApiServer<MemoryStorage> {
         let storage = Arc::new(MemoryStorage::new());
         let ledger = Arc::new(Ledger::new(storage, KeyRegistry::new()));
+        ledger.register_rule_handler(
+            "offchain_encrypted_file_policy",
+            |_ledger, _entry, _config| Ok(()),
+        );
+        ledger.register_rule_handler(
+            "offchain_encrypted_payload_field_policy",
+            |_ledger, _entry, _config| Ok(()),
+        );
         ledger.bootstrap_namespaces(vec![NamespaceRuleset {
             descriptor: NamespaceDescriptor {
                 namespace: "audit.procurement".to_string(),
@@ -2603,6 +2915,315 @@ mod tests {
         let payload: Value = serde_json::from_slice(&body).expect("intent payload");
         assert_eq!(payload["namespace"], "files.secure");
         assert_eq!(payload["constraints"]["max_file_size_bytes"], 10_485_760);
+    }
+
+    #[tokio::test]
+    async fn file_commit_enforces_idempotency_and_persists_manifest() {
+        let app = build_server().router();
+        let now = chrono::Utc::now().timestamp();
+
+        let signer = ValidatorKeypair::generate("did:citizen:holder-1".to_string());
+        let mut consent_entry = LedgerEntry {
+            entry_id: Uuid::new_v4(),
+            namespace: "consent.receipt".to_string(),
+            action: "CONSENT_GRANTED".to_string(),
+            object_id: "did:citizen:holder-1".to_string(),
+            payload: json!({
+                "data_hash": "sha256:file-001",
+                "policy_ref": "policy:offchain:v1",
+                "expires_at": now + 3_600
+            }),
+            privacy_flag: false,
+            privacy_mode: citizen_types::PrivacyMode::None,
+            payload_commitment: None,
+            ciphertext_hex: None,
+            nonce_hex: None,
+            salt_hex: None,
+            kdf_params: None,
+            consent_receipt: None,
+            authorized_readers: vec![],
+            custodian_policy_id: None,
+            field_reader_acls: BTreeMap::new(),
+            key_wrapped_secrets: vec![],
+            revocation_events: vec![],
+            author: "did:citizen:holder-1".to_string(),
+            signature: String::new(),
+            timestamp: now,
+        };
+        sign_entry_for_tests(&mut consent_entry, &signer);
+        let consent_envelope = SignedEnvelope {
+            envelope_id: Uuid::new_v4(),
+            signer: consent_entry.author.clone(),
+            signature: consent_entry.signature.clone(),
+            submitted_at: chrono::Utc::now(),
+            payload: consent_entry,
+        };
+        let _ = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/envelopes/submit")
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        serde_json::to_vec(&consent_envelope).expect("serialize envelope"),
+                    ))
+                    .expect("request"),
+            )
+            .await
+            .expect("submit response");
+
+        let intent_request = json!({
+            "namespace": "files.secure",
+            "object_id": "PROC-001",
+            "author_did": "did:author:a",
+            "mime_type": "application/pdf",
+            "file_size_bytes": 1024,
+            "encryption_mode": "hybrid-acl",
+            "consent_receipt": {
+                "subject_did": "did:citizen:holder-1",
+                "data_hash": "sha256:file-001",
+                "policy_ref": "policy:offchain:v1",
+                "granted_at": now,
+                "expires_at": now + 3_600,
+                "authorized_readers": ["did:author:a"]
+            }
+        });
+
+        let intent_response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/files/intents")
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        serde_json::to_vec(&intent_request).expect("intent body"),
+                    ))
+                    .expect("request"),
+            )
+            .await
+            .expect("intent response");
+        assert_eq!(intent_response.status(), StatusCode::CREATED);
+        let intent_body = axum::body::to_bytes(intent_response.into_body(), usize::MAX)
+            .await
+            .expect("intent body");
+        let intent_payload: Value = serde_json::from_slice(&intent_body).expect("intent payload");
+        let intent_id = intent_payload["intent_id"].as_str().expect("intent id");
+
+        let signer = ValidatorKeypair::generate("did:author:a".to_string());
+        let mut entry = LedgerEntry {
+            entry_id: Uuid::new_v4(),
+            namespace: "files.secure".to_string(),
+            action: "ENCRYPTED_FILE_UPLOAD".to_string(),
+            object_id: "PROC-001".to_string(),
+            payload: json!({"manifest_ref":"obj-1"}),
+            privacy_flag: false,
+            privacy_mode: citizen_types::PrivacyMode::None,
+            payload_commitment: None,
+            ciphertext_hex: None,
+            nonce_hex: None,
+            salt_hex: None,
+            kdf_params: None,
+            consent_receipt: None,
+            authorized_readers: vec![],
+            custodian_policy_id: None,
+            field_reader_acls: BTreeMap::new(),
+            key_wrapped_secrets: vec![],
+            revocation_events: vec![],
+            author: "did:author:a".to_string(),
+            signature: String::new(),
+            timestamp: now,
+        };
+        sign_entry_for_tests(&mut entry, &signer);
+        let envelope = SignedEnvelope {
+            envelope_id: Uuid::new_v4(),
+            signer: "did:author:a".to_string(),
+            signature: entry.signature.clone(),
+            submitted_at: chrono::Utc::now(),
+            payload: entry,
+        };
+
+        let commit_request = json!({
+            "intent_id": intent_id,
+            "manifest": {
+                "schema_version": "1.0.0",
+                "file_ref": "s3://bucket/proc-001.enc",
+                "ciphertext_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+                "payload_commitment": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+                "consent_receipt_ref": "receipt-1",
+                "encryption": {"mode": "passphrase_file", "kdf": {"name":"argon2id","params":{"memory_kib":8192,"iterations":1,"parallelism":1,"salt":"s"}}}
+            },
+            "envelope": envelope
+        });
+
+        let first = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/files/commit")
+                    .header("content-type", "application/json")
+                    .header("idempotency-key", "file-commit-1")
+                    .body(Body::from(
+                        serde_json::to_vec(&commit_request).expect("commit body"),
+                    ))
+                    .expect("request"),
+            )
+            .await
+            .expect("first commit");
+        assert_eq!(first.status(), StatusCode::ACCEPTED);
+        let first_body = axum::body::to_bytes(first.into_body(), usize::MAX)
+            .await
+            .expect("body");
+
+        let second = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/files/commit")
+                    .header("content-type", "application/json")
+                    .header("idempotency-key", "file-commit-1")
+                    .body(Body::from(
+                        serde_json::to_vec(&commit_request).expect("commit body"),
+                    ))
+                    .expect("request"),
+            )
+            .await
+            .expect("second commit");
+        assert_eq!(second.status(), StatusCode::OK);
+        let second_body = axum::body::to_bytes(second.into_body(), usize::MAX)
+            .await
+            .expect("body");
+        assert_eq!(first_body, second_body);
+    }
+
+    #[tokio::test]
+    async fn payload_commit_rejects_missing_required_fields() {
+        let app = build_server().router();
+        let now = chrono::Utc::now().timestamp();
+
+        let signer = ValidatorKeypair::generate("did:citizen:holder-1".to_string());
+        let mut consent_entry = LedgerEntry {
+            entry_id: Uuid::new_v4(),
+            namespace: "consent.receipt".to_string(),
+            action: "CONSENT_GRANTED".to_string(),
+            object_id: "did:citizen:holder-1".to_string(),
+            payload: json!({
+                "data_hash": "sha256:payload-commit-1",
+                "policy_ref": "policy:offchain:v1",
+                "expires_at": now + 3_600
+            }),
+            privacy_flag: false,
+            privacy_mode: citizen_types::PrivacyMode::None,
+            payload_commitment: None,
+            ciphertext_hex: None,
+            nonce_hex: None,
+            salt_hex: None,
+            kdf_params: None,
+            consent_receipt: None,
+            authorized_readers: vec![],
+            custodian_policy_id: None,
+            field_reader_acls: BTreeMap::new(),
+            key_wrapped_secrets: vec![],
+            revocation_events: vec![],
+            author: "did:citizen:holder-1".to_string(),
+            signature: String::new(),
+            timestamp: now,
+        };
+        sign_entry_for_tests(&mut consent_entry, &signer);
+        let consent_envelope = SignedEnvelope {
+            envelope_id: Uuid::new_v4(),
+            signer: consent_entry.author.clone(),
+            signature: consent_entry.signature.clone(),
+            submitted_at: chrono::Utc::now(),
+            payload: consent_entry,
+        };
+        let _ = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/envelopes/submit")
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        serde_json::to_vec(&consent_envelope).expect("serialize envelope"),
+                    ))
+                    .expect("request"),
+            )
+            .await
+            .expect("submit response");
+
+        let entry = LedgerEntry {
+            entry_id: Uuid::new_v4(),
+            namespace: "files.secure".to_string(),
+            action: "ENCRYPTED_PAYLOAD_FIELD_COMMIT".to_string(),
+            object_id: "PROC-001".to_string(),
+            payload: json!({"field_refs":1}),
+            privacy_flag: false,
+            privacy_mode: citizen_types::PrivacyMode::None,
+            payload_commitment: None,
+            ciphertext_hex: None,
+            nonce_hex: None,
+            salt_hex: None,
+            kdf_params: None,
+            consent_receipt: None,
+            authorized_readers: vec![],
+            custodian_policy_id: None,
+            field_reader_acls: BTreeMap::new(),
+            key_wrapped_secrets: vec![],
+            revocation_events: vec![],
+            author: "did:author:a".to_string(),
+            signature: "sig-payload-1".to_string(),
+            timestamp: now,
+        };
+        let envelope = SignedEnvelope {
+            envelope_id: Uuid::new_v4(),
+            signer: "did:author:a".to_string(),
+            signature: "sig-payload-1".to_string(),
+            submitted_at: chrono::Utc::now(),
+            payload: entry,
+        };
+
+        let request = json!({
+            "namespace": "files.secure",
+            "object_id": "PROC-001",
+            "author_did": "did:author:a",
+            "consent_receipt": {
+                "subject_did": "did:citizen:holder-1",
+                "data_hash": "sha256:payload-commit-1",
+                "policy_ref": "policy:offchain:v1",
+                "granted_at": now,
+                "expires_at": now + 3_600,
+                "authorized_readers": ["did:author:a"]
+            },
+            "encrypted_field_refs": [
+                {
+                    "field_path": "payload.ssn",
+                    "blob_ref": "blob://a",
+                    "ciphertext_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                    "payload_commitment": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+                }
+            ],
+            "envelope": envelope
+        });
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/payloads/commit")
+                    .header("content-type", "application/json")
+                    .header("idempotency-key", "payload-commit-1")
+                    .body(Body::from(
+                        serde_json::to_vec(&request).expect("request body"),
+                    ))
+                    .expect("request"),
+            )
+            .await
+            .expect("payload commit response");
+
+        assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
     }
 
     #[tokio::test]

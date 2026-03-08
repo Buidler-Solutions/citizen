@@ -165,12 +165,12 @@ Deliverables:
 
 Checklist:
 - [x] Add `POST /api/v1/files/intents` (consent + policy precheck).
-- [ ] Add `POST /api/v1/files/commit` (anchors file commitment via signed envelope).
-- [ ] Add `POST /api/v1/payloads/commit` for entries with off-chain encrypted fields.
+- [x] Add `POST /api/v1/files/commit` (anchors file commitment via signed envelope).
+- [x] Add `POST /api/v1/payloads/commit` for entries with off-chain encrypted fields.
 - [ ] Add storage policy enforcement (size caps, MIME allowlist, namespace controls).
 - [ ] Persist immutable file manifest references with deterministic IDs.
 - [ ] Persist encrypted field-blob references keyed by `entry_id + namespace + field_path`.
-- [ ] Add retry/idempotency key semantics for commit endpoint.
+- [x] Add retry/idempotency key semantics for commit endpoint.
 
 ## Phase D — Governance + Policy Runtime
 
@@ -231,7 +231,7 @@ Checklist:
 - [x] Implement namespace-aware payload partitioning and field-level off-chain encryption helper.
 
 ### API / Node
-- [ ] Implement file intent + commit endpoints.
+- [x] Implement file intent + commit endpoints.
 - [ ] Add storage adapter interfaces and policy hooks.
 - [ ] Add rate limits and abuse controls for file flows.
 - [ ] Enforce namespace field policy at submission time (reject missing encrypted off-chain refs).
