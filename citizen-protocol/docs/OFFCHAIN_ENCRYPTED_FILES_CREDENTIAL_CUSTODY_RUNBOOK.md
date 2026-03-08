@@ -132,3 +132,20 @@ Run and archive these checks after any credential change:
 - `pnpm --dir sdk/nodejs test -- offchain`
 
 If a command is unavailable in the environment, document the limitation and run equivalent CI jobs before production rollout.
+
+### 9.1 Receipt-to-object verification command example
+
+Use the wallet CLI verifier to deterministically confirm `payload_commitment` and
+`ciphertext_hash` reconciliation for a committed manifest:
+
+```bash
+cargo run -q -p citizen-wallet -- verify-offchain-file \
+  --manifest-json "$MANIFEST_JSON" \
+  --payload-commitment "$PAYLOAD_COMMITMENT" \
+  --ciphertext-path /secure/offchain/object.bin
+```
+
+Where:
+- `MANIFEST_JSON` is the exact manifest JSON persisted by the commit flow.
+- `PAYLOAD_COMMITMENT` is the receipt-linked manifest commitment (`sha256:...`).
+- `ciphertext-path` points to retrieved encrypted bytes (never plaintext).
