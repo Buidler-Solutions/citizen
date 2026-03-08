@@ -1590,6 +1590,74 @@ mod tests {
     }
 
     #[test]
+    fn hybrid_entry_all_authorized_readers_can_decrypt_with_individual_wraps() {
+        let author = WalletKeypair::generate();
+        let reader_a_secret = StaticSecret::from([21u8; 32]);
+        let reader_b_secret = StaticSecret::from([22u8; 32]);
+        let reader_a_public = X25519PublicKey::from(&reader_a_secret);
+        let reader_b_public = X25519PublicKey::from(&reader_b_secret);
+
+        let mut reader_public_keys = BTreeMap::new();
+        reader_public_keys.insert(
+            "did:ledger:reader-a".to_string(),
+            hex::encode(reader_a_public.as_bytes()),
+        );
+        reader_public_keys.insert(
+            "did:ledger:reader-b".to_string(),
+            hex::encode(reader_b_public.as_bytes()),
+        );
+
+        let draft = EntryDraft {
+            namespace: "audit.procurement".to_string(),
+            action: "RECORD_EVENT".to_string(),
+            object_id: "AUD-3B".to_string(),
+            payload: json!({"document_hash":"abc123","event":"BID_OPENED","round":"final"}),
+            privacy_flag: true,
+            privacy_mode: PrivacyMode::Hybrid,
+            encryption_passphrase: None,
+            authorized_readers: vec![
+                "did:ledger:reader-a".to_string(),
+                "did:ledger:reader-b".to_string(),
+            ],
+            custodian_policy_id: Some("custodian.policy.v1".to_string()),
+            key_wrapped_secrets: vec![],
+            revocation_events: vec![],
+            field_reader_acls: Default::default(),
+            reader_public_keys,
+            author: "did:ledger:auditor".to_string(),
+            timestamp: 1_736_500_113,
+        };
+
+        let entry = sign_entry(draft, &author).expect("sign hybrid private entry");
+        assert_eq!(entry.key_wrapped_secrets.len(), 2);
+
+        let author_public =
+            hex::encode(X25519PublicKey::from(&x25519_secret_from_wallet(&author)).as_bytes());
+
+        let decrypted_reader_a = decrypt_payload_with_hybrid(
+            &entry,
+            "did:ledger:reader-a",
+            &hex::encode(reader_a_secret.to_bytes()),
+            &author_public,
+            1_736_500_114,
+        )
+        .expect("authorized reader a decrypt");
+
+        let decrypted_reader_b = decrypt_payload_with_hybrid(
+            &entry,
+            "did:ledger:reader-b",
+            &hex::encode(reader_b_secret.to_bytes()),
+            &author_public,
+            1_736_500_114,
+        )
+        .expect("authorized reader b decrypt");
+
+        let expected = json!({"document_hash":"abc123","event":"BID_OPENED","round":"final"});
+        assert_eq!(decrypted_reader_a, expected);
+        assert_eq!(decrypted_reader_b, expected);
+    }
+
+    #[test]
     fn hybrid_selective_entry_supports_field_reader_acls() {
         let author = WalletKeypair::generate();
         let reader_secret = StaticSecret::from([9u8; 32]);
