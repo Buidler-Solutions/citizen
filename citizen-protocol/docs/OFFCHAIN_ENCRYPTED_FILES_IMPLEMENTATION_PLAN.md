@@ -212,8 +212,8 @@ Checklist:
 - [x] Add adversarial tests ensuring non-granted wallets cannot decrypt and granted participant wallets can decrypt.
 - [x] Add performance tests for 10MB / 100MB / 1GB encrypted file paths. ✅ Added ignored wallet performance test `verifies_offchain_file_object_hash_for_large_ciphertext_streams` that validates streaming hash verification for deterministic 10MB/100MB/1GB ciphertext readers without loading full blobs in memory.
 - [x] Add performance tests for high-field-count payloads with mixed clear/encrypted fields. ✅ Added ignored wallet performance test `partitions_high_field_count_payload_with_mixed_visibility_sets` covering deterministic partitioning across 4,000 mixed public/committed/off-chain-encrypted field paths.
-- [ ] Complete cryptography review + key lifecycle review.
-- [ ] Publish production readiness report.
+- [x] Complete cryptography review + key lifecycle review. ✅ Published `docs/OFFCHAIN_ENCRYPTED_FILES_CRYPTO_KEY_LIFECYCLE_REVIEW.md` with deterministic commitment/encryption findings, key custody lifecycle controls, residual risk register, and cross-team sign-off.
+- [x] Publish production readiness report. ✅ Published `docs/OFFCHAIN_ENCRYPTED_FILES_PRODUCTION_READINESS_REPORT.md` with release-gate status, staged rollout plan, go/no-go criteria, and final sign-off recommendation.
 
 ## 5) Cross-Team Task Board (Execution Checklist)
 
