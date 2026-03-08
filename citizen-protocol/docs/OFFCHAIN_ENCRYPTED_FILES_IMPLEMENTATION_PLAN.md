@@ -76,7 +76,7 @@ Exit criteria:
 5. Wallet: implement streaming encrypt/decrypt (passphrase mode).
 6. Wallet: implement hybrid ACL/DEK wrapping with per-wallet wraps.
 7. SDK: implement namespace-aware payload field partitioning helper.
-8. API: implement `/files/intents` with consent + policy precheck.
+8. API: implement `/files/intents` with consent + policy precheck. ✅ Implemented in API crate with namespace policy + consent precheck.
 9. API: implement `/files/commit` and `/payloads/commit` idempotent endpoints.
 10. Security: add adversarial integration suite for unauthorized decrypt + replay attempts.
 
@@ -164,7 +164,7 @@ Deliverables:
 - Payload commit endpoint support for off-chain encrypted field references.
 
 Checklist:
-- [ ] Add `POST /api/v1/files/intents` (consent + policy precheck).
+- [x] Add `POST /api/v1/files/intents` (consent + policy precheck).
 - [ ] Add `POST /api/v1/files/commit` (anchors file commitment via signed envelope).
 - [ ] Add `POST /api/v1/payloads/commit` for entries with off-chain encrypted fields.
 - [ ] Add storage policy enforcement (size caps, MIME allowlist, namespace controls).
