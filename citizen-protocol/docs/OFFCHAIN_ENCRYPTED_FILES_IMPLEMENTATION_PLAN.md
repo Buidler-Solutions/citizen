@@ -206,8 +206,8 @@ Deliverables:
 - Threat model + security review sign-off packet.
 
 Checklist:
-- [ ] Add integration tests for happy path (upload, commit, verify, retrieve, revoke).
-- [ ] Add integration tests for per-namespace payload field encryption (serialize -> encrypt off-chain -> commit -> verify).
+- [x] Add integration tests for happy path (upload, commit, verify, retrieve, revoke). ✅ Added API integration test `offchain_file_happy_path_upload_commit_read_revoke` to validate intent->commit->authorized read->revoke->denied read transitions.
+- [x] Add integration tests for per-namespace payload field encryption (serialize -> encrypt off-chain -> commit -> verify). ✅ Added API integration test `payload_commit_happy_path_accepts_required_encrypted_field_refs` to validate namespace-governed encrypted field refs are accepted when required fields, commitments, and blob refs are provided.
 - [x] Add adversarial tests (tampered ciphertext, stale consent, unauthorized reader, replayed intent). ✅ API tests now cover replayed intent (`file_commit_enforces_idempotency_and_persists_manifest`), stale consent (`file_read_rejects_expired_consent_receipt`), unauthorized readers (`file_read_rejects_reader_not_in_authorized_list`), and tampered ciphertext hash reconciliation (`file_read_rejects_ciphertext_hash_mismatch`).
 - [x] Add adversarial tests ensuring non-granted wallets cannot decrypt and granted participant wallets can decrypt.
 - [ ] Add performance tests for 10MB / 100MB / 1GB encrypted file paths.
