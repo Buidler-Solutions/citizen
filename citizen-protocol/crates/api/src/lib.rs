@@ -186,6 +186,7 @@ struct FileReadRequest {
     manifest_id: String,
     reader_did: String,
     consent_receipt: ConsentReceipt,
+    observed_ciphertext_hash: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -1169,6 +1170,18 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
             .get("ciphertext_hash")
             .and_then(|value| value.as_str())
             .unwrap_or_default();
+
+        if let Some(observed_ciphertext_hash) = request.observed_ciphertext_hash.as_deref() {
+            if observed_ciphertext_hash != ciphertext_hash {
+                return (
+                    StatusCode::CONFLICT,
+                    Json(serde_json::json!({
+                        "error": "ciphertext hash mismatch for manifest",
+                        "manifest_id": request.manifest_id,
+                    })),
+                );
+            }
+        }
 
         (
             StatusCode::OK,
@@ -5088,6 +5101,204 @@ mod tests {
             .expect("read response");
 
         assert_eq!(read_response.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn file_read_rejects_ciphertext_hash_mismatch() {
+        let grant_keys = grant_approver_keys(&[
+            "grant:ops-1",
+            "grant:ops-2",
+            "grant:ops-3",
+            "grant:ops-4",
+            "grant:ops-5",
+        ]);
+        let app = build_server_with_grant_keys_and_file_actions(
+            &grant_keys,
+            &[
+                "ENCRYPTED_FILE_UPLOAD",
+                "ENCRYPTED_FILE_SHARE",
+                "ENCRYPTED_FILE_REVOKE",
+            ],
+        )
+        .router();
+        let now = chrono::Utc::now().timestamp();
+
+        let _ = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/envelopes/submit")
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        serde_json::to_vec(&json!({
+                            "envelope_id": Uuid::new_v4(),
+                            "signer": "did:citizen:holder-1",
+                            "signature": "sig-consent-hash-mismatch",
+                            "submitted_at": chrono::Utc::now(),
+                            "payload": {
+                                "entry_id": Uuid::new_v4(),
+                                "namespace": "consent.receipt",
+                                "action": "CONSENT_GRANTED",
+                                "object_id": "did:citizen:holder-1",
+                                "payload": {
+                                    "data_hash": "sha256:file-hash-mismatch",
+                                    "policy_ref": "policy:offchain:v1",
+                                    "expires_at": now + 3_600
+                                },
+                                "privacy_flag": false,
+                                "privacy_mode": "none",
+                                "payload_commitment": null,
+                                "ciphertext_hex": null,
+                                "nonce_hex": null,
+                                "salt_hex": null,
+                                "kdf_params": null,
+                                "consent_receipt": null,
+                                "authorized_readers": [],
+                                "custodian_policy_id": null,
+                                "field_reader_acls": {},
+                                "key_wrapped_secrets": [],
+                                "revocation_events": [],
+                                "author": "did:citizen:holder-1",
+                                "signature": "sig-consent-hash-mismatch",
+                                "timestamp": now
+                            }
+                        }))
+                        .expect("consent body"),
+                    ))
+                    .expect("request"),
+            )
+            .await
+            .expect("consent response");
+
+        let intent_response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/files/intents")
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        serde_json::to_vec(&json!({
+                            "namespace": "files.secure",
+                            "object_id": "did:citizen:holder-1",
+                            "author_did": "did:author:a",
+                            "mime_type": "application/pdf",
+                            "file_size_bytes": 256,
+                            "encryption_mode": "passphrase",
+                            "consent_receipt": {
+                                "subject_did": "did:citizen:holder-1",
+                                "data_hash": "sha256:file-hash-mismatch",
+                                "policy_ref": "policy:offchain:v1",
+                                "granted_at": now,
+                                "expires_at": now + 3_600,
+                                "authorized_readers": ["did:reader:1"]
+                            }
+                        }))
+                        .expect("intent body"),
+                    ))
+                    .expect("request"),
+            )
+            .await
+            .expect("intent response");
+        let body = axum::body::to_bytes(intent_response.into_body(), usize::MAX)
+            .await
+            .expect("intent body bytes");
+        let payload: Value = serde_json::from_slice(&body).expect("intent payload");
+
+        let commit_response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/files/commit")
+                    .header("content-type", "application/json")
+                    .header("idempotency-key", "file-read-hash-mismatch-commit")
+                    .body(Body::from(
+                        serde_json::to_vec(&json!({
+                            "intent_id": payload["intent_id"],
+                            "manifest": {
+                                "namespace": "files.secure",
+                                "object_id": "did:citizen:holder-1",
+                                "author_did": "did:author:a",
+                                "mime_type": "application/pdf",
+                                "file_size_bytes": 256,
+                                "encryption_mode": "passphrase",
+                                "file_ref": payload["upload"]["object_ref"],
+                                "ciphertext_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                                "payload_commitment": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                                "consent_receipt_ref": "consent:receipt:file-hash-mismatch"
+                            },
+                            "envelope": {
+                                "envelope_id": Uuid::new_v4(),
+                                "signer": "did:author:a",
+                                "signature": "sig-file-hash-mismatch",
+                                "submitted_at": chrono::Utc::now(),
+                                "payload": {
+                                    "entry_id": Uuid::new_v4(),
+                                    "namespace": "files.secure",
+                                    "action": "ENCRYPTED_FILE_UPLOAD",
+                                    "object_id": "did:citizen:holder-1",
+                                    "payload": {"manifest_id": "manifest-hash-mismatch"},
+                                    "privacy_flag": false,
+                                    "privacy_mode": "none",
+                                    "payload_commitment": null,
+                                    "ciphertext_hex": null,
+                                    "nonce_hex": null,
+                                    "salt_hex": null,
+                                    "kdf_params": null,
+                                    "consent_receipt": null,
+                                    "authorized_readers": [],
+                                    "custodian_policy_id": null,
+                                    "field_reader_acls": {},
+                                    "key_wrapped_secrets": [],
+                                    "revocation_events": [],
+                                    "author": "did:author:a",
+                                    "signature": "sig-file-hash-mismatch",
+                                    "timestamp": now
+                                }
+                            }
+                        }))
+                        .expect("commit body"),
+                    ))
+                    .expect("request"),
+            )
+            .await
+            .expect("commit response");
+        assert_eq!(commit_response.status(), StatusCode::ACCEPTED);
+        let body = axum::body::to_bytes(commit_response.into_body(), usize::MAX)
+            .await
+            .expect("commit body bytes");
+        let payload: Value = serde_json::from_slice(&body).expect("commit payload");
+
+        let read_response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/files/read")
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        serde_json::to_vec(&json!({
+                            "manifest_id": payload["manifest_id"],
+                            "reader_did": "did:reader:1",
+                            "observed_ciphertext_hash": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+                            "consent_receipt": {
+                                "subject_did": "did:citizen:holder-1",
+                                "data_hash": "sha256:file-hash-mismatch",
+                                "policy_ref": "policy:offchain:v1",
+                                "granted_at": now,
+                                "expires_at": now + 3_600,
+                                "authorized_readers": ["did:reader:1"]
+                            }
+                        }))
+                        .expect("read body"),
+                    ))
+                    .expect("request"),
+            )
+            .await
+            .expect("read response");
+
+        assert_eq!(read_response.status(), StatusCode::CONFLICT);
     }
 
     #[tokio::test]

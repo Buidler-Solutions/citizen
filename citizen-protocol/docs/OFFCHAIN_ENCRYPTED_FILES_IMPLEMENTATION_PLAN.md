@@ -208,7 +208,7 @@ Deliverables:
 Checklist:
 - [ ] Add integration tests for happy path (upload, commit, verify, retrieve, revoke).
 - [ ] Add integration tests for per-namespace payload field encryption (serialize -> encrypt off-chain -> commit -> verify).
-- [ ] Add adversarial tests (tampered ciphertext, stale consent, unauthorized reader, replayed intent). ↳ Replay attempt coverage added in API test `file_commit_enforces_idempotency_and_persists_manifest`; stale-consent and unauthorized-reader read-path coverage added in API tests `file_read_rejects_expired_consent_receipt` and `file_read_rejects_reader_not_in_authorized_list`; tampered-ciphertext adversarial case remains open.
+- [x] Add adversarial tests (tampered ciphertext, stale consent, unauthorized reader, replayed intent). ✅ API tests now cover replayed intent (`file_commit_enforces_idempotency_and_persists_manifest`), stale consent (`file_read_rejects_expired_consent_receipt`), unauthorized readers (`file_read_rejects_reader_not_in_authorized_list`), and tampered ciphertext hash reconciliation (`file_read_rejects_ciphertext_hash_mismatch`).
 - [x] Add adversarial tests ensuring non-granted wallets cannot decrypt and granted participant wallets can decrypt.
 - [ ] Add performance tests for 10MB / 100MB / 1GB encrypted file paths.
 - [ ] Add performance tests for high-field-count payloads with mixed clear/encrypted fields.
