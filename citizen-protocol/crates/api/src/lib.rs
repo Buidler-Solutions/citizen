@@ -569,6 +569,14 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
             }
         }
 
+        if let Err(error) = Self::validate_required_consent_policy(policy, &request.consent_receipt)
+        {
+            return (
+                StatusCode::UNPROCESSABLE_ENTITY,
+                Json(serde_json::json!({"error": error})),
+            );
+        }
+
         let now = Utc::now().timestamp();
         let consent_status =
             Self::evaluate_consent_receipt(Arc::clone(&ledger), &request.consent_receipt, now);
@@ -829,6 +837,22 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
                 Json(serde_json::json!({"error": "namespace not found"})),
             );
         };
+
+        if let Some(file_policy) = ruleset
+            .validators
+            .iter()
+            .find(|rule| rule.name == "offchain_encrypted_file_policy")
+            .map(|rule| &rule.config)
+        {
+            if let Err(error) =
+                Self::validate_required_consent_policy(file_policy, &request.consent_receipt)
+            {
+                return (
+                    StatusCode::UNPROCESSABLE_ENTITY,
+                    Json(serde_json::json!({"error": error})),
+                );
+            }
+        }
 
         let Some(required_fields) = ruleset
             .validators
@@ -1125,6 +1149,24 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
         }
 
         configured
+    }
+
+    fn validate_required_consent_policy(
+        policy: &serde_json::Value,
+        receipt: &ConsentReceipt,
+    ) -> Result<(), String> {
+        if let Some(required_policy_ref) = policy
+            .get("required_consent_policy_ref")
+            .and_then(|value| value.as_str())
+        {
+            if receipt.policy_ref != required_policy_ref {
+                return Err(format!(
+                    "consent receipt policy_ref does not satisfy namespace policy requirement: expected {required_policy_ref}"
+                ));
+            }
+        }
+
+        Ok(())
     }
 
     fn evaluate_consent_receipt(
@@ -1761,12 +1803,20 @@ mod tests {
     fn build_server_with_grant_keys(
         grant_keys: &HashMap<String, ValidatorKeypair>,
     ) -> ApiServer<MemoryStorage> {
-        build_server_with_grant_keys_and_file_actions(grant_keys, &["ENCRYPTED_FILE_UPLOAD"])
+        build_server_with_grant_keys_and_file_policy(grant_keys, &["ENCRYPTED_FILE_UPLOAD"], None)
     }
 
     fn build_server_with_grant_keys_and_file_actions(
         grant_keys: &HashMap<String, ValidatorKeypair>,
         allowed_file_actions: &[&str],
+    ) -> ApiServer<MemoryStorage> {
+        build_server_with_grant_keys_and_file_policy(grant_keys, allowed_file_actions, None)
+    }
+
+    fn build_server_with_grant_keys_and_file_policy(
+        grant_keys: &HashMap<String, ValidatorKeypair>,
+        allowed_file_actions: &[&str],
+        required_consent_policy_ref: Option<&str>,
     ) -> ApiServer<MemoryStorage> {
         let storage = Arc::new(MemoryStorage::new());
         let ledger = Arc::new(Ledger::new(storage, KeyRegistry::new()));
@@ -1808,13 +1858,19 @@ mod tests {
             validators: vec![
                 NamespaceRule {
                     name: "offchain_encrypted_file_policy".to_string(),
-                    config: json!({
-                        "enabled": true,
-                        "max_file_size_bytes": 10_485_760,
-                        "allowed_mime_types": ["application/pdf", "application/json"],
-                        "allowed_encryption_modes": ["passphrase", "hybrid-acl"],
-                        "allowed_actions": allowed_file_actions
-                    }),
+                    config: {
+                        let mut policy = json!({
+                            "enabled": true,
+                            "max_file_size_bytes": 10_485_760,
+                            "allowed_mime_types": ["application/pdf", "application/json"],
+                            "allowed_encryption_modes": ["passphrase", "hybrid-acl"],
+                            "allowed_actions": allowed_file_actions
+                        });
+                        if let Some(policy_ref) = required_consent_policy_ref {
+                            policy["required_consent_policy_ref"] = json!(policy_ref);
+                        }
+                        policy
+                    },
                 },
                 NamespaceRule {
                     name: "offchain_encrypted_payload_field_policy".to_string(),
@@ -4531,6 +4587,267 @@ mod tests {
             .expect("response");
 
         assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    }
+
+    #[tokio::test]
+    async fn file_intent_rejects_consent_with_unapproved_policy_ref() {
+        let grant_keys = grant_approver_keys(&[
+            "grant:ops-1",
+            "grant:ops-2",
+            "grant:ops-3",
+            "grant:ops-4",
+            "grant:ops-5",
+        ]);
+        let app = build_server_with_grant_keys_and_file_policy(
+            &grant_keys,
+            &["ENCRYPTED_FILE_UPLOAD"],
+            Some("policy:offchain:strict:v1"),
+        )
+        .router();
+
+        let now = chrono::Utc::now().timestamp();
+        let signer = ValidatorKeypair::generate("did:citizen:holder-1".to_string());
+        let mut consent_entry = LedgerEntry {
+            entry_id: Uuid::new_v4(),
+            namespace: "consent.receipt".to_string(),
+            action: "CONSENT_GRANTED".to_string(),
+            object_id: "did:citizen:holder-1".to_string(),
+            payload: json!({
+                "data_hash": "sha256:policy-ref-check",
+                "policy_ref": "policy:offchain:v1",
+                "expires_at": now + 3_600
+            }),
+            privacy_flag: false,
+            privacy_mode: citizen_types::PrivacyMode::None,
+            payload_commitment: None,
+            ciphertext_hex: None,
+            nonce_hex: None,
+            salt_hex: None,
+            kdf_params: None,
+            consent_receipt: None,
+            authorized_readers: vec![],
+            custodian_policy_id: None,
+            field_reader_acls: BTreeMap::new(),
+            key_wrapped_secrets: vec![],
+            revocation_events: vec![],
+            author: "did:citizen:holder-1".to_string(),
+            signature: String::new(),
+            timestamp: now,
+        };
+        sign_entry_for_tests(&mut consent_entry, &signer);
+        let consent_envelope = SignedEnvelope {
+            envelope_id: Uuid::new_v4(),
+            signer: consent_entry.author.clone(),
+            signature: consent_entry.signature.clone(),
+            submitted_at: chrono::Utc::now(),
+            payload: consent_entry,
+        };
+        let _ = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/envelopes/submit")
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        serde_json::to_vec(&consent_envelope).expect("serialize envelope"),
+                    ))
+                    .expect("request"),
+            )
+            .await
+            .expect("submit response");
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/files/intents")
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        serde_json::to_vec(&json!({
+                            "namespace": "files.secure",
+                            "object_id": "PROC-POL-1",
+                            "author_did": "did:author:a",
+                            "mime_type": "application/pdf",
+                            "file_size_bytes": 1024,
+                            "encryption_mode": "passphrase",
+                            "consent_receipt": {
+                                "subject_did": "did:citizen:holder-1",
+                                "data_hash": "sha256:policy-ref-check",
+                                "policy_ref": "policy:offchain:v1",
+                                "granted_at": now,
+                                "expires_at": now + 3_600,
+                                "authorized_readers": ["did:author:a"]
+                            }
+                        }))
+                        .expect("intent body"),
+                    ))
+                    .expect("request"),
+            )
+            .await
+            .expect("intent response");
+
+        assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("response body");
+        let payload: Value = serde_json::from_slice(&body).expect("response json");
+        assert_eq!(
+            payload["error"],
+            "consent receipt policy_ref does not satisfy namespace policy requirement: expected policy:offchain:strict:v1"
+        );
+    }
+
+    #[tokio::test]
+    async fn payload_commit_rejects_consent_with_unapproved_policy_ref() {
+        let grant_keys = grant_approver_keys(&[
+            "grant:ops-1",
+            "grant:ops-2",
+            "grant:ops-3",
+            "grant:ops-4",
+            "grant:ops-5",
+        ]);
+        let app = build_server_with_grant_keys_and_file_policy(
+            &grant_keys,
+            &["ENCRYPTED_FILE_UPLOAD"],
+            Some("policy:offchain:strict:v1"),
+        )
+        .router();
+
+        let now = chrono::Utc::now().timestamp();
+        let signer = ValidatorKeypair::generate("did:citizen:holder-1".to_string());
+        let mut consent_entry = LedgerEntry {
+            entry_id: Uuid::new_v4(),
+            namespace: "consent.receipt".to_string(),
+            action: "CONSENT_GRANTED".to_string(),
+            object_id: "did:citizen:holder-1".to_string(),
+            payload: json!({
+                "data_hash": "sha256:payload-policy-check",
+                "policy_ref": "policy:offchain:v1",
+                "expires_at": now + 3_600
+            }),
+            privacy_flag: false,
+            privacy_mode: citizen_types::PrivacyMode::None,
+            payload_commitment: None,
+            ciphertext_hex: None,
+            nonce_hex: None,
+            salt_hex: None,
+            kdf_params: None,
+            consent_receipt: None,
+            authorized_readers: vec![],
+            custodian_policy_id: None,
+            field_reader_acls: BTreeMap::new(),
+            key_wrapped_secrets: vec![],
+            revocation_events: vec![],
+            author: "did:citizen:holder-1".to_string(),
+            signature: String::new(),
+            timestamp: now,
+        };
+        sign_entry_for_tests(&mut consent_entry, &signer);
+        let consent_envelope = SignedEnvelope {
+            envelope_id: Uuid::new_v4(),
+            signer: consent_entry.author.clone(),
+            signature: consent_entry.signature.clone(),
+            submitted_at: chrono::Utc::now(),
+            payload: consent_entry,
+        };
+        let _ = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/envelopes/submit")
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        serde_json::to_vec(&consent_envelope).expect("serialize envelope"),
+                    ))
+                    .expect("request"),
+            )
+            .await
+            .expect("submit response");
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/payloads/commit")
+                    .header("content-type", "application/json")
+                    .header("idempotency-key", "payload-policy-check")
+                    .body(Body::from(
+                        serde_json::to_vec(&json!({
+                            "namespace": "files.secure",
+                            "object_id": "PROC-PAY-1",
+                            "author_did": "did:author:a",
+                            "consent_receipt": {
+                                "subject_did": "did:citizen:holder-1",
+                                "data_hash": "sha256:payload-policy-check",
+                                "policy_ref": "policy:offchain:v1",
+                                "granted_at": now,
+                                "expires_at": now + 3_600,
+                                "authorized_readers": ["did:author:a"]
+                            },
+                            "encrypted_field_refs": [
+                                {
+                                    "field_path": "payload.ssn",
+                                    "blob_ref": "blob://local/files.secure/PROC-PAY-1/field-ssn.cipher",
+                                    "ciphertext_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                                    "payload_commitment": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+                                },
+                                {
+                                    "field_path": "payload.medical_record",
+                                    "blob_ref": "blob://local/files.secure/PROC-PAY-1/field-medical.cipher",
+                                    "ciphertext_hash": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                                    "payload_commitment": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+                                }
+                            ],
+                            "envelope": {
+                                "envelope_id": Uuid::new_v4(),
+                                "signer": "did:author:a",
+                                "signature": "sig-payload-policy",
+                                "submitted_at": chrono::Utc::now(),
+                                "payload": {
+                                    "entry_id": Uuid::new_v4(),
+                                    "namespace": "files.secure",
+                                    "action": "ENCRYPTED_PAYLOAD_FIELD_COMMIT",
+                                    "object_id": "PROC-PAY-1",
+                                    "payload": {"field_refs": 2},
+                                    "privacy_flag": false,
+                                    "privacy_mode": "none",
+                                    "payload_commitment": null,
+                                    "ciphertext_hex": null,
+                                    "nonce_hex": null,
+                                    "salt_hex": null,
+                                    "kdf_params": null,
+                                    "consent_receipt": null,
+                                    "authorized_readers": [],
+                                    "custodian_policy_id": null,
+                                    "field_reader_acls": {},
+                                    "key_wrapped_secrets": [],
+                                    "revocation_events": [],
+                                    "author": "did:author:a",
+                                    "signature": "sig-payload-policy",
+                                    "timestamp": now
+                                }
+                            }
+                        }))
+                        .expect("request body"),
+                    ))
+                    .expect("request"),
+            )
+            .await
+            .expect("response");
+
+        assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("response body");
+        let payload: Value = serde_json::from_slice(&body).expect("response json");
+        assert_eq!(
+            payload["error"],
+            "consent receipt policy_ref does not satisfy namespace policy requirement: expected policy:offchain:strict:v1"
+        );
     }
 
     #[tokio::test]
