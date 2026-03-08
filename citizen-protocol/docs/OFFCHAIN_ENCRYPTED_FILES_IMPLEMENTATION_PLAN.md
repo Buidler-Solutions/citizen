@@ -168,8 +168,8 @@ Checklist:
 - [x] Add `POST /api/v1/files/commit` (anchors file commitment via signed envelope).
 - [x] Add `POST /api/v1/payloads/commit` for entries with off-chain encrypted fields.
 - [ ] Add storage policy enforcement (size caps, MIME allowlist, namespace controls).
-- [ ] Persist immutable file manifest references with deterministic IDs.
-- [ ] Persist encrypted field-blob references keyed by `entry_id + namespace + field_path`.
+- [x] Persist immutable file manifest references with deterministic IDs.
+- [x] Persist encrypted field-blob references keyed by `entry_id + namespace + field_path`.
 - [x] Add retry/idempotency key semantics for commit endpoint.
 
 ## Phase D — Governance + Policy Runtime

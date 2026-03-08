@@ -557,7 +557,10 @@ impl<S: LedgerStorage + 'static> Ledger<S> {
         if entry.privacy_mode == PrivacyMode::None {
             return Ok(());
         }
-        if entry.ciphertext_hex.is_none() || entry.nonce_hex.is_none() || entry.payload_commitment.is_none() {
+        if entry.ciphertext_hex.is_none()
+            || entry.nonce_hex.is_none()
+            || entry.payload_commitment.is_none()
+        {
             return Err(ProtocolError::ValidationFailed(
                 "encrypted entries must include ciphertext, nonce, and payload_commitment".into(),
             ));
@@ -599,10 +602,12 @@ impl<S: LedgerStorage + 'static> Ledger<S> {
                         "field_reader_acls[{field}] must include at least one reader"
                     )));
                 }
-                if !readers
-                    .iter()
-                    .all(|reader| entry.authorized_readers.iter().any(|allowed| allowed == reader))
-                {
+                if !readers.iter().all(|reader| {
+                    entry
+                        .authorized_readers
+                        .iter()
+                        .any(|allowed| allowed == reader)
+                }) {
                     return Err(ProtocolError::ValidationFailed(
                         "field_reader_acls readers must be present in authorized_readers".into(),
                     ));
@@ -1557,8 +1562,7 @@ mod tests {
     use crate::canonical_json;
     use citizen_crypto::{sign_message, verifying_key_to_string, ValidatorKeypair};
     use citizen_types::{
-        CommitProof, LedgerEntry, NamespaceDescriptor, NamespaceRule, NamespaceRuleset,
-        PrivacyMode,
+        CommitProof, LedgerEntry, NamespaceDescriptor, NamespaceRule, NamespaceRuleset, PrivacyMode,
     };
     use citizen_wallet::{sign_entry, EntryDraft, WalletKeypair};
     use serde_json::json;
@@ -2212,14 +2216,11 @@ mod tests {
         missing_grant_link.action = "SPONSOR_USAGE".into();
         missing_grant_link.object_id = "builder:alpha".into();
         missing_grant_link.author = "builder:alpha".into();
-        missing_grant_link.payload =
-            json!({"amount": 1_u64, "sponsorship_id":"spn-no-grant", "sponsored_did":"did:ledger:user1"});
+        missing_grant_link.payload = json!({"amount": 1_u64, "sponsorship_id":"spn-no-grant", "sponsored_did":"did:ledger:user1"});
         let missing_err = ledger
             .apply_entry(missing_grant_link)
             .expect_err("sponsor usage should require credit_grant_id");
-        assert!(missing_err
-            .to_string()
-            .contains("payload.credit_grant_id"));
+        assert!(missing_err.to_string().contains("payload.credit_grant_id"));
 
         let mut unknown_grant_link = test_entry(namespace);
         unknown_grant_link.action = "SPONSOR_USAGE".into();
