@@ -62,9 +62,9 @@ impl Default for ApiEdgeConfig {
     }
 }
 
-#[derive(Debug)]
 struct ApiEdgeState {
     config: ApiEdgeConfig,
+    object_store: Arc<dyn OffchainObjectStore>,
     write_windows: Mutex<BTreeMap<String, Vec<i64>>>,
     file_intents: Mutex<BTreeMap<Uuid, StoredFileIntent>>,
     file_commit_idempotency: Mutex<BTreeMap<String, serde_json::Value>>,
@@ -74,15 +74,77 @@ struct ApiEdgeState {
 }
 
 impl ApiEdgeState {
-    fn new(config: ApiEdgeConfig) -> Self {
+    fn new(config: ApiEdgeConfig, object_store: Arc<dyn OffchainObjectStore>) -> Self {
         Self {
             config,
+            object_store,
             write_windows: Mutex::new(BTreeMap::new()),
             file_intents: Mutex::new(BTreeMap::new()),
             file_commit_idempotency: Mutex::new(BTreeMap::new()),
             payload_commit_idempotency: Mutex::new(BTreeMap::new()),
             file_manifests: Mutex::new(BTreeMap::new()),
             payload_field_refs: Mutex::new(BTreeMap::new()),
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+struct UploadIntentRequest {
+    intent_id: Uuid,
+    namespace: String,
+    object_id: String,
+    author_did: String,
+    mime_type: String,
+    file_size_bytes: u64,
+    encryption_mode: String,
+}
+
+#[derive(Clone, Debug)]
+struct UploadIntent {
+    object_ref: String,
+    upload_url: String,
+    expires_at: i64,
+}
+
+trait OffchainObjectStore: Send + Sync {
+    fn create_upload_intent(&self, request: &UploadIntentRequest) -> Result<UploadIntent, String>;
+    fn validate_object_ref(&self, namespace: &str, object_ref: &str) -> Result<(), String>;
+}
+
+#[derive(Clone, Debug, Default)]
+struct LocalOffchainObjectStore;
+
+impl OffchainObjectStore for LocalOffchainObjectStore {
+    fn create_upload_intent(&self, request: &UploadIntentRequest) -> Result<UploadIntent, String> {
+        let namespace_slug = urlencoding::encode(&request.namespace);
+        let object_slug = urlencoding::encode(&request.object_id);
+        let object_ref = format!(
+            "blob://local/{}/{}/{}.cipher",
+            namespace_slug, object_slug, request.intent_id
+        );
+        let upload_url = format!(
+            "/api/v1/files/upload/local/{}/{}/{}?mime={}&mode={}&author={}&size={}",
+            namespace_slug,
+            object_slug,
+            request.intent_id,
+            urlencoding::encode(&request.mime_type),
+            urlencoding::encode(&request.encryption_mode),
+            urlencoding::encode(&request.author_did),
+            request.file_size_bytes,
+        );
+        Ok(UploadIntent {
+            object_ref,
+            upload_url,
+            expires_at: Utc::now().timestamp() + 900,
+        })
+    }
+
+    fn validate_object_ref(&self, namespace: &str, object_ref: &str) -> Result<(), String> {
+        let prefix = format!("blob://local/{}/", urlencoding::encode(namespace));
+        if object_ref.starts_with(&prefix) {
+            Ok(())
+        } else {
+            Err("manifest file_ref is not accepted by local storage policy".to_string())
         }
     }
 }
@@ -132,6 +194,7 @@ struct EncryptedFieldRef {
 struct StoredFileIntent {
     request: FileIntentRequest,
     created_at: i64,
+    object_ref: String,
 }
 
 impl<S: LedgerStorage + 'static> ApiServer<S> {
@@ -140,9 +203,21 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
     }
 
     pub fn with_edge_config(ledger: Arc<Ledger<S>>, edge_config: ApiEdgeConfig) -> Self {
+        Self::with_edge_config_and_store(
+            ledger,
+            edge_config,
+            Arc::new(LocalOffchainObjectStore),
+        )
+    }
+
+    pub(crate) fn with_edge_config_and_store(
+        ledger: Arc<Ledger<S>>,
+        edge_config: ApiEdgeConfig,
+        object_store: Arc<dyn OffchainObjectStore>,
+    ) -> Self {
         Self {
             ledger,
-            edge: Arc::new(ApiEdgeState::new(edge_config)),
+            edge: Arc::new(ApiEdgeState::new(edge_config, object_store)),
         }
     }
 
@@ -513,11 +588,30 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
         }
 
         let intent_id = Uuid::new_v4();
+        let upload_intent = match edge.object_store.create_upload_intent(&UploadIntentRequest {
+            intent_id,
+            namespace: request.namespace.clone(),
+            object_id: request.object_id.clone(),
+            author_did: request.author_did.clone(),
+            mime_type: request.mime_type.clone(),
+            file_size_bytes: request.file_size_bytes,
+            encryption_mode: request.encryption_mode.clone(),
+        }) {
+            Ok(intent) => intent,
+            Err(message) => {
+                return (
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    Json(serde_json::json!({"error": message})),
+                )
+            }
+        };
+
         edge.file_intents.lock().await.insert(
             intent_id,
             StoredFileIntent {
                 request: request.clone(),
                 created_at: now,
+                object_ref: upload_intent.object_ref.clone(),
             },
         );
 
@@ -528,6 +622,11 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
                 "namespace": request.namespace,
                 "object_id": request.object_id,
                 "author_did": request.author_did,
+                "upload": {
+                    "object_ref": upload_intent.object_ref,
+                    "upload_url": upload_intent.upload_url,
+                    "expires_at": upload_intent.expires_at,
+                },
                 "constraints": {
                     "max_file_size_bytes": policy.get("max_file_size_bytes").cloned().unwrap_or(serde_json::Value::Null),
                     "allowed_mime_types": policy.get("allowed_mime_types").cloned().unwrap_or_else(|| serde_json::json!([])),
@@ -602,7 +701,13 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
             };
 
             if let Err(message) =
-                Self::validate_manifest_against_intent(&request.manifest, &intent.request, policy)
+                Self::validate_manifest_against_intent(
+                    &request.manifest,
+                    &intent.request,
+                    policy,
+                    &intent.object_ref,
+                    edge.object_store.as_ref(),
+                )
             {
                 return (
                     StatusCode::UNPROCESSABLE_ENTITY,
@@ -786,6 +891,8 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
         manifest: &serde_json::Value,
         intent: &FileIntentRequest,
         policy: &serde_json::Value,
+        expected_object_ref: &str,
+        object_store: &dyn OffchainObjectStore,
     ) -> Result<(), String> {
         if !manifest.is_object() {
             return Err("manifest must be a JSON object".to_string());
@@ -879,6 +986,15 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
                 );
             }
         }
+
+        let manifest_file_ref = manifest
+            .get("file_ref")
+            .and_then(|value| value.as_str())
+            .ok_or_else(|| "manifest missing file_ref".to_string())?;
+        if manifest_file_ref != expected_object_ref {
+            return Err("manifest file_ref does not match issued upload intent object_ref".to_string());
+        }
+        object_store.validate_object_ref(&intent.namespace, manifest_file_ref)?;
 
         Ok(())
     }
@@ -3142,6 +3258,9 @@ mod tests {
             .expect("intent body");
         let intent_payload: Value = serde_json::from_slice(&intent_body).expect("intent payload");
         let intent_id = intent_payload["intent_id"].as_str().expect("intent id");
+        let object_ref = intent_payload["upload"]["object_ref"]
+            .as_str()
+            .expect("object ref");
 
         let signer = ValidatorKeypair::generate("did:author:a".to_string());
         let mut entry = LedgerEntry {
@@ -3186,7 +3305,7 @@ mod tests {
                 "mime_type": "application/pdf",
                 "file_size_bytes": 1024,
                 "encryption_mode": "hybrid-acl",
-                "file_ref": "s3://bucket/proc-001.enc",
+                "file_ref": object_ref,
                 "ciphertext_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
                 "payload_commitment": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
                 "consent_receipt_ref": "receipt-1",
@@ -3329,6 +3448,9 @@ mod tests {
             .expect("intent body");
         let intent_payload: Value = serde_json::from_slice(&intent_body).expect("intent payload");
         let intent_id = intent_payload["intent_id"].as_str().expect("intent id");
+        let _object_ref = intent_payload["upload"]["object_ref"]
+            .as_str()
+            .expect("object ref");
 
         let entry = LedgerEntry {
             entry_id: Uuid::new_v4(),
