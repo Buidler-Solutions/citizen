@@ -227,7 +227,7 @@ Checklist:
 - [ ] Implement file encryption/decryption APIs.
 - [ ] Implement reader ACL + DEK wrapping flows.
 - [x] Enforce "grant required" decrypt checks in wallet runtime and SDK helpers.
-- [ ] Ship verification helper for off-chain object hash reconciliation.
+- [x] Ship verification helper for off-chain object hash reconciliation. ✅ Added wallet library verification helpers for deterministic manifest commitment + ciphertext object-hash reconciliation (`compute_file_manifest_commitment`, `verify_offchain_file_object_hash`, `verify_offchain_file_reconciliation`) with shared-vector test coverage.
 - [x] Implement namespace-aware payload partitioning and field-level off-chain encryption helper.
 
 ### API / Node
