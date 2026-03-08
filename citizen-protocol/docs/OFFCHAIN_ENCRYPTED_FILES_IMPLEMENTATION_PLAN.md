@@ -236,6 +236,7 @@ Checklist:
 - [x] Add storage adapter interfaces and policy hooks. ✅ Implemented API-level off-chain object-store trait with local adapter and manifest `file_ref` policy enforcement.
 - [x] Add rate limits and abuse controls for file flows.
 - [x] Enforce namespace field policy at submission time (reject missing encrypted off-chain refs and reject plaintext for required encrypted fields).
+- [x] Enforce canonical payload-field commitment derivation at `/api/v1/payloads/commit` (reject non-canonical `payload_commitment` values per `field_path -> ciphertext_hash` input).
 
 ### Explorer / Indexer
 - [ ] Index encrypted-file events and consent status transitions.
