@@ -6052,6 +6052,198 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn offchain_file_happy_path_upload_commit_read_revoke() {
+        let grant_keys = grant_approver_keys(&[
+            "grant:ops-1",
+            "grant:ops-2",
+            "grant:ops-3",
+            "grant:ops-4",
+            "grant:ops-5",
+        ]);
+        let app = build_server_with_grant_keys_and_file_actions(
+            &grant_keys,
+            &[
+                "ENCRYPTED_FILE_UPLOAD",
+                "ENCRYPTED_FILE_SHARE",
+                "ENCRYPTED_FILE_REVOKE",
+            ],
+        )
+        .router();
+        let now = chrono::Utc::now().timestamp();
+
+        let _ = app.clone().oneshot(Request::builder().method("POST").uri("/api/v1/envelopes/submit").header("content-type", "application/json").body(Body::from(serde_json::to_vec(&json!({"envelope_id":Uuid::new_v4(),"signer":"did:citizen:holder-1","signature":"sig-consent-happy-path","submitted_at":chrono::Utc::now(),"payload":{"entry_id":Uuid::new_v4(),"namespace":"consent.receipt","action":"CONSENT_GRANTED","object_id":"did:citizen:holder-1","payload":{"data_hash":"sha256:file-happy-path","policy_ref":"policy:offchain:v1","expires_at":now+3600},"privacy_flag":false,"privacy_mode":"none","payload_commitment":null,"ciphertext_hex":null,"nonce_hex":null,"salt_hex":null,"kdf_params":null,"consent_receipt":null,"authorized_readers":[],"custodian_policy_id":null,"field_reader_acls":{},"key_wrapped_secrets":[],"revocation_events":[],"author":"did:citizen:holder-1","signature":"sig-consent-happy-path","timestamp":now}})).expect("consent"))).expect("request")).await.expect("consent response");
+
+        let intent_response = app.clone().oneshot(Request::builder().method("POST").uri("/api/v1/files/intents").header("content-type", "application/json").body(Body::from(serde_json::to_vec(&json!({"namespace":"files.secure","object_id":"did:citizen:holder-1","author_did":"did:author:a","mime_type":"application/pdf","file_size_bytes":1024,"encryption_mode":"passphrase","consent_receipt":{"subject_did":"did:citizen:holder-1","data_hash":"sha256:file-happy-path","policy_ref":"policy:offchain:v1","granted_at":now,"expires_at":now+3600,"authorized_readers":["did:reader:1"]}})).expect("intent"))).expect("request")).await.expect("intent response");
+        assert_eq!(intent_response.status(), StatusCode::CREATED);
+        let intent_body = axum::body::to_bytes(intent_response.into_body(), usize::MAX)
+            .await
+            .expect("intent body");
+        let intent_payload: Value = serde_json::from_slice(&intent_body).expect("intent payload");
+
+        let commit_response = app.clone().oneshot(Request::builder().method("POST").uri("/api/v1/files/commit").header("content-type", "application/json").header("idempotency-key", "file-happy-path-commit").body(Body::from(serde_json::to_vec(&json!({"intent_id": intent_payload["intent_id"],"manifest":{"namespace":"files.secure","object_id":"did:citizen:holder-1","author_did":"did:author:a","mime_type":"application/pdf","file_size_bytes":1024,"encryption_mode":"passphrase","file_ref":intent_payload["upload"]["object_ref"],"ciphertext_hash":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","payload_commitment":"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","consent_receipt_ref":"consent:receipt:file-happy-path"},"envelope":{"envelope_id":Uuid::new_v4(),"signer":"did:author:a","signature":"sig-file-happy-path","submitted_at":chrono::Utc::now(),"payload":{"entry_id":Uuid::new_v4(),"namespace":"files.secure","action":"ENCRYPTED_FILE_UPLOAD","object_id":"did:citizen:holder-1","payload":{"manifest_id":"manifest-happy-path"},"privacy_flag":false,"privacy_mode":"none","payload_commitment":null,"ciphertext_hex":null,"nonce_hex":null,"salt_hex":null,"kdf_params":null,"consent_receipt":null,"authorized_readers":[],"custodian_policy_id":null,"field_reader_acls":{},"key_wrapped_secrets":[],"revocation_events":[],"author":"did:author:a","signature":"sig-file-happy-path","timestamp":now}}})).expect("commit"))).expect("request")).await.expect("commit response");
+        assert_eq!(commit_response.status(), StatusCode::ACCEPTED);
+        let commit_body = axum::body::to_bytes(commit_response.into_body(), usize::MAX)
+            .await
+            .expect("commit body");
+        let commit_payload: Value = serde_json::from_slice(&commit_body).expect("commit payload");
+
+        let read_ok = app.clone().oneshot(Request::builder().method("POST").uri("/api/v1/files/read").header("content-type", "application/json").body(Body::from(serde_json::to_vec(&json!({"manifest_id":commit_payload["manifest_id"],"reader_did":"did:reader:1","consent_receipt":{"subject_did":"did:citizen:holder-1","data_hash":"sha256:file-happy-path","policy_ref":"policy:offchain:v1","granted_at":now,"expires_at":now+3600,"authorized_readers":["did:reader:1"]}})).expect("read"))).expect("request")).await.expect("read response");
+        assert_eq!(read_ok.status(), StatusCode::OK);
+
+        let revoke_response = app.clone().oneshot(Request::builder().method("POST").uri("/api/v1/envelopes/submit").header("content-type", "application/json").body(Body::from(serde_json::to_vec(&json!({"envelope_id":Uuid::new_v4(),"signer":"did:author:a","signature":"sig-revoke-happy-path","submitted_at":chrono::Utc::now(),"payload":{"entry_id":Uuid::new_v4(),"namespace":"files.secure","action":"ENCRYPTED_FILE_REVOKE","object_id":"did:citizen:holder-1","payload":{"manifest_id":commit_payload["manifest_id"],"reader_did":"did:reader:1","reason":"happy path revoke"},"privacy_flag":false,"privacy_mode":"none","payload_commitment":null,"ciphertext_hex":null,"nonce_hex":null,"salt_hex":null,"kdf_params":null,"consent_receipt":null,"authorized_readers":[],"custodian_policy_id":null,"field_reader_acls":{},"key_wrapped_secrets":[],"revocation_events":[],"author":"did:author:a","signature":"sig-revoke-happy-path","timestamp":now}})).expect("revoke"))).expect("request")).await.expect("revoke response");
+        assert_eq!(revoke_response.status(), StatusCode::ACCEPTED);
+
+        let read_denied = app.clone().oneshot(Request::builder().method("POST").uri("/api/v1/files/read").header("content-type", "application/json").body(Body::from(serde_json::to_vec(&json!({"manifest_id":commit_payload["manifest_id"],"reader_did":"did:reader:1","consent_receipt":{"subject_did":"did:citizen:holder-1","data_hash":"sha256:file-happy-path","policy_ref":"policy:offchain:v1","granted_at":now,"expires_at":now+3600,"authorized_readers":["did:reader:1"]}})).expect("read denied"))).expect("request")).await.expect("read denied response");
+        assert_eq!(read_denied.status(), StatusCode::FORBIDDEN);
+    }
+
+    #[tokio::test]
+    async fn payload_commit_happy_path_accepts_required_encrypted_field_refs() {
+        let grant_keys = grant_approver_keys(&[
+            "grant:ops-1",
+            "grant:ops-2",
+            "grant:ops-3",
+            "grant:ops-4",
+            "grant:ops-5",
+        ]);
+        let app = build_server_with_grant_keys_and_file_actions(
+            &grant_keys,
+            &["ENCRYPTED_FILE_UPLOAD", "ENCRYPTED_PAYLOAD_FIELD_COMMIT"],
+        )
+        .router();
+        let now = chrono::Utc::now().timestamp();
+        let _ = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/envelopes/submit")
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        serde_json::to_vec(&json!({
+                            "envelope_id": Uuid::new_v4(),
+                            "signer": "did:citizen:holder-1",
+                            "signature": "sig-consent-payload-happy-path",
+                            "submitted_at": chrono::Utc::now(),
+                            "payload": {
+                                "entry_id": Uuid::new_v4(),
+                                "namespace": "consent.receipt",
+                                "action": "CONSENT_GRANTED",
+                                "object_id": "did:citizen:holder-1",
+                                "payload": {
+                                    "data_hash": "sha256:payload-happy-path",
+                                    "policy_ref": "policy:offchain:v1",
+                                    "expires_at": now + 3_600
+                                },
+                                "privacy_flag": false,
+                                "privacy_mode": "none",
+                                "payload_commitment": null,
+                                "ciphertext_hex": null,
+                                "nonce_hex": null,
+                                "salt_hex": null,
+                                "kdf_params": null,
+                                "consent_receipt": null,
+                                "authorized_readers": [],
+                                "custodian_policy_id": null,
+                                "field_reader_acls": {},
+                                "key_wrapped_secrets": [],
+                                "revocation_events": [],
+                                "author": "did:citizen:holder-1",
+                                "signature": "sig-consent-payload-happy-path",
+                                "timestamp": now
+                            }
+                        }))
+                        .expect("consent body"),
+                    ))
+                    .expect("request"),
+            )
+            .await
+            .expect("consent response");
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/payloads/commit")
+                    .header("content-type", "application/json")
+                    .header("idempotency-key", "payload-happy-path-commit")
+                    .body(Body::from(
+                        serde_json::to_vec(&json!({
+                            "namespace": "files.secure",
+                            "object_id": "PROC-PAYLOAD-HAPPY-PATH",
+                            "author_did": "did:author:a",
+                            "policy_version": 1,
+                            "consent_receipt": {
+                                "subject_did": "did:citizen:holder-1",
+                                "data_hash": "sha256:payload-happy-path",
+                                "policy_ref": "policy:offchain:v1",
+                                "granted_at": now,
+                                "expires_at": now + 3_600,
+                                "authorized_readers": ["did:reader:1"]
+                            },
+                            "encrypted_field_refs": [
+                                {
+                                    "field_path": "payload.ssn",
+                                    "ciphertext_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                                    "blob_ref": "blob://local/files.secure/PROC-PAYLOAD-HAPPY-PATH/field-ssn.cipher",
+                                    "payload_commitment": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+                                },
+                                {
+                                    "field_path": "payload.medical_record",
+                                    "ciphertext_hash": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                                    "blob_ref": "blob://local/files.secure/PROC-PAYLOAD-HAPPY-PATH/field-medical.cipher",
+                                    "payload_commitment": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+                                }
+                            ],
+                            "envelope": {
+                                "envelope_id": Uuid::new_v4(),
+                                "signer": "did:author:a",
+                                "signature": "sig-payload-happy-path",
+                                "submitted_at": chrono::Utc::now(),
+                                "payload": {
+                                    "entry_id": Uuid::new_v4(),
+                                    "namespace": "files.secure",
+                                    "action": "ENCRYPTED_PAYLOAD_FIELD_COMMIT",
+                                    "object_id": "PROC-PAYLOAD-HAPPY-PATH",
+                                    "payload": {"record_type": "medical_claim"},
+                                    "privacy_flag": false,
+                                    "privacy_mode": "none",
+                                    "payload_commitment": null,
+                                    "ciphertext_hex": null,
+                                    "nonce_hex": null,
+                                    "salt_hex": null,
+                                    "kdf_params": null,
+                                    "consent_receipt": null,
+                                    "authorized_readers": [],
+                                    "custodian_policy_id": null,
+                                    "field_reader_acls": {},
+                                    "key_wrapped_secrets": [],
+                                    "revocation_events": [],
+                                    "author": "did:author:a",
+                                    "signature": "sig-payload-happy-path",
+                                    "timestamp": now
+                                }
+                            }
+                        }))
+                        .expect("request body"),
+                    ))
+                    .expect("request"),
+            )
+            .await
+            .expect("response");
+
+        assert_eq!(response.status(), StatusCode::ACCEPTED);
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("response body");
+        let payload: Value = serde_json::from_slice(&body).expect("response payload");
+        assert_eq!(payload["status"], json!("accepted"));
+        assert_eq!(payload["namespace"], json!("files.secure"));
+        assert_eq!(payload["object_id"], json!("PROC-PAYLOAD-HAPPY-PATH"));
+        assert_eq!(payload["encrypted_field_refs"].as_array().map(Vec::len), Some(2));
+    }
+
+    #[tokio::test]
     async fn payload_commit_rejects_non_payload_commit_action() {
         let app = build_server().router();
         let now = chrono::Utc::now().timestamp();
