@@ -1011,6 +1011,51 @@ pub fn verify_consent_receipt_offchain(
     verify_claims_commitment(plaintext_data, &receipt.data_hash)
 }
 
+pub fn compute_file_manifest_commitment(manifest: &Value) -> Result<String> {
+    let mut normalized_manifest = manifest.clone();
+    if let Some(object) = normalized_manifest.as_object_mut() {
+        object.remove("payload_commitment");
+    }
+    let canonical_manifest = canonical_json(&normalized_manifest);
+    Ok(format!(
+        "sha256:{}",
+        hex::encode(Sha256::digest(canonical_manifest.as_bytes()))
+    ))
+}
+
+pub fn verify_offchain_file_object_hash(manifest: &Value, ciphertext_bytes: &[u8]) -> Result<()> {
+    let expected_hash = manifest
+        .get("ciphertext_hash")
+        .and_then(Value::as_str)
+        .ok_or_else(|| {
+            ProtocolError::ValidationFailed("manifest.ciphertext_hash is required".into())
+        })?;
+    let computed_hash = format!("sha256:{}", hex::encode(Sha256::digest(ciphertext_bytes)));
+    if computed_hash != expected_hash {
+        return Err(ProtocolError::ValidationFailed(
+            "off-chain ciphertext hash mismatch".into(),
+        ));
+    }
+    Ok(())
+}
+
+pub fn verify_offchain_file_reconciliation(
+    manifest: &Value,
+    expected_payload_commitment: &str,
+    ciphertext_bytes: &[u8],
+) -> Result<()> {
+    verify_offchain_file_object_hash(manifest, ciphertext_bytes)?;
+
+    let computed_manifest_commitment = compute_file_manifest_commitment(manifest)?;
+    if computed_manifest_commitment != expected_payload_commitment {
+        return Err(ProtocolError::ValidationFailed(
+            "off-chain manifest commitment mismatch".into(),
+        ));
+    }
+
+    Ok(())
+}
+
 pub fn partition_payload_by_field_policy(
     namespace: &str,
     payload: &Value,
@@ -1637,5 +1682,49 @@ mod tests {
         assert!(err
             .to_string()
             .contains("cannot be present in both public_fields and offchain_encrypted_fields"));
+    }
+
+    #[test]
+    fn computes_file_manifest_commitment_from_shared_vectors() {
+        let fixture: Value = serde_json::from_slice(include_bytes!(
+            "../../../docs/test-vectors/file_commitment_test_vectors.json"
+        ))
+        .expect("parse file commitment vectors");
+        let vectors = fixture["vectors"]
+            .as_array()
+            .expect("vectors should be an array");
+
+        for vector in vectors {
+            let manifest = vector.get("manifest").expect("manifest fixture");
+            let expected = vector["expected_sha256"]
+                .as_str()
+                .expect("expected hash fixture");
+            let computed =
+                compute_file_manifest_commitment(manifest).expect("compute manifest commitment");
+            assert_eq!(computed, expected);
+        }
+    }
+
+    #[test]
+    fn verifies_offchain_file_object_hash_and_manifest_commitment() {
+        let ciphertext = b"ciphertext bytes for deterministic hash";
+        let ciphertext_hash = format!("sha256:{}", hex::encode(Sha256::digest(ciphertext)));
+        let manifest = serde_json::json!({
+            "schema_version": "1.0.0",
+            "file_ref": "local://ciphertexts/example.bin",
+            "ciphertext_hash": ciphertext_hash,
+            "consent_receipt_ref": "receipt:abc-123",
+            "encryption": { "mode": "passphrase_file" }
+        });
+        let commitment = compute_file_manifest_commitment(&manifest).expect("compute commitment");
+
+        verify_offchain_file_reconciliation(&manifest, &commitment, ciphertext)
+            .expect("reconciliation should succeed");
+
+        let mismatch = verify_offchain_file_reconciliation(&manifest, "sha256:00", ciphertext)
+            .expect_err("mismatched commitment should fail");
+        assert!(mismatch
+            .to_string()
+            .contains("manifest commitment mismatch"));
     }
 }
