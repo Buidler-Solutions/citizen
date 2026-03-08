@@ -197,7 +197,7 @@ Checklist:
 - [x] Add explorer panels for file manifest metadata (hashes, mode, consent state). ✅ Explorer backend now proxies `/files/manifests/:manifestId` to the canonical API and frontend renders an `Encrypted File Manifest Metadata` card keyed by `NEXT_PUBLIC_FILE_MANIFEST_ID`.
 - [x] Ensure no plaintext or secret key material is rendered/logged. ✅ Explorer manifest panel only renders commitment metadata (`manifest_id`, `ciphertext_hash`, `payload_commitment`, consent state, revoked-reader count) and does not request or display plaintext payload bytes.
 - [x] Add verifier command examples in docs and runbooks. ✅ Added wallet CLI `verify-offchain-file` command plus runbook command snippets for `manifest_json + payload_commitment + ciphertext_path` verification workflows.
-- [ ] Add operator alerting for commitment mismatch/revocation conflicts.
+- [x] Add operator alerting for commitment mismatch/revocation conflicts. ✅ API now records `commitment_mismatch` and `revocation_conflict` access alerts during `/api/v1/files/read` checks and exposes them via `GET /api/v1/files/alerts` for operator polling/export.
 
 ## Phase F — Release Gate + Security Validation
 
