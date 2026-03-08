@@ -239,7 +239,7 @@ Checklist:
 ### Explorer / Indexer
 - [ ] Index encrypted-file events and consent status transitions.
 - [ ] Add high-signal privacy + revocation UI labels.
-- [ ] Index and display encrypted payload field references by namespace and field path (never plaintext).
+- [x] Index and display encrypted payload field references by namespace and field path (never plaintext). ✅ Added API `GET /api/v1/payloads/fields/:entry_id/:namespace` plus explorer backend/frontend views to display only `field_path`, `blob_ref`, and ciphertext commitment hashes.
 
 ### Operations / Governance
 - [x] Add credential custody runbook for storage/KMS secrets. ✅ Published `docs/OFFCHAIN_ENCRYPTED_FILES_CREDENTIAL_CUSTODY_RUNBOOK.md` with least-privilege custody, rotation intervals, audit evidence requirements, and compromise response workflow.
