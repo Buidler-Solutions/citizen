@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 type BlockResponse = {
   source: string;
   data: {
@@ -60,6 +62,23 @@ type ReceiptResponse = {
   };
 };
 
+type FileManifestResponse = {
+  source: string;
+  data: {
+    manifest_id: string;
+    namespace: string;
+    object_id: string;
+    committed_at: number;
+    encryption_mode: string | null;
+    ciphertext_hash: string | null;
+    payload_commitment: string | null;
+    consent_receipt_ref: string | null;
+    consent_state: string;
+    consent_state_reason: string | null;
+    revoked_readers: string[];
+  };
+};
+
 type AssetPositionsResponse = {
   source: string;
   data: {
@@ -83,6 +102,7 @@ const blockHeight = Number(process.env.NEXT_PUBLIC_BLOCK_HEIGHT ?? '1');
 const namespace = process.env.NEXT_PUBLIC_NAMESPACE ?? 'governance.vote';
 const receiptId = process.env.NEXT_PUBLIC_RECEIPT_ID;
 const assetAccountId = process.env.NEXT_PUBLIC_ASSET_ACCOUNT_ID ?? 'did:ledger:alice';
+const fileManifestId = process.env.NEXT_PUBLIC_FILE_MANIFEST_ID;
 
 async function loadBlock(): Promise<BlockResponse> {
   const response = await fetch(`${apiBase}/blocks/${blockHeight}`, {
@@ -114,6 +134,16 @@ async function loadReceipt(id: string): Promise<ReceiptResponse> {
   return response.json();
 }
 
+async function loadFileManifest(manifestId: string): Promise<FileManifestResponse | null> {
+  const response = await fetch(`${apiBase}/files/manifests/${encodeURIComponent(manifestId)}`, {
+    next: { revalidate: 5 },
+  });
+  if (!response.ok) {
+    return null;
+  }
+  return response.json();
+}
+
 async function loadAssetPositions(accountId: string): Promise<AssetPositionsResponse | null> {
   const response = await fetch(`${apiBase}/assets/${encodeURIComponent(accountId)}`, {
     next: { revalidate: 5 },
@@ -125,10 +155,11 @@ async function loadAssetPositions(accountId: string): Promise<AssetPositionsResp
 }
 
 export default async function HomePage() {
-  const [block, entries, receipt, assetPositions] = await Promise.all([
+  const [block, entries, receipt, fileManifest, assetPositions] = await Promise.all([
     loadBlock(),
     loadEntries(),
     receiptId ? loadReceipt(receiptId) : Promise.resolve(null),
+    fileManifestId ? loadFileManifest(fileManifestId) : Promise.resolve(null),
     loadAssetPositions(assetAccountId),
   ]);
 
@@ -227,6 +258,45 @@ export default async function HomePage() {
           ) : (
             <p>
               Set <code>NEXT_PUBLIC_RECEIPT_ID</code> to inspect canonical receipt finality proofs.
+            </p>
+          )}
+        </div>
+
+
+        <div className="card">
+          <h2>Encrypted File Manifest Metadata</h2>
+          {fileManifest ? (
+            <ul>
+              <li>
+                <div className="row">
+                  <span>Manifest ID</span>
+                  <strong className="mono">{fileManifest.data.manifest_id}</strong>
+                </div>
+                <div className="row">
+                  <span>Namespace</span>
+                  <strong>{fileManifest.data.namespace}</strong>
+                </div>
+                <div className="row">
+                  <span>Encryption mode</span>
+                  <strong>{fileManifest.data.encryption_mode ?? 'N/A'}</strong>
+                </div>
+                <div className="row">
+                  <span>Ciphertext hash</span>
+                  <strong className="mono">{fileManifest.data.ciphertext_hash ?? 'N/A'}</strong>
+                </div>
+                <div className="row">
+                  <span>Consent state</span>
+                  <strong>{fileManifest.data.consent_state}</strong>
+                </div>
+                <div className="row">
+                  <span>Revoked readers</span>
+                  <strong>{fileManifest.data.revoked_readers.length}</strong>
+                </div>
+              </li>
+            </ul>
+          ) : (
+            <p>
+              Set <code>NEXT_PUBLIC_FILE_MANIFEST_ID</code> to inspect encrypted file manifest hashes and consent status.
             </p>
           )}
         </div>
