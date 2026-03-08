@@ -19,6 +19,7 @@ Primary implementation emphasis for v1:
 
 - **Per-namespace field policies first**: each namespace must explicitly define which payload fields are clear, committed-only, or encrypted off-chain.
 - **Per-payload encryption off-chain**: sensitive payload fields are encrypted as detached off-chain blobs and referenced by deterministic commitments in the on-chain payload.
+- **Grant-only decryption**: decryption must be possible only for wallets that have an explicit active grant, and sharing modes must support all participating wallets in the authorized set without exposing plaintext to non-participants.
 
 ## 2) Scope (v1)
 
@@ -27,6 +28,7 @@ Primary implementation emphasis for v1:
 - Canonical payload field-classification schema per namespace (`public_fields`, `committed_fields`, `offchain_encrypted_fields`).
 - Wallet-side encrypt-then-commit for files (passphrase + ACL/DEK modes).
 - Wallet/SDK helpers that split payloads by field policy and produce off-chain encrypted field blobs per payload.
+- Grant-scoped key wrapping so only explicitly authorized participant wallets can decrypt.
 - Deterministic commitment computation for files and metadata manifests.
 - Off-chain storage adapter contract (S3-compatible + local dev backend).
 - Reader access flow with DEK wrapping + rotation hooks.
@@ -47,8 +49,10 @@ Primary implementation emphasis for v1:
 4. **Dual privacy modes**:
    - `passphrase_file` for user-managed sharing.
    - `hybrid_file_acl_dek` for reader-scoped access control.
+   - both modes must enforce that only currently granted wallets can decrypt; non-granted wallets must fail closed.
 5. **No silent downgrades**: encrypted submissions fail closed if required crypto or consent metadata is missing.
 6. **Namespace-governed field encryption**: field classification is a namespace policy artifact, versioned and governance-controlled.
+7. **Participating-wallet decrypt set**: ACL/DEK grants must be computed from the full participating-wallet set for the record/action so each authorized participant wallet can decrypt with its own wrap.
 
 ## 4) Concrete Delivery Phases
 
@@ -79,6 +83,8 @@ Checklist:
 - [ ] Implement streaming encryption path for large files (avoid full-memory buffering).
 - [ ] Reuse Argon2id + ChaCha20-Poly1305 standards for passphrase mode.
 - [ ] Implement per-reader X25519 DEK wrapping for hybrid mode.
+- [ ] Enforce grant validation before unwrap/decrypt in wallet SDK APIs.
+- [ ] Ensure participating wallets receive deterministic per-wallet key wraps when policy requires multi-party readability.
 - [ ] Implement deterministic payload field canonicalization before per-field encryption.
 - [ ] Add wallet UX guardrails: explicit opt-in warnings + mode disclosure.
 - [ ] Add golden tests for deterministic commitments across platforms.
@@ -137,6 +143,7 @@ Checklist:
 - [ ] Add integration tests for happy path (upload, commit, verify, retrieve, revoke).
 - [ ] Add integration tests for per-namespace payload field encryption (serialize -> encrypt off-chain -> commit -> verify).
 - [ ] Add adversarial tests (tampered ciphertext, stale consent, unauthorized reader, replayed intent).
+- [ ] Add adversarial tests ensuring non-granted wallets cannot decrypt and granted participant wallets can decrypt.
 - [ ] Add performance tests for 10MB / 100MB / 1GB encrypted file paths.
 - [ ] Add performance tests for high-field-count payloads with mixed clear/encrypted fields.
 - [ ] Complete cryptography review + key lifecycle review.
@@ -153,6 +160,7 @@ Checklist:
 ### Wallet / SDK
 - [ ] Implement file encryption/decryption APIs.
 - [ ] Implement reader ACL + DEK wrapping flows.
+- [ ] Enforce "grant required" decrypt checks in wallet runtime and SDK helpers.
 - [ ] Ship verification helper for off-chain object hash reconciliation.
 - [ ] Implement namespace-aware payload partitioning and field-level off-chain encryption helper.
 
@@ -180,6 +188,8 @@ This work is complete only when all of the following are true:
 - [ ] Namespace field policy deterministically enforces which payload fields are off-chain encrypted.
 - [ ] A builder can verify file commitments deterministically from receipt + off-chain object hash.
 - [ ] A builder can verify per-payload encrypted field commitments from receipt + field blob hashes.
+- [ ] Only wallets with active grants can decrypt; decrypt attempts from non-granted wallets always fail.
+- [ ] All authorized participating wallets for a shared record can decrypt via their own wallet-specific key wraps.
 - [ ] Reader ACL changes and revocations are reflected in on-chain events and enforced in retrieval paths.
 - [ ] Explorer exposes auditable file metadata while revealing no sensitive plaintext.
 - [ ] Security review signs off cryptography, key handling, and abuse controls.
