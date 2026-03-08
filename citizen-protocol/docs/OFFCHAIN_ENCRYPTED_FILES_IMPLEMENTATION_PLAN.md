@@ -167,7 +167,7 @@ Checklist:
 - [x] Add `POST /api/v1/files/intents` (consent + policy precheck).
 - [x] Add `POST /api/v1/files/commit` (anchors file commitment via signed envelope).
 - [x] Add `POST /api/v1/payloads/commit` for entries with off-chain encrypted fields.
-- [ ] Add storage policy enforcement (size caps, MIME allowlist, namespace controls).
+- [x] Add storage policy enforcement (size caps, MIME allowlist, namespace controls, blob_ref namespace prefix validation for manifests and encrypted payload field refs).
 - [x] Persist immutable file manifest references with deterministic IDs.
 - [x] Persist encrypted field-blob references keyed by `entry_id + namespace + field_path`.
 - [x] Add retry/idempotency key semantics for commit endpoint.
