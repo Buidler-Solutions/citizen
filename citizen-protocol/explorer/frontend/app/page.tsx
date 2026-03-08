@@ -88,6 +88,27 @@ function revocationTone(revokedReaders: string[]): 'ok' | 'warn' {
 }
 
 
+type FileTimelineResponse = {
+  source: string;
+  data: {
+    manifest: {
+      manifest_id: string;
+      namespace: string;
+      object_id: string;
+      committed_at: number;
+      consent_state: string;
+      consent_state_reason: string | null;
+      revoked_readers: string[];
+    };
+    events: Array<{
+      timestamp: number;
+      event_type: string;
+      detail: string;
+    }>;
+  };
+};
+
+
 
 type PayloadFieldRefsResponse = {
   source: string;
@@ -161,6 +182,14 @@ async function loadFileManifest(manifestId: string): Promise<FileManifestRespons
   );
 }
 
+
+
+async function loadFileTimeline(manifestId: string): Promise<FileTimelineResponse | null> {
+  return safeFetchJson<FileTimelineResponse>(
+    `${apiBase}/files/timeline/${encodeURIComponent(manifestId)}`
+  );
+}
+
 async function loadPayloadFieldRefs(
   entryId: string,
   namespaceName: string,
@@ -175,11 +204,12 @@ async function loadAssetPositions(accountId: string): Promise<AssetPositionsResp
 }
 
 export default async function HomePage() {
-  const [block, entries, receipt, fileManifest, payloadFieldRefs, assetPositions] = await Promise.all([
+  const [block, entries, receipt, fileManifest, fileTimeline, payloadFieldRefs, assetPositions] = await Promise.all([
     loadBlock(),
     loadEntries(),
     receiptId ? loadReceipt(receiptId) : Promise.resolve(null),
     fileManifestId ? loadFileManifest(fileManifestId) : Promise.resolve(null),
+    fileManifestId ? loadFileTimeline(fileManifestId) : Promise.resolve(null),
     payloadEntryId && payloadNamespace
       ? loadPayloadFieldRefs(payloadEntryId, payloadNamespace)
       : Promise.resolve(null),
@@ -346,6 +376,44 @@ export default async function HomePage() {
               {fileManifestId
                 ? 'Manifest metadata unavailable. Confirm the API service is running and reachable.'
                 : <>Set <code>NEXT_PUBLIC_FILE_MANIFEST_ID</code> to inspect encrypted file manifest hashes and consent status.</>}
+            </p>
+          )}
+        </div>
+
+
+
+        <div className="card">
+          <h2>Encrypted File Consent & Revocation Timeline</h2>
+          {fileTimeline ? (
+            <>
+              <p className="subtitle">
+                Manifest: <code>{fileTimeline.data.manifest.manifest_id}</code>
+              </p>
+              {(fileTimeline.data.events ?? []).length > 0 ? (
+                <ul>
+                  {fileTimeline.data.events.map((event, index) => (
+                    <li key={`${event.event_type}-${event.timestamp}-${index}`}>
+                      <div className="row">
+                        <span>Timestamp</span>
+                        <strong>{event.timestamp}</strong>
+                      </div>
+                      <div className="row">
+                        <span>Event</span>
+                        <strong>{event.event_type}</strong>
+                      </div>
+                      <p className="privacy-note">{event.detail}</p>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p>No consent/revocation timeline events found for this manifest.</p>
+              )}
+            </>
+          ) : (
+            <p>
+              {fileManifestId
+                ? 'Timeline data unavailable. Confirm the API service is running and reachable.'
+                : <>Set <code>NEXT_PUBLIC_FILE_MANIFEST_ID</code> to inspect encrypted-file consent and revocation transitions.</>}
             </p>
           )}
         </div>
