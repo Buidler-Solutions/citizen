@@ -16,7 +16,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet, HashSet};
-use std::io::{Cursor, Read};
+use std::io::{Cursor, Read, Write};
 use uuid::Uuid;
 use x25519_dalek::{PublicKey as X25519PublicKey, StaticSecret};
 
@@ -608,6 +608,185 @@ pub struct EncryptedPayload {
     pub nonce_hex: String,
     pub kdf: String,
     pub kdf_params: KdfParams,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct EncryptedFileMetadata {
+    pub salt_hex: String,
+    pub nonce_prefix_hex: String,
+    pub kdf: String,
+    pub kdf_params: KdfParams,
+    pub chunk_size_bytes: u32,
+    pub ciphertext_hash: String,
+}
+
+const OFFCHAIN_FILE_CHUNK_SIZE_BYTES: usize = 64 * 1024;
+
+pub fn encrypt_offchain_file_reader_to_writer<R: Read, W: Write>(
+    reader: &mut R,
+    writer: &mut W,
+    passphrase: &str,
+) -> Result<EncryptedFileMetadata> {
+    let mut salt = [0u8; 16];
+    OsRng.fill_bytes(&mut salt);
+    let params = Params::new(19456, 2, 1, Some(32))
+        .map_err(|err| ProtocolError::crypto(format!("invalid kdf params: {err}")))?;
+    let mut derived_key = [0u8; 32];
+    let kdf_params = KdfParams {
+        memory_kib: params.m_cost(),
+        iterations: params.t_cost(),
+        parallelism: params.p_cost(),
+        output_length: 32,
+    };
+    let argon2 = Argon2::new(Algorithm::Argon2id, Version::V0x13, params);
+    argon2
+        .hash_password_into(passphrase.as_bytes(), &salt, &mut derived_key)
+        .map_err(|err| ProtocolError::crypto(format!("failed to derive key: {err}")))?;
+
+    let mut nonce_prefix = [0u8; 4];
+    OsRng.fill_bytes(&mut nonce_prefix);
+    let mut hasher = Sha256::new();
+    let cipher = ChaCha20Poly1305::new(Key::from_slice(&derived_key));
+    let mut chunk = vec![0_u8; OFFCHAIN_FILE_CHUNK_SIZE_BYTES];
+    let mut index: u64 = 0;
+
+    loop {
+        let read = reader.read(&mut chunk).map_err(|err| {
+            ProtocolError::crypto(format!("failed to read plaintext file: {err}"))
+        })?;
+        if read == 0 {
+            break;
+        }
+
+        let nonce = chunk_nonce(&nonce_prefix, index);
+        let aad = index.to_be_bytes();
+        let ciphertext = cipher
+            .encrypt(
+                Nonce::from_slice(&nonce),
+                chacha20poly1305::aead::Payload {
+                    msg: &chunk[..read],
+                    aad: &aad,
+                },
+            )
+            .map_err(|err| ProtocolError::crypto(format!("failed to encrypt file chunk: {err}")))?;
+
+        let frame_len = (ciphertext.len() as u32).to_be_bytes();
+        writer
+            .write_all(&frame_len)
+            .and_then(|_| writer.write_all(&ciphertext))
+            .map_err(|err| ProtocolError::crypto(format!("failed to write ciphertext: {err}")))?;
+        hasher.update(frame_len);
+        hasher.update(&ciphertext);
+        index = index
+            .checked_add(1)
+            .ok_or_else(|| ProtocolError::crypto("file chunk counter overflow".to_string()))?;
+    }
+
+    Ok(EncryptedFileMetadata {
+        salt_hex: hex::encode(salt),
+        nonce_prefix_hex: hex::encode(nonce_prefix),
+        kdf: "argon2id".to_string(),
+        kdf_params,
+        chunk_size_bytes: OFFCHAIN_FILE_CHUNK_SIZE_BYTES as u32,
+        ciphertext_hash: format!("sha256:{}", hex::encode(hasher.finalize())),
+    })
+}
+
+pub fn decrypt_offchain_file_reader_to_writer<R: Read, W: Write>(
+    reader: &mut R,
+    writer: &mut W,
+    metadata: &EncryptedFileMetadata,
+    passphrase: &str,
+) -> Result<()> {
+    if metadata.kdf != "argon2id" {
+        return Err(ProtocolError::crypto(format!(
+            "unsupported kdf: {}",
+            metadata.kdf
+        )));
+    }
+    if metadata.chunk_size_bytes as usize != OFFCHAIN_FILE_CHUNK_SIZE_BYTES {
+        return Err(ProtocolError::crypto(format!(
+            "unsupported file chunk size: {}",
+            metadata.chunk_size_bytes
+        )));
+    }
+    let salt = hex::decode(&metadata.salt_hex)
+        .map_err(|err| ProtocolError::crypto(format!("invalid salt hex: {err}")))?;
+    let nonce_prefix: [u8; 4] = hex::decode(&metadata.nonce_prefix_hex)
+        .map_err(|err| ProtocolError::crypto(format!("invalid nonce prefix hex: {err}")))?
+        .try_into()
+        .map_err(|_| ProtocolError::crypto("nonce prefix must be 4 bytes".to_string()))?;
+    let params = Params::new(
+        metadata.kdf_params.memory_kib,
+        metadata.kdf_params.iterations,
+        metadata.kdf_params.parallelism,
+        Some(metadata.kdf_params.output_length),
+    )
+    .map_err(|err| ProtocolError::crypto(format!("invalid kdf params: {err}")))?;
+    let argon2 = Argon2::new(Algorithm::Argon2id, Version::V0x13, params);
+    let mut derived_key = [0u8; 32];
+    argon2
+        .hash_password_into(passphrase.as_bytes(), &salt, &mut derived_key)
+        .map_err(|err| ProtocolError::crypto(format!("failed to derive key: {err}")))?;
+
+    let cipher = ChaCha20Poly1305::new(Key::from_slice(&derived_key));
+    let mut hasher = Sha256::new();
+    let mut index = 0_u64;
+
+    loop {
+        let mut frame_len = [0_u8; 4];
+        match reader.read_exact(&mut frame_len) {
+            Ok(()) => {}
+            Err(err) if err.kind() == std::io::ErrorKind::UnexpectedEof => break,
+            Err(err) => {
+                return Err(ProtocolError::crypto(format!(
+                    "failed to read ciphertext frame length: {err}"
+                )))
+            }
+        }
+
+        let len = u32::from_be_bytes(frame_len) as usize;
+        let mut ciphertext = vec![0_u8; len];
+        reader.read_exact(&mut ciphertext).map_err(|err| {
+            ProtocolError::crypto(format!("failed to read ciphertext frame payload: {err}"))
+        })?;
+
+        hasher.update(frame_len);
+        hasher.update(&ciphertext);
+        let nonce = chunk_nonce(&nonce_prefix, index);
+        let aad = index.to_be_bytes();
+        let plaintext = cipher
+            .decrypt(
+                Nonce::from_slice(&nonce),
+                chacha20poly1305::aead::Payload {
+                    msg: &ciphertext,
+                    aad: &aad,
+                },
+            )
+            .map_err(|err| ProtocolError::crypto(format!("failed to decrypt file chunk: {err}")))?;
+        writer.write_all(&plaintext).map_err(|err| {
+            ProtocolError::crypto(format!("failed to write plaintext file: {err}"))
+        })?;
+        index = index
+            .checked_add(1)
+            .ok_or_else(|| ProtocolError::crypto("file chunk counter overflow".to_string()))?;
+    }
+
+    let computed_hash = format!("sha256:{}", hex::encode(hasher.finalize()));
+    if computed_hash != metadata.ciphertext_hash {
+        return Err(ProtocolError::ValidationFailed(
+            "off-chain ciphertext hash mismatch".into(),
+        ));
+    }
+
+    Ok(())
+}
+
+fn chunk_nonce(prefix: &[u8; 4], chunk_index: u64) -> [u8; 12] {
+    let mut nonce = [0_u8; 12];
+    nonce[..4].copy_from_slice(prefix);
+    nonce[4..].copy_from_slice(&chunk_index.to_be_bytes());
+    nonce
 }
 
 pub fn encrypt_payload(payload: &Value, passphrase: &str) -> Result<EncryptedPayload> {
@@ -1817,6 +1996,61 @@ mod tests {
         assert!(mismatch
             .to_string()
             .contains("manifest commitment mismatch"));
+    }
+
+    #[test]
+    fn encrypts_and_decrypts_offchain_file_stream_without_full_buffering() {
+        let plaintext = vec![0x5a; OFFCHAIN_FILE_CHUNK_SIZE_BYTES * 2 + 17];
+        let mut plaintext_reader = Cursor::new(plaintext.clone());
+        let mut ciphertext = Vec::new();
+
+        let metadata = encrypt_offchain_file_reader_to_writer(
+            &mut plaintext_reader,
+            &mut ciphertext,
+            "stream-passphrase",
+        )
+        .expect("encrypt offchain file stream");
+
+        assert_eq!(metadata.kdf, "argon2id");
+        assert_eq!(
+            metadata.chunk_size_bytes as usize,
+            OFFCHAIN_FILE_CHUNK_SIZE_BYTES
+        );
+
+        let mut ciphertext_reader = Cursor::new(ciphertext);
+        let mut decrypted = Vec::new();
+        decrypt_offchain_file_reader_to_writer(
+            &mut ciphertext_reader,
+            &mut decrypted,
+            &metadata,
+            "stream-passphrase",
+        )
+        .expect("decrypt offchain file stream");
+
+        assert_eq!(decrypted, plaintext);
+    }
+
+    #[test]
+    fn rejects_offchain_file_stream_decrypt_with_wrong_passphrase() {
+        let mut plaintext_reader = Cursor::new(b"deterministic offchain ciphertext".to_vec());
+        let mut ciphertext = Vec::new();
+        let metadata = encrypt_offchain_file_reader_to_writer(
+            &mut plaintext_reader,
+            &mut ciphertext,
+            "correct-passphrase",
+        )
+        .expect("encrypt offchain file stream");
+
+        let mut ciphertext_reader = Cursor::new(ciphertext);
+        let mut decrypted = Vec::new();
+        let err = decrypt_offchain_file_reader_to_writer(
+            &mut ciphertext_reader,
+            &mut decrypted,
+            &metadata,
+            "wrong-passphrase",
+        )
+        .expect_err("wrong passphrase must fail decrypt");
+        assert!(err.to_string().contains("failed to decrypt file chunk"));
     }
 
     struct PatternReader {
