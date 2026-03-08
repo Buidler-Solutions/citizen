@@ -59,7 +59,7 @@ Goal: integrate uploads/commits safely with reversible rollout.
 
 Deliver in third PR slice:
 - `POST /api/v1/files/intents`, `POST /api/v1/files/commit`, `POST /api/v1/payloads/commit`.
-- Local + S3-compatible storage adapters enforcing policy constraints.
+- Local + MinIO (S3-compatible) storage adapters enforcing policy constraints.
 - Idempotency semantics + audit logging for file/payload commit flows.
 - Feature flag: `offchain_encrypted_files_v1` (default OFF in production). ✅ API edge now enforces this flag across off-chain file/payload routes, returning explicit `SERVICE_UNAVAILABLE` + `feature_flag` metadata when disabled.
 
@@ -96,7 +96,7 @@ Exit criteria:
 - Wallet/SDK helpers that split payloads by field policy and produce off-chain encrypted field blobs per payload.
 - Grant-scoped key wrapping so only explicitly authorized participant wallets can decrypt.
 - Deterministic commitment computation for files and metadata manifests.
-- Off-chain storage adapter contract (S3-compatible + local dev backend).
+- Off-chain storage adapter contract (MinIO-backed S3-compatible + local dev backend).
 - Reader access flow with DEK wrapping + rotation hooks.
 - API receipts that expose file commitment verification metadata.
 - Explorer read-only visibility (no plaintext) for auditability.
@@ -119,6 +119,7 @@ Exit criteria:
 5. **No silent downgrades**: encrypted submissions fail closed if required crypto or consent metadata is missing.
 6. **Namespace-governed field encryption**: field classification is a namespace policy artifact, versioned and governance-controlled.
 7. **Participating-wallet decrypt set**: ACL/DEK grants must be computed from the full participating-wallet set for the record/action so each authorized participant wallet can decrypt with its own wrap.
+8. **MinIO-first S3 compatibility**: standardize on MinIO as the canonical S3-compatible object backend for Gate 2 so local/staging/prod integration behavior stays consistent and testable.
 
 ## 4) Concrete Delivery Phases
 
@@ -160,14 +161,37 @@ Checklist:
 Deliverables:
 - Upload negotiation endpoint returning pre-signed target and policy constraints.
 - Receipt-compatible file submission endpoint.
-- Storage adapter abstraction with local + S3-compatible implementations.
+- Storage adapter abstraction with local + MinIO implementations.
 - Payload commit endpoint support for off-chain encrypted field references.
+
+### Phase C.1 — MinIO Integration Strategy (authoritative)
+
+Use MinIO as the canonical object backend implementation for all S3-compatible requirements.
+
+Execution steps:
+1. **Adapter implementation**
+   - Add `MinioOffchainObjectStore` implementing the existing object-store contract.
+   - Support pre-signed upload intent generation and namespace-scoped `file_ref` validation.
+2. **Deterministic object-reference policy**
+   - Standardize `file_ref`/`blob_ref` patterns for MinIO-backed buckets/prefixes.
+   - Enforce namespace, object ID, and intent binding in ref validation logic.
+3. **Environment profile rollout**
+   - Local: single-node MinIO for developer workflows.
+   - Staging/production: replicated MinIO deployment with versioned buckets and audit logging enabled.
+4. **Security and custody controls**
+   - Use least-privilege access keys scoped by namespace prefix and operation.
+   - Rotate credentials/KMS material per custody runbook intervals and document evidence.
+5. **Verification and failure-injection**
+   - Add integration coverage for invalid pre-signed URL usage, prefix escape attempts, expired upload intents, and replayed commits.
+   - Validate deterministic `receipt -> commitment -> object hash` reconciliation against MinIO-hosted ciphertext objects.
 
 Checklist:
 - [x] Add `POST /api/v1/files/intents` (consent + policy precheck).
 - [x] Add `POST /api/v1/files/commit` (anchors file commitment via signed envelope).
 - [x] Add `POST /api/v1/payloads/commit` for entries with off-chain encrypted fields.
 - [x] Add storage policy enforcement (size caps, MIME allowlist, namespace controls, blob_ref namespace prefix validation for manifests and encrypted payload field refs).
+- [ ] Add MinIO adapter implementation + config wiring (endpoint, bucket, access key, secret key, optional TLS path-style).
+- [ ] Add MinIO-backed integration tests for file intent/commit and payload field refs using policy-constrained prefixes.
 - [x] Persist immutable file manifest references with deterministic IDs.
 - [x] Persist encrypted field-blob references keyed by `entry_id + namespace + field_path`.
 - [x] Add retry/idempotency key semantics for commit endpoint.
