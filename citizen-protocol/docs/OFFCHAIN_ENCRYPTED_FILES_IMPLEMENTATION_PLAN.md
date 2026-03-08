@@ -244,7 +244,7 @@ Checklist:
 ### Operations / Governance
 - [x] Add credential custody runbook for storage/KMS secrets. ✅ Published `docs/OFFCHAIN_ENCRYPTED_FILES_CREDENTIAL_CUSTODY_RUNBOOK.md` with least-privilege custody, rotation intervals, audit evidence requirements, and compromise response workflow.
 - [x] Add incident response playbook for encrypted-file compromise scenarios. ✅ Published `docs/OFFCHAIN_ENCRYPTED_FILES_INCIDENT_RESPONSE_PLAYBOOK.md` with severity tiers, containment/recovery workflow, governance escalation matrix, and forensic evidence requirements.
-- [ ] Add governance proposal templates for file-policy changes.
+- [x] Add governance proposal templates for file-policy changes. ✅ Published `docs/OFFCHAIN_ENCRYPTED_FILES_GOVERNANCE_PROPOSAL_TEMPLATES.md` with canonical `UpdateNamespace`/`UpdateParameter` proposal payloads, reviewer checklist, and post-execution operator handoff steps.
 
 ## 6) Acceptance Criteria (Definition of Done)
 
