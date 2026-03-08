@@ -147,6 +147,8 @@ Baseline reference: `docs/DEEP_RESEARCH_ARCHITECTURE_BASELINE.md` (Phase 1 secti
 
 ## Post-Phase Operational Backlog
 ### Next Priority Tasks
+- [ ] Deliver opt-in off-chain encrypted files implementation track end-to-end (wallet/SDK crypto path, API/storage adapters, governance policy rules, explorer visibility, and security/release gate).
+  - 2026-03-08 update: added `docs/OFFCHAIN_ENCRYPTED_FILES_IMPLEMENTATION_PLAN.md` with a concrete multi-phase implementation plan, cross-team execution checklist, and definition-of-done acceptance criteria.
 - [x] Confirm validator-node rollout readiness across target operators (keys, peer admission policy, telemetry, and runbooks).
   - 2026-02-14 update: added `docs/VALIDATOR_ROLLOUT_READINESS.md` with a four-gate validator sign-off workflow (keys, admission policy, telemetry, runbooks), explicit pass criteria, and release sign-off template for operator onboarding cohorts.
 - [x] Add a dedicated watcher/observer node delivery track immediately after validator readiness sign-off:
