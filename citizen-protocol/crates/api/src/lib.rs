@@ -71,11 +71,17 @@ struct ApiEdgeState {
     write_windows: Mutex<BTreeMap<String, Vec<i64>>>,
     file_intents: Mutex<BTreeMap<Uuid, StoredFileIntent>>,
     committed_file_intents: Mutex<BTreeMap<Uuid, String>>,
-    file_commit_idempotency: Mutex<BTreeMap<String, serde_json::Value>>,
-    payload_commit_idempotency: Mutex<BTreeMap<String, serde_json::Value>>,
+    file_commit_idempotency: Mutex<BTreeMap<String, IdempotencyRecord>>,
+    payload_commit_idempotency: Mutex<BTreeMap<String, IdempotencyRecord>>,
     file_manifests: Mutex<BTreeMap<String, StoredFileManifest>>,
     payload_field_refs: Mutex<BTreeMap<String, EncryptedFieldRef>>,
     file_access_alerts: Mutex<Vec<FileAccessAlert>>,
+}
+
+#[derive(Clone, Debug)]
+struct IdempotencyRecord {
+    request_hash: String,
+    response: serde_json::Value,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -190,7 +196,7 @@ struct FileIntentRequest {
     consent_receipt: ConsentReceipt,
 }
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 struct FileCommitRequest {
     intent_id: Uuid,
     manifest: serde_json::Value,
@@ -212,7 +218,7 @@ struct FileRevokeRequest {
     envelope: SignedEnvelope<LedgerEntry>,
 }
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 struct PayloadCommitRequest {
     namespace: String,
     object_id: String,
@@ -769,6 +775,19 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
             Err(response) => return response,
         };
 
+        let request_value = match serde_json::to_value(&request) {
+            Ok(value) => value,
+            Err(err) => {
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(serde_json::json!({
+                        "error": format!("failed to canonicalize file commit request: {err}")
+                    })),
+                )
+            }
+        };
+        let request_hash = sha256_hex(&canonical_json(&request_value));
+
         if let Some(cached) = edge
             .file_commit_idempotency
             .lock()
@@ -776,7 +795,16 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
             .get(&idempotency_key)
             .cloned()
         {
-            return (StatusCode::OK, Json(cached));
+            if cached.request_hash != request_hash {
+                return (
+                    StatusCode::CONFLICT,
+                    Json(serde_json::json!({
+                        "error": "idempotency key reuse with different request payload",
+                        "idempotency_key": idempotency_key,
+                    })),
+                );
+            }
+            return (StatusCode::OK, Json(cached.response));
         }
 
         if let Some(manifest_id) = edge
@@ -898,10 +926,13 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
             "intent_created_at": intent.created_at,
             "result": base,
         });
-        edge.file_commit_idempotency
-            .lock()
-            .await
-            .insert(idempotency_key, response.clone());
+        edge.file_commit_idempotency.lock().await.insert(
+            idempotency_key,
+            IdempotencyRecord {
+                request_hash,
+                response: response.clone(),
+            },
+        );
 
         (StatusCode::ACCEPTED, Json(response))
     }
@@ -927,6 +958,19 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
             Err(response) => return response,
         };
 
+        let request_value = match serde_json::to_value(&request) {
+            Ok(value) => value,
+            Err(err) => {
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(serde_json::json!({
+                        "error": format!("failed to canonicalize payload commit request: {err}")
+                    })),
+                )
+            }
+        };
+        let request_hash = sha256_hex(&canonical_json(&request_value));
+
         if let Some(cached) = edge
             .payload_commit_idempotency
             .lock()
@@ -934,7 +978,16 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
             .get(&idempotency_key)
             .cloned()
         {
-            return (StatusCode::OK, Json(cached));
+            if cached.request_hash != request_hash {
+                return (
+                    StatusCode::CONFLICT,
+                    Json(serde_json::json!({
+                        "error": "idempotency key reuse with different request payload",
+                        "idempotency_key": idempotency_key,
+                    })),
+                );
+            }
+            return (StatusCode::OK, Json(cached.response));
         }
 
         let now = Utc::now().timestamp();
@@ -1165,10 +1218,13 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
             "encrypted_field_refs": request.encrypted_field_refs,
             "result": base,
         });
-        edge.payload_commit_idempotency
-            .lock()
-            .await
-            .insert(idempotency_key, response.clone());
+        edge.payload_commit_idempotency.lock().await.insert(
+            idempotency_key,
+            IdempotencyRecord {
+                request_hash,
+                response: response.clone(),
+            },
+        );
 
         (StatusCode::ACCEPTED, Json(response))
     }
@@ -4395,6 +4451,37 @@ mod tests {
             .expect("body");
         assert_eq!(first_body, second_body);
 
+        let mut altered_commit_request = commit_request.clone();
+        altered_commit_request["manifest"]["ciphertext_hash"] =
+            json!("sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
+
+        let reuse_with_different_payload = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/files/commit")
+                    .header("content-type", "application/json")
+                    .header("idempotency-key", "file-commit-1")
+                    .body(Body::from(
+                        serde_json::to_vec(&altered_commit_request).expect("altered commit body"),
+                    ))
+                    .expect("request"),
+            )
+            .await
+            .expect("reuse with different payload");
+        assert_eq!(reuse_with_different_payload.status(), StatusCode::CONFLICT);
+        let conflict_body =
+            axum::body::to_bytes(reuse_with_different_payload.into_body(), usize::MAX)
+                .await
+                .expect("conflict body");
+        let conflict_payload: Value =
+            serde_json::from_slice(&conflict_body).expect("conflict payload");
+        assert_eq!(
+            conflict_payload["error"],
+            "idempotency key reuse with different request payload"
+        );
+
         let third = app
             .oneshot(
                 Request::builder()
@@ -6930,6 +7017,192 @@ mod tests {
         assert_eq!(
             payload["encrypted_field_refs"].as_array().map(Vec::len),
             Some(2)
+        );
+    }
+
+    #[tokio::test]
+    async fn payload_commit_rejects_idempotency_key_reuse_with_different_payload() {
+        let grant_keys = grant_approver_keys(&[
+            "grant:ops-1",
+            "grant:ops-2",
+            "grant:ops-3",
+            "grant:ops-4",
+            "grant:ops-5",
+        ]);
+        let app = build_server_with_grant_keys_and_file_actions(
+            &grant_keys,
+            &["ENCRYPTED_FILE_UPLOAD", "ENCRYPTED_PAYLOAD_FIELD_COMMIT"],
+        )
+        .router();
+        let now = chrono::Utc::now().timestamp();
+
+        let _ = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/envelopes/submit")
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        serde_json::to_vec(&json!({
+                            "envelope_id": Uuid::new_v4(),
+                            "signer": "did:citizen:holder-1",
+                            "signature": "sig-consent-payload-idempotency",
+                            "submitted_at": chrono::Utc::now(),
+                            "payload": {
+                                "entry_id": Uuid::new_v4(),
+                                "namespace": "consent.receipt",
+                                "action": "CONSENT_GRANTED",
+                                "object_id": "did:citizen:holder-1",
+                                "payload": {
+                                    "data_hash": "sha256:payload-idempotency",
+                                    "policy_ref": "policy:offchain:v1",
+                                    "expires_at": now + 3_600
+                                },
+                                "privacy_flag": false,
+                                "privacy_mode": "none",
+                                "payload_commitment": null,
+                                "ciphertext_hex": null,
+                                "nonce_hex": null,
+                                "salt_hex": null,
+                                "kdf_params": null,
+                                "consent_receipt": null,
+                                "authorized_readers": [],
+                                "custodian_policy_id": null,
+                                "field_reader_acls": {},
+                                "key_wrapped_secrets": [],
+                                "revocation_events": [],
+                                "author": "did:citizen:holder-1",
+                                "signature": "sig-consent-payload-idempotency",
+                                "timestamp": now
+                            }
+                        }))
+                        .expect("consent body"),
+                    ))
+                    .expect("request"),
+            )
+            .await
+            .expect("consent response");
+
+        let entry_id = Uuid::new_v4();
+        let ssn_commitment = ApiServer::<MemoryStorage>::compute_payload_field_commitment(
+            "files.secure",
+            &entry_id.to_string(),
+            1,
+            "payload.ssn",
+            "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        );
+        let medical_commitment = ApiServer::<MemoryStorage>::compute_payload_field_commitment(
+            "files.secure",
+            &entry_id.to_string(),
+            1,
+            "payload.medical_record",
+            "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        );
+
+        let commit_request = json!({
+            "namespace": "files.secure",
+            "object_id": "PROC-PAYLOAD-IDEMPOTENCY",
+            "author_did": "did:author:a",
+            "policy_version": 1,
+            "consent_receipt": {
+                "subject_did": "did:citizen:holder-1",
+                "data_hash": "sha256:payload-idempotency",
+                "policy_ref": "policy:offchain:v1",
+                "granted_at": now,
+                "expires_at": now + 3_600,
+                "authorized_readers": ["did:reader:1"]
+            },
+            "encrypted_field_refs": [
+                {
+                    "field_path": "payload.ssn",
+                    "ciphertext_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                    "blob_ref": "blob://local/files.secure/PROC-PAYLOAD-IDEMPOTENCY/field-ssn.cipher",
+                    "payload_commitment": ssn_commitment
+                },
+                {
+                    "field_path": "payload.medical_record",
+                    "ciphertext_hash": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                    "blob_ref": "blob://local/files.secure/PROC-PAYLOAD-IDEMPOTENCY/field-medical.cipher",
+                    "payload_commitment": medical_commitment
+                }
+            ],
+            "envelope": {
+                "envelope_id": Uuid::new_v4(),
+                "signer": "did:author:a",
+                "signature": "sig-payload-idempotency",
+                "submitted_at": chrono::Utc::now(),
+                "payload": {
+                    "entry_id": entry_id,
+                    "namespace": "files.secure",
+                    "action": "ENCRYPTED_PAYLOAD_FIELD_COMMIT",
+                    "object_id": "PROC-PAYLOAD-IDEMPOTENCY",
+                    "payload": {"record_type": "pii_update"},
+                    "privacy_flag": false,
+                    "privacy_mode": "none",
+                    "payload_commitment": null,
+                    "ciphertext_hex": null,
+                    "nonce_hex": null,
+                    "salt_hex": null,
+                    "kdf_params": null,
+                    "consent_receipt": null,
+                    "authorized_readers": [],
+                    "custodian_policy_id": null,
+                    "field_reader_acls": {},
+                    "key_wrapped_secrets": [],
+                    "revocation_events": [],
+                    "author": "did:author:a",
+                    "signature": "sig-payload-idempotency",
+                    "timestamp": now
+                }
+            }
+        });
+
+        let first = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/payloads/commit")
+                    .header("content-type", "application/json")
+                    .header("idempotency-key", "payload-idempotency-1")
+                    .body(Body::from(
+                        serde_json::to_vec(&commit_request).expect("commit request body"),
+                    ))
+                    .expect("request"),
+            )
+            .await
+            .expect("first response");
+        assert_eq!(first.status(), StatusCode::ACCEPTED);
+
+        let mut altered_commit_request = commit_request.clone();
+        altered_commit_request["encrypted_field_refs"][0]["ciphertext_hash"] =
+            json!("sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
+
+        let conflict = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/payloads/commit")
+                    .header("content-type", "application/json")
+                    .header("idempotency-key", "payload-idempotency-1")
+                    .body(Body::from(
+                        serde_json::to_vec(&altered_commit_request)
+                            .expect("altered commit request body"),
+                    ))
+                    .expect("request"),
+            )
+            .await
+            .expect("conflict response");
+        assert_eq!(conflict.status(), StatusCode::CONFLICT);
+
+        let body = axum::body::to_bytes(conflict.into_body(), usize::MAX)
+            .await
+            .expect("conflict body");
+        let payload: Value = serde_json::from_slice(&body).expect("conflict payload");
+        assert_eq!(
+            payload["error"],
+            "idempotency key reuse with different request payload"
         );
     }
 
