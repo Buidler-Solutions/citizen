@@ -210,8 +210,8 @@ Checklist:
 - [x] Add integration tests for per-namespace payload field encryption (serialize -> encrypt off-chain -> commit -> verify). ✅ Added API integration test `payload_commit_happy_path_accepts_required_encrypted_field_refs` to validate namespace-governed encrypted field refs are accepted when required fields, commitments, and blob refs are provided.
 - [x] Add adversarial tests (tampered ciphertext, stale consent, unauthorized reader, replayed intent). ✅ API tests now cover replayed intent (`file_commit_enforces_idempotency_and_persists_manifest`), stale consent (`file_read_rejects_expired_consent_receipt`), unauthorized readers (`file_read_rejects_reader_not_in_authorized_list`), and tampered ciphertext hash reconciliation (`file_read_rejects_ciphertext_hash_mismatch`).
 - [x] Add adversarial tests ensuring non-granted wallets cannot decrypt and granted participant wallets can decrypt.
-- [ ] Add performance tests for 10MB / 100MB / 1GB encrypted file paths.
-- [ ] Add performance tests for high-field-count payloads with mixed clear/encrypted fields.
+- [x] Add performance tests for 10MB / 100MB / 1GB encrypted file paths. ✅ Added ignored wallet performance test `verifies_offchain_file_object_hash_for_large_ciphertext_streams` that validates streaming hash verification for deterministic 10MB/100MB/1GB ciphertext readers without loading full blobs in memory.
+- [x] Add performance tests for high-field-count payloads with mixed clear/encrypted fields. ✅ Added ignored wallet performance test `partitions_high_field_count_payload_with_mixed_visibility_sets` covering deterministic partitioning across 4,000 mixed public/committed/off-chain-encrypted field paths.
 - [ ] Complete cryptography review + key lifecycle review.
 - [ ] Publish production readiness report.
 
