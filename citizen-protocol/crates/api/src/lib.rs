@@ -1075,6 +1075,39 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
             );
         }
 
+        let entry_id = request.envelope.payload.entry_id.to_string();
+        let commitment_mismatches: Vec<serde_json::Value> = request
+            .encrypted_field_refs
+            .iter()
+            .filter_map(|field_ref| {
+                let expected = Self::compute_payload_field_commitment(
+                    &request.namespace,
+                    &entry_id,
+                    request.policy_version,
+                    &field_ref.field_path,
+                    &field_ref.ciphertext_hash,
+                );
+                if expected == field_ref.payload_commitment {
+                    None
+                } else {
+                    Some(serde_json::json!({
+                        "field_path": field_ref.field_path,
+                        "provided_payload_commitment": field_ref.payload_commitment,
+                        "expected_payload_commitment": expected,
+                    }))
+                }
+            })
+            .collect();
+        if !commitment_mismatches.is_empty() {
+            return (
+                StatusCode::UNPROCESSABLE_ENTITY,
+                Json(serde_json::json!({
+                    "error": "encrypted field payload_commitment does not match canonical commitment derivation",
+                    "mismatches": commitment_mismatches,
+                })),
+            );
+        }
+
         let entry_id = request.envelope.payload.entry_id;
         let (status, Json(base)) =
             Self::process_envelope_submission(ledger, request.envelope).await;
@@ -1436,6 +1469,28 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
             migration_guide_ref,
             offchain_encrypted_fields,
         })
+    }
+
+    fn compute_payload_field_commitment(
+        namespace: &str,
+        entry_id: &str,
+        policy_version: u32,
+        field_path: &str,
+        ciphertext_hash: &str,
+    ) -> String {
+        let commitment_input = serde_json::json!({
+            "schema_version": "1.0.0",
+            "namespace": namespace,
+            "entry_id": entry_id,
+            "policy_version": policy_version,
+            "fields": [
+                {
+                    "field_path": field_path,
+                    "ciphertext_hash": ciphertext_hash,
+                }
+            ]
+        });
+        sha256_hex(&canonical_json(&commitment_input))
     }
 
     fn required_idempotency_key(
@@ -6211,6 +6266,22 @@ mod tests {
             .await
             .expect("consent response");
 
+        let entry_id = Uuid::new_v4();
+        let sso_commitment = ApiServer::<MemoryStorage>::compute_payload_field_commitment(
+            "files.secure",
+            &entry_id.to_string(),
+            1,
+            "payload.ssn",
+            "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        );
+        let medical_commitment = ApiServer::<MemoryStorage>::compute_payload_field_commitment(
+            "files.secure",
+            &entry_id.to_string(),
+            1,
+            "payload.medical_record",
+            "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        );
+
         let response = app
             .oneshot(
                 Request::builder()
@@ -6237,13 +6308,13 @@ mod tests {
                                     "field_path": "payload.ssn",
                                     "ciphertext_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
                                     "blob_ref": "blob://local/files.secure/PROC-PAYLOAD-HAPPY-PATH/field-ssn.cipher",
-                                    "payload_commitment": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+                                    "payload_commitment": sso_commitment
                                 },
                                 {
                                     "field_path": "payload.medical_record",
                                     "ciphertext_hash": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
                                     "blob_ref": "blob://local/files.secure/PROC-PAYLOAD-HAPPY-PATH/field-medical.cipher",
-                                    "payload_commitment": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+                                    "payload_commitment": medical_commitment
                                 }
                             ],
                             "envelope": {
@@ -6252,7 +6323,7 @@ mod tests {
                                 "signature": "sig-payload-happy-path",
                                 "submitted_at": chrono::Utc::now(),
                                 "payload": {
-                                    "entry_id": Uuid::new_v4(),
+                                    "entry_id": entry_id,
                                     "namespace": "files.secure",
                                     "action": "ENCRYPTED_PAYLOAD_FIELD_COMMIT",
                                     "object_id": "PROC-PAYLOAD-HAPPY-PATH",
@@ -6313,6 +6384,20 @@ mod tests {
         .router();
         let now = chrono::Utc::now().timestamp();
         let entry_id = Uuid::new_v4();
+        let medical_commitment = ApiServer::<MemoryStorage>::compute_payload_field_commitment(
+            "files.secure",
+            &entry_id.to_string(),
+            1,
+            "payload.medical_record",
+            "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        );
+        let ssn_commitment = ApiServer::<MemoryStorage>::compute_payload_field_commitment(
+            "files.secure",
+            &entry_id.to_string(),
+            1,
+            "payload.ssn",
+            "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        );
 
         let _ = app
             .clone()
@@ -6389,13 +6474,13 @@ mod tests {
                                     "field_path": "payload.medical_record",
                                     "ciphertext_hash": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
                                     "blob_ref": "blob://local/files.secure/PROC-PAYLOAD-FIELD-REFS/field-medical.cipher",
-                                    "payload_commitment": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+                                    "payload_commitment": medical_commitment
                                 },
                                 {
                                     "field_path": "payload.ssn",
                                     "ciphertext_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
                                     "blob_ref": "blob://local/files.secure/PROC-PAYLOAD-FIELD-REFS/field-ssn.cipher",
-                                    "payload_commitment": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+                                    "payload_commitment": ssn_commitment
                                 }
                             ],
                             "envelope": {
@@ -7016,6 +7101,163 @@ mod tests {
             payload["migration_guide_ref"],
             json!("docs/migrations/offchain-policy-v3.md")
         );
+    }
+
+    #[tokio::test]
+    async fn payload_commit_rejects_noncanonical_field_payload_commitment() {
+        let grant_keys = grant_approver_keys(&[
+            "grant:ops-1",
+            "grant:ops-2",
+            "grant:ops-3",
+            "grant:ops-4",
+            "grant:ops-5",
+        ]);
+        let app = build_server_with_grant_keys_and_file_actions(
+            &grant_keys,
+            &["ENCRYPTED_FILE_UPLOAD", "ENCRYPTED_PAYLOAD_FIELD_COMMIT"],
+        )
+        .router();
+
+        let now = chrono::Utc::now().timestamp();
+        let signer = ValidatorKeypair::generate("did:citizen:holder-1".to_string());
+        let mut consent_entry = LedgerEntry {
+            entry_id: Uuid::new_v4(),
+            namespace: "consent.receipt".to_string(),
+            action: "CONSENT_GRANTED".to_string(),
+            object_id: "did:citizen:holder-1".to_string(),
+            payload: json!({
+                "data_hash": "sha256:payload-bad-field-commitment",
+                "policy_ref": "policy:offchain:v1",
+                "expires_at": now + 3_600
+            }),
+            privacy_flag: false,
+            privacy_mode: citizen_types::PrivacyMode::None,
+            payload_commitment: None,
+            ciphertext_hex: None,
+            nonce_hex: None,
+            salt_hex: None,
+            kdf_params: None,
+            consent_receipt: None,
+            authorized_readers: vec![],
+            custodian_policy_id: None,
+            field_reader_acls: BTreeMap::new(),
+            key_wrapped_secrets: vec![],
+            revocation_events: vec![],
+            author: "did:citizen:holder-1".to_string(),
+            signature: String::new(),
+            timestamp: now,
+        };
+        sign_entry_for_tests(&mut consent_entry, &signer);
+        let consent_envelope = SignedEnvelope {
+            envelope_id: Uuid::new_v4(),
+            signer: consent_entry.author.clone(),
+            signature: consent_entry.signature.clone(),
+            submitted_at: chrono::Utc::now(),
+            payload: consent_entry,
+        };
+        let _ = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/envelopes/submit")
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        serde_json::to_vec(&consent_envelope).expect("serialize envelope"),
+                    ))
+                    .expect("request"),
+            )
+            .await
+            .expect("submit response");
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/payloads/commit")
+                    .header("content-type", "application/json")
+                    .header("idempotency-key", "payload-bad-field-commitment")
+                    .body(Body::from(
+                        serde_json::to_vec(&json!({
+                            "namespace": "files.secure",
+                            "object_id": "PROC-PAY-BAD-COMMITMENT",
+                            "author_did": "did:author:a",
+                            "policy_version": 1,
+                            "consent_receipt": {
+                                "subject_did": "did:citizen:holder-1",
+                                "data_hash": "sha256:payload-bad-field-commitment",
+                                "policy_ref": "policy:offchain:v1",
+                                "granted_at": now,
+                                "expires_at": now + 3_600,
+                                "authorized_readers": ["did:author:a"]
+                            },
+                            "encrypted_field_refs": [
+                                {
+                                    "field_path": "payload.ssn",
+                                    "blob_ref": "blob://local/files.secure/PROC-PAY-BAD-COMMITMENT/field-ssn.cipher",
+                                    "ciphertext_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                                    "payload_commitment": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+                                },
+                                {
+                                    "field_path": "payload.medical_record",
+                                    "blob_ref": "blob://local/files.secure/PROC-PAY-BAD-COMMITMENT/field-medical.cipher",
+                                    "ciphertext_hash": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                                    "payload_commitment": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+                                }
+                            ],
+                            "envelope": {
+                                "envelope_id": Uuid::new_v4(),
+                                "signer": "did:author:a",
+                                "signature": "sig-payload-bad-field-commitment",
+                                "submitted_at": chrono::Utc::now(),
+                                "payload": {
+                                    "entry_id": Uuid::new_v4(),
+                                    "namespace": "files.secure",
+                                    "action": "ENCRYPTED_PAYLOAD_FIELD_COMMIT",
+                                    "object_id": "PROC-PAY-BAD-COMMITMENT",
+                                    "payload": {"record_type": "medical_claim"},
+                                    "privacy_flag": false,
+                                    "privacy_mode": "none",
+                                    "payload_commitment": null,
+                                    "ciphertext_hex": null,
+                                    "nonce_hex": null,
+                                    "salt_hex": null,
+                                    "kdf_params": null,
+                                    "consent_receipt": null,
+                                    "authorized_readers": [],
+                                    "custodian_policy_id": null,
+                                    "field_reader_acls": {},
+                                    "key_wrapped_secrets": [],
+                                    "revocation_events": [],
+                                    "author": "did:author:a",
+                                    "signature": "sig-payload-bad-field-commitment",
+                                    "timestamp": now
+                                }
+                            }
+                        }))
+                        .expect("request body"),
+                    ))
+                    .expect("request"),
+            )
+            .await
+            .expect("response");
+
+        assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("response body");
+        let payload: Value = serde_json::from_slice(&body).expect("response json");
+        assert_eq!(
+            payload["error"],
+            "encrypted field payload_commitment does not match canonical commitment derivation"
+        );
+        let mismatches = payload["mismatches"]
+            .as_array()
+            .expect("mismatch array should exist");
+        assert_eq!(mismatches.len(), 2);
+        assert!(mismatches
+            .iter()
+            .all(|mismatch| mismatch["expected_payload_commitment"].as_str().is_some()));
     }
 
     #[tokio::test]
