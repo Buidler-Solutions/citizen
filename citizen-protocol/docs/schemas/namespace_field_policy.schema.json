@@ -1,0 +1,79 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://citizen-protocol.org/schemas/namespace_field_policy.schema.json",
+  "title": "Citizen Namespace Field Policy",
+  "description": "Governance-controlled schema for classifying payload field handling for on-chain and off-chain commitments.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "namespace",
+    "policy_version",
+    "public_fields",
+    "committed_fields",
+    "offchain_encrypted_fields"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "1.0.0"
+    },
+    "namespace": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$"
+    },
+    "policy_version": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "public_fields": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/fieldPath" },
+      "uniqueItems": true
+    },
+    "committed_fields": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/fieldPath" },
+      "uniqueItems": true
+    },
+    "offchain_encrypted_fields": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/fieldPath" },
+      "uniqueItems": true,
+      "minItems": 1
+    },
+    "constraints": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "allowed_encryption_modes": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["passphrase_file", "hybrid_file_acl_dek"]
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "required_consent_class": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "max_total_encrypted_fields": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    }
+  },
+  "$defs": {
+    "fieldPath": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256,
+      "pattern": "^[a-zA-Z0-9_]+(?:\\.[a-zA-Z0-9_]+)*$"
+    }
+  }
+}

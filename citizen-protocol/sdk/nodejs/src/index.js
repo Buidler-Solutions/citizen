@@ -31,6 +31,18 @@ export function canonicalizeJson(value) {
   return JSON.stringify(canonicalizeValue(value));
 }
 
+export async function sha256DigestHex(input) {
+  const source = typeof input === "string" ? new TextEncoder().encode(input) : input;
+
+  if (globalThis.crypto?.subtle) {
+    const digest = await globalThis.crypto.subtle.digest("SHA-256", source);
+    return `sha256:${Buffer.from(digest).toString("hex")}`;
+  }
+
+  const { createHash } = await import("node:crypto");
+  return `sha256:${createHash("sha256").update(source).digest("hex")}`;
+}
+
 const DEFAULT_RECEIPT_TERMINAL_STATUSES = new Set(["Accepted", "Rejected"]);
 
 function sleep(ms) {
