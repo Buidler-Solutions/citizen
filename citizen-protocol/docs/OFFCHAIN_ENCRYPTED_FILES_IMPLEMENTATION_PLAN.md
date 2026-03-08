@@ -21,6 +21,72 @@ Primary implementation emphasis for v1:
 - **Per-payload encryption off-chain**: sensitive payload fields are encrypted as detached off-chain blobs and referenced by deterministic commitments in the on-chain payload.
 - **Grant-only decryption**: decryption must be possible only for wallets that have an explicit active grant, and sharing modes must support all participating wallets in the authorized set without exposing plaintext to non-participants.
 
+## 1.1 Strategic Implementation Start (authoritative execution order)
+
+To start implementation with minimal rework risk, execution proceeds as **three merge gates** before broad feature coding.
+
+### Gate 0 — Canonical Contracts First (must land before crypto/storage code)
+
+Goal: lock deterministic contracts so all teams build against identical inputs/outputs.
+
+Deliver in first PR slice:
+- `encrypted_file_manifest.schema.json` (canonical envelope contract).
+- `namespace_field_policy.schema.json` (public/committed/offchain-encrypted policy contract).
+- `file_commitment_test_vectors.json` and `payload_field_commitment_test_vectors.json`.
+- Error-code registry for consent/key-wrap/policy violations.
+
+Exit criteria:
+- Deterministic vectors pass in CI across at least Rust + TypeScript implementations.
+- Governance/architecture review sign-off recorded in docs.
+
+### Gate 1 — Wallet/SDK Deterministic Crypto Core (no API dependency)
+
+Goal: make encrypt/decrypt/commitment generation correct and reproducible before service integration.
+
+Deliver in second PR slice:
+- Streaming encrypt/decrypt primitives for file blobs.
+- Field-policy payload splitter (`public`, `committed_only`, `offchain_encrypted`).
+- Grant-aware unwrap checks (fail closed without active grant).
+- Golden fixture tests proving stable output for same inputs.
+
+Exit criteria:
+- Round-trip + adversarial crypto tests passing.
+- Non-granted wallet decrypt tests consistently fail.
+
+### Gate 2 — API + Storage Integration Behind Feature Flag
+
+Goal: integrate uploads/commits safely with reversible rollout.
+
+Deliver in third PR slice:
+- `POST /api/v1/files/intents`, `POST /api/v1/files/commit`, `POST /api/v1/payloads/commit`.
+- Local + S3-compatible storage adapters enforcing policy constraints.
+- Idempotency semantics + audit logging for file/payload commit flows.
+- Feature flag: `offchain_encrypted_files_v1` (default OFF in production).
+
+Exit criteria:
+- End-to-end verification path (`receipt -> commitment -> object hash`) passes.
+- Revocation/status transitions propagate to reader access checks.
+
+### First 10 implementation tickets (ready to create now)
+
+1. Spec: add canonical encrypted file manifest JSON schema + examples.
+2. Spec: add canonical namespace field policy JSON schema + examples.
+3. Crypto: implement deterministic canonicalization for manifest + field commitments.
+4. Test: add shared test vectors consumed by Rust and TypeScript.
+5. Wallet: implement streaming encrypt/decrypt (passphrase mode).
+6. Wallet: implement hybrid ACL/DEK wrapping with per-wallet wraps.
+7. SDK: implement namespace-aware payload field partitioning helper.
+8. API: implement `/files/intents` with consent + policy precheck.
+9. API: implement `/files/commit` and `/payloads/commit` idempotent endpoints.
+10. Security: add adversarial integration suite for unauthorized decrypt + replay attempts.
+
+### Sequencing constraints (do not violate)
+
+- Do **not** merge API endpoints before schemas + vectors are locked.
+- Do **not** expose explorer views before redaction tests prove no plaintext leaks.
+- Do **not** enable production flag before cryptography + key lifecycle review is approved.
+- Any namespace adding encrypted fields must include migration/version notes in the same PR.
+
 ## 2) Scope (v1)
 
 ### In scope
@@ -195,10 +261,19 @@ This work is complete only when all of the following are true:
 - [ ] Security review signs off cryptography, key handling, and abuse controls.
 - [ ] Runbooks exist for operator deployment, rotation, backup, and incident response.
 
-## 7) Immediate Next Actions (this sprint)
+## 7) Immediate Next Actions (this sprint, execution-start)
 
-- [ ] Approve this plan in governance/architecture review.
-- [ ] Create implementation tickets for Phases A and B with owners + deadlines.
-- [ ] Land schema + test vector PR first, before storage/API implementation.
-- [ ] Land namespace field-classification schema + payload-field test vectors before endpoint rollout.
-- [ ] Schedule security design review focused on DEK wrapping and revocation semantics.
+### Sprint Goal
+Ship **Gate 0 complete** and open **Gate 1 crypto core PR**.
+
+### Committed outcomes
+- [ ] Approve this implementation order in governance/architecture review.
+- [ ] Create and assign the first 10 tickets above with owners and due dates.
+- [ ] Merge schemas + deterministic vectors as the first implementation PR.
+- [ ] Wire CI job to validate vectors in both Rust and TypeScript SDK paths.
+- [ ] Open wallet crypto-core PR (streaming encryption + grant-aware unwrap checks).
+- [ ] Schedule security design review focused on DEK wrapping, revocation, and replay resistance.
+
+### Hard sprint guardrails
+- [ ] No API/storage endpoint merges until Gate 0 artifacts are merged.
+- [ ] No production flag enablement until Phase F security sign-off is complete.
