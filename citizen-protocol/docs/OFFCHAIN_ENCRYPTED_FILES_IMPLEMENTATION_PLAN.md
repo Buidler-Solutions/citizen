@@ -151,7 +151,7 @@ Checklist:
 - [ ] Implement per-reader X25519 DEK wrapping for hybrid mode.
 - [x] Enforce grant validation before unwrap/decrypt in wallet SDK APIs.
 - [ ] Ensure participating wallets receive deterministic per-wallet key wraps when policy requires multi-party readability.
-- [ ] Implement deterministic payload field canonicalization before per-field encryption.
+- [x] Implement deterministic payload field canonicalization before per-field encryption.
 - [ ] Add wallet UX guardrails: explicit opt-in warnings + mode disclosure.
 - [ ] Add golden tests for deterministic commitments across platforms.
 
@@ -228,7 +228,7 @@ Checklist:
 - [ ] Implement reader ACL + DEK wrapping flows.
 - [x] Enforce "grant required" decrypt checks in wallet runtime and SDK helpers.
 - [ ] Ship verification helper for off-chain object hash reconciliation.
-- [ ] Implement namespace-aware payload partitioning and field-level off-chain encryption helper.
+- [x] Implement namespace-aware payload partitioning and field-level off-chain encryption helper.
 
 ### API / Node
 - [ ] Implement file intent + commit endpoints.
@@ -271,7 +271,7 @@ Ship **Gate 0 complete** and open **Gate 1 crypto core PR**.
 - [ ] Create and assign the first 10 tickets above with owners and due dates.
 - [x] Merge schemas + deterministic vectors as the first implementation PR.
 - [x] Wire CI job to validate vectors in both Rust and TypeScript SDK paths.
-- [ ] Open wallet crypto-core PR (streaming encryption + grant-aware unwrap checks).
+- [x] Open wallet crypto-core PR (streaming encryption + grant-aware unwrap checks).
 - [ ] Schedule security design review focused on DEK wrapping, revocation, and replay resistance.
 
 ### Hard sprint guardrails
