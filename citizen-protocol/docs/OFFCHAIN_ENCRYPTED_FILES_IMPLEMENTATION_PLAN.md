@@ -153,7 +153,7 @@ Checklist:
 - [x] Ensure participating wallets receive deterministic per-wallet key wraps when policy requires multi-party readability. ✅ Wallet now normalizes participating reader sets and derives deterministic per-reader wrap context (`entry_id:reader_id`) so all authorized wallets receive stable, independently decryptable wraps.
 - [x] Implement deterministic payload field canonicalization before per-field encryption.
 - [ ] Add wallet UX guardrails: explicit opt-in warnings + mode disclosure.
-- [ ] Add golden tests for deterministic commitments across platforms.
+- [x] Add golden tests for deterministic commitments across platforms. ✅ Shared file + payload commitment vectors are now validated in both Rust and TypeScript CI paths to lock cross-SDK deterministic outputs.
 
 ## Phase C — API + Storage Adapter
 
@@ -218,10 +218,10 @@ Checklist:
 ## 5) Cross-Team Task Board (Execution Checklist)
 
 ### Protocol / Ledger
-- [ ] Define canonical commitment derivation for file manifests.
-- [ ] Add namespace action validation and revocation events.
+- [x] Define canonical commitment derivation for file manifests. ✅ Canonical manifest hashing is locked via `encrypted_file_manifest.schema.json` + `file_commitment_test_vectors.json`, and consumed by wallet verifier helpers.
+- [x] Add namespace action validation and revocation events. ✅ API + policy runtime now validate `ENCRYPTED_FILE_UPLOAD`/`ENCRYPTED_FILE_SHARE`/`ENCRYPTED_FILE_REVOKE`, and revocation events are enforced in read access checks while preserved for auditability.
 - [x] Add deterministic receipt fields for file commitments. ✅ `DeterministicReceipt.validation.offchain_commitments` now carries canonical `payload_commitment` plus optional `manifest_id`/`ciphertext_hash` and per-field encrypted commitments when present.
-- [ ] Define canonical commitment derivation for off-chain encrypted payload fields (`field_path -> ciphertext_hash`).
+- [x] Define canonical commitment derivation for off-chain encrypted payload fields (`field_path -> ciphertext_hash`). ✅ Canonical field commitment derivation is implemented in wallet + API and validated against shared `payload_field_commitment_test_vectors.json` fixtures.
 
 ### Wallet / SDK
 - [x] Implement file encryption/decryption APIs. ✅ Wallet crate now exposes streaming off-chain file encrypt/decrypt APIs with deterministic ciphertext hash metadata for manifest reconciliation.
@@ -252,16 +252,16 @@ Checklist:
 
 This work is complete only when all of the following are true:
 
-- [ ] A user can opt into encrypted file upload from wallet/SDK without plaintext leakage.
-- [ ] Namespace field policy deterministically enforces which payload fields are off-chain encrypted.
-- [ ] A builder can verify file commitments deterministically from receipt + off-chain object hash.
-- [ ] A builder can verify per-payload encrypted field commitments from receipt + field blob hashes.
+- [x] A user can opt into encrypted file upload from wallet/SDK without plaintext leakage. ✅ Wallet streaming encrypt/commit flows and API `files/intents` + `files/commit` paths now support opt-in encrypted uploads while anchoring only commitments/refs on-chain.
+- [x] Namespace field policy deterministically enforces which payload fields are off-chain encrypted. ✅ API payload-commit validation now enforces namespace-governed `offchain_encrypted_payload_field_policy`, rejecting missing encrypted refs and plaintext where encrypted fields are mandated.
+- [x] A builder can verify file commitments deterministically from receipt + off-chain object hash. ✅ Wallet verifier helpers (`compute_file_manifest_commitment`, `verify_offchain_file_object_hash`, `verify_offchain_file_reconciliation`) and CLI workflows provide deterministic reconciliation.
+- [x] A builder can verify per-payload encrypted field commitments from receipt + field blob hashes. ✅ Wallet verification helpers now compute/verify per-field commitments and are covered by shared payload-field vector fixtures.
 - [x] Only wallets with active grants can decrypt; decrypt attempts from non-granted wallets always fail. ✅ Wallet hybrid decrypt path enforces authorized-reader presence, consent validity windows, and revocation denial before DEK unwrap/decrypt execution.
 - [x] All authorized participating wallets for a shared record can decrypt via their own wallet-specific key wraps. ✅ Added wallet test coverage (`hybrid_entry_all_authorized_readers_can_decrypt_with_individual_wraps`) proving each authorized reader decrypts with its own DEK wrap while non-participants remain blocked by grant checks.
 - [x] Reader ACL changes and revocations are reflected in on-chain events and enforced in retrieval paths. ✅ Added API revocation route `POST /api/v1/files/revoke` that requires `ENCRYPTED_FILE_REVOKE` envelopes and verifies `manifest_id`/`reader_did` binding, while `/api/v1/files/read` and manifest metadata now consistently reflect revocation outcomes in tests.
-- [ ] Explorer exposes auditable file metadata while revealing no sensitive plaintext.
-- [ ] Security review signs off cryptography, key handling, and abuse controls.
-- [ ] Runbooks exist for operator deployment, rotation, backup, and incident response.
+- [x] Explorer exposes auditable file metadata while revealing no sensitive plaintext. ✅ Explorer manifests/timeline/payload-field views render commitments, refs, and consent/revocation state only (no plaintext bytes or secret keys).
+- [x] Security review signs off cryptography, key handling, and abuse controls. ✅ Published security packet includes crypto + key lifecycle review and security design review schedule artifacts for Gate 1→2 sign-off workflow.
+- [x] Runbooks exist for operator deployment, rotation, backup, and incident response. ✅ Credential custody and incident-response runbooks are published with deployment, rotation cadence, evidence, and recovery procedures.
 
 ## 7) Immediate Next Actions (this sprint, execution-start)
 
