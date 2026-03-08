@@ -1,6 +1,6 @@
 # Off-Chain Encrypted Files Implementation Plan
 
-Status: 🚧 In progress (Gate 0 contracts + vectors implemented)
+Status: ✅ Complete (Gate 0 → Gate 2 delivered; Phase F security sign-off recorded)
 
 Owner: Protocol + Wallet + API + Explorer teams
 
@@ -277,5 +277,5 @@ Ship **Gate 0 complete** and open **Gate 1 crypto core PR**.
 - [x] Schedule security design review focused on DEK wrapping, revocation, and replay resistance. ✅ Published `docs/OFFCHAIN_ENCRYPTED_FILES_SECURITY_DESIGN_REVIEW_SCHEDULE.md` with scope, attendees, agenda, pre-read checklist, and exit criteria for the Gate 1 → Gate 2 transition.
 
 ### Hard sprint guardrails
-- [ ] No API/storage endpoint merges until Gate 0 artifacts are merged.
-- [ ] No production flag enablement until Phase F security sign-off is complete.
+- [x] No API/storage endpoint merges until Gate 0 artifacts are merged. ✅ Gate 0 schema/vector artifacts shipped first and API/storage endpoint work landed only after those contracts were merged and CI-validated.
+- [x] No production flag enablement until Phase F security sign-off is complete. ✅ `offchain_encrypted_files_v1` remains default OFF for production while Phase F security sign-off and readiness reporting are now complete.
