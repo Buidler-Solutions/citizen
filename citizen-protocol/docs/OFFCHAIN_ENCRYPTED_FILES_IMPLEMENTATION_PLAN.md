@@ -146,8 +146,8 @@ Deliverables:
 - SDK helpers for per-payload field extraction/encryption based on namespace policy.
 
 Checklist:
-- [ ] Implement streaming encryption path for large files (avoid full-memory buffering).
-- [ ] Reuse Argon2id + ChaCha20-Poly1305 standards for passphrase mode.
+- [x] Implement streaming encryption path for large files (avoid full-memory buffering). ✅ Added wallet streaming helpers `encrypt_offchain_file_reader_to_writer` and `decrypt_offchain_file_reader_to_writer` that process framed ciphertext chunks without full-file buffering.
+- [x] Reuse Argon2id + ChaCha20-Poly1305 standards for passphrase mode. ✅ Streaming file encryption now derives per-file keys with Argon2id and encrypts chunk frames with ChaCha20-Poly1305 nonces bound to chunk index AAD.
 - [ ] Implement per-reader X25519 DEK wrapping for hybrid mode.
 - [x] Enforce grant validation before unwrap/decrypt in wallet SDK APIs.
 - [ ] Ensure participating wallets receive deterministic per-wallet key wraps when policy requires multi-party readability.
@@ -224,7 +224,7 @@ Checklist:
 - [ ] Define canonical commitment derivation for off-chain encrypted payload fields (`field_path -> ciphertext_hash`).
 
 ### Wallet / SDK
-- [ ] Implement file encryption/decryption APIs.
+- [x] Implement file encryption/decryption APIs. ✅ Wallet crate now exposes streaming off-chain file encrypt/decrypt APIs with deterministic ciphertext hash metadata for manifest reconciliation.
 - [ ] Implement reader ACL + DEK wrapping flows.
 - [x] Enforce "grant required" decrypt checks in wallet runtime and SDK helpers.
 - [x] Ship verification helper for off-chain object hash reconciliation. ✅ Added wallet library verification helpers for deterministic manifest commitment + ciphertext object-hash reconciliation (`compute_file_manifest_commitment`, `verify_offchain_file_object_hash`, `verify_offchain_file_reconciliation`) with shared-vector test coverage.
