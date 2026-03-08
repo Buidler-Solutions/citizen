@@ -205,6 +205,13 @@ struct FileReadRequest {
 }
 
 #[derive(Clone, Debug, Deserialize)]
+struct FileRevokeRequest {
+    manifest_id: String,
+    reader_did: String,
+    envelope: SignedEnvelope<LedgerEntry>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
 struct PayloadCommitRequest {
     namespace: String,
     object_id: String,
@@ -297,6 +304,8 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
         let payload_fields_edge = Arc::clone(&self.edge);
         let file_read_ledger = Arc::clone(&self.ledger);
         let file_read_edge = Arc::clone(&self.edge);
+        let file_revoke_ledger = Arc::clone(&self.ledger);
+        let file_revoke_edge = Arc::clone(&self.edge);
         let file_manifest_metadata_ledger = Arc::clone(&self.ledger);
         let file_manifest_metadata_edge = Arc::clone(&self.edge);
         let file_alerts_edge = Arc::clone(&self.edge);
@@ -398,6 +407,14 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
                     let ledger = Arc::clone(&file_read_ledger);
                     let edge = Arc::clone(&file_read_edge);
                     async move { Self::handle_read_file(ledger, edge, headers, request).await }
+                }),
+            )
+            .route(
+                "/api/v1/files/revoke",
+                post(move |headers: HeaderMap, Json(request): Json<FileRevokeRequest>| {
+                    let ledger = Arc::clone(&file_revoke_ledger);
+                    let edge = Arc::clone(&file_revoke_edge);
+                    async move { Self::handle_revoke_file_reader(ledger, edge, headers, request).await }
                 }),
             )
             .route(
@@ -1318,6 +1335,117 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
                 "file_ref": file_ref,
                 "ciphertext_hash": ciphertext_hash,
                 "revoked": false,
+            })),
+        )
+    }
+
+    async fn handle_revoke_file_reader(
+        ledger: Arc<Ledger<S>>,
+        edge: Arc<ApiEdgeState>,
+        headers: HeaderMap,
+        request: FileRevokeRequest,
+    ) -> (StatusCode, Json<serde_json::Value>) {
+        if !edge.config.offchain_encrypted_files_v1_enabled {
+            return Self::offchain_feature_disabled_response();
+        }
+
+        if let Err(response) =
+            Self::authorize_write(Arc::clone(&edge), &headers, "files.revoke").await
+        {
+            return response;
+        }
+
+        let stored_manifest = {
+            let manifests = edge.file_manifests.lock().await;
+            manifests.get(&request.manifest_id).cloned()
+        };
+
+        let Some(stored_manifest) = stored_manifest else {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(serde_json::json!({"error": "file manifest not found"})),
+            );
+        };
+
+        let payload = &request.envelope.payload;
+        if payload.namespace != stored_manifest.intent.namespace
+            || payload.object_id != stored_manifest.intent.object_id
+        {
+            return (
+                StatusCode::UNPROCESSABLE_ENTITY,
+                Json(serde_json::json!({
+                    "error": "revoke envelope must target manifest namespace/object"
+                })),
+            );
+        }
+
+        if payload.action != "ENCRYPTED_FILE_REVOKE" {
+            return (
+                StatusCode::UNPROCESSABLE_ENTITY,
+                Json(serde_json::json!({
+                    "error": "revoke envelope action must be ENCRYPTED_FILE_REVOKE"
+                })),
+            );
+        }
+
+        let manifest_match = payload
+            .payload
+            .get("manifest_id")
+            .and_then(|value| value.as_str())
+            .map(|manifest_id| manifest_id == request.manifest_id)
+            .unwrap_or(false);
+        if !manifest_match {
+            return (
+                StatusCode::UNPROCESSABLE_ENTITY,
+                Json(serde_json::json!({
+                    "error": "revoke envelope payload.manifest_id must match request manifest_id"
+                })),
+            );
+        }
+
+        let reader_match = payload
+            .payload
+            .get("reader_did")
+            .and_then(|value| value.as_str())
+            .map(|reader_did| reader_did == request.reader_did)
+            .unwrap_or(false);
+        if !reader_match {
+            return (
+                StatusCode::UNPROCESSABLE_ENTITY,
+                Json(serde_json::json!({
+                    "error": "revoke envelope payload.reader_did must match request reader_did"
+                })),
+            );
+        }
+
+        let (status, Json(base)) =
+            Self::process_envelope_submission(Arc::clone(&ledger), request.envelope).await;
+        if status != StatusCode::ACCEPTED {
+            return (status, Json(base));
+        }
+
+        let now = Utc::now().timestamp();
+        Self::record_file_access_alert(
+            Arc::clone(&edge),
+            FileAccessAlert {
+                alert_type: "reader_revoked".to_string(),
+                manifest_id: request.manifest_id.clone(),
+                namespace: stored_manifest.intent.namespace,
+                object_id: stored_manifest.intent.object_id,
+                reader_did: request.reader_did.clone(),
+                detected_at: now,
+                detail: "reader access revoked via ENCRYPTED_FILE_REVOKE event".to_string(),
+            },
+        )
+        .await;
+
+        (
+            StatusCode::ACCEPTED,
+            Json(serde_json::json!({
+                "status": "accepted",
+                "manifest_id": request.manifest_id,
+                "reader_did": request.reader_did,
+                "result": base,
             })),
         )
     }
@@ -5724,6 +5852,275 @@ mod tests {
             alerts_payload["alerts"][0]["alert_type"],
             json!("commitment_mismatch")
         );
+    }
+
+    #[tokio::test]
+    async fn file_revoke_endpoint_blocks_reader_and_updates_manifest_metadata() {
+        let grant_keys = grant_approver_keys(&[
+            "grant:ops-1",
+            "grant:ops-2",
+            "grant:ops-3",
+            "grant:ops-4",
+            "grant:ops-5",
+        ]);
+        let app = build_server_with_grant_keys_and_file_actions(
+            &grant_keys,
+            &[
+                "ENCRYPTED_FILE_UPLOAD",
+                "ENCRYPTED_FILE_SHARE",
+                "ENCRYPTED_FILE_REVOKE",
+            ],
+        )
+        .router();
+        let now = chrono::Utc::now().timestamp();
+
+        let _ = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/envelopes/submit")
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        serde_json::to_vec(&json!({
+                            "envelope_id": Uuid::new_v4(),
+                            "signer": "did:citizen:holder-1",
+                            "signature": "sig-consent-revoke-path",
+                            "submitted_at": chrono::Utc::now(),
+                            "payload": {
+                                "entry_id": Uuid::new_v4(),
+                                "namespace": "consent.receipt",
+                                "action": "CONSENT_GRANTED",
+                                "object_id": "did:citizen:holder-1",
+                                "payload": {
+                                    "data_hash": "sha256:file-revoke-path",
+                                    "policy_ref": "policy:offchain:v1",
+                                    "expires_at": now + 3_600
+                                },
+                                "privacy_flag": false,
+                                "privacy_mode": "none",
+                                "payload_commitment": null,
+                                "ciphertext_hex": null,
+                                "nonce_hex": null,
+                                "salt_hex": null,
+                                "kdf_params": null,
+                                "consent_receipt": null,
+                                "authorized_readers": [],
+                                "custodian_policy_id": null,
+                                "field_reader_acls": {},
+                                "key_wrapped_secrets": [],
+                                "revocation_events": [],
+                                "author": "did:citizen:holder-1",
+                                "signature": "sig-consent-revoke-path",
+                                "timestamp": now
+                            }
+                        }))
+                        .expect("consent body"),
+                    ))
+                    .expect("request"),
+            )
+            .await
+            .expect("consent response");
+
+        let intent_response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/files/intents")
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        serde_json::to_vec(&json!({
+                            "namespace": "files.secure",
+                            "object_id": "did:citizen:holder-1",
+                            "author_did": "did:author:a",
+                            "mime_type": "application/pdf",
+                            "file_size_bytes": 256,
+                            "encryption_mode": "passphrase",
+                            "consent_receipt": {
+                                "subject_did": "did:citizen:holder-1",
+                                "data_hash": "sha256:file-revoke-path",
+                                "policy_ref": "policy:offchain:v1",
+                                "granted_at": now,
+                                "expires_at": now + 3_600,
+                                "authorized_readers": ["did:reader:1"]
+                            }
+                        }))
+                        .expect("intent body"),
+                    ))
+                    .expect("request"),
+            )
+            .await
+            .expect("intent response");
+        let body = axum::body::to_bytes(intent_response.into_body(), usize::MAX)
+            .await
+            .expect("intent body bytes");
+        let intent_payload: Value = serde_json::from_slice(&body).expect("intent payload");
+
+        let commit_response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/files/commit")
+                    .header("content-type", "application/json")
+                    .header("idempotency-key", "file-revoke-path-commit")
+                    .body(Body::from(
+                        serde_json::to_vec(&json!({
+                            "intent_id": intent_payload["intent_id"],
+                            "manifest": {
+                                "namespace": "files.secure",
+                                "object_id": "did:citizen:holder-1",
+                                "author_did": "did:author:a",
+                                "mime_type": "application/pdf",
+                                "file_size_bytes": 256,
+                                "encryption_mode": "passphrase",
+                                "file_ref": intent_payload["upload"]["object_ref"],
+                                "ciphertext_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                                "payload_commitment": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                                "consent_receipt_ref": "consent:receipt:file-revoke-path"
+                            },
+                            "envelope": {
+                                "envelope_id": Uuid::new_v4(),
+                                "signer": "did:author:a",
+                                "signature": "sig-file-revoke-path",
+                                "submitted_at": chrono::Utc::now(),
+                                "payload": {
+                                    "entry_id": Uuid::new_v4(),
+                                    "namespace": "files.secure",
+                                    "action": "ENCRYPTED_FILE_UPLOAD",
+                                    "object_id": "did:citizen:holder-1",
+                                    "payload": {"manifest_id": "manifest-revoke-path"},
+                                    "privacy_flag": false,
+                                    "privacy_mode": "none",
+                                    "payload_commitment": null,
+                                    "ciphertext_hex": null,
+                                    "nonce_hex": null,
+                                    "salt_hex": null,
+                                    "kdf_params": null,
+                                    "consent_receipt": null,
+                                    "authorized_readers": [],
+                                    "custodian_policy_id": null,
+                                    "field_reader_acls": {},
+                                    "key_wrapped_secrets": [],
+                                    "revocation_events": [],
+                                    "author": "did:author:a",
+                                    "signature": "sig-file-revoke-path",
+                                    "timestamp": now
+                                }
+                            }
+                        }))
+                        .expect("commit body"),
+                    ))
+                    .expect("request"),
+            )
+            .await
+            .expect("commit response");
+        assert_eq!(commit_response.status(), StatusCode::ACCEPTED);
+        let body = axum::body::to_bytes(commit_response.into_body(), usize::MAX)
+            .await
+            .expect("commit body bytes");
+        let commit_payload: Value = serde_json::from_slice(&body).expect("commit payload");
+
+        let revoke_response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/files/revoke")
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        serde_json::to_vec(&json!({
+                            "manifest_id": commit_payload["manifest_id"],
+                            "reader_did": "did:reader:1",
+                            "envelope": {
+                                "envelope_id": Uuid::new_v4(),
+                                "signer": "did:author:a",
+                                "signature": "sig-file-revoke-reader",
+                                "submitted_at": chrono::Utc::now(),
+                                "payload": {
+                                    "entry_id": Uuid::new_v4(),
+                                    "namespace": "files.secure",
+                                    "action": "ENCRYPTED_FILE_REVOKE",
+                                    "object_id": "did:citizen:holder-1",
+                                    "payload": {
+                                        "manifest_id": commit_payload["manifest_id"],
+                                        "reader_did": "did:reader:1"
+                                    },
+                                    "privacy_flag": false,
+                                    "privacy_mode": "none",
+                                    "payload_commitment": null,
+                                    "ciphertext_hex": null,
+                                    "nonce_hex": null,
+                                    "salt_hex": null,
+                                    "kdf_params": null,
+                                    "consent_receipt": null,
+                                    "authorized_readers": [],
+                                    "custodian_policy_id": null,
+                                    "field_reader_acls": {},
+                                    "key_wrapped_secrets": [],
+                                    "revocation_events": [],
+                                    "author": "did:author:a",
+                                    "signature": "sig-file-revoke-reader",
+                                    "timestamp": now
+                                }
+                            }
+                        }))
+                        .expect("revoke body"),
+                    ))
+                    .expect("request"),
+            )
+            .await
+            .expect("revoke response");
+        assert_eq!(revoke_response.status(), StatusCode::ACCEPTED);
+
+        let read_response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/files/read")
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        serde_json::to_vec(&json!({
+                            "manifest_id": commit_payload["manifest_id"],
+                            "reader_did": "did:reader:1",
+                            "consent_receipt": {
+                                "subject_did": "did:citizen:holder-1",
+                                "data_hash": "sha256:file-revoke-path",
+                                "policy_ref": "policy:offchain:v1",
+                                "granted_at": now,
+                                "expires_at": now + 3_600,
+                                "authorized_readers": ["did:reader:1"]
+                            }
+                        }))
+                        .expect("read body"),
+                    ))
+                    .expect("request"),
+            )
+            .await
+            .expect("read response");
+        assert_eq!(read_response.status(), StatusCode::FORBIDDEN);
+
+        let metadata_response = app
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri(format!(
+                        "/api/v1/files/manifests/{}",
+                        commit_payload["manifest_id"].as_str().expect("manifest_id")
+                    ))
+                    .body(Body::empty())
+                    .expect("request"),
+            )
+            .await
+            .expect("manifest metadata response");
+        assert_eq!(metadata_response.status(), StatusCode::OK);
+        let body = axum::body::to_bytes(metadata_response.into_body(), usize::MAX)
+            .await
+            .expect("metadata body bytes");
+        let metadata: Value = serde_json::from_slice(&body).expect("metadata payload");
+        assert_eq!(metadata["revoked_readers"][0], json!("did:reader:1"));
     }
 
     #[tokio::test]
