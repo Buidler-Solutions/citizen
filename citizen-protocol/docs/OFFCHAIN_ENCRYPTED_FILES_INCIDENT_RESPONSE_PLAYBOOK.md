@@ -145,6 +145,21 @@ Run and archive command outputs after containment/recovery:
 
 If unavailable locally, capture CI job URLs and outcomes before production re-enable.
 
+### 8.1 Targeted manifest verification command example
+
+When triaging commitment mismatch alerts, run targeted reconciliation for each
+impacted manifest/object pair:
+
+```bash
+cargo run -q -p citizen-wallet -- verify-offchain-file \
+  --manifest-json "$MANIFEST_JSON" \
+  --payload-commitment "$PAYLOAD_COMMITMENT" \
+  --ciphertext-path /tmp/recovered-ciphertext.bin
+```
+
+A non-zero exit indicates either ciphertext hash mismatch or manifest commitment
+mismatch and should keep the incident open until resolved.
+
 ## 9) Readiness drills
 
 Run tabletop exercises at least quarterly covering:
