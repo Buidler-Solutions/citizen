@@ -182,7 +182,7 @@ Deliverables:
 Checklist:
 - [x] Add namespace policy rules for `ENCRYPTED_FILE_UPLOAD`, `ENCRYPTED_FILE_SHARE`, `ENCRYPTED_FILE_REVOKE`. ✅ API `POST /api/v1/files/commit` now enforces governance-configured `offchain_encrypted_file_policy.allowed_actions` (defaulting to upload-only when omitted).
 - [ ] Add namespace policy rules requiring off-chain encryption for configured payload fields.
-- [ ] Add governance-managed constraints (max file size, allowed encryption modes, required consent class).
+- [x] Add governance-managed constraints (max file size, allowed encryption modes, required consent class via `required_consent_policy_ref`).
 - [ ] Add governance-managed field-policy versioning and migration rules.
 - [ ] Add revocation semantics that invalidate future reads while preserving audit history.
 - [ ] Add admission/runbook docs for operators handling storage credentials.
