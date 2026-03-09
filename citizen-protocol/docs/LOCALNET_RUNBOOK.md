@@ -74,6 +74,9 @@ infrastructure.
 
   - `/api/v1/entries/submit` requires `entries.submit`.
   - `/api/v1/envelopes/submit` requires `envelopes.submit`.
+  - Offchain write routes (`/api/v1/files/commit`, `/api/v1/payloads/commit`, `/api/v1/files/revoke`) also enforce builder-credit linkage on their embedded envelope payload before ledger admission.
+  - All write submissions that carry ledger entries must include `payload.credit_grant_id` referencing an active `builder.credits` grant for `payload.sponsor_builder_id` (or `entry.author` when `sponsor_builder_id` is omitted).
+  - Only grant-issuance bootstrap actions (`MULTISIG_CREDIT_GRANT` / `PROGRAMMABLE_CREDIT_GRANT` in `builder.credits`) are exempt from needing a pre-existing `credit_grant_id`.
   - Missing/invalid keys return `401`; missing scopes return `403`; over-limit
     clients receive `429`.
 
