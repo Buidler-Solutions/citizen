@@ -8,8 +8,8 @@
 - Runbooks/scripts (`docs/*runbook*`, `scripts/smoke_test_node_entry.sh`)
 
 ## Executive status
-- **Runtime + SDK + runbooks/scripts:** mostly aligned with strict builder-credit enforcement.
-- **Wallet React + browser wallet + demo dApps:** **not fully updated** for strict grant/sponsorship linkage.
+- **Runtime + SDK + runbooks/scripts + dApp/demo submission flows:** aligned with strict builder-credit enforcement.
+- **Wallet surfaces:** React/browser wallet include strict builder-credit guidance, and wallet CLI now exposes dedicated grant/sponsorship signing commands.
 
 ## Findings by component
 
@@ -29,9 +29,11 @@
 - Localnet and validator runbooks document strict write gating and required grant linkage fields.
 - `scripts/smoke_test_node_entry.sh` requires `CREDIT_GRANT_ID` and injects both `credit_grant_id` and `sponsor_builder_id` in payload.
 
-### 4) Wallet CLI (Partially aligned)
+### 4) Wallet CLI (Aligned)
 - CLI includes `sign-builder-credit-proof` helper for multisig grant proof generation.
-- CLI does **not** expose dedicated high-level commands for creating/submitting strict `builder.credits` grant/sponsorship entries end-to-end; users must rely on generic `sign-entry`/manual payload flow.
+- CLI now includes dedicated strict-flow helpers:
+  - `sign-builder-credit-grant` for `builder.credits` + `MULTISIG_CREDIT_GRANT` envelopes.
+  - `sign-sponsor-usage` for `builder.credits` + `SPONSOR_USAGE` envelopes with direct `credit_grant_id` linkage.
 
 ### 5) Wallet React (Not aligned)
 - React wallet remains a local scaffold UI with simulated pending/finalized states and no strict builder-credit grant/sponsorship workflow.
@@ -47,4 +49,4 @@
 - With current strict runtime gating, these flows will be rejected unless their payload model is upgraded.
 
 ## Conclusion
-The strict builder-credit model is implemented and documented at runtime/policy level, but **ecosystem app surfaces are not uniformly upgraded** yet. The primary remediation priority is to update wallet + dApp/demo submission UX and payload construction so every write path can carry valid grant linkage metadata under the strict policy.
+Strict builder-credit enforcement is implemented at runtime/policy level and now reflected across SDK, runbooks, dApp/demo submission payloads, and wallet CLI helper surfaces. Remaining UX hardening is primarily around richer browser-extension authoring workflows (grant selection, sponsorship templates, and validation hints) rather than missing core linkage fields.
