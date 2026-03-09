@@ -1,5 +1,9 @@
 import { useEffect, useState } from 'react';
-import { createMultisigGrantDraft, createSponsorUsageDraft } from './builderCreditDraft';
+import {
+  buildStrictBuilderCreditChecklist,
+  createMultisigGrantDraft,
+  createSponsorUsageDraft,
+} from './builderCreditDraft';
 
 type WalletState = {
   account: string;
@@ -30,6 +34,19 @@ type WalletResponse = {
 
 const STORAGE_KEY = 'citizen.browser.wallet.v1';
 const LAST_REQUEST_KEY = 'citizen.browser.wallet.last_request.v1';
+
+const SPONSORSHIP_PRESETS = {
+  article: {
+    grantScope: 'content.article',
+    sponsoredDid: 'did:ledger:app:citizen-blog',
+    sponsorshipId: 'sponsor-usage-article-001',
+  },
+  governance: {
+    grantScope: 'governance.vote',
+    sponsoredDid: 'did:ledger:app:citizen-governance',
+    sponsorshipId: 'sponsor-usage-governance-001',
+  },
+} as const;
 
 function mask(value: string) {
   if (value.length < 14) {
@@ -64,6 +81,17 @@ export function App() {
   const [grantScope, setGrantScope] = useState('content.article');
   const [draftErrors, setDraftErrors] = useState<string[]>([]);
   const [draftPayload, setDraftPayload] = useState('');
+  const checklist = buildStrictBuilderCreditChecklist({
+    authorDid: state.account,
+    creditGrantId: grantId,
+    sponsorBuilderId: sponsorDid,
+    sponsoredDid,
+    sponsorshipId,
+    usageUnits,
+    grantUnits,
+    multisigThreshold,
+    grantScope,
+  });
 
   const refreshState = async () => {
     const stored = await chrome.storage.local.get([STORAGE_KEY, LAST_REQUEST_KEY]);
@@ -199,6 +227,14 @@ export function App() {
     setDraftPayload(result.payloadJson);
   };
 
+  const applyPreset = (preset: keyof typeof SPONSORSHIP_PRESETS) => {
+    const config = SPONSORSHIP_PRESETS[preset];
+    setGrantScope(config.grantScope);
+    setSponsoredDid(config.sponsoredDid);
+    setSponsorshipId(config.sponsorshipId);
+    setStatus(`Applied ${preset} sponsorship preset.`);
+  };
+
   return (
     <main className="wallet-root">
       <section className="wallet-frame" aria-label="browser wallet status">
@@ -289,6 +325,10 @@ export function App() {
             <h2>Sponsorship draft builder</h2>
             <p className="meta-text">Creates strict <code>builder.credits</code> payload templates for grant issuance and sponsorship usage.</p>
             <div className="form-grid">
+              <div className="hero-actions">
+                <button className="ghost" onClick={() => applyPreset('article')}>Use article preset</button>
+                <button className="ghost" onClick={() => applyPreset('governance')}>Use governance preset</button>
+              </div>
               <input value={grantId} onChange={(event) => setGrantId(event.target.value)} placeholder="credit_grant_id" />
               <input value={sponsorDid} onChange={(event) => setSponsorDid(event.target.value)} placeholder="sponsor_builder_id" />
               <input value={sponsoredDid} onChange={(event) => setSponsoredDid(event.target.value)} placeholder="sponsored_did" />
@@ -301,6 +341,11 @@ export function App() {
                 <button className="primary" onClick={handleBuildSponsorDraft}>Build sponsor usage draft</button>
                 <button className="ghost" onClick={handleBuildGrantDraft}>Build multisig grant draft</button>
               </div>
+              <ul>
+                {checklist.map((item) => (
+                  <li key={item.label}>{item.valid ? '✅' : '⚠️'} {item.label}</li>
+                ))}
+              </ul>
               {draftErrors.length > 0 ? <p>{draftErrors.join(' ')}</p> : null}
               {draftPayload ? <textarea readOnly value={draftPayload} rows={10} aria-label="Sponsor draft payload" /> : null}
             </div>
