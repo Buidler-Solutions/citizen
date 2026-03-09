@@ -44,6 +44,12 @@ export function App() {
     author: 'did:ledger:abc',
     payloadJson: '{"credit_grant_id":"grant:builder:alpha","sponsor_builder_id":"did:ledger:builder:alpha"}',
   });
+  const [grantTemplate, setGrantTemplate] = useState({
+    grantId: 'grant:builder:alpha',
+    sponsorBuilderId: 'did:ledger:builder:alpha',
+    sponsoredDid: 'did:ledger:app:demo',
+    sponsorshipId: 'sponsor:demo:001',
+  });
 
   const activeKey = keys[0];
   const walletHealth = useMemo(() => ({
@@ -85,6 +91,47 @@ export function App() {
       createdAt: new Date().toISOString(),
     };
     persistReceipts([submission, ...receipts]);
+  };
+
+  const loadGrantDraft = () => {
+    setDraft({
+      namespace: 'builder.credits',
+      action: 'MULTISIG_CREDIT_GRANT',
+      objectId: grantTemplate.grantId,
+      author: grantTemplate.sponsorBuilderId,
+      payloadJson: JSON.stringify(
+        {
+          credit_grant_id: grantTemplate.grantId,
+          sponsor_builder_id: grantTemplate.sponsorBuilderId,
+          grant_scope: 'content.article',
+          units: 100,
+          multisig_threshold: 2,
+        },
+        null,
+        2,
+      ),
+    });
+  };
+
+  const loadSponsorshipDraft = () => {
+    setDraft({
+      namespace: 'builder.credits',
+      action: 'SPONSOR_USAGE',
+      objectId: grantTemplate.sponsorshipId,
+      author: grantTemplate.sponsorBuilderId,
+      payloadJson: JSON.stringify(
+        {
+          credit_grant_id: grantTemplate.grantId,
+          sponsor_builder_id: grantTemplate.sponsorBuilderId,
+          sponsorship_id: grantTemplate.sponsorshipId,
+          sponsored_did: grantTemplate.sponsoredDid,
+          units: 1,
+          purpose: 'content.article publish',
+        },
+        null,
+        2,
+      ),
+    });
   };
 
   const markFinal = (id: string) => {
@@ -167,6 +214,19 @@ export function App() {
           <p className="notice">Strict write policy: include <code>credit_grant_id</code> and optional <code>sponsor_builder_id</code> in payload for non-bootstrap writes.</p>
           <button onClick={submitDraft} disabled={!activeKey}>Submit signed entry</button>
           {!activeKey && <p className="notice">Create a key first to enable submissions.</p>}
+        </article>
+
+        <article className="card">
+          <h2>Builder Credit Templates</h2>
+          <p>Prepare strict payloads for grant + sponsorship actions before signing.</p>
+          <label>Grant ID<input value={grantTemplate.grantId} onChange={(event) => setGrantTemplate({ ...grantTemplate, grantId: event.target.value })} /></label>
+          <label>Sponsor Builder DID<input value={grantTemplate.sponsorBuilderId} onChange={(event) => setGrantTemplate({ ...grantTemplate, sponsorBuilderId: event.target.value })} /></label>
+          <label>Sponsored DID<input value={grantTemplate.sponsoredDid} onChange={(event) => setGrantTemplate({ ...grantTemplate, sponsoredDid: event.target.value })} /></label>
+          <label>Sponsorship ID<input value={grantTemplate.sponsorshipId} onChange={(event) => setGrantTemplate({ ...grantTemplate, sponsorshipId: event.target.value })} /></label>
+          <div className="row">
+            <button onClick={loadGrantDraft}>Load MULTISIG_CREDIT_GRANT draft</button>
+            <button onClick={loadSponsorshipDraft}>Load SPONSOR_USAGE draft</button>
+          </div>
         </article>
 
         <article className="card">
