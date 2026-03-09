@@ -16,6 +16,11 @@ export type BuilderCreditDraftResult = {
   payloadJson: string;
 };
 
+export type BuilderCreditChecklistItem = {
+  label: string;
+  valid: boolean;
+};
+
 function isPositiveInteger(value: string) {
   if (!/^\d+$/.test(value)) {
     return false;
@@ -97,4 +102,37 @@ export function createMultisigGrantDraft(input: BuilderCreditDraftInput): Builde
     errors,
     payloadJson: JSON.stringify(envelope, null, 2),
   };
+}
+
+export function buildStrictBuilderCreditChecklist(input: BuilderCreditDraftInput): BuilderCreditChecklistItem[] {
+  return [
+    {
+      label: 'payload.credit_grant_id is provided',
+      valid: Boolean(input.creditGrantId.trim()),
+    },
+    {
+      label: 'payload.sponsor_builder_id uses explicit DID or signer fallback',
+      valid: Boolean((input.sponsorBuilderId || input.authorDid).trim()),
+    },
+    {
+      label: 'SPONSOR_USAGE includes payload.sponsored_did',
+      valid: Boolean(input.sponsoredDid.trim()),
+    },
+    {
+      label: 'SPONSOR_USAGE includes payload.sponsorship_id',
+      valid: Boolean(input.sponsorshipId.trim()),
+    },
+    {
+      label: 'SPONSOR_USAGE usage_units is a positive integer',
+      valid: isPositiveInteger(input.usageUnits),
+    },
+    {
+      label: 'MULTISIG_CREDIT_GRANT grant_units is a positive integer',
+      valid: isPositiveInteger(input.grantUnits),
+    },
+    {
+      label: 'MULTISIG_CREDIT_GRANT multisig_threshold is a positive integer',
+      valid: isPositiveInteger(input.multisigThreshold),
+    },
+  ];
 }
