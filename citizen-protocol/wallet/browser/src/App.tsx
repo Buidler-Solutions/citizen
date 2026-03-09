@@ -224,6 +224,24 @@ export function App() {
           </article>
 
           <article className="request-card">
+            <h2>Builder credit write checklist</h2>
+            <dl>
+              <div>
+                <dt>Required field</dt>
+                <dd><code>payload.credit_grant_id</code></dd>
+              </div>
+              <div>
+                <dt>Optional sponsor</dt>
+                <dd><code>payload.sponsor_builder_id</code> (defaults to signing account)</dd>
+              </div>
+              <div>
+                <dt>Namespace focus</dt>
+                <dd><code>builder.credits</code> grant + sponsorship entries</dd>
+              </div>
+            </dl>
+          </article>
+
+          <article className="request-card">
             <h2>Active account</h2>
             <dl>
               <div>
