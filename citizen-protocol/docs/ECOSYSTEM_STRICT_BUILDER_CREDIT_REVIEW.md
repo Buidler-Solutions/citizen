@@ -49,3 +49,26 @@
 
 ## Conclusion
 Strict builder-credit enforcement is implemented at runtime/policy level and now reflected across SDK, runbooks, dApp/demo submission payloads, and wallet CLI helper surfaces. Remaining UX hardening is primarily around richer browser-extension authoring workflows (grant selection, sponsorship templates, and validation hints) rather than missing core linkage fields.
+
+---
+
+## Runtime sync re-validation (latest pass)
+
+### What was re-checked
+- Runtime enforcement + ledger tests for strict grant linkage and sponsorship constraints.
+- API tests that explicitly exercise strict builder-credit requirements.
+- Browser wallet draft-builder tests for strict payload generation/validation.
+- Runtime-adjacent integration points (`dapp`, `demo`, `scripts`, SDK helper code paths) for required `credit_grant_id` / `sponsor_builder_id` linkage.
+
+### Current alignment assessment
+- **Strict builder-credit flow remains aligned and working** in runtime-critical paths:
+  - `citizen-ledger` full unit suite passes, including builder-credit enforcement tests.
+  - `citizen-api` strict builder-credit tests pass (`write_endpoints_require_builder_credit_grant_linkage`, `sponsored_user_write_accepts_builder_grant_linkage`).
+  - Browser wallet strict draft-builder tests pass.
+- **Repository-wide runtime sync is still partial**:
+  - Full `citizen-api` test suite currently has multiple failing tests outside strict builder-credit coverage, indicating broader API/runtime behavior drift that should be resolved before claiming complete ecosystem-runtime synchronization.
+
+### Recommended follow-up
+1. Treat strict builder-credit implementation as validated.
+2. Open a dedicated API/runtime sync remediation track for the non-builder-credit failing API tests.
+3. Re-run full workspace CI after API fixes to reconfirm end-to-end alignment claims.
