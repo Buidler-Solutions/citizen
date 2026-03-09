@@ -669,6 +669,11 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
         {
             return response;
         }
+        if let Err(response) =
+            Self::authorize_builder_credit_gate(Arc::clone(&edge), Arc::clone(&ledger), &entry)
+        {
+            return response;
+        }
         let envelope = SignedEnvelope {
             envelope_id: Uuid::new_v4(),
             signer: entry.author.clone(),
@@ -723,10 +728,77 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
         headers: HeaderMap,
         envelope: SignedEnvelope<LedgerEntry>,
     ) -> (StatusCode, Json<serde_json::Value>) {
-        if let Err(response) = Self::authorize_write(edge, &headers, "envelopes.submit").await {
+        if let Err(response) =
+            Self::authorize_write(Arc::clone(&edge), &headers, "envelopes.submit").await
+        {
+            return response;
+        }
+        if let Err(response) =
+            Self::authorize_builder_credit_gate(Arc::clone(&edge), Arc::clone(&ledger), &envelope.payload)
+        {
             return response;
         }
         Self::process_envelope_submission(ledger, envelope).await
+    }
+
+    fn authorize_builder_credit_gate(
+        _edge: Arc<ApiEdgeState>,
+        ledger: Arc<Ledger<S>>,
+        entry: &LedgerEntry,
+    ) -> Result<(), (StatusCode, Json<serde_json::Value>)> {
+        if entry.namespace == "builder.credits"
+            && matches!(
+                entry.action.as_str(),
+                "MULTISIG_CREDIT_GRANT" | "PROGRAMMABLE_CREDIT_GRANT"
+            )
+        {
+            return Ok(());
+        }
+
+        let credit_grant_id = entry
+            .payload
+            .get("credit_grant_id")
+            .and_then(|value| value.as_str())
+            .ok_or_else(|| {
+                (
+                    StatusCode::FORBIDDEN,
+                    Json(serde_json::json!({
+                        "error": "builder credit grant required for all writes",
+                        "detail": "payload.credit_grant_id is required",
+                    })),
+                )
+            })?;
+
+        let sponsoring_builder = entry
+            .payload
+            .get("sponsor_builder_id")
+            .and_then(|value| value.as_str())
+            .unwrap_or(entry.author.as_str());
+
+        let grants = ledger
+            .storage()
+            .namespace_entries(&"builder.credits".to_string())
+            .unwrap_or_default();
+        let grant_exists = grants.iter().any(|existing| {
+            existing.entry_id.to_string() == credit_grant_id
+                && existing.object_id == sponsoring_builder
+                && matches!(
+                    existing.action.as_str(),
+                    "MULTISIG_CREDIT_GRANT" | "PROGRAMMABLE_CREDIT_GRANT"
+                )
+        });
+
+        if !grant_exists {
+            return Err((
+                StatusCode::FORBIDDEN,
+                Json(serde_json::json!({
+                    "error": "builder credit grant required for all writes",
+                    "detail": "payload.credit_grant_id must reference an active builder grant for payload.sponsor_builder_id (or entry.author when sponsor_builder_id is omitted)",
+                })),
+            ));
+        }
+
+        Ok(())
     }
 
     async fn handle_create_file_intent(
@@ -1043,6 +1115,14 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
         let manifest_id = manifest_commitment.clone();
         let now = Utc::now().timestamp();
 
+        if let Err(response) = Self::authorize_builder_credit_gate(
+            Arc::clone(&edge),
+            Arc::clone(&ledger),
+            &request.envelope.payload,
+        ) {
+            return response;
+        }
+
         let (status, Json(base)) =
             Self::process_envelope_submission(ledger, request.envelope).await;
         if status != StatusCode::ACCEPTED {
@@ -1339,6 +1419,14 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
         }
 
         let entry_id = request.envelope.payload.entry_id;
+        if let Err(response) = Self::authorize_builder_credit_gate(
+            Arc::clone(&edge),
+            Arc::clone(&ledger),
+            &request.envelope.payload,
+        ) {
+            return response;
+        }
+
         let (status, Json(base)) =
             Self::process_envelope_submission(ledger, request.envelope).await;
         if status != StatusCode::ACCEPTED {
@@ -1618,6 +1706,14 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
                     "error": "revoke envelope payload.reader_did must match request reader_did"
                 })),
             );
+        }
+
+        if let Err(response) = Self::authorize_builder_credit_gate(
+            Arc::clone(&edge),
+            Arc::clone(&ledger),
+            &request.envelope.payload,
+        ) {
+            return response;
         }
 
         let (status, Json(base)) =
@@ -3157,6 +3253,38 @@ mod tests {
         ApiServer::with_edge_config(ledger, edge)
     }
 
+    fn build_server_with_builder_credit_namespace(edge: ApiEdgeConfig) -> ApiServer<MemoryStorage> {
+        let storage = Arc::new(MemoryStorage::new());
+        let ledger = Arc::new(Ledger::new(storage, KeyRegistry::new()));
+        ledger.bootstrap_namespaces(vec![NamespaceRuleset {
+            descriptor: NamespaceDescriptor {
+                namespace: "audit.procurement".to_string(),
+                version: 1,
+                rules_hash: "rules-v1".to_string(),
+                governed_by: "governance".to_string(),
+            },
+            writers: BTreeSet::new(),
+            validators: vec![NamespaceRule {
+                name: "require_signature".to_string(),
+                config: json!({}),
+            }],
+        }]);
+        ledger.bootstrap_namespaces(vec![NamespaceRuleset {
+            descriptor: NamespaceDescriptor {
+                namespace: "builder.credits".to_string(),
+                version: 1,
+                rules_hash: "builder-credits-v1".to_string(),
+                governed_by: "governance".to_string(),
+            },
+            writers: BTreeSet::new(),
+            validators: vec![NamespaceRule {
+                name: "require_signature".to_string(),
+                config: json!({}),
+            }],
+        }]);
+        ApiServer::with_edge_config(ledger, edge)
+    }
+
     fn grant_approver_keys(approvers: &[&str]) -> HashMap<String, ValidatorKeypair> {
         approvers
             .iter()
@@ -4276,6 +4404,133 @@ mod tests {
             .expect("submit response");
 
         assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[tokio::test]
+    async fn write_endpoints_require_builder_credit_grant_linkage() {
+        let app = build_server_with_edge(ApiEdgeConfig {
+            write_enabled: true,
+            auth_required: false,
+            max_write_requests_per_minute: 10,
+            offchain_encrypted_files_v1_enabled: true,
+            clients: BTreeMap::new(),
+        })
+        .router();
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/entries/submit")
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        serde_json::to_vec(&test_envelope().payload).expect("entry body"),
+                    ))
+                    .expect("request"),
+            )
+            .await
+            .expect("submit response");
+
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    }
+
+    #[tokio::test]
+    async fn sponsored_user_write_accepts_builder_grant_linkage() {
+        let app = build_server_with_builder_credit_namespace(ApiEdgeConfig {
+            write_enabled: true,
+            auth_required: false,
+            max_write_requests_per_minute: 10,
+            offchain_encrypted_files_v1_enabled: true,
+            clients: BTreeMap::new(),
+        })
+        .router();
+
+        let builder_key = ValidatorKeypair::generate("builder:alpha".to_string());
+        let mut grant_entry = LedgerEntry {
+            entry_id: Uuid::new_v4(),
+            namespace: "builder.credits".to_string(),
+            action: "MULTISIG_CREDIT_GRANT".to_string(),
+            object_id: "builder:alpha".to_string(),
+            payload: json!({"amount": 100}),
+            privacy_flag: false,
+            privacy_mode: citizen_types::PrivacyMode::None,
+            payload_commitment: None,
+            ciphertext_hex: None,
+            nonce_hex: None,
+            salt_hex: None,
+            kdf_params: None,
+            consent_receipt: None,
+            authorized_readers: vec![],
+            custodian_policy_id: None,
+            field_reader_acls: BTreeMap::new(),
+            key_wrapped_secrets: vec![],
+            revocation_events: vec![],
+            author: "builder:alpha".to_string(),
+            signature: String::new(),
+            timestamp: chrono::Utc::now().timestamp(),
+        };
+        sign_entry_for_tests(&mut grant_entry, &builder_key);
+
+        let grant_response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/entries/submit")
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        serde_json::to_vec(&grant_entry).expect("grant entry body"),
+                    ))
+                    .expect("request"),
+            )
+            .await
+            .expect("submit response");
+        assert_eq!(grant_response.status(), StatusCode::ACCEPTED);
+
+        let user_key = ValidatorKeypair::generate("did:user:1".to_string());
+        let mut user_entry = LedgerEntry {
+            entry_id: Uuid::new_v4(),
+            namespace: "audit.procurement".to_string(),
+            action: "RECORD_EVENT".to_string(),
+            object_id: "PROC-001".to_string(),
+            payload: json!({
+                "event": "BID_OPENED",
+                "credit_grant_id": grant_entry.entry_id.to_string(),
+                "sponsor_builder_id": "builder:alpha"
+            }),
+            privacy_flag: false,
+            privacy_mode: citizen_types::PrivacyMode::None,
+            payload_commitment: None,
+            ciphertext_hex: None,
+            nonce_hex: None,
+            salt_hex: None,
+            kdf_params: None,
+            consent_receipt: None,
+            authorized_readers: vec![],
+            custodian_policy_id: None,
+            field_reader_acls: BTreeMap::new(),
+            key_wrapped_secrets: vec![],
+            revocation_events: vec![],
+            author: "did:user:1".to_string(),
+            signature: String::new(),
+            timestamp: chrono::Utc::now().timestamp(),
+        };
+        sign_entry_for_tests(&mut user_entry, &user_key);
+
+        let user_response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/entries/submit")
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        serde_json::to_vec(&user_entry).expect("user entry body"),
+                    ))
+                    .expect("request"),
+            )
+            .await
+            .expect("submit response");
+        assert_eq!(user_response.status(), StatusCode::ACCEPTED);
     }
 
     #[tokio::test]
