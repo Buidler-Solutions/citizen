@@ -10,6 +10,7 @@ quorum_bps = 8000
 signing_key_hex = "REPLACE_WITH_32_BYTE_SECRET_HEX_FROM_HSM_EXPORT"
 api_port = 8481
 api_auth_required = true
+api_require_builder_credit_for_all_writes = true
 api_max_write_requests_per_minute = 60
 data_dir = "data/miannet-validator-alpha"
 bind_addr = "0.0.0.0:9500"
