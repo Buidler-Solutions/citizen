@@ -50,6 +50,7 @@ export function App() {
     sponsoredDid: 'did:ledger:app:demo',
     sponsorshipId: 'sponsor:demo:001',
   });
+  const [submissionError, setSubmissionError] = useState<string | null>(null);
 
   const activeKey = keys[0];
   const walletHealth = useMemo(() => ({
@@ -83,7 +84,41 @@ export function App() {
     persistKeys([newKey, ...keys]);
   };
 
+  const validateStrictPayload = (): string | null => {
+    let parsedPayload: Record<string, unknown>;
+    try {
+      parsedPayload = JSON.parse(draft.payloadJson) as Record<string, unknown>;
+    } catch {
+      return 'Payload JSON must be valid JSON before submission.';
+    }
+
+    const isBootstrapGrant =
+      draft.namespace === 'builder.credits'
+      && (draft.action === 'MULTISIG_CREDIT_GRANT' || draft.action === 'PROGRAMMABLE_CREDIT_GRANT');
+
+    if (!isBootstrapGrant && typeof parsedPayload.credit_grant_id !== 'string') {
+      return 'Strict write policy: payload.credit_grant_id is required for non-bootstrap writes.';
+    }
+
+    if (
+      draft.namespace === 'builder.credits'
+      && draft.action === 'SPONSOR_USAGE'
+      && (typeof parsedPayload.sponsored_did !== 'string' || typeof parsedPayload.sponsorship_id !== 'string')
+    ) {
+      return 'SPONSOR_USAGE requires payload.sponsored_did and payload.sponsorship_id.';
+    }
+
+    return null;
+  };
+
   const submitDraft = () => {
+    const error = validateStrictPayload();
+    if (error) {
+      setSubmissionError(error);
+      return;
+    }
+
+    setSubmissionError(null);
     const submission: Submission = {
       id: crypto.randomUUID(),
       status: 'pending',
@@ -94,6 +129,7 @@ export function App() {
   };
 
   const loadGrantDraft = () => {
+    setSubmissionError(null);
     setDraft({
       namespace: 'builder.credits',
       action: 'MULTISIG_CREDIT_GRANT',
@@ -114,6 +150,7 @@ export function App() {
   };
 
   const loadSponsorshipDraft = () => {
+    setSubmissionError(null);
     setDraft({
       namespace: 'builder.credits',
       action: 'SPONSOR_USAGE',
@@ -214,6 +251,7 @@ export function App() {
           <p className="notice">Strict write policy: include <code>credit_grant_id</code> and optional <code>sponsor_builder_id</code> in payload for non-bootstrap writes.</p>
           <button onClick={submitDraft} disabled={!activeKey}>Submit signed entry</button>
           {!activeKey && <p className="notice">Create a key first to enable submissions.</p>}
+          {submissionError && <p className="notice">{submissionError}</p>}
         </article>
 
         <article className="card">
