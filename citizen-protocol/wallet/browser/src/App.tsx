@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { createSponsorUsageDraft } from './builderCreditDraft';
 
 type WalletState = {
   account: string;
@@ -53,6 +54,13 @@ export function App() {
   const [status, setStatus] = useState('');
   const [secretPassword, setSecretPassword] = useState('');
   const [secretKey, setSecretKey] = useState('');
+  const [grantId, setGrantId] = useState('grant:builder:alpha');
+  const [sponsorDid, setSponsorDid] = useState('did:ledger:builder:alpha');
+  const [sponsoredDid, setSponsoredDid] = useState('did:ledger:app:citizen-blog');
+  const [sponsorshipId, setSponsorshipId] = useState('sponsor-usage-001');
+  const [usageUnits, setUsageUnits] = useState('1');
+  const [draftErrors, setDraftErrors] = useState<string[]>([]);
+  const [draftPayload, setDraftPayload] = useState('');
 
   const refreshState = async () => {
     const stored = await chrome.storage.local.get([STORAGE_KEY, LAST_REQUEST_KEY]);
@@ -155,6 +163,19 @@ export function App() {
     await refreshState();
   };
 
+  const handleBuildSponsorDraft = () => {
+    const result = createSponsorUsageDraft({
+      authorDid: state.account,
+      creditGrantId: grantId,
+      sponsorBuilderId: sponsorDid,
+      sponsoredDid,
+      sponsorshipId,
+      usageUnits,
+    });
+    setDraftErrors(result.errors);
+    setDraftPayload(result.payloadJson);
+  };
+
   return (
     <main className="wallet-root">
       <section className="wallet-frame" aria-label="browser wallet status">
@@ -173,7 +194,7 @@ export function App() {
           </div>
           <p className="network-pill">citizen-{state.network}</p>
           <p className="top-address" title={state.account}>Wallet: {state.account}</p>
-          <h1>Citizen Browser Wallet</h1>
+          <h1>Citizen Signer Wallet</h1>
           <p>Password lock is required before account access and signing.</p>
         </header>
 
@@ -239,6 +260,21 @@ export function App() {
                 <dd><code>builder.credits</code> grant + sponsorship entries</dd>
               </div>
             </dl>
+          </article>
+
+          <article className="request-card">
+            <h2>Sponsorship draft builder</h2>
+            <p className="meta-text">Creates strict <code>builder.credits/SPONSOR_USAGE</code> payload templates for dApps.</p>
+            <div className="form-grid">
+              <input value={grantId} onChange={(event) => setGrantId(event.target.value)} placeholder="credit_grant_id" />
+              <input value={sponsorDid} onChange={(event) => setSponsorDid(event.target.value)} placeholder="sponsor_builder_id" />
+              <input value={sponsoredDid} onChange={(event) => setSponsoredDid(event.target.value)} placeholder="sponsored_did" />
+              <input value={sponsorshipId} onChange={(event) => setSponsorshipId(event.target.value)} placeholder="sponsorship_id" />
+              <input value={usageUnits} onChange={(event) => setUsageUnits(event.target.value)} placeholder="usage_units" />
+              <button className="primary" onClick={handleBuildSponsorDraft}>Build sponsor draft</button>
+              {draftErrors.length > 0 ? <p>{draftErrors.join(' ')}</p> : null}
+              {draftPayload ? <textarea readOnly value={draftPayload} rows={10} aria-label="Sponsor draft payload" /> : null}
+            </div>
           </article>
 
           <article className="request-card">
