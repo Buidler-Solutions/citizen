@@ -1,5 +1,13 @@
 # Citizen Monorepo
 
+[![Protocol](https://img.shields.io/badge/Protocol-CITIZEN-2d6cdf)](./citizen-protocol/README.md)
+[![Status](https://img.shields.io/badge/Status-Working%20Draft-orange)](./AGENTS.md)
+[![Consensus](https://img.shields.io/badge/Consensus-BFT%20%E2%89%A580%25%20quorum-6f42c1)](./AGENTS.md)
+[![Finality](https://img.shields.io/badge/Finality-Deterministic%20~1s-success)](./AGENTS.md)
+[![Rust](https://img.shields.io/badge/Rust-Workspace-000000?logo=rust)](./citizen-protocol/Cargo.toml)
+[![License: CPNCL](https://img.shields.io/badge/License-CPNCL%20v1.0-blue)](./LICENSE)
+[![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-blue)](./citizen-protocol/LICENSE)
+
 This repository is the monorepo for **Citizen**, a governance-first public-ledger initiative centered on the **CITIZEN protocol**.
 
 The protocol mission is to provide verifiable public truth infrastructure (records, accountability, governance, and civic coordination) without speculative-currency design as the core value proposition.
