@@ -8,7 +8,8 @@
 - Runbooks/scripts (`docs/*runbook*`, `scripts/smoke_test_node_entry.sh`)
 
 ## Executive status
-- **Runtime + SDK + runbooks/scripts + dApp/demo submission flows:** aligned with strict builder-credit enforcement.
+- **Runtime policy logic + SDK + runbooks/scripts + dApp/demo submission flows:** aligned with strict builder-credit enforcement semantics.
+- **Operational rollout:** previously **partial** because strict API gating was controlled by an API edge toggle defaulting to `false` (compatibility mode).
 - **Wallet surfaces:** React/browser wallet include strict builder-credit guidance, and wallet CLI now exposes dedicated grant/sponsorship signing commands.
 
 ## Findings by component
@@ -47,8 +48,14 @@
 - DApp API article submission now includes strict linkage fields (`payload.credit_grant_id`, `payload.sponsor_builder_id`) and challenge-time grant metadata propagation.
 - Demo blog server runtime envelopes include strict linkage fields and preserve sponsor fallback behavior when `sponsorBuilderId` is omitted by clients.
 
+
+### 8) API edge rollout toggle (Previously Partial, now Configurable)
+- The API gate is intentionally behind `require_builder_credit_for_all_writes` so operators can phase in strict enforcement without immediately breaking baseline/runtime tests and existing write clients.
+- The quoted note (`default is now false`) is a compatibility statement, not a policy rollback: strict enforcement still executes whenever the toggle is enabled.
+- To remove rollout ambiguity, node config now exposes `api_require_builder_credit_for_all_writes`, so strict mode can be enabled directly in validator configs instead of requiring code-level wiring.
+
 ## Conclusion
-Strict builder-credit enforcement is implemented at runtime/policy level and now reflected across SDK, runbooks, dApp/demo submission payloads, and wallet CLI helper surfaces. Remaining UX hardening is primarily around richer browser-extension authoring workflows (grant selection, sponsorship templates, and validation hints) rather than missing core linkage fields.
+Strict builder-credit enforcement is implemented at runtime/policy level and reflected across SDK, runbooks, dApp/demo submission payloads, and wallet helper surfaces. The remaining alignment risk was rollout wiring: if the edge toggle is left disabled, strict linkage is not globally enforced. With node-level config exposure and validator sample configs updated to enable strict mode, this gap is now operationally addressable while preserving an explicit compatibility default for legacy/baseline environments.
 
 ---
 

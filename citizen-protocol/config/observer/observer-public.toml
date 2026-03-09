@@ -5,6 +5,7 @@ api_port = 8090
 # Observer profile: no consensus voting/proposer participation and no write API routes.
 # Writes to /api/v1/entries/submit and /api/v1/envelopes/submit are rejected with HTTP 403.
 api_auth_required = false
+api_require_builder_credit_for_all_writes = false
 api_max_write_requests_per_minute = 60
 network_key_rotation_secs = 3600
 
