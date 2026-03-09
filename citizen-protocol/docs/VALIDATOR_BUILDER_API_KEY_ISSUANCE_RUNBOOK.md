@@ -69,6 +69,7 @@ Update the validator config TOML:
 
 ```toml
 api_auth_required = true
+api_require_builder_credit_for_all_writes = true
 api_max_write_requests_per_minute = 120
 
 [[api_clients]]
@@ -78,7 +79,7 @@ scopes = ["entries.submit", "envelopes.submit"]
 
 Notes:
 
-- Keep `api_auth_required = true` for public/builder write exposure.
+- Keep `api_auth_required = true` and `api_require_builder_credit_for_all_writes = true` for public/builder write exposure.
 - Add only the scopes required for the builder use case.
 - If multiple builders exist, add one `[[api_clients]]` block per key.
 
