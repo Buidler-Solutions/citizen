@@ -77,13 +77,16 @@ function validateDraft(body) {
   const tags = Array.isArray(body.tags)
     ? body.tags.map((tag) => String(tag).trim()).filter(Boolean)
     : [];
+  const creditGrantId = typeof body.creditGrantId === "string" ? body.creditGrantId.trim() : "";
+  const sponsorBuilderId = typeof body.sponsorBuilderId === "string" ? body.sponsorBuilderId.trim() : "";
 
   const errors = [];
   if (title.length < 5) errors.push("title must have at least 5 characters");
   if (author.length < 3) errors.push("author must have at least 3 characters");
   if (content.length < 100) errors.push("content must have at least 100 characters");
+  if (creditGrantId.length < 3) errors.push("creditGrantId is required (minimum 3 characters)");
 
-  return { valid: errors.length === 0, errors, draft: { title, author, content, tags } };
+  return { valid: errors.length === 0, errors, draft: { title, author, content, tags, creditGrantId, sponsorBuilderId } };
 }
 
 async function fetchNodeJson(pathname, options) {
@@ -257,6 +260,8 @@ async function finalizeSignedArticle(body) {
         authorDid: challenge.authorDid,
         signedMessage: challenge.signedMessage,
         contentHash: challenge.contentHash,
+        credit_grant_id: challenge.draft.creditGrantId,
+        sponsor_builder_id: challenge.draft.sponsorBuilderId || challenge.wallet,
       },
       author: challenge.wallet,
       signature: walletSignature,
