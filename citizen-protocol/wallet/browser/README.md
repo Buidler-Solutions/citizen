@@ -28,7 +28,7 @@ npm run dev
 
 ## Builder credit authoring helper
 
-The popup now includes a **Sponsorship draft builder** to generate strict `builder.credits` / `SPONSOR_USAGE` payloads with required fields (`credit_grant_id`, `sponsorship_id`, `sponsored_did`, `usage_units`) and optional `sponsor_builder_id` fallback behavior. Preset templates (article/governance) and an inline strict-field checklist help authors verify grant linkage before signing.
+The popup now includes a **Sponsorship draft builder** to generate strict `builder.credits` / `SPONSOR_USAGE` payloads with required fields (`credit_grant_id`, `sponsorship_id`, `sponsored_did`, `amount`) and optional `sponsor_builder_id` fallback behavior. Preset templates (article/governance) and an inline strict-field checklist help authors verify grant linkage before signing.
 
 ## Quality gates
 

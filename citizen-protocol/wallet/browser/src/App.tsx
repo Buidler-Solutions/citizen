@@ -75,8 +75,8 @@ export function App() {
   const [sponsorDid, setSponsorDid] = useState('did:ledger:builder:alpha');
   const [sponsoredDid, setSponsoredDid] = useState('did:ledger:app:citizen-blog');
   const [sponsorshipId, setSponsorshipId] = useState('sponsor-usage-001');
-  const [usageUnits, setUsageUnits] = useState('1');
-  const [grantUnits, setGrantUnits] = useState('100');
+  const [sponsorUsageAmount, setSponsorUsageAmount] = useState('1');
+  const [grantAmount, setGrantAmount] = useState('100');
   const [multisigThreshold, setMultisigThreshold] = useState('2');
   const [grantScope, setGrantScope] = useState('content.article');
   const [draftErrors, setDraftErrors] = useState<string[]>([]);
@@ -87,8 +87,8 @@ export function App() {
     sponsorBuilderId: sponsorDid,
     sponsoredDid,
     sponsorshipId,
-    usageUnits,
-    grantUnits,
+    sponsorUsageAmount,
+    grantAmount,
     multisigThreshold,
     grantScope,
   });
@@ -202,8 +202,8 @@ export function App() {
       sponsorBuilderId: sponsorDid,
       sponsoredDid,
       sponsorshipId,
-      usageUnits,
-      grantUnits,
+      sponsorUsageAmount,
+      grantAmount,
       multisigThreshold,
       grantScope,
     });
@@ -218,8 +218,8 @@ export function App() {
       sponsorBuilderId: sponsorDid,
       sponsoredDid,
       sponsorshipId,
-      usageUnits,
-      grantUnits,
+      sponsorUsageAmount,
+      grantAmount,
       multisigThreshold,
       grantScope,
     });
@@ -333,8 +333,8 @@ export function App() {
               <input value={sponsorDid} onChange={(event) => setSponsorDid(event.target.value)} placeholder="sponsor_builder_id" />
               <input value={sponsoredDid} onChange={(event) => setSponsoredDid(event.target.value)} placeholder="sponsored_did" />
               <input value={sponsorshipId} onChange={(event) => setSponsorshipId(event.target.value)} placeholder="sponsorship_id" />
-              <input value={usageUnits} onChange={(event) => setUsageUnits(event.target.value)} placeholder="usage_units" />
-              <input value={grantUnits} onChange={(event) => setGrantUnits(event.target.value)} placeholder="grant_units" />
+              <input value={sponsorUsageAmount} onChange={(event) => setSponsorUsageAmount(event.target.value)} placeholder="amount (sponsor usage)" />
+              <input value={grantAmount} onChange={(event) => setGrantAmount(event.target.value)} placeholder="amount (credit grant)" />
               <input value={multisigThreshold} onChange={(event) => setMultisigThreshold(event.target.value)} placeholder="multisig_threshold" />
               <input value={grantScope} onChange={(event) => setGrantScope(event.target.value)} placeholder="grant_scope" />
               <div className="hero-actions">

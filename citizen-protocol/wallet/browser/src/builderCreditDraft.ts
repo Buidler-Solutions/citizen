@@ -4,8 +4,8 @@ export type BuilderCreditDraftInput = {
   sponsorBuilderId: string;
   sponsoredDid: string;
   sponsorshipId: string;
-  usageUnits: string;
-  grantUnits: string;
+  sponsorUsageAmount: string;
+  grantAmount: string;
   multisigThreshold: string;
   grantScope: string;
 };
@@ -28,6 +28,10 @@ function isPositiveInteger(value: string) {
   return Number(value) > 0;
 }
 
+function resolveBuilderDid(input: BuilderCreditDraftInput) {
+  return (input.sponsorBuilderId || input.authorDid).trim();
+}
+
 export function createSponsorUsageDraft(input: BuilderCreditDraftInput): BuilderCreditDraftResult {
   const errors: string[] = [];
   if (!input.authorDid.trim()) {
@@ -42,20 +46,22 @@ export function createSponsorUsageDraft(input: BuilderCreditDraftInput): Builder
   if (!input.sponsorshipId.trim()) {
     errors.push('sponsorship_id is required.');
   }
-  if (!isPositiveInteger(input.usageUnits)) {
-    errors.push('usage_units must be a positive integer.');
+  if (!isPositiveInteger(input.sponsorUsageAmount)) {
+    errors.push('payload.amount must be a positive integer for SPONSOR_USAGE.');
   }
 
+  const builderDid = resolveBuilderDid(input);
   const envelope = {
     namespace: 'builder.credits',
     action: 'SPONSOR_USAGE',
-    author: input.authorDid,
+    object_id: builderDid,
+    author: builderDid,
     payload: {
       credit_grant_id: input.creditGrantId,
-      sponsor_builder_id: input.sponsorBuilderId || input.authorDid,
+      sponsor_builder_id: builderDid,
       sponsored_did: input.sponsoredDid,
       sponsorship_id: input.sponsorshipId,
-      usage_units: Number(input.usageUnits),
+      amount: Number(input.sponsorUsageAmount),
     },
   };
 
@@ -77,22 +83,24 @@ export function createMultisigGrantDraft(input: BuilderCreditDraftInput): Builde
   if (!input.grantScope.trim()) {
     errors.push('grant_scope is required.');
   }
-  if (!isPositiveInteger(input.grantUnits)) {
-    errors.push('grant_units must be a positive integer.');
+  if (!isPositiveInteger(input.grantAmount)) {
+    errors.push('payload.amount must be a positive integer for MULTISIG_CREDIT_GRANT.');
   }
   if (!isPositiveInteger(input.multisigThreshold)) {
     errors.push('multisig_threshold must be a positive integer.');
   }
 
+  const builderDid = resolveBuilderDid(input);
   const envelope = {
     namespace: 'builder.credits',
     action: 'MULTISIG_CREDIT_GRANT',
-    author: input.authorDid,
+    object_id: builderDid,
+    author: builderDid,
     payload: {
       credit_grant_id: input.creditGrantId,
-      sponsor_builder_id: input.sponsorBuilderId || input.authorDid,
+      sponsor_builder_id: builderDid,
       grant_scope: input.grantScope,
-      grant_units: Number(input.grantUnits),
+      amount: Number(input.grantAmount),
       multisig_threshold: Number(input.multisigThreshold),
     },
   };
@@ -112,7 +120,11 @@ export function buildStrictBuilderCreditChecklist(input: BuilderCreditDraftInput
     },
     {
       label: 'payload.sponsor_builder_id uses explicit DID or signer fallback',
-      valid: Boolean((input.sponsorBuilderId || input.authorDid).trim()),
+      valid: Boolean(resolveBuilderDid(input)),
+    },
+    {
+      label: 'object_id and author resolve to builder DID',
+      valid: Boolean(resolveBuilderDid(input)),
     },
     {
       label: 'SPONSOR_USAGE includes payload.sponsored_did',
@@ -123,12 +135,12 @@ export function buildStrictBuilderCreditChecklist(input: BuilderCreditDraftInput
       valid: Boolean(input.sponsorshipId.trim()),
     },
     {
-      label: 'SPONSOR_USAGE usage_units is a positive integer',
-      valid: isPositiveInteger(input.usageUnits),
+      label: 'SPONSOR_USAGE payload.amount is a positive integer',
+      valid: isPositiveInteger(input.sponsorUsageAmount),
     },
     {
-      label: 'MULTISIG_CREDIT_GRANT grant_units is a positive integer',
-      valid: isPositiveInteger(input.grantUnits),
+      label: 'MULTISIG_CREDIT_GRANT payload.amount is a positive integer',
+      valid: isPositiveInteger(input.grantAmount),
     },
     {
       label: 'MULTISIG_CREDIT_GRANT multisig_threshold is a positive integer',
