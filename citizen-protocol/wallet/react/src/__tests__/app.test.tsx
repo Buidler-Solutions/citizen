@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
 import { axe } from 'vitest-axe';
@@ -17,6 +17,17 @@ describe('wallet app', () => {
 
 
 
+  it('blocks invalid strict submission payloads and shows guidance', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(screen.getAllByRole('button', { name: 'Create key' })[0]);
+    await user.clear(screen.getAllByLabelText('Payload JSON')[0]);
+    fireEvent.change(screen.getAllByLabelText('Payload JSON')[0], { target: { value: '{"event":"BID_OPENED"}' } });
+    await user.click(screen.getAllByRole('button', { name: 'Submit signed entry' })[0]);
+
+    expect(screen.getByText(/payload.credit_grant_id is required/)).toBeInTheDocument();
+  });
 
   it('loads strict builder credit templates into the draft form', async () => {
     const user = userEvent.setup();
