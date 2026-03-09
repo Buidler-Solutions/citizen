@@ -61,6 +61,8 @@ export default function ArticlePublisher() {
   const [wallet, setWallet] = useState<string>("");
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
+  const [creditGrantId, setCreditGrantId] = useState("");
+  const [sponsorBuilderId, setSponsorBuilderId] = useState("");
   const [articles, setArticles] = useState<PublishedArticle[]>([]);
   const [status, setStatus] = useState("Connect a wallet to start publishing.");
   const [busy, setBusy] = useState(false);
@@ -149,7 +151,9 @@ export default function ArticlePublisher() {
           authorWallet: wallet,
           title,
           content,
-          network: targetNetwork
+          network: targetNetwork,
+          creditGrantId,
+          sponsorBuilderId: sponsorBuilderId || undefined
         })
       });
 
@@ -193,6 +197,8 @@ export default function ArticlePublisher() {
       await submitResponse.json();
       setTitle("");
       setContent("");
+      setCreditGrantId("");
+      setSponsorBuilderId("");
       setStatus("Article published and submitted to selected blockchain network.");
       await loadArticles();
     } catch {
@@ -259,6 +265,23 @@ export default function ArticlePublisher() {
                 value={content}
                 onChange={(event) => setContent(event.target.value)}
                 placeholder="Describe what happened..."
+              />
+            </label>
+            <label>
+              Credit grant ID
+              <input
+                required
+                value={creditGrantId}
+                onChange={(event) => setCreditGrantId(event.target.value)}
+                placeholder="grant:builder:..."
+              />
+            </label>
+            <label>
+              Sponsor builder DID (optional)
+              <input
+                value={sponsorBuilderId}
+                onChange={(event) => setSponsorBuilderId(event.target.value)}
+                placeholder="did:ledger:builder:..."
               />
             </label>
             <button className="button primary action-button" disabled={busy} type="submit">
