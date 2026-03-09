@@ -6,6 +6,8 @@ type ChallengeBody = {
   title: string;
   content: string;
   network?: string;
+  creditGrantId: string;
+  sponsorBuilderId?: string;
 };
 
 type SubmitBody = {
@@ -55,7 +57,9 @@ export class AppController {
         title: body.title,
         content: body.content
       },
-      body.network
+      body.network,
+      body.creditGrantId,
+      body.sponsorBuilderId
     );
   }
 

@@ -287,6 +287,8 @@ struct NodeConfig {
     api_port: u16,
     #[serde(default)]
     api_auth_required: bool,
+    #[serde(default)]
+    api_require_builder_credit_for_all_writes: bool,
     #[serde(default = "default_api_write_rpm")]
     api_max_write_requests_per_minute: usize,
     #[serde(default)]
@@ -379,6 +381,7 @@ impl NodeConfig {
             auth_required: self.api_auth_required,
             max_write_requests_per_minute: self.api_max_write_requests_per_minute,
             offchain_encrypted_files_v1_enabled: self.api_offchain_encrypted_files_v1_enabled,
+            require_builder_credit_for_all_writes: self.api_require_builder_credit_for_all_writes,
             clients,
         }
     }
@@ -572,6 +575,7 @@ impl Default for NodeConfig {
             signing_key_hex: None,
             api_port: default_api_port(),
             api_auth_required: false,
+            api_require_builder_credit_for_all_writes: false,
             api_max_write_requests_per_minute: default_api_write_rpm(),
             api_clients: Vec::new(),
             api_offchain_encrypted_files_v1_enabled: false,
