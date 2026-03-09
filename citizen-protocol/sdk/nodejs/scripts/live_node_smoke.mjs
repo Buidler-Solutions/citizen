@@ -1,4 +1,6 @@
 import { spawn } from "node:child_process";
+import { readFileSync, rmSync } from "node:fs";
+import path from "node:path";
 import { CitizenNodeClient } from "../src/index.js";
 
 const NODE_URL = process.env.CITIZEN_NODE_URL ?? "http://127.0.0.1:8081";
@@ -7,6 +9,7 @@ const NODE_MODE = (process.env.CITIZEN_NODE_MODE ?? "external").toLowerCase();
 const LOCAL_CONFIG_PATH = process.env.CITIZEN_LOCAL_CONFIG_PATH ?? "config/localnet/validator-alpha.toml";
 const LOCAL_PROTOCOL_DIR = process.env.CITIZEN_LOCAL_PROTOCOL_DIR ?? "citizen-protocol";
 const LOCAL_BUILD_COMMAND = process.env.CITIZEN_LOCAL_BUILD_COMMAND ?? "cargo build -p citizen-node";
+const LOCAL_RESET_DATA_DIR = (process.env.CITIZEN_LOCAL_RESET_DATA_DIR ?? "true").toLowerCase() !== "false";
 const START_COMMAND = process.env.CITIZEN_NODE_START_COMMAND;
 const STOP_COMMAND = process.env.CITIZEN_NODE_STOP_COMMAND;
 
@@ -67,6 +70,27 @@ function startBackgroundCommand(command, options = {}) {
   return child;
 }
 
+function readLocalDataDir(configPath) {
+  const configContent = readFileSync(configPath, "utf8");
+  const dataDirMatch = configContent.match(/^data_dir\s*=\s*"([^"]+)"/m);
+  if (!dataDirMatch) {
+    throw new Error(`Unable to read data_dir from config: ${configPath}`);
+  }
+
+  return dataDirMatch[1];
+}
+
+function resetLocalDataDirIfEnabled(protocolDir, configPath) {
+  if (!LOCAL_RESET_DATA_DIR) {
+    return;
+  }
+
+  const absoluteConfigPath = path.resolve(protocolDir, configPath);
+  const dataDir = readLocalDataDir(absoluteConfigPath);
+  const absoluteDataDir = path.resolve(path.dirname(absoluteConfigPath), dataDir);
+  rmSync(absoluteDataDir, { recursive: true, force: true });
+}
+
 async function waitForHealthyNode({ timeoutMs = HEALTH_TIMEOUT_MS, pollIntervalMs = HEALTH_POLL_INTERVAL_MS } = {}) {
   const startedAt = Date.now();
 
@@ -92,6 +116,7 @@ async function startNodeForMode(mode) {
   }
 
   if (mode === "local") {
+    resetLocalDataDirIfEnabled(LOCAL_PROTOCOL_DIR, LOCAL_CONFIG_PATH);
     await runCommand(LOCAL_BUILD_COMMAND, { cwd: LOCAL_PROTOCOL_DIR });
     const command = `cargo run -p citizen-node -- ${LOCAL_CONFIG_PATH}`;
     return startBackgroundCommand(command, { cwd: LOCAL_PROTOCOL_DIR });
