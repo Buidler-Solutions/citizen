@@ -53,7 +53,7 @@ Validation checklist:
   and is applied to the active set only (`ceil(0.8 * |V_active|)`).
 - Epoch rotation controls are configured and reviewed: `epoch_length_blocks`
   and `promotion_limit`.
-- API write edge controls are configured (`api_auth_required = true`, scoped API keys, rate limits).
+- API write edge controls are configured (`api_auth_required = true`, `api_require_builder_credit_for_all_writes = true`, scoped API keys, rate limits).
 
 Pass criteria:
 
