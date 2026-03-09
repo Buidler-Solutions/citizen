@@ -31,7 +31,8 @@ citizen-wallet-cli --help
 ## Implemented command groups
 - Key lifecycle: `init`, `keygen`, `import-key`, `list-keys`, `public-key`, `export-key`
 - Entry signing: `sign-entry`, `sign-identity-register`, `sign-governance-vote`,
-  `sign-registry-transfer`, `sign-audit-record`
+  `sign-registry-transfer`, `sign-audit-record`, `sign-builder-credit-grant`,
+  `sign-sponsor-usage`
 - Verification: `verify-entry`, `verify-receipt`
 - Submission + receipts: `submit`, `list-receipts`
 - Governance policy controls: `sign-governance-vote --required-approvals --policy-approver --approval`
@@ -100,4 +101,19 @@ cargo run -p citizen-wallet-cli -- sign-governance-vote \
   --policy-approver validator-b \
   --approval validator-a \
   --approval validator-b
+```
+
+
+## Strict builder-credit helper commands
+
+Create a `builder.credits` grant envelope using strict action naming:
+
+```bash
+cargo run -p citizen-wallet-cli -- sign-builder-credit-grant   --path ./tmp/wallet.json   --key-id <KEY_ID>   --grant-id grant:builder:alpha:q1   --amount 1000   --author did:ledger:builder:alpha   --sponsor-builder-id did:ledger:builder:alpha   --target-builder-id did:ledger:builder:alpha   --multisig-proofs-json '[{"approver":"approver-a","public_key":"<HEX>","signature":"<HEX>"}]'
+```
+
+Create a sponsorship usage envelope linked to an active grant:
+
+```bash
+cargo run -p citizen-wallet-cli -- sign-sponsor-usage   --path ./tmp/wallet.json   --key-id <KEY_ID>   --sponsorship-id spn-2026-03-02-00001   --credit-grant-id grant:builder:alpha:q1   --amount 25   --sponsored-did did:ledger:user:publisher-01   --author did:ledger:builder:alpha   --sponsor-builder-id did:ledger:builder:alpha
 ```
