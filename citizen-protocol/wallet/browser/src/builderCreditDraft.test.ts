@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { createMultisigGrantDraft, createSponsorUsageDraft } from './builderCreditDraft';
+import {
+  buildStrictBuilderCreditChecklist,
+  createMultisigGrantDraft,
+  createSponsorUsageDraft,
+} from './builderCreditDraft';
 
 describe('createSponsorUsageDraft', () => {
   it('builds strict sponsor usage envelope', () => {
@@ -62,5 +66,23 @@ describe('createMultisigGrantDraft', () => {
     expect(result.payloadJson).toContain('\"action\": \"MULTISIG_CREDIT_GRANT\"');
     expect(result.payloadJson).toContain('\"grant_scope\": \"content.article\"');
     expect(result.payloadJson).toContain('\"multisig_threshold\": 2');
+  });
+});
+
+describe('buildStrictBuilderCreditChecklist', () => {
+  it('marks all strict fields as valid for complete templates', () => {
+    const checklist = buildStrictBuilderCreditChecklist({
+      authorDid: 'did:ledger:builder:alpha',
+      creditGrantId: 'grant:builder:alpha',
+      sponsorBuilderId: 'did:ledger:builder:alpha',
+      sponsoredDid: 'did:ledger:app:citizen-blog',
+      sponsorshipId: 'sponsor-usage-001',
+      usageUnits: '2',
+      grantUnits: '100',
+      multisigThreshold: '2',
+      grantScope: 'content.article',
+    });
+
+    expect(checklist.every((item) => item.valid)).toBe(true);
   });
 });
