@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { createSponsorUsageDraft } from './builderCreditDraft';
+import { createMultisigGrantDraft, createSponsorUsageDraft } from './builderCreditDraft';
 
 type WalletState = {
   account: string;
@@ -59,6 +59,9 @@ export function App() {
   const [sponsoredDid, setSponsoredDid] = useState('did:ledger:app:citizen-blog');
   const [sponsorshipId, setSponsorshipId] = useState('sponsor-usage-001');
   const [usageUnits, setUsageUnits] = useState('1');
+  const [grantUnits, setGrantUnits] = useState('100');
+  const [multisigThreshold, setMultisigThreshold] = useState('2');
+  const [grantScope, setGrantScope] = useState('content.article');
   const [draftErrors, setDraftErrors] = useState<string[]>([]);
   const [draftPayload, setDraftPayload] = useState('');
 
@@ -163,6 +166,23 @@ export function App() {
     await refreshState();
   };
 
+
+  const handleBuildGrantDraft = () => {
+    const result = createMultisigGrantDraft({
+      authorDid: state.account,
+      creditGrantId: grantId,
+      sponsorBuilderId: sponsorDid,
+      sponsoredDid,
+      sponsorshipId,
+      usageUnits,
+      grantUnits,
+      multisigThreshold,
+      grantScope,
+    });
+    setDraftErrors(result.errors);
+    setDraftPayload(result.payloadJson);
+  };
+
   const handleBuildSponsorDraft = () => {
     const result = createSponsorUsageDraft({
       authorDid: state.account,
@@ -171,6 +191,9 @@ export function App() {
       sponsoredDid,
       sponsorshipId,
       usageUnits,
+      grantUnits,
+      multisigThreshold,
+      grantScope,
     });
     setDraftErrors(result.errors);
     setDraftPayload(result.payloadJson);
@@ -264,14 +287,20 @@ export function App() {
 
           <article className="request-card">
             <h2>Sponsorship draft builder</h2>
-            <p className="meta-text">Creates strict <code>builder.credits/SPONSOR_USAGE</code> payload templates for dApps.</p>
+            <p className="meta-text">Creates strict <code>builder.credits</code> payload templates for grant issuance and sponsorship usage.</p>
             <div className="form-grid">
               <input value={grantId} onChange={(event) => setGrantId(event.target.value)} placeholder="credit_grant_id" />
               <input value={sponsorDid} onChange={(event) => setSponsorDid(event.target.value)} placeholder="sponsor_builder_id" />
               <input value={sponsoredDid} onChange={(event) => setSponsoredDid(event.target.value)} placeholder="sponsored_did" />
               <input value={sponsorshipId} onChange={(event) => setSponsorshipId(event.target.value)} placeholder="sponsorship_id" />
               <input value={usageUnits} onChange={(event) => setUsageUnits(event.target.value)} placeholder="usage_units" />
-              <button className="primary" onClick={handleBuildSponsorDraft}>Build sponsor draft</button>
+              <input value={grantUnits} onChange={(event) => setGrantUnits(event.target.value)} placeholder="grant_units" />
+              <input value={multisigThreshold} onChange={(event) => setMultisigThreshold(event.target.value)} placeholder="multisig_threshold" />
+              <input value={grantScope} onChange={(event) => setGrantScope(event.target.value)} placeholder="grant_scope" />
+              <div className="hero-actions">
+                <button className="primary" onClick={handleBuildSponsorDraft}>Build sponsor usage draft</button>
+                <button className="ghost" onClick={handleBuildGrantDraft}>Build multisig grant draft</button>
+              </div>
               {draftErrors.length > 0 ? <p>{draftErrors.join(' ')}</p> : null}
               {draftPayload ? <textarea readOnly value={draftPayload} rows={10} aria-label="Sponsor draft payload" /> : null}
             </div>

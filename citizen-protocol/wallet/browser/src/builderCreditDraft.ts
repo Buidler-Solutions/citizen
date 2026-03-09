@@ -5,6 +5,9 @@ export type BuilderCreditDraftInput = {
   sponsoredDid: string;
   sponsorshipId: string;
   usageUnits: string;
+  grantUnits: string;
+  multisigThreshold: string;
+  grantScope: string;
 };
 
 export type BuilderCreditDraftResult = {
@@ -58,3 +61,40 @@ export function createSponsorUsageDraft(input: BuilderCreditDraftInput): Builder
   };
 }
 
+export function createMultisigGrantDraft(input: BuilderCreditDraftInput): BuilderCreditDraftResult {
+  const errors: string[] = [];
+  if (!input.authorDid.trim()) {
+    errors.push('Author DID is required.');
+  }
+  if (!input.creditGrantId.trim()) {
+    errors.push('credit_grant_id is required.');
+  }
+  if (!input.grantScope.trim()) {
+    errors.push('grant_scope is required.');
+  }
+  if (!isPositiveInteger(input.grantUnits)) {
+    errors.push('grant_units must be a positive integer.');
+  }
+  if (!isPositiveInteger(input.multisigThreshold)) {
+    errors.push('multisig_threshold must be a positive integer.');
+  }
+
+  const envelope = {
+    namespace: 'builder.credits',
+    action: 'MULTISIG_CREDIT_GRANT',
+    author: input.authorDid,
+    payload: {
+      credit_grant_id: input.creditGrantId,
+      sponsor_builder_id: input.sponsorBuilderId || input.authorDid,
+      grant_scope: input.grantScope,
+      grant_units: Number(input.grantUnits),
+      multisig_threshold: Number(input.multisigThreshold),
+    },
+  };
+
+  return {
+    ok: errors.length === 0,
+    errors,
+    payloadJson: JSON.stringify(envelope, null, 2),
+  };
+}
