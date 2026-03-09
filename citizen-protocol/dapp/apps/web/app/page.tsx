@@ -76,6 +76,15 @@ const fallbackWorkflows = {
     pubkey: "bls:0xabc123",
     anchors: ["University of X"],
     voting_period: "14 days"
+  },
+  sponsorship: {
+    namespace: "builder.credits",
+    action: "SPONSOR_USAGE",
+    credit_grant_id: "grant:builder:alpha",
+    sponsor_builder_id: "did:ledger:builder:alpha",
+    sponsorship_id: "sponsor:demo:001",
+    sponsored_did: "did:ledger:app:demo",
+    units: 1
   }
 };
 
@@ -95,6 +104,10 @@ const fallbackNamespaces = [
   {
     namespace: "governance.vote",
     actions: ["SUBMIT_PROPOSAL", "CAST_VOTE", "EXECUTE_PROPOSAL"]
+  },
+  {
+    namespace: "builder.credits",
+    actions: ["MULTISIG_CREDIT_GRANT", "PROGRAMMABLE_CREDIT_GRANT", "SPONSOR_USAGE"]
   }
 ];
 
