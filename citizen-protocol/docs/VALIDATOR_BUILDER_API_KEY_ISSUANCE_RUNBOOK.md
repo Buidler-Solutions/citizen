@@ -6,9 +6,10 @@ This runbook defines the operational process for a validator operator to issue,
 activate, verify, rotate, and revoke a builder API key used for write ingress to
 Citizen node endpoints.
 
-The API key is an **ingress identity + scope control**, not economic
-authorization. Builder write capacity must still be enforced by on-ledger credit
-grant policy (`credit_grant_id` checks and builder credit namespace rules).
+The API key is an **ingress identity + scope control**. Economic authorization
+for writes is enforced by strict builder-credit linkage at submission time plus
+on-ledger builder credit namespace policy (`credit_grant_id` checks,
+non-transferability, sponsorship anti-abuse controls).
 
 ## Scope
 
@@ -17,6 +18,10 @@ such as:
 
 - `POST /api/v1/entries/submit` (`entries.submit` scope)
 - `POST /api/v1/envelopes/submit` (`envelopes.submit` scope)
+- `POST /api/v1/files/intents` (`files.intents.create` scope; offchain intent preflight)
+- `POST /api/v1/files/commit` (`files.commit` scope; embedded envelope write)
+- `POST /api/v1/payloads/commit` (`payloads.commit` scope; embedded envelope write)
+- `POST /api/v1/files/revoke` (`files.revoke` scope; embedded envelope write)
 
 ## Preconditions
 
@@ -41,7 +46,7 @@ Create an internal issuance ticket containing:
 
 - Builder ID (for example `did:builder:acme`).
 - Environment (`testnet`, `staging`, `mainnet`).
-- Required scopes (`entries.submit`, `envelopes.submit`, etc.).
+- Required scopes (`entries.submit`, `envelopes.submit`, `files.commit`, etc.).
 - Rate-limit target (writes/minute).
 - Key owner and emergency contact.
 - Planned expiry/rotation date.
@@ -134,8 +139,9 @@ Expected: `403`.
 
 Submit a syntactically valid request to an allowed endpoint.
 
-Expected: request passes API-key check and is then accepted/rejected by ledger
-policy (for example credit-grant validation).
+Expected: request passes API-key check and is then accepted/rejected by strict
+builder-credit linkage (must include valid `payload.credit_grant_id` + optional
+`payload.sponsor_builder_id`) and downstream ledger policy.
 
 ## Rotation Runbook
 
@@ -176,7 +182,7 @@ For each issuance, retain:
 
 - API keys authenticate client ingress and enforce coarse authorization/rate
   limiting.
-- On-ledger grant policy remains mandatory for write economics and sponsorship
-  authorization.
-- This split preserves builder-first UX while maintaining deterministic,
-  auditable enforcement boundaries.
+- API edge + ledger policy both enforce builder-credit economics for write flows
+  to keep sponsorship deterministic and auditable.
+- Builders can sponsor user-signed writes by providing `payload.sponsor_builder_id`
+  and a matching active grant reference in `payload.credit_grant_id`.

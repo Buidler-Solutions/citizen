@@ -18,6 +18,13 @@ require_cmd python
 export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-target-smoke}"
 LOG_FILE="${LOG_FILE:-node-smoke.log}"
 CONFIG_PATH="${1:-config/localnet/validator-alpha.toml}"
+SPONSOR_BUILDER_ID="${SPONSOR_BUILDER_ID:-builder:city-records-labs}"
+CREDIT_GRANT_ID="${CREDIT_GRANT_ID:-}"
+
+if [[ -z "${CREDIT_GRANT_ID}" ]]; then
+  echo "[smoke] missing CREDIT_GRANT_ID env var. submit a valid MULTISIG_CREDIT_GRANT first (see docs/LOCALNET_80_QUORUM_MULTISIG_RUNBOOK.md)" >&2
+  exit 1
+fi
 
 cleanup() {
   if [[ -n "${NODE_PID:-}" ]]; then
@@ -49,7 +56,7 @@ PY
 )"
 
 read -r -d '' PAYLOAD <<JSON || true
-{"entry_id":"${ENTRY_ID}","namespace":"audit.procurement","action":"RECORD_EVENT","object_id":"BID-001","payload":{"event":"BID_OPENED","document_hash":"sha256:test"},"author":"audit.procurement","signature":"sig-local","timestamp":${NOW}}
+{"entry_id":"${ENTRY_ID}","namespace":"audit.procurement","action":"RECORD_EVENT","object_id":"BID-001","payload":{"event":"BID_OPENED","document_hash":"sha256:test","credit_grant_id":"${CREDIT_GRANT_ID}","sponsor_builder_id":"${SPONSOR_BUILDER_ID}"},"author":"audit.procurement","signature":"sig-local","timestamp":${NOW}}
 JSON
 
 echo "[smoke] submitting entry"

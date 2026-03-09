@@ -25,8 +25,8 @@ Neither should replace the other.
 
 1. **API edge (ingress control)**
    - Require `x-api-key` for write endpoints.
-   - Enforce endpoint scopes (for example, `entries:write`,
-     `governance:write`).
+   - Enforce endpoint scopes (for example, `entries.submit`, `envelopes.submit`,
+     `files.commit`, `payloads.commit`, `files.revoke`).
    - Apply per-key rate limits and abuse controls.
 
 2. **Ledger admission policy (economic authorization)**
@@ -104,9 +104,13 @@ content-type: application/json
 
 ## Implementation Note for Current Stack
 
-Current stack enforces API-key write gating and builder credit policy checks
-(including multisig grant controls and sponsorship anti-abuse constraints), and
-`SPONSOR_USAGE` now requires `payload.credit_grant_id` to reference an existing
-builder grant entry (`MULTISIG_CREDIT_GRANT` or `PROGRAMMABLE_CREDIT_GRANT`) for
-the same builder. This gives deterministic reject behavior when sponsorship is
-submitted without a valid issued grant linkage.
+Current stack enforces strict API-edge builder-credit gating on ledger submit
+paths (`/api/v1/entries/submit`, `/api/v1/envelopes/submit`) and on offchain
+envelope write flows (`/api/v1/files/commit`, `/api/v1/payloads/commit`,
+`/api/v1/files/revoke`) before ledger admission. Writes must include
+`payload.credit_grant_id` referencing an active `builder.credits` grant for
+`payload.sponsor_builder_id` (or `entry.author` when omitted).
+
+At ledger policy level, `SPONSOR_USAGE` also requires `payload.credit_grant_id`,
+unique `sponsorship_id`, and sufficient available builder credits, preserving
+deterministic rejection when sponsorship linkage or spend conditions are invalid.
