@@ -36,6 +36,7 @@ PY
   --payload-json '{"event":"BID_OPENED","document_hash":"abc123"}' \
   --password testpass \
   --encrypt \
+  --encryption-opt-in \
   --encryption-passphrase test-entry-passphrase \
   > "${ENTRY_PATH}"
 

@@ -1,0 +1,44 @@
+{
+  "version": "1.0.0",
+  "algorithm": "sha256(canonical_json(field_commitment_input))",
+  "vectors": [
+    {
+      "id": "identity_claim_fields_v1",
+      "field_commitment_input": {
+        "schema_version": "1.0.0",
+        "namespace": "identity.citizen",
+        "entry_id": "entry-2001",
+        "policy_version": 1,
+        "fields": [
+          {
+            "field_path": "claims.address",
+            "ciphertext_hash": "sha256:3c8c1af6f9d6e2f6de53726d97cf3dc2e31de4d12888da265fa1f49f8f465f4f"
+          },
+          {
+            "field_path": "claims.national_id",
+            "ciphertext_hash": "sha256:d5a2a9d8e5b6822fdd2659ae8354570b5e27f6587f7f8e0ae5d8f6a22ec7c222"
+          }
+        ]
+      },
+      "expected_canonical_json": "{\"entry_id\":\"entry-2001\",\"fields\":[{\"ciphertext_hash\":\"sha256:3c8c1af6f9d6e2f6de53726d97cf3dc2e31de4d12888da265fa1f49f8f465f4f\",\"field_path\":\"claims.address\"},{\"ciphertext_hash\":\"sha256:d5a2a9d8e5b6822fdd2659ae8354570b5e27f6587f7f8e0ae5d8f6a22ec7c222\",\"field_path\":\"claims.national_id\"}],\"namespace\":\"identity.citizen\",\"policy_version\":1,\"schema_version\":\"1.0.0\"}",
+      "expected_sha256": "sha256:8d37bce43423a6d789cb90d276bb4ef56b39acee526e7fa8fe7bc85afc788731"
+    },
+    {
+      "id": "land_registry_owner_docs_v1",
+      "field_commitment_input": {
+        "schema_version": "1.0.0",
+        "namespace": "registry.land",
+        "entry_id": "entry-4512",
+        "policy_version": 3,
+        "fields": [
+          {
+            "field_path": "documents.deed_pdf",
+            "ciphertext_hash": "sha256:af2f128bbf4d19012fdfe0d808b68ceeb717b35f6f5bbd84f784f2f43f93b331"
+          }
+        ]
+      },
+      "expected_canonical_json": "{\"entry_id\":\"entry-4512\",\"fields\":[{\"ciphertext_hash\":\"sha256:af2f128bbf4d19012fdfe0d808b68ceeb717b35f6f5bbd84f784f2f43f93b331\",\"field_path\":\"documents.deed_pdf\"}],\"namespace\":\"registry.land\",\"policy_version\":3,\"schema_version\":\"1.0.0\"}",
+      "expected_sha256": "sha256:2436868a870e38a312ad063621f9e95658e2f221937ed7ae968e693328450d30"
+    }
+  ]
+}

@@ -1,5 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { readFile } from "node:fs/promises";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { sha256DigestHex } from "../src/index.js";
 
 import {
   BrowserWalletSigner,
@@ -253,4 +257,32 @@ test("submitTransaction validates builder.credits payloads before submitting", a
     }),
     /payload.credit_grant_id must be a non-empty string/
   );
+});
+
+test("file commitment vectors match canonical hash outputs", async () => {
+  const fixturePath = path.resolve(
+    path.dirname(fileURLToPath(import.meta.url)),
+    "../../../docs/test-vectors/file_commitment_test_vectors.json"
+  );
+  const fixture = JSON.parse(await readFile(fixturePath, "utf8"));
+
+  for (const vector of fixture.vectors) {
+    const canonical = canonicalizeJson(vector.manifest);
+    assert.equal(canonical, vector.expected_canonical_json);
+    assert.equal(await sha256DigestHex(canonical), vector.expected_sha256);
+  }
+});
+
+test("payload field commitment vectors match canonical hash outputs", async () => {
+  const fixturePath = path.resolve(
+    path.dirname(fileURLToPath(import.meta.url)),
+    "../../../docs/test-vectors/payload_field_commitment_test_vectors.json"
+  );
+  const fixture = JSON.parse(await readFile(fixturePath, "utf8"));
+
+  for (const vector of fixture.vectors) {
+    const canonical = canonicalizeJson(vector.field_commitment_input);
+    assert.equal(canonical, vector.expected_canonical_json);
+    assert.equal(await sha256DigestHex(canonical), vector.expected_sha256);
+  }
 });
