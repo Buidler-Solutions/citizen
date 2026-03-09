@@ -42,7 +42,7 @@ export function App() {
     action: 'REGISTER_IDENTITY',
     objectId: 'did:ledger:abc',
     author: 'did:ledger:abc',
-    payloadJson: '{"claims_hash":"abc123"}',
+    payloadJson: '{"credit_grant_id":"grant:builder:alpha","sponsor_builder_id":"did:ledger:builder:alpha"}',
   });
 
   const activeKey = keys[0];
@@ -155,6 +155,7 @@ export function App() {
               <option>registry.land</option>
               <option>audit.procurement</option>
               <option>governance.vote</option>
+              <option>builder.credits</option>
             </select>
           </label>
           <label>Action<input value={draft.action} onChange={(event) => setDraft({ ...draft, action: event.target.value })} /></label>
@@ -163,6 +164,7 @@ export function App() {
           <label>Payload JSON
             <textarea value={draft.payloadJson} onChange={(event) => setDraft({ ...draft, payloadJson: event.target.value })} rows={4} />
           </label>
+          <p className="notice">Strict write policy: include <code>credit_grant_id</code> and optional <code>sponsor_builder_id</code> in payload for non-bootstrap writes.</p>
           <button onClick={submitDraft} disabled={!activeKey}>Submit signed entry</button>
           {!activeKey && <p className="notice">Create a key first to enable submissions.</p>}
         </article>

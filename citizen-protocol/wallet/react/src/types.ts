@@ -5,7 +5,7 @@ export type WalletKey = {
   createdAt: string;
 };
 
-export type Namespace = 'identity.citizen' | 'registry.land' | 'audit.procurement' | 'governance.vote';
+export type Namespace = 'identity.citizen' | 'registry.land' | 'audit.procurement' | 'governance.vote' | 'builder.credits';
 
 export type DraftEntry = {
   namespace: Namespace;
