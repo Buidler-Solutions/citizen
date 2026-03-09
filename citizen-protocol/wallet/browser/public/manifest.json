@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "Citizen Browser Wallet",
+  "name": "Citizen Signer Wallet",
   "description": "CITIZEN browser wallet popup for reviewing and signing ledger events.",
   "version": "0.2.0",
   "action": {
