@@ -37,6 +37,7 @@ pub struct ApiEdgeConfig {
     pub auth_required: bool,
     pub max_write_requests_per_minute: usize,
     pub offchain_encrypted_files_v1_enabled: bool,
+    pub require_builder_credit_for_all_writes: bool,
     pub clients: BTreeMap<String, ApiClientProfile>,
 }
 
@@ -60,6 +61,7 @@ impl Default for ApiEdgeConfig {
             auth_required: false,
             max_write_requests_per_minute: 120,
             offchain_encrypted_files_v1_enabled: false,
+            require_builder_credit_for_all_writes: false,
             clients: BTreeMap::new(),
         }
     }
@@ -733,19 +735,24 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
         {
             return response;
         }
-        if let Err(response) =
-            Self::authorize_builder_credit_gate(Arc::clone(&edge), Arc::clone(&ledger), &envelope.payload)
-        {
+        if let Err(response) = Self::authorize_builder_credit_gate(
+            Arc::clone(&edge),
+            Arc::clone(&ledger),
+            &envelope.payload,
+        ) {
             return response;
         }
         Self::process_envelope_submission(ledger, envelope).await
     }
 
     fn authorize_builder_credit_gate(
-        _edge: Arc<ApiEdgeState>,
+        edge: Arc<ApiEdgeState>,
         ledger: Arc<Ledger<S>>,
         entry: &LedgerEntry,
     ) -> Result<(), (StatusCode, Json<serde_json::Value>)> {
+        if !edge.config.require_builder_credit_for_all_writes {
+            return Ok(());
+        }
         if entry.namespace == "builder.credits"
             && matches!(
                 entry.action.as_str(),
@@ -4334,6 +4341,7 @@ mod tests {
             auth_required: false,
             max_write_requests_per_minute: 1,
             offchain_encrypted_files_v1_enabled: true,
+            require_builder_credit_for_all_writes: false,
             clients: BTreeMap::new(),
         })
         .router();
@@ -4385,6 +4393,7 @@ mod tests {
             auth_required: true,
             max_write_requests_per_minute: 10,
             offchain_encrypted_files_v1_enabled: true,
+            require_builder_credit_for_all_writes: false,
             clients,
         })
         .router();
@@ -4413,6 +4422,7 @@ mod tests {
             auth_required: false,
             max_write_requests_per_minute: 10,
             offchain_encrypted_files_v1_enabled: true,
+            require_builder_credit_for_all_writes: true,
             clients: BTreeMap::new(),
         })
         .router();
@@ -4441,6 +4451,7 @@ mod tests {
             auth_required: false,
             max_write_requests_per_minute: 10,
             offchain_encrypted_files_v1_enabled: true,
+            require_builder_credit_for_all_writes: true,
             clients: BTreeMap::new(),
         })
         .router();
@@ -4545,6 +4556,7 @@ mod tests {
             auth_required: true,
             max_write_requests_per_minute: 10,
             offchain_encrypted_files_v1_enabled: true,
+            require_builder_credit_for_all_writes: false,
             clients,
         })
         .router();
@@ -4579,6 +4591,7 @@ mod tests {
             auth_required: true,
             max_write_requests_per_minute: 1,
             offchain_encrypted_files_v1_enabled: true,
+            require_builder_credit_for_all_writes: false,
             clients,
         })
         .router();
@@ -4630,6 +4643,7 @@ mod tests {
             auth_required: true,
             max_write_requests_per_minute: 10,
             offchain_encrypted_files_v1_enabled: true,
+            require_builder_credit_for_all_writes: false,
             clients,
         });
 
@@ -4673,6 +4687,7 @@ mod tests {
             auth_required: false,
             max_write_requests_per_minute: 10,
             offchain_encrypted_files_v1_enabled: false,
+            require_builder_credit_for_all_writes: false,
             clients: BTreeMap::new(),
         })
         .router();
@@ -9146,6 +9161,7 @@ mod tests {
             auth_required: true,
             max_write_requests_per_minute: 10,
             offchain_encrypted_files_v1_enabled: true,
+            require_builder_credit_for_all_writes: false,
             clients,
         })
         .router();
@@ -9190,6 +9206,7 @@ mod tests {
             auth_required: true,
             max_write_requests_per_minute: 10,
             offchain_encrypted_files_v1_enabled: true,
+            require_builder_credit_for_all_writes: false,
             clients,
         })
         .router();
