@@ -17,6 +17,19 @@ describe('wallet app', () => {
 
 
 
+
+  it('loads strict builder credit templates into the draft form', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(screen.getAllByRole('button', { name: 'Load SPONSOR_USAGE draft' })[0]);
+
+    expect(screen.getByDisplayValue('builder.credits')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('SPONSOR_USAGE')).toBeInTheDocument();
+    expect(screen.getAllByDisplayValue('did:ledger:builder:alpha').length).toBeGreaterThan(0);
+    expect(screen.getByDisplayValue(/sponsorship_id/)).toBeInTheDocument();
+  });
+
   it('renders builder-issued asset disclosure parity notices', () => {
     render(<App />);
     expect(screen.getAllByText(/Builder-Issued Asset Disclosure/).length).toBeGreaterThan(0);
