@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 type BlockResponse = {
   source: string;
   data: {
@@ -60,6 +62,69 @@ type ReceiptResponse = {
   };
 };
 
+type FileManifestResponse = {
+  source: string;
+  data: {
+    manifest_id: string;
+    namespace: string;
+    object_id: string;
+    committed_at: number;
+    encryption_mode: string | null;
+    ciphertext_hash: string | null;
+    payload_commitment: string | null;
+    consent_receipt_ref: string | null;
+    consent_state: string;
+    consent_state_reason: string | null;
+    revoked_readers: string[];
+  };
+};
+
+function consentTone(consentState: string): 'ok' | 'warn' {
+  return consentState === 'active' ? 'ok' : 'warn';
+}
+
+function revocationTone(revokedReaders: string[]): 'ok' | 'warn' {
+  return revokedReaders.length === 0 ? 'ok' : 'warn';
+}
+
+
+type FileTimelineResponse = {
+  source: string;
+  data: {
+    manifest: {
+      manifest_id: string;
+      namespace: string;
+      object_id: string;
+      committed_at: number;
+      consent_state: string;
+      consent_state_reason: string | null;
+      revoked_readers: string[];
+    };
+    events: Array<{
+      timestamp: number;
+      event_type: string;
+      detail: string;
+    }>;
+  };
+};
+
+
+
+type PayloadFieldRefsResponse = {
+  source: string;
+  data: {
+    entry_id: string;
+    namespace: string;
+    field_refs: Array<{
+      field_path: string;
+      blob_ref: string;
+      ciphertext_hash: string;
+      payload_commitment: string;
+    }>;
+  };
+};
+
+
 type AssetPositionsResponse = {
   source: string;
   data: {
@@ -79,56 +144,75 @@ type AssetPositionsResponse = {
 };
 
 const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:3001';
+
+async function safeFetchJson<T>(url: string): Promise<T | null> {
+  try {
+    const response = await fetch(url, { next: { revalidate: 5 } });
+    if (!response.ok) {
+      return null;
+    }
+    return (await response.json()) as T;
+  } catch {
+    return null;
+  }
+}
 const blockHeight = Number(process.env.NEXT_PUBLIC_BLOCK_HEIGHT ?? '1');
 const namespace = process.env.NEXT_PUBLIC_NAMESPACE ?? 'governance.vote';
 const receiptId = process.env.NEXT_PUBLIC_RECEIPT_ID;
 const assetAccountId = process.env.NEXT_PUBLIC_ASSET_ACCOUNT_ID ?? 'did:ledger:alice';
+const fileManifestId = process.env.NEXT_PUBLIC_FILE_MANIFEST_ID;
+const payloadEntryId = process.env.NEXT_PUBLIC_PAYLOAD_ENTRY_ID;
+const payloadNamespace = process.env.NEXT_PUBLIC_PAYLOAD_NAMESPACE;
 
-async function loadBlock(): Promise<BlockResponse> {
-  const response = await fetch(`${apiBase}/blocks/${blockHeight}`, {
-    next: { revalidate: 5 },
-  });
-  if (!response.ok) {
-    throw new Error('Failed to load block');
-  }
-  return response.json();
+async function loadBlock(): Promise<BlockResponse | null> {
+  return safeFetchJson<BlockResponse>(`${apiBase}/blocks/${blockHeight}`);
 }
 
-async function loadEntries(): Promise<EntryResponse> {
-  const response = await fetch(`${apiBase}/entries/${namespace}`, {
-    next: { revalidate: 5 },
-  });
-  if (!response.ok) {
-    throw new Error('Failed to load entries');
-  }
-  return response.json();
+async function loadEntries(): Promise<EntryResponse | null> {
+  return safeFetchJson<EntryResponse>(`${apiBase}/entries/${namespace}`);
 }
 
-async function loadReceipt(id: string): Promise<ReceiptResponse> {
-  const response = await fetch(`${apiBase}/receipts/${id}`, {
-    next: { revalidate: 5 },
-  });
-  if (!response.ok) {
-    throw new Error('Failed to load receipt');
-  }
-  return response.json();
+async function loadReceipt(id: string): Promise<ReceiptResponse | null> {
+  return safeFetchJson<ReceiptResponse>(`${apiBase}/receipts/${id}`);
+}
+
+async function loadFileManifest(manifestId: string): Promise<FileManifestResponse | null> {
+  return safeFetchJson<FileManifestResponse>(
+    `${apiBase}/files/manifests/${encodeURIComponent(manifestId)}`
+  );
+}
+
+
+
+async function loadFileTimeline(manifestId: string): Promise<FileTimelineResponse | null> {
+  return safeFetchJson<FileTimelineResponse>(
+    `${apiBase}/files/timeline/${encodeURIComponent(manifestId)}`
+  );
+}
+
+async function loadPayloadFieldRefs(
+  entryId: string,
+  namespaceName: string,
+): Promise<PayloadFieldRefsResponse | null> {
+  return safeFetchJson<PayloadFieldRefsResponse>(
+    `${apiBase}/payloads/fields/${encodeURIComponent(entryId)}/${encodeURIComponent(namespaceName)}`
+  );
 }
 
 async function loadAssetPositions(accountId: string): Promise<AssetPositionsResponse | null> {
-  const response = await fetch(`${apiBase}/assets/${encodeURIComponent(accountId)}`, {
-    next: { revalidate: 5 },
-  });
-  if (!response.ok) {
-    return null;
-  }
-  return response.json();
+  return safeFetchJson<AssetPositionsResponse>(`${apiBase}/assets/${encodeURIComponent(accountId)}`);
 }
 
 export default async function HomePage() {
-  const [block, entries, receipt, assetPositions] = await Promise.all([
+  const [block, entries, receipt, fileManifest, fileTimeline, payloadFieldRefs, assetPositions] = await Promise.all([
     loadBlock(),
     loadEntries(),
     receiptId ? loadReceipt(receiptId) : Promise.resolve(null),
+    fileManifestId ? loadFileManifest(fileManifestId) : Promise.resolve(null),
+    fileManifestId ? loadFileTimeline(fileManifestId) : Promise.resolve(null),
+    payloadEntryId && payloadNamespace
+      ? loadPayloadFieldRefs(payloadEntryId, payloadNamespace)
+      : Promise.resolve(null),
     loadAssetPositions(assetAccountId),
   ]);
 
@@ -149,15 +233,15 @@ export default async function HomePage() {
           </div>
           <div>
             <span className="label">Node Source</span>
-            <span>{block.source}</span>
+            <span>{block?.source ?? 'unavailable'}</span>
           </div>
         </div>
       </header>
 
       <section className="grid">
         <div className="card">
-          <h2>Block {block.data.height}</h2>
-          {block.data.block ? (
+          <h2>Block {block?.data.height ?? blockHeight}</h2>
+          {block?.data.block ? (
             <ul>
               <li>
                 <div className="row">
@@ -177,14 +261,17 @@ export default async function HomePage() {
               </li>
             </ul>
           ) : (
-            <p>No block found at this height.</p>
+            <p>
+              {block ? 'No block found at this height.' : 'Block data unavailable. Confirm the API service is running and reachable.'}
+            </p>
           )}
         </div>
 
         <div className="card">
-          <h2>Namespace Entries ({entries.data.namespace})</h2>
-          <ul>
-            {entries.data.entries.map((entry) => (
+          <h2>Namespace Entries ({entries?.data.namespace ?? namespace})</h2>
+          {(entries?.data.entries ?? []).length > 0 ? (
+            <ul>
+              {(entries?.data.entries ?? []).map((entry) => (
               <li key={entry.entry_id}>
                 <div className="row">
                   <span>Action</span>
@@ -195,8 +282,15 @@ export default async function HomePage() {
                   <strong className="mono">{entry.author}</strong>
                 </div>
               </li>
-            ))}
-          </ul>
+              ))}
+            </ul>
+          ) : (
+            <p>
+              {entries
+                ? 'No namespace entries available.'
+                : 'Namespace entries unavailable. Confirm the API service is running and reachable.'}
+            </p>
+          )}
         </div>
 
         <div className="card">
@@ -226,10 +320,143 @@ export default async function HomePage() {
             </ul>
           ) : (
             <p>
-              Set <code>NEXT_PUBLIC_RECEIPT_ID</code> to inspect canonical receipt finality proofs.
+              {receiptId
+                ? 'Receipt data unavailable. Confirm the API service is running and reachable.'
+                : <>Set <code>NEXT_PUBLIC_RECEIPT_ID</code> to inspect canonical receipt finality proofs.</>}
             </p>
           )}
         </div>
+
+
+        <div className="card">
+          <h2>Encrypted File Manifest Metadata</h2>
+          {fileManifest ? (
+            <ul>
+              <li>
+                <div className="row">
+                  <span>Manifest ID</span>
+                  <strong className="mono">{fileManifest.data.manifest_id}</strong>
+                </div>
+                <div className="row">
+                  <span>Namespace</span>
+                  <strong>{fileManifest.data.namespace}</strong>
+                </div>
+                <div className="row">
+                  <span>Encryption mode</span>
+                  <strong>{fileManifest.data.encryption_mode ?? 'N/A'}</strong>
+                </div>
+                <div className="row">
+                  <span>Ciphertext hash</span>
+                  <strong className="mono">{fileManifest.data.ciphertext_hash ?? 'N/A'}</strong>
+                </div>
+                <div className="row">
+                  <span>Consent state</span>
+                  <strong className={`status-chip ${consentTone(fileManifest.data.consent_state)}`}>
+                    {fileManifest.data.consent_state}
+                  </strong>
+                </div>
+                <div className="row">
+                  <span>Revoked readers</span>
+                  <strong className={`status-chip ${revocationTone(fileManifest.data.revoked_readers)}`}>
+                    {fileManifest.data.revoked_readers.length}
+                  </strong>
+                </div>
+                <p className="privacy-note">
+                  Privacy label:{' '}
+                  <strong>
+                    {fileManifest.data.consent_state === 'active'
+                      ? 'Grant-active encrypted object (metadata only)'
+                      : 'Revoked/invalid grant state — do not serve plaintext'}
+                  </strong>
+                </p>
+              </li>
+            </ul>
+          ) : (
+            <p>
+              {fileManifestId
+                ? 'Manifest metadata unavailable. Confirm the API service is running and reachable.'
+                : <>Set <code>NEXT_PUBLIC_FILE_MANIFEST_ID</code> to inspect encrypted file manifest hashes and consent status.</>}
+            </p>
+          )}
+        </div>
+
+
+
+        <div className="card">
+          <h2>Encrypted File Consent & Revocation Timeline</h2>
+          {fileTimeline ? (
+            <>
+              <p className="subtitle">
+                Manifest: <code>{fileTimeline.data.manifest.manifest_id}</code>
+              </p>
+              {(fileTimeline.data.events ?? []).length > 0 ? (
+                <ul>
+                  {fileTimeline.data.events.map((event, index) => (
+                    <li key={`${event.event_type}-${event.timestamp}-${index}`}>
+                      <div className="row">
+                        <span>Timestamp</span>
+                        <strong>{event.timestamp}</strong>
+                      </div>
+                      <div className="row">
+                        <span>Event</span>
+                        <strong>{event.event_type}</strong>
+                      </div>
+                      <p className="privacy-note">{event.detail}</p>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p>No consent/revocation timeline events found for this manifest.</p>
+              )}
+            </>
+          ) : (
+            <p>
+              {fileManifestId
+                ? 'Timeline data unavailable. Confirm the API service is running and reachable.'
+                : <>Set <code>NEXT_PUBLIC_FILE_MANIFEST_ID</code> to inspect encrypted-file consent and revocation transitions.</>}
+            </p>
+          )}
+        </div>
+
+        <div className="card">
+          <h2>Encrypted Payload Field References</h2>
+          {payloadFieldRefs ? (
+            <>
+              <p className="subtitle">
+                Entry: <code>{payloadFieldRefs.data.entry_id}</code>
+              </p>
+              <ul>
+                {payloadFieldRefs.data.field_refs.map((fieldRef) => (
+                  <li key={fieldRef.field_path}>
+                    <p className="privacy-note">
+                      Privacy label: Encrypted field reference only (plaintext suppressed)
+                    </p>
+                    <div className="row">
+                      <span>Field path</span>
+                      <strong className="mono">{fieldRef.field_path}</strong>
+                    </div>
+                    <div className="row">
+                      <span>Blob ref</span>
+                      <strong className="mono">{fieldRef.blob_ref}</strong>
+                    </div>
+                    <div className="row">
+                      <span>Ciphertext hash</span>
+                      <strong className="mono">{fieldRef.ciphertext_hash}</strong>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </>
+          ) : (
+            <p>
+              {payloadEntryId && payloadNamespace
+                ? 'Payload field references unavailable. Confirm the API service is running and reachable.'
+                : <>Set <code>NEXT_PUBLIC_PAYLOAD_ENTRY_ID</code> and <code>NEXT_PUBLIC_PAYLOAD_NAMESPACE</code>{' '}
+                    to inspect namespace-scoped encrypted payload field refs.</>}
+            </p>
+          )}
+        </div>
+
 
         <div className="card">
           <h2>Builder-Issued Asset Policy Disclosure</h2>
@@ -266,7 +493,7 @@ export default async function HomePage() {
             </>
           ) : (
             <p>
-              No asset disclosure data loaded. Confirm <code>/assets/:account_id</code> is exposed by the API.
+              Asset disclosure unavailable. Confirm <code>/assets/:account_id</code> is exposed and API service is reachable.
             </p>
           )}
         </div>

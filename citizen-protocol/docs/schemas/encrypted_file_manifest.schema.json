@@ -1,0 +1,130 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://citizen-protocol.org/schemas/encrypted_file_manifest.schema.json",
+  "title": "Citizen Encrypted File Manifest",
+  "description": "Canonical envelope metadata for off-chain encrypted files referenced by on-chain commitments.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "file_ref",
+    "ciphertext_hash",
+    "payload_commitment",
+    "consent_receipt_ref",
+    "encryption"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "1.0.0"
+    },
+    "file_ref": {
+      "type": "string",
+      "description": "Opaque object storage locator for ciphertext bytes.",
+      "minLength": 1,
+      "maxLength": 512
+    },
+    "ciphertext_hash": {
+      "type": "string",
+      "description": "sha256:<hex> digest of ciphertext object bytes.",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "payload_commitment": {
+      "type": "string",
+      "description": "sha256:<hex> deterministic commitment of canonical manifest payload.",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "consent_receipt_ref": {
+      "type": "string",
+      "description": "Receipt reference proving consent at commit time.",
+      "minLength": 1,
+      "maxLength": 160
+    },
+    "encryption": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "mode"
+      ],
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": [
+            "passphrase_file",
+            "hybrid_file_acl_dek"
+          ]
+        },
+        "kdf": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "name",
+            "params"
+          ],
+          "properties": {
+            "name": {
+              "type": "string",
+              "const": "argon2id"
+            },
+            "params": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "memory_kib",
+                "iterations",
+                "parallelism",
+                "salt"
+              ],
+              "properties": {
+                "memory_kib": { "type": "integer", "minimum": 8192 },
+                "iterations": { "type": "integer", "minimum": 1 },
+                "parallelism": { "type": "integer", "minimum": 1 },
+                "salt": { "type": "string", "pattern": "^[A-Za-z0-9_-]+$" }
+              }
+            }
+          }
+        },
+        "dek_wraps": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["wallet_id", "wrapped_dek", "key_agreement"],
+            "properties": {
+              "wallet_id": { "type": "string", "minLength": 1, "maxLength": 128 },
+              "wrapped_dek": { "type": "string", "minLength": 1 },
+              "key_agreement": { "type": "string", "const": "x25519-xsalsa20poly1305" }
+            }
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "mode": { "const": "passphrase_file" } } },
+          "then": {
+            "required": ["kdf"],
+            "not": { "required": ["dek_wraps"] }
+          }
+        },
+        {
+          "if": { "properties": { "mode": { "const": "hybrid_file_acl_dek" } } },
+          "then": {
+            "required": ["dek_wraps"],
+            "not": { "required": ["kdf"] }
+          }
+        }
+      ]
+    },
+    "metadata": {
+      "type": "object",
+      "description": "Optional non-sensitive metadata used in policy checks.",
+      "additionalProperties": false,
+      "properties": {
+        "mime_type": { "type": "string", "maxLength": 128 },
+        "size_bytes": { "type": "integer", "minimum": 0 },
+        "namespace": { "type": "string", "maxLength": 128 },
+        "entry_id": { "type": "string", "maxLength": 128 }
+      }
+    }
+  }
+}

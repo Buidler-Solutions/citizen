@@ -66,6 +66,7 @@ export type BuilderCreditsOperation = {
 };
 
 export function canonicalizeJson(value: unknown): string;
+export function sha256DigestHex(input: string | Uint8Array): Promise<string>;
 export function createMultisigCreditGrant(args: CreateMultisigCreditGrantRequest): BuilderCreditsOperation;
 export function createSponsorshipUsage(args: CreateSponsorshipUsageRequest): BuilderCreditsOperation;
 export function validateBuilderCreditsPayload(args: {

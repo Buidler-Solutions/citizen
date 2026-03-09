@@ -1,0 +1,67 @@
+{
+  "version": "1.0.0",
+  "algorithm": "sha256(canonical_json(manifest_without_payload_commitment))",
+  "vectors": [
+    {
+      "id": "passphrase_file_manifest_v1",
+      "manifest": {
+        "schema_version": "1.0.0",
+        "file_ref": "s3://citizen-dev/objects/file-001.cipher",
+        "ciphertext_hash": "sha256:8ff3b2b6a633f9ec45df31f55f8810b9f4d4f6eb7a127d24808f4d9f7dcb82e9",
+        "consent_receipt_ref": "receipt:8f45d9f2-6ed5-4c5d-bce6-8b9ccfe3df35",
+        "encryption": {
+          "mode": "passphrase_file",
+          "kdf": {
+            "name": "argon2id",
+            "params": {
+              "memory_kib": 65536,
+              "iterations": 3,
+              "parallelism": 1,
+              "salt": "Q2l0aXplbi1nYXRlMC1wYXNz"
+            }
+          }
+        },
+        "metadata": {
+          "entry_id": "entry-001",
+          "namespace": "identity.citizen",
+          "mime_type": "application/pdf",
+          "size_bytes": 24576
+        }
+      },
+      "expected_canonical_json": "{\"ciphertext_hash\":\"sha256:8ff3b2b6a633f9ec45df31f55f8810b9f4d4f6eb7a127d24808f4d9f7dcb82e9\",\"consent_receipt_ref\":\"receipt:8f45d9f2-6ed5-4c5d-bce6-8b9ccfe3df35\",\"encryption\":{\"kdf\":{\"name\":\"argon2id\",\"params\":{\"iterations\":3,\"memory_kib\":65536,\"parallelism\":1,\"salt\":\"Q2l0aXplbi1nYXRlMC1wYXNz\"}},\"mode\":\"passphrase_file\"},\"file_ref\":\"s3://citizen-dev/objects/file-001.cipher\",\"metadata\":{\"entry_id\":\"entry-001\",\"mime_type\":\"application/pdf\",\"namespace\":\"identity.citizen\",\"size_bytes\":24576},\"schema_version\":\"1.0.0\"}",
+      "expected_sha256": "sha256:237fbd4d051b9847ef1c19d901a4563062ac8a68f1992f3e9623acce39303429"
+    },
+    {
+      "id": "hybrid_acl_manifest_v1",
+      "manifest": {
+        "schema_version": "1.0.0",
+        "file_ref": "local://ciphertexts/audit-event-990.bin",
+        "ciphertext_hash": "sha256:56c53f230f7f70da0fae6a6633f84dd5f52f5de5bf04dbe0f259f8f89d1f6d2a",
+        "consent_receipt_ref": "receipt:2a452f79-3c6e-4903-b36a-e3f587accf7b",
+        "encryption": {
+          "mode": "hybrid_file_acl_dek",
+          "dek_wraps": [
+            {
+              "wallet_id": "did:key:z6Mkg5Alice",
+              "wrapped_dek": "base64:VW5pcXVlV3JhcEFsaWNl",
+              "key_agreement": "x25519-xsalsa20poly1305"
+            },
+            {
+              "wallet_id": "did:key:z6Mkg5Bob",
+              "wrapped_dek": "base64:VW5pcXVlV3JhcEJvYg==",
+              "key_agreement": "x25519-xsalsa20poly1305"
+            }
+          ]
+        },
+        "metadata": {
+          "entry_id": "entry-990",
+          "namespace": "audit.procurement",
+          "mime_type": "application/json",
+          "size_bytes": 912
+        }
+      },
+      "expected_canonical_json": "{\"ciphertext_hash\":\"sha256:56c53f230f7f70da0fae6a6633f84dd5f52f5de5bf04dbe0f259f8f89d1f6d2a\",\"consent_receipt_ref\":\"receipt:2a452f79-3c6e-4903-b36a-e3f587accf7b\",\"encryption\":{\"dek_wraps\":[{\"key_agreement\":\"x25519-xsalsa20poly1305\",\"wallet_id\":\"did:key:z6Mkg5Alice\",\"wrapped_dek\":\"base64:VW5pcXVlV3JhcEFsaWNl\"},{\"key_agreement\":\"x25519-xsalsa20poly1305\",\"wallet_id\":\"did:key:z6Mkg5Bob\",\"wrapped_dek\":\"base64:VW5pcXVlV3JhcEJvYg==\"}],\"mode\":\"hybrid_file_acl_dek\"},\"file_ref\":\"local://ciphertexts/audit-event-990.bin\",\"metadata\":{\"entry_id\":\"entry-990\",\"mime_type\":\"application/json\",\"namespace\":\"audit.procurement\",\"size_bytes\":912},\"schema_version\":\"1.0.0\"}",
+      "expected_sha256": "sha256:3809ace7cb1c632207abd7ea8471bb9ad394c41a525a111ba2db00f47c088beb"
+    }
+  ]
+}
