@@ -1,0 +1,163 @@
+# Off-Chain Encrypted Files Canonical Examples
+
+This document provides canonical JSON examples referenced by
+`OFFCHAIN_ENCRYPTED_FILES_IMPLEMENTATION_PLAN.md` for:
+
+1. `encrypted_file_manifest` in `passphrase_file` mode,
+2. `encrypted_file_manifest` in `hybrid_file_acl_dek` mode, and
+3. per-namespace payload splits (`public`, `committed_only`, `offchain_encrypted`).
+
+All examples follow the deterministic field ordering and schema constraints in:
+
+- `docs/schemas/encrypted_file_manifest.schema.json`
+- `docs/schemas/namespace_field_policy.schema.json`
+
+## 1) Canonical manifest example — passphrase mode
+
+```json
+{
+  "schema_version": "1.0.0",
+  "file_ref": "s3://citizen-prod/identity/files/holder-1024/passport-front.enc",
+  "ciphertext_hash": "sha256:6f6a96a9d82cf8d4a4fef6a7494adf08ecf28431f0f6f05b44d1f7779fc7ac77",
+  "encryption": {
+    "mode": "passphrase_file",
+    "kdf": {
+      "name": "argon2id",
+      "params": {
+        "salt": "Q2l0aXplbi1wcm9kLXBhc3NwaHJhc2U",
+        "memory_kib": 65536,
+        "iterations": 3,
+        "parallelism": 1
+      }
+    }
+  },
+  "payload_commitment": "sha256:3f3073842595b49689f8b89f4b654a62695fb66ef7e2f937f0d0651f8f3357ab",
+  "consent_receipt_ref": "receipt:f0d1b684-a58a-4db1-beb3-4f9420ee5a39",
+  "metadata": {
+    "namespace": "identity.citizen",
+    "entry_id": "entry-identity-1024",
+    "mime_type": "image/jpeg",
+    "size_bytes": 183204
+  }
+}
+```
+
+## 2) Canonical manifest example — ACL/DEK hybrid mode
+
+```json
+{
+  "schema_version": "1.0.0",
+  "file_ref": "s3://citizen-prod/procurement/files/tender-2026-04/bid-ledger.enc",
+  "ciphertext_hash": "sha256:2b6165f208f6c8b8d9ad7bfe8de94f1b02893b4e4e7c4f8df64ca233dcaf57ef",
+  "encryption": {
+    "mode": "hybrid_file_acl_dek",
+    "key_wraps": [
+      {
+        "reader_did": "did:citizen:buyer-committee",
+        "alg": "x25519_xchacha20poly1305",
+        "wrapped_dek": "base64:uM4wS7gG2..."
+      },
+      {
+        "reader_did": "did:citizen:auditor-regional-7",
+        "alg": "x25519_xchacha20poly1305",
+        "wrapped_dek": "base64:qP2jk2Po3..."
+      }
+    ]
+  },
+  "payload_commitment": "sha256:aa8f2801694a0b67251f1f92a3e8a21f2d12049149d8cd8a189f434453f43062",
+  "consent_receipt_ref": "receipt:a4688f9c-a0fb-4f8f-ad31-fdc5d9954f6a",
+  "metadata": {
+    "namespace": "audit.procurement",
+    "entry_id": "entry-audit-2026-04-009",
+    "mime_type": "application/pdf",
+    "size_bytes": 928176
+  }
+}
+```
+
+## 3) Canonical per-namespace payload split examples
+
+### 3.1 Namespace field policy (`identity.citizen`)
+
+```json
+{
+  "namespace": "identity.citizen",
+  "policy_version": 3,
+  "public_fields": [
+    "payload.subject_did",
+    "payload.document_type",
+    "payload.issuer"
+  ],
+  "committed_fields": [
+    "payload.document_number_last4",
+    "payload.issue_date"
+  ],
+  "offchain_encrypted_fields": [
+    "payload.full_name",
+    "payload.date_of_birth",
+    "payload.document_number_full",
+    "payload.front_image_blob_ref"
+  ]
+}
+```
+
+### 3.2 Payload before split (`identity.citizen`)
+
+```json
+{
+  "payload": {
+    "subject_did": "did:citizen:holder-1024",
+    "document_type": "passport",
+    "issuer": "authority:civil-registry",
+    "document_number_last4": "9021",
+    "issue_date": "2022-01-05",
+    "full_name": "Amina Doe",
+    "date_of_birth": "1992-07-14",
+    "document_number_full": "XK-778-9021",
+    "front_image_blob_ref": "blob://identity.citizen/front/holder-1024"
+  }
+}
+```
+
+### 3.3 Canonical split output (`identity.citizen`)
+
+```json
+{
+  "public": {
+    "payload.subject_did": "did:citizen:holder-1024",
+    "payload.document_type": "passport",
+    "payload.issuer": "authority:civil-registry"
+  },
+  "committed_only": {
+    "payload.document_number_last4": "9021",
+    "payload.issue_date": "2022-01-05"
+  },
+  "offchain_encrypted": {
+    "payload.full_name": {
+      "blob_ref": "blob://identity.citizen/entry-identity-1024/payload.full_name.enc",
+      "ciphertext_hash": "sha256:fac3d9936ca52ec856f8ce5f2b95df56b8cb2e3ff68fd8f60b52db00d2394f0b"
+    },
+    "payload.date_of_birth": {
+      "blob_ref": "blob://identity.citizen/entry-identity-1024/payload.date_of_birth.enc",
+      "ciphertext_hash": "sha256:f11631ae33f5679782c365d4a3959f7e89ea3cb95f5f825d9fd3339aa1486f2d"
+    },
+    "payload.document_number_full": {
+      "blob_ref": "blob://identity.citizen/entry-identity-1024/payload.document_number_full.enc",
+      "ciphertext_hash": "sha256:0f6968a42bd68717dcfcc2206dba8caebde6fce5f98be03c4f6bc70f291f37e2"
+    },
+    "payload.front_image_blob_ref": {
+      "blob_ref": "blob://identity.citizen/entry-identity-1024/payload.front_image_blob_ref.enc",
+      "ciphertext_hash": "sha256:1eca85a0f2bef465bec8f0cf00ef19ff8f95431f6e8f30a2f72e5641978395d6"
+    }
+  }
+}
+```
+
+## 4) Notes for implementers
+
+- These examples are illustrative canonical shapes; production values (hashes, wraps,
+  object references) must be generated by wallet/SDK deterministic flows.
+- Nodes and explorers must never render decrypted field plaintext from
+  `offchain_encrypted` blobs.
+- Namespace policy updates that add/alter encrypted fields must increment policy
+  version and include migration guidance.

@@ -29,4 +29,23 @@ export class AppController {
   async receipt(@Param('receiptId') receiptId: string) {
     return this.citizenService.getReceipt(receiptId);
   }
+
+  @Get('files/manifests/:manifestId')
+  async fileManifest(@Param('manifestId') manifestId: string) {
+    return this.citizenService.getFileManifest(manifestId);
+  }
+
+
+  @Get('files/timeline/:manifestId')
+  async fileTimeline(@Param('manifestId') manifestId: string) {
+    return this.citizenService.getFileTimeline(manifestId);
+  }
+
+  @Get('payloads/fields/:entryId/:namespace')
+  async payloadFieldRefs(
+    @Param('entryId') entryId: string,
+    @Param('namespace') namespace: string,
+  ) {
+    return this.citizenService.getPayloadFieldRefs(entryId, namespace);
+  }
 }

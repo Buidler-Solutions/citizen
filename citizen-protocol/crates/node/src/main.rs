@@ -9,7 +9,7 @@ use std::sync::Arc;
 
 use anyhow::Context;
 use chrono::Utc;
-use citizen_api::{ApiClientProfile, ApiEdgeConfig, ApiServer};
+use citizen_api::{ApiClientProfile, ApiEdgeConfig, ApiServer, MinioOffchainObjectStoreConfig};
 use citizen_consensus::ConsensusEngine;
 use citizen_crypto::{verifying_key_to_string, KeyRegistry, ValidatorKeypair};
 use citizen_ledger::Ledger;
@@ -76,7 +76,16 @@ async fn main() -> anyhow::Result<()> {
     let ledger = Arc::new(Ledger::new(storage.clone(), key_registry));
     ledger.bootstrap_namespaces(config.namespaces.clone());
 
-    let api_server = ApiServer::with_edge_config(ledger.clone(), config.api_edge_config());
+    let api_server = if let Some(minio_config) = config.offchain_minio_config() {
+        ApiServer::with_edge_config_and_minio_store(
+            ledger.clone(),
+            config.api_edge_config(),
+            minio_config,
+        )
+        .map_err(|err| anyhow::anyhow!("invalid MinIO off-chain object store config: {err}"))?
+    } else {
+        ApiServer::with_edge_config(ledger.clone(), config.api_edge_config())
+    };
     let api_handle = api_server
         .serve(SocketAddr::from((Ipv4Addr::LOCALHOST, config.api_port)))
         .await;
@@ -283,6 +292,10 @@ struct NodeConfig {
     #[serde(default)]
     api_clients: Vec<ApiClientConfig>,
     #[serde(default)]
+    api_offchain_encrypted_files_v1_enabled: bool,
+    #[serde(default)]
+    api_offchain_minio: Option<ApiOffchainMinioConfig>,
+    #[serde(default)]
     data_dir: Option<PathBuf>,
     #[serde(default)]
     bind_addr: Option<SocketAddr>,
@@ -321,6 +334,20 @@ struct PeerConfig {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
+struct ApiOffchainMinioConfig {
+    endpoint: String,
+    bucket: String,
+    access_key: String,
+    secret_key: String,
+    #[serde(default = "default_true")]
+    use_tls: bool,
+    #[serde(default = "default_true")]
+    path_style: bool,
+    #[serde(default = "default_minio_key_prefix")]
+    key_prefix: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
 struct ApiClientConfig {
     api_key: String,
     #[serde(default)]
@@ -351,8 +378,23 @@ impl NodeConfig {
             write_enabled: self.node_role != NodeRole::Observer,
             auth_required: self.api_auth_required,
             max_write_requests_per_minute: self.api_max_write_requests_per_minute,
+            offchain_encrypted_files_v1_enabled: self.api_offchain_encrypted_files_v1_enabled,
             clients,
         }
+    }
+
+    fn offchain_minio_config(&self) -> Option<MinioOffchainObjectStoreConfig> {
+        self.api_offchain_minio
+            .as_ref()
+            .map(|cfg| MinioOffchainObjectStoreConfig {
+                endpoint: cfg.endpoint.clone(),
+                bucket: cfg.bucket.clone(),
+                access_key: cfg.access_key.clone(),
+                secret_key: cfg.secret_key.clone(),
+                use_tls: cfg.use_tls,
+                path_style: cfg.path_style,
+                key_prefix: cfg.key_prefix.clone(),
+            })
     }
 
     fn admission_settings(&self) -> AdmissionSettings {
@@ -532,6 +574,8 @@ impl Default for NodeConfig {
             api_auth_required: false,
             api_max_write_requests_per_minute: default_api_write_rpm(),
             api_clients: Vec::new(),
+            api_offchain_encrypted_files_v1_enabled: false,
+            api_offchain_minio: None,
             data_dir: Some(PathBuf::from("data")),
             bind_addr: Some(default_bind()),
             namespaces: default_namespaces(),
@@ -581,6 +625,14 @@ fn default_liveness_threshold() -> u64 {
 
 fn default_api_write_rpm() -> usize {
     120
+}
+
+fn default_true() -> bool {
+    true
+}
+
+fn default_minio_key_prefix() -> String {
+    "citizen/offchain-encrypted-files/v1".to_string()
 }
 
 fn default_api_port() -> u16 {
