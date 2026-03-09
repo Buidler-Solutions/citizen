@@ -42,8 +42,15 @@ export function App() {
     action: 'REGISTER_IDENTITY',
     objectId: 'did:ledger:abc',
     author: 'did:ledger:abc',
-    payloadJson: '{"claims_hash":"abc123"}',
+    payloadJson: '{"credit_grant_id":"grant:builder:alpha","sponsor_builder_id":"did:ledger:builder:alpha"}',
   });
+  const [grantTemplate, setGrantTemplate] = useState({
+    grantId: 'grant:builder:alpha',
+    sponsorBuilderId: 'did:ledger:builder:alpha',
+    sponsoredDid: 'did:ledger:app:demo',
+    sponsorshipId: 'sponsor:demo:001',
+  });
+  const [submissionError, setSubmissionError] = useState<string | null>(null);
 
   const activeKey = keys[0];
   const walletHealth = useMemo(() => ({
@@ -77,7 +84,41 @@ export function App() {
     persistKeys([newKey, ...keys]);
   };
 
+  const validateStrictPayload = (): string | null => {
+    let parsedPayload: Record<string, unknown>;
+    try {
+      parsedPayload = JSON.parse(draft.payloadJson) as Record<string, unknown>;
+    } catch {
+      return 'Payload JSON must be valid JSON before submission.';
+    }
+
+    const isBootstrapGrant =
+      draft.namespace === 'builder.credits'
+      && (draft.action === 'MULTISIG_CREDIT_GRANT' || draft.action === 'PROGRAMMABLE_CREDIT_GRANT');
+
+    if (!isBootstrapGrant && typeof parsedPayload.credit_grant_id !== 'string') {
+      return 'Strict write policy: payload.credit_grant_id is required for non-bootstrap writes.';
+    }
+
+    if (
+      draft.namespace === 'builder.credits'
+      && draft.action === 'SPONSOR_USAGE'
+      && (typeof parsedPayload.sponsored_did !== 'string' || typeof parsedPayload.sponsorship_id !== 'string')
+    ) {
+      return 'SPONSOR_USAGE requires payload.sponsored_did and payload.sponsorship_id.';
+    }
+
+    return null;
+  };
+
   const submitDraft = () => {
+    const error = validateStrictPayload();
+    if (error) {
+      setSubmissionError(error);
+      return;
+    }
+
+    setSubmissionError(null);
     const submission: Submission = {
       id: crypto.randomUUID(),
       status: 'pending',
@@ -85,6 +126,49 @@ export function App() {
       createdAt: new Date().toISOString(),
     };
     persistReceipts([submission, ...receipts]);
+  };
+
+  const loadGrantDraft = () => {
+    setSubmissionError(null);
+    setDraft({
+      namespace: 'builder.credits',
+      action: 'MULTISIG_CREDIT_GRANT',
+      objectId: grantTemplate.grantId,
+      author: grantTemplate.sponsorBuilderId,
+      payloadJson: JSON.stringify(
+        {
+          credit_grant_id: grantTemplate.grantId,
+          sponsor_builder_id: grantTemplate.sponsorBuilderId,
+          grant_scope: 'content.article',
+          amount: 100,
+          multisig_threshold: 2,
+        },
+        null,
+        2,
+      ),
+    });
+  };
+
+  const loadSponsorshipDraft = () => {
+    setSubmissionError(null);
+    setDraft({
+      namespace: 'builder.credits',
+      action: 'SPONSOR_USAGE',
+      objectId: grantTemplate.sponsorshipId,
+      author: grantTemplate.sponsorBuilderId,
+      payloadJson: JSON.stringify(
+        {
+          credit_grant_id: grantTemplate.grantId,
+          sponsor_builder_id: grantTemplate.sponsorBuilderId,
+          sponsorship_id: grantTemplate.sponsorshipId,
+          sponsored_did: grantTemplate.sponsoredDid,
+          amount: 1,
+          purpose: 'content.article publish',
+        },
+        null,
+        2,
+      ),
+    });
   };
 
   const markFinal = (id: string) => {
@@ -155,6 +239,7 @@ export function App() {
               <option>registry.land</option>
               <option>audit.procurement</option>
               <option>governance.vote</option>
+              <option>builder.credits</option>
             </select>
           </label>
           <label>Action<input value={draft.action} onChange={(event) => setDraft({ ...draft, action: event.target.value })} /></label>
@@ -163,8 +248,23 @@ export function App() {
           <label>Payload JSON
             <textarea value={draft.payloadJson} onChange={(event) => setDraft({ ...draft, payloadJson: event.target.value })} rows={4} />
           </label>
+          <p className="notice">Strict write policy: include <code>credit_grant_id</code> and optional <code>sponsor_builder_id</code> in payload for non-bootstrap writes.</p>
           <button onClick={submitDraft} disabled={!activeKey}>Submit signed entry</button>
           {!activeKey && <p className="notice">Create a key first to enable submissions.</p>}
+          {submissionError && <p className="notice">{submissionError}</p>}
+        </article>
+
+        <article className="card">
+          <h2>Builder Credit Templates</h2>
+          <p>Prepare strict payloads for grant + sponsorship actions before signing.</p>
+          <label>Grant ID<input value={grantTemplate.grantId} onChange={(event) => setGrantTemplate({ ...grantTemplate, grantId: event.target.value })} /></label>
+          <label>Sponsor Builder DID<input value={grantTemplate.sponsorBuilderId} onChange={(event) => setGrantTemplate({ ...grantTemplate, sponsorBuilderId: event.target.value })} /></label>
+          <label>Sponsored DID<input value={grantTemplate.sponsoredDid} onChange={(event) => setGrantTemplate({ ...grantTemplate, sponsoredDid: event.target.value })} /></label>
+          <label>Sponsorship ID<input value={grantTemplate.sponsorshipId} onChange={(event) => setGrantTemplate({ ...grantTemplate, sponsorshipId: event.target.value })} /></label>
+          <div className="row">
+            <button onClick={loadGrantDraft}>Load MULTISIG_CREDIT_GRANT draft</button>
+            <button onClick={loadSponsorshipDraft}>Load SPONSOR_USAGE draft</button>
+          </div>
         </article>
 
         <article className="card">

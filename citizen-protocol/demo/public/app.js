@@ -153,6 +153,8 @@ form.addEventListener("submit", async (event) => {
       .map((tag) => tag.trim())
       .filter(Boolean),
     content: form.content.value,
+    creditGrantId: form.creditGrantId.value,
+    sponsorBuilderId: form.sponsorBuilderId.value || undefined,
     wallet: connectedWallet
   };
 

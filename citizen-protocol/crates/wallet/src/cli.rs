@@ -241,6 +241,50 @@ enum Commands {
         #[arg(long)]
         expected_public_key: Option<String>,
     },
+    SignBuilderCreditGrant {
+        #[arg(long, default_value = "wallet.json")]
+        path: PathBuf,
+        #[arg(long)]
+        key_id: Uuid,
+        #[arg(long)]
+        grant_id: String,
+        #[arg(long)]
+        amount: u64,
+        #[arg(long)]
+        author: String,
+        #[arg(long)]
+        sponsor_builder_id: Option<String>,
+        #[arg(long)]
+        target_builder_id: Option<String>,
+        #[arg(long)]
+        multisig_proofs_json: Option<String>,
+        #[arg(long)]
+        timestamp: Option<i64>,
+        #[arg(long)]
+        password: Option<String>,
+    },
+    SignSponsorUsage {
+        #[arg(long, default_value = "wallet.json")]
+        path: PathBuf,
+        #[arg(long)]
+        key_id: Uuid,
+        #[arg(long)]
+        sponsorship_id: String,
+        #[arg(long)]
+        credit_grant_id: String,
+        #[arg(long)]
+        amount: u64,
+        #[arg(long)]
+        sponsored_did: String,
+        #[arg(long)]
+        author: String,
+        #[arg(long)]
+        sponsor_builder_id: Option<String>,
+        #[arg(long)]
+        timestamp: Option<i64>,
+        #[arg(long)]
+        password: Option<String>,
+    },
 }
 
 #[derive(Debug, Serialize)]
@@ -795,6 +839,88 @@ pub fn run() -> anyhow::Result<()> {
                 signing_payload,
             };
             println!("{}", serde_json::to_string_pretty(&proof)?);
+        }
+        Commands::SignBuilderCreditGrant {
+            path,
+            key_id,
+            grant_id,
+            amount,
+            author,
+            sponsor_builder_id,
+            target_builder_id,
+            multisig_proofs_json,
+            timestamp,
+            password,
+        } => {
+            let mut payload = serde_json::json!({
+                "amount": amount,
+            });
+
+            if let Some(sponsor_builder_id) = sponsor_builder_id {
+                payload["sponsor_builder_id"] = json!(sponsor_builder_id);
+            }
+
+            if let Some(target_builder_id) = target_builder_id {
+                payload["target_builder_id"] = json!(target_builder_id);
+            }
+
+            if let Some(multisig_proofs_json) = multisig_proofs_json {
+                let proofs: Value = serde_json::from_str(&multisig_proofs_json)?;
+                payload["multisig_proofs"] = proofs;
+            }
+
+            sign_namespace_entry(
+                &path,
+                key_id,
+                "builder.credits",
+                "MULTISIG_CREDIT_GRANT",
+                grant_id,
+                author,
+                payload,
+                timestamp,
+                password,
+                false,
+                false,
+                None,
+            )?;
+        }
+        Commands::SignSponsorUsage {
+            path,
+            key_id,
+            sponsorship_id,
+            credit_grant_id,
+            amount,
+            sponsored_did,
+            author,
+            sponsor_builder_id,
+            timestamp,
+            password,
+        } => {
+            let mut payload = serde_json::json!({
+                "sponsorship_id": sponsorship_id.clone(),
+                "credit_grant_id": credit_grant_id,
+                "amount": amount,
+                "sponsored_did": sponsored_did,
+            });
+
+            if let Some(sponsor_builder_id) = sponsor_builder_id {
+                payload["sponsor_builder_id"] = json!(sponsor_builder_id);
+            }
+
+            sign_namespace_entry(
+                &path,
+                key_id,
+                "builder.credits",
+                "SPONSOR_USAGE",
+                format!("sponsorship:{sponsorship_id}"),
+                author,
+                payload,
+                timestamp,
+                password,
+                false,
+                false,
+                None,
+            )?;
         }
     }
 

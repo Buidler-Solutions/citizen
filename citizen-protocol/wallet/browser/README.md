@@ -1,4 +1,4 @@
-# Citizen Browser Wallet
+# Citizen Wallet Signer
 
 Dedicated browser-wallet UX project for transaction/event signing flows.
 
@@ -24,6 +24,11 @@ npm install
 ```bash
 npm run dev
 ```
+
+
+## Builder credit authoring helper
+
+The popup now includes a **Sponsorship draft builder** to generate strict `builder.credits` / `SPONSOR_USAGE` payloads with required fields (`credit_grant_id`, `sponsorship_id`, `sponsored_did`, `amount`) and optional `sponsor_builder_id` fallback behavior. Preset templates (article/governance) and an inline strict-field checklist help authors verify grant linkage before signing.
 
 ## Quality gates
 

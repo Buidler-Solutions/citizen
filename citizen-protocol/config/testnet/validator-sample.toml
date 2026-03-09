@@ -10,6 +10,7 @@ quorum_bps = 8000
 signing_key_hex = "REPLACE_WITH_32_BYTE_SECRET_HEX"
 api_port = 8281
 api_auth_required = true
+api_require_builder_credit_for_all_writes = true
 api_max_write_requests_per_minute = 120
 data_dir = "data/testnet-validator-alpha"
 bind_addr = "0.0.0.0:9300"
