@@ -72,10 +72,10 @@ Strict builder-credit enforcement is implemented at runtime/policy level and ref
   - `citizen-ledger` full unit suite passes, including builder-credit enforcement tests.
   - `citizen-api` strict builder-credit tests pass (`write_endpoints_require_builder_credit_grant_linkage`, `sponsored_user_write_accepts_builder_grant_linkage`).
   - Browser wallet strict draft-builder tests pass.
-- **Repository-wide runtime sync is still partial**:
-  - Full `citizen-api` test suite currently has multiple failing tests outside strict builder-credit coverage, indicating broader API/runtime behavior drift that should be resolved before claiming complete ecosystem-runtime synchronization.
+- **Repository-wide runtime sync is now aligned for this scope**:
+  - Full `citizen-api` test suite now passes alongside `citizen-ledger`, so no current API/runtime drift is observed in the strict builder-credit implementation area.
 
 ### Recommended follow-up
-1. Treat strict builder-credit implementation as validated.
-2. Open a dedicated API/runtime sync remediation track for the non-builder-credit failing API tests.
-3. Re-run full workspace CI after API fixes to reconfirm end-to-end alignment claims.
+1. Treat strict builder-credit implementation as validated and functionally complete for current scope.
+2. Keep `api_require_builder_credit_for_all_writes` enabled in validator/operator configs where strict policy is mandatory.
+3. Continue periodic full workspace CI runs to catch unrelated regressions early.
