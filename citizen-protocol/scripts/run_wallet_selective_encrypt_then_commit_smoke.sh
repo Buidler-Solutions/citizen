@@ -36,6 +36,7 @@ PY
   --payload-json '{"public_fields":{"event":"BID_OPENED","document_hash":"abc123"},"private_fields":{"vendor_email":"alice@example.org","amount":1200},"public_allowlist":["document_hash","event"]}' \
   --password testpass \
   --encrypt \
+  --encryption-opt-in \
   --encryption-passphrase test-entry-passphrase \
   > "${ENTRY_PATH}"
 

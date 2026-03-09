@@ -308,6 +308,25 @@ pub struct ValidationSummary {
     pub namespace: NamespaceId,
     pub action: String,
     pub outcome: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub offchain_commitments: Option<OffchainCommitmentSummary>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct OffchainCommitmentSummary {
+    pub payload_commitment: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub manifest_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ciphertext_hash: Option<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    pub encrypted_field_commitments: Vec<PayloadFieldCommitmentSummary>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct PayloadFieldCommitmentSummary {
+    pub field_path: String,
+    pub payload_commitment: String,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]

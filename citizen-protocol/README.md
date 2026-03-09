@@ -45,6 +45,31 @@ Implementation handoff status is tracked in:
 
 - `docs/PHASE_IMPLEMENTATION_TRACKER.md`
 
+## Feasibility Note: "Institutional Integrity" Runtime Diagrams
+
+Citizen's existing runtime is already designed for that model at the
+architecture level, and the current implementation is on that path.
+
+Conceptual diagrams that show one shared blockchain runtime serving domains like
+voting, finance, health records, and supply chain are directionally compatible
+with Citizen's architecture, with one critical constraint: those domains must be
+implemented as governed namespaces (and optionally governance-gated execution
+modules), not as unconstrained app logic.
+
+In practical terms:
+
+- **Possible now**: a shared, permissioned validator runtime with deterministic
+  finality, transparent verification paths, and cryptographically controlled
+  off-chain data custody commitments.
+- **Required before production**: per-namespace governance approvals, explicit
+  write/validation rules, privacy/data custody policies, and staged
+  interoperability controls.
+- **Out of scope by default**: permissionless validator churn, speculative token
+  economics, or ad-hoc cross-domain integrations bypassing governance.
+
+This keeps "institutional integrity" as a real implementation target while
+preserving Citizen's governance-first safety model.
+
 Current delivery includes Phase 2 identity/data ownership primitives, Phase 3 builder credit controls, Phase 4 governed asset controls, and Phase 5 scoped WASM + interop controls:
 
 - DID registry namespace rule enforcement (`identity.citizen`) with governed action allowlists.
@@ -337,6 +362,15 @@ cd dist/runtime-stack/node-runtime/docker
 docker compose up --build
 ```
 
+Admission policy note: the generated runtime bundle defaults to
+`manifest_enforce = false` for local/dev convenience only. For shared, staged,
+and production environments, the recommended setup is `manifest_enforce = true`
+with `manifest_path` set to a signed admission manifest that is mounted or
+copied into the runtime at that exact path.
+
+You can generate a signed manifest payload and signature using the workflow in
+`deploy/runtime-stack/README.md`.
+
 ## Transport Admission & Key Rotation
 
 - Incoming QUIC/libp2p peers are validated against the configured validator snapshot in `node.toml`. Use
@@ -416,4 +450,4 @@ The harness covers the RFC scenarios: normal operation, partial outages, quorum 
 
 ## License
 
-Licensed under [Apache License 2.0](LICENSE).
+Licensed under [Citizen Protocol Non-Commercial License (CPNCL) v1.0](LICENSE).

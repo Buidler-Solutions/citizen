@@ -4,6 +4,7 @@ use ed25519_dalek::{
 };
 use parking_lot::RwLock;
 use rand::rngs::OsRng;
+use serde_json::Value;
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -108,6 +109,36 @@ pub fn hash_entry(entry: &LedgerEntry) -> String {
     hex::encode(hasher.finalize())
 }
 
+pub fn canonical_json(value: &Value) -> String {
+    match value {
+        Value::Object(map) => {
+            let mut keys: Vec<&String> = map.keys().collect();
+            keys.sort();
+            let encoded_entries: Vec<String> = keys
+                .iter()
+                .map(|key| {
+                    let encoded_key =
+                        serde_json::to_string(key).expect("canonical object key serialization");
+                    let encoded_value = canonical_json(&map[*key]);
+                    format!("{encoded_key}:{encoded_value}")
+                })
+                .collect();
+            format!("{{{}}}", encoded_entries.join(","))
+        }
+        Value::Array(items) => {
+            let encoded_items: Vec<String> = items.iter().map(canonical_json).collect();
+            format!("[{}]", encoded_items.join(","))
+        }
+        _ => serde_json::to_string(value).expect("canonical scalar serialization"),
+    }
+}
+
+pub fn sha256_hex(input: &str) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(input.as_bytes());
+    format!("sha256:{}", hex::encode(hasher.finalize()))
+}
+
 pub fn aggregate_signatures(
     signatures: &BTreeMap<ValidatorId, Signature>,
     quorum: usize,
@@ -196,10 +227,56 @@ pub fn verifying_key_to_string(key: &VerifyingKey) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde::Deserialize;
+
+    #[derive(Debug, Deserialize)]
+    struct VectorFile {
+        vectors: Vec<TestVector>,
+    }
+
+    #[derive(Debug, Deserialize)]
+    struct TestVector {
+        manifest: Option<Value>,
+        field_commitment_input: Option<Value>,
+        expected_canonical_json: String,
+        expected_sha256: String,
+    }
 
     #[test]
     fn quorum_calculation_rounds_up() {
         assert_eq!(quorum_threshold(5, 8000), 4);
         assert_eq!(quorum_threshold(10, 8000), 8);
+    }
+
+    #[test]
+    fn file_commitment_vectors_match_canonical_hashes() {
+        let vectors: VectorFile = serde_json::from_str(include_str!(
+            "../../../docs/test-vectors/file_commitment_test_vectors.json"
+        ))
+        .expect("valid file commitment vectors");
+
+        for vector in vectors.vectors {
+            let input = vector.manifest.expect("manifest vector input");
+            let canonical = canonical_json(&input);
+            assert_eq!(canonical, vector.expected_canonical_json);
+            assert_eq!(sha256_hex(&canonical), vector.expected_sha256);
+        }
+    }
+
+    #[test]
+    fn payload_field_commitment_vectors_match_canonical_hashes() {
+        let vectors: VectorFile = serde_json::from_str(include_str!(
+            "../../../docs/test-vectors/payload_field_commitment_test_vectors.json"
+        ))
+        .expect("valid payload commitment vectors");
+
+        for vector in vectors.vectors {
+            let input = vector
+                .field_commitment_input
+                .expect("field commitment vector input");
+            let canonical = canonical_json(&input);
+            assert_eq!(canonical, vector.expected_canonical_json);
+            assert_eq!(sha256_hex(&canonical), vector.expected_sha256);
+        }
     }
 }

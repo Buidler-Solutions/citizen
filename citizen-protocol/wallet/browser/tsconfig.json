@@ -18,7 +18,8 @@
     "strict": true,
     "types": [
       "vite/client",
-      "chrome"
+      "chrome",
+      "vitest"
     ]
   },
   "include": [

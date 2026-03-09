@@ -131,3 +131,30 @@ h1 {
   color: #44526b;
   line-height: 1.4;
 }
+
+.privacy-note {
+  margin: 0 0 10px;
+  font-size: 12px;
+  color: #4c5568;
+  line-height: 1.35;
+}
+
+.status-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.status-chip.ok {
+  background: #e7f9ef;
+  color: #0f7a3d;
+}
+
+.status-chip.warn {
+  background: #fff4e5;
+  color: #ad5e00;
+}
