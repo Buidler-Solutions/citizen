@@ -13,8 +13,8 @@ describe('createSponsorUsageDraft', () => {
       sponsorBuilderId: 'did:ledger:builder:alpha',
       sponsoredDid: 'did:ledger:app:citizen-blog',
       sponsorshipId: 'sponsor-usage-001',
-      usageUnits: '2',
-      grantUnits: '100',
+      sponsorUsageAmount: '2',
+      grantAmount: '100',
       multisigThreshold: '2',
       grantScope: 'content.article',
     });
@@ -24,6 +24,8 @@ describe('createSponsorUsageDraft', () => {
     expect(result.payloadJson).toContain('"namespace": "builder.credits"');
     expect(result.payloadJson).toContain('"action": "SPONSOR_USAGE"');
     expect(result.payloadJson).toContain('"credit_grant_id": "grant:builder:alpha"');
+    expect(result.payloadJson).toContain('"object_id": "did:ledger:builder:alpha"');
+    expect(result.payloadJson).toContain('"amount": 2');
   });
 
   it('returns validation errors for incomplete draft input', () => {
@@ -33,8 +35,8 @@ describe('createSponsorUsageDraft', () => {
       sponsorBuilderId: '',
       sponsoredDid: '',
       sponsorshipId: '',
-      usageUnits: '0',
-      grantUnits: '0',
+      sponsorUsageAmount: '0',
+      grantAmount: '0',
       multisigThreshold: '0',
       grantScope: '',
     });
@@ -42,7 +44,7 @@ describe('createSponsorUsageDraft', () => {
     expect(result.ok).toBe(false);
     expect(result.errors).toContain('Author DID is required.');
     expect(result.errors).toContain('credit_grant_id is required.');
-    expect(result.errors).toContain('usage_units must be a positive integer.');
+    expect(result.errors).toContain('payload.amount must be a positive integer for SPONSOR_USAGE.');
   });
 });
 
@@ -55,17 +57,18 @@ describe('createMultisigGrantDraft', () => {
       sponsorBuilderId: 'did:ledger:builder:alpha',
       sponsoredDid: 'did:ledger:app:citizen-blog',
       sponsorshipId: 'sponsor-usage-001',
-      usageUnits: '2',
-      grantUnits: '100',
+      sponsorUsageAmount: '2',
+      grantAmount: '100',
       multisigThreshold: '2',
       grantScope: 'content.article',
     });
 
     expect(result.ok).toBe(true);
     expect(result.errors).toEqual([]);
-    expect(result.payloadJson).toContain('\"action\": \"MULTISIG_CREDIT_GRANT\"');
-    expect(result.payloadJson).toContain('\"grant_scope\": \"content.article\"');
-    expect(result.payloadJson).toContain('\"multisig_threshold\": 2');
+    expect(result.payloadJson).toContain('"action": "MULTISIG_CREDIT_GRANT"');
+    expect(result.payloadJson).toContain('"grant_scope": "content.article"');
+    expect(result.payloadJson).toContain('"multisig_threshold": 2');
+    expect(result.payloadJson).toContain('"amount": 100');
   });
 });
 
@@ -77,8 +80,8 @@ describe('buildStrictBuilderCreditChecklist', () => {
       sponsorBuilderId: 'did:ledger:builder:alpha',
       sponsoredDid: 'did:ledger:app:citizen-blog',
       sponsorshipId: 'sponsor-usage-001',
-      usageUnits: '2',
-      grantUnits: '100',
+      sponsorUsageAmount: '2',
+      grantAmount: '100',
       multisigThreshold: '2',
       grantScope: 'content.article',
     });

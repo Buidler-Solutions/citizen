@@ -35,18 +35,17 @@
   - `sign-builder-credit-grant` for `builder.credits` + `MULTISIG_CREDIT_GRANT` envelopes.
   - `sign-sponsor-usage` for `builder.credits` + `SPONSOR_USAGE` envelopes with direct `credit_grant_id` linkage.
 
-### 5) Wallet React (Not aligned)
-- React wallet remains a local scaffold UI with simulated pending/finalized states and no strict builder-credit grant/sponsorship workflow.
-- Namespace options shown in UI do not include `builder.credits`.
+### 5) Wallet React (Aligned)
+- React wallet now includes `builder.credits` in namespace options and strict payload validation for non-bootstrap writes.
+- Dedicated draft loaders generate runtime-compatible `MULTISIG_CREDIT_GRANT` and `SPONSOR_USAGE` payloads using `payload.amount`, `credit_grant_id`, `sponsor_builder_id`, `sponsorship_id`, and `sponsored_did`.
 
-### 6) Browser wallet / extension (Not aligned)
-- Browser wallet focuses on account/password + generic `personal_sign` style request handling.
-- No extension UX for `builder.credits` grant linkage, sponsor selection, or strict sponsorship metadata authoring.
+### 6) Browser wallet / extension (Aligned)
+- Browser wallet popup now includes a strict builder-credit draft builder with preset templates and checklist guidance.
+- Generated draft envelopes are runtime-compatible for `builder.credits` actions (`MULTISIG_CREDIT_GRANT`, `SPONSOR_USAGE`) with builder DID object linkage and `payload.amount` semantics.
 
-### 7) Demo dApps + demo blog (Not aligned)
-- DApp API envelope creation for article publishing submits `content.article` entries without `payload.credit_grant_id` / `payload.sponsor_builder_id`.
-- Demo blog server also builds runtime submit envelopes without strict builder-credit linkage fields.
-- With current strict runtime gating, these flows will be rejected unless their payload model is upgraded.
+### 7) Demo dApps + demo blog (Aligned)
+- DApp API article submission now includes strict linkage fields (`payload.credit_grant_id`, `payload.sponsor_builder_id`) and challenge-time grant metadata propagation.
+- Demo blog server runtime envelopes include strict linkage fields and preserve sponsor fallback behavior when `sponsorBuilderId` is omitted by clients.
 
 ## Conclusion
 Strict builder-credit enforcement is implemented at runtime/policy level and now reflected across SDK, runbooks, dApp/demo submission payloads, and wallet CLI helper surfaces. Remaining UX hardening is primarily around richer browser-extension authoring workflows (grant selection, sponsorship templates, and validation hints) rather than missing core linkage fields.
