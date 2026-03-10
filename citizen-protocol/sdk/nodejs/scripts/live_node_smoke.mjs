@@ -87,7 +87,9 @@ function resetLocalDataDirIfEnabled(protocolDir, configPath) {
 
   const absoluteConfigPath = path.resolve(protocolDir, configPath);
   const dataDir = readLocalDataDir(absoluteConfigPath);
-  const absoluteDataDir = path.resolve(path.dirname(absoluteConfigPath), dataDir);
+  const absoluteDataDir = path.isAbsolute(dataDir)
+    ? dataDir
+    : path.resolve(protocolDir, dataDir);
   rmSync(absoluteDataDir, { recursive: true, force: true });
 }
 
