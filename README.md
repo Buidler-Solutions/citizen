@@ -6,7 +6,6 @@
 [![Finality](https://img.shields.io/badge/Finality-Deterministic%20~1s-success)](./AGENTS.md)
 [![Rust](https://img.shields.io/badge/Rust-Workspace-000000?logo=rust)](./citizen-protocol/Cargo.toml)
 [![License: CPNCL](https://img.shields.io/badge/License-CPNCL%20v1.0-blue)](./LICENSE)
-[![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-blue)](./citizen-protocol/LICENSE)
 
 This repository is the monorepo for **Citizen**, a governance-first public-ledger initiative centered on the **CITIZEN protocol**.
 
