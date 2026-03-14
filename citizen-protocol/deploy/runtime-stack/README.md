@@ -1,41 +1,51 @@
 # Runtime Stack (Docker)
 
-This folder contains a minimal Docker runtime deployment for a Citizen node.
+This folder contains a Docker runtime deployment for a Citizen node that works in two modes:
 
-## What was reviewed
+- **Local/dev quickstart** (default): `manifest_enforce = false` using bundled sample config.
+- **Shared/staged/production-style**: `manifest_enforce = true` with a real signed admission manifest.
 
-The runtime stack expected a signed admission manifest (via `manifest_path` in `node.toml`) but did not include a payload template to help operators produce one. This directory now includes:
+## What changed to make Docker actually runnable
 
-- `manifest.payload.sample.json` — sample payload that matches the node admission manifest schema.
+- `Dockerfile` now builds `citizen-node` in a Rust builder stage and copies the compiled binary into a slim runtime image.
+- `docker-compose.yml` now defaults to files that exist inside this folder:
+  - `deploy/runtime-stack/config/node.docker.toml`
+  - `deploy/runtime-stack/config/signed-manifest.local.json`
 
-## Signed manifest is the recommended default
+This avoids the previous broken default paths (`config/node.toml`, missing `bin/citizen-node`, and missing signed manifest).
 
-For any shared, staged, or production-style runtime, keep admission enforcement
-enabled:
+## Quickstart (local/dev)
+
+From `citizen-protocol/`:
+
+```bash
+cd deploy/runtime-stack
+docker compose up --build
+```
+
+Defaults:
+
+- Container config path: `/etc/citizen/node.toml`
+- `manifest_enforce = false` (local-only convenience)
+
+## Shared/Staged/Production-style runtime (recommended)
+
+For any shared network profile, keep admission enforcement enabled:
 
 ```toml
 manifest_enforce = true
 manifest_path = "/absolute/path/to/signed-manifest.json"
 ```
 
-Use `manifest_enforce = false` only for local/dev-only sandbox scenarios where
-you explicitly accept bypassing signed admission checks.
+### Generate signed manifest
 
-## Generate a signed manifest from the sample payload
-
-1. Copy and edit the sample payload:
+1. Copy and edit payload template:
 
 ```bash
 cp deploy/runtime-stack/manifest.payload.sample.json ./manifest.payload.json
 ```
 
-2. Replace placeholders in `./manifest.payload.json`:
-
-- `genesis_hash`
-- validator `public_key`
-- optionally `network_id`, `boot_nodes`, and `manifest_id`
-
-3. Sign the payload:
+2. Sign payload:
 
 ```bash
 scripts/generate_signed_manifest.sh \
@@ -45,27 +55,7 @@ scripts/generate_signed_manifest.sh \
   --output ./signed-manifest.json
 ```
 
-4. Point your node config to the generated file (recommended default):
-
-```toml
-manifest_enforce = true
-manifest_path = "/absolute/path/to/signed-manifest.json"
-```
-
-5. If running through Docker Compose, mount the signed manifest into the
-   container at the same path used in `manifest_path`:
-
-```yaml
-volumes:
-  - ../../config/node.toml:/etc/citizen/node.toml:ro
-  - ../../config/signed-manifest.json:/etc/citizen/signed-manifest.json:ro
-```
-
-
-## Runbook script for Docker + signed manifest
-
-Use the helper script to run the runtime stack with signed-manifest mounting and
-container path alignment:
+3. Run helper script with explicit host paths:
 
 ```bash
 ./deploy/runtime-stack/runbook-docker-signed-manifest.sh compose-up \
@@ -73,29 +63,18 @@ container path alignment:
   --manifest ./config/signed-manifest.json
 ```
 
-The same script also supports direct `docker run` mode:
+## Runbook helper
 
 ```bash
-./deploy/runtime-stack/runbook-docker-signed-manifest.sh docker-run \
-  --node-config ./config/node.toml \
-  --manifest ./config/signed-manifest.json
-```
-
-Useful follow-up commands:
-
-```bash
+./deploy/runtime-stack/runbook-docker-signed-manifest.sh compose-up
 ./deploy/runtime-stack/runbook-docker-signed-manifest.sh compose-down
+./deploy/runtime-stack/runbook-docker-signed-manifest.sh docker-run
 ./deploy/runtime-stack/runbook-docker-signed-manifest.sh docker-stop
 ```
 
-By default, `docker-compose.yml` now accepts optional env var overrides so the
-runbook can inject host/container paths:
+Optional env/path overrides remain supported via:
 
 - `NODE_CONFIG_HOST_PATH`
 - `SIGNED_MANIFEST_HOST_PATH`
 - `CONTAINER_NODE_CONFIG_PATH`
 - `CONTAINER_MANIFEST_PATH`
-
-## Runtime stack path fixes
-
-`docker-compose.yml` and `Dockerfile` are wired so the compose build context is the repository root, and image copy paths resolve against that context.
