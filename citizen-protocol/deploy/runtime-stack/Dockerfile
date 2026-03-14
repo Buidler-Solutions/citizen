@@ -1,3 +1,9 @@
+FROM rust:1.86-bookworm AS builder
+
+WORKDIR /src
+COPY . .
+RUN cargo build --release -p citizen-node
+
 FROM debian:bookworm-slim
 
 RUN apt-get update \
@@ -5,8 +11,8 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /opt/citizen
-COPY bin/citizen-node /usr/local/bin/citizen-node
-COPY config/node.toml /etc/citizen/node.toml
+COPY --from=builder /src/target/release/citizen-node /usr/local/bin/citizen-node
+COPY deploy/runtime-stack/config/node.docker.toml /etc/citizen/node.toml
 
 EXPOSE 8080 9100 9200
 

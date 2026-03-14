@@ -10,8 +10,8 @@ services:
       - "9100:9100"
       - "9200:9200"
     volumes:
-      - ${NODE_CONFIG_HOST_PATH:-../../config/node.toml}:${CONTAINER_NODE_CONFIG_PATH:-/etc/citizen/node.toml}:ro
-      - ${SIGNED_MANIFEST_HOST_PATH:-../../config/signed-manifest.json}:${CONTAINER_MANIFEST_PATH:-/etc/citizen/signed-manifest.json}:ro
+      - ${NODE_CONFIG_HOST_PATH:-./config/node.docker.toml}:${CONTAINER_NODE_CONFIG_PATH:-/etc/citizen/node.toml}:ro
+      - ${SIGNED_MANIFEST_HOST_PATH:-./config/signed-manifest.local.json}:${CONTAINER_MANIFEST_PATH:-/etc/citizen/signed-manifest.json}:ro
       - citizen_node_data:/var/lib/citizen
     command: ["${CONTAINER_NODE_CONFIG_PATH:-/etc/citizen/node.toml}"]
 
