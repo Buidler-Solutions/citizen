@@ -1,0 +1,14 @@
+validator_id = "validator.local"
+block_time_millis = 1000
+quorum_bps = 8000
+api_port = 8080
+network_key_rotation_secs = 3600
+
+# Docker quickstart defaults to local/dev mode without admission manifest enforcement.
+# For staged/shared/prod environments, set manifest_enforce=true and mount a signed manifest.
+manifest_enforce = false
+
+[[validators]]
+validator_id = "validator.local"
+public_key = "local_validator_public_key_hex"
+anchors = ["org:local"]

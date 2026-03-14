@@ -5,8 +5,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 RUNTIME_DIR="${REPO_ROOT}/deploy/runtime-stack"
 
-NODE_CONFIG_DEFAULT="${REPO_ROOT}/config/node.toml"
-MANIFEST_DEFAULT="${REPO_ROOT}/config/signed-manifest.json"
+NODE_CONFIG_DEFAULT="${RUNTIME_DIR}/config/node.docker.toml"
+MANIFEST_DEFAULT="${RUNTIME_DIR}/config/signed-manifest.local.json"
 CONTAINER_CONFIG_DEFAULT="/etc/citizen/node.toml"
 CONTAINER_MANIFEST_DEFAULT="/etc/citizen/signed-manifest.json"
 IMAGE_DEFAULT="citizen-node:runtime"
@@ -14,7 +14,7 @@ CONTAINER_DEFAULT="citizen-node-runtime"
 
 usage() {
   cat <<'USAGE'
-Runbook helper for running Citizen runtime Docker with a signed manifest.
+Runbook helper for running Citizen runtime Docker with manifest mounting (signed manifest in shared/prod).
 
 Usage:
   runbook-docker-signed-manifest.sh <command> [options]
@@ -37,8 +37,8 @@ Options:
 Examples:
   ./deploy/runtime-stack/runbook-docker-signed-manifest.sh compose-up
   ./deploy/runtime-stack/runbook-docker-signed-manifest.sh docker-run \
-    --node-config ./config/node.toml \
-    --manifest ./config/signed-manifest.json
+    --node-config ./deploy/runtime-stack/config/node.docker.toml \
+    --manifest ./deploy/runtime-stack/config/signed-manifest.local.json
 USAGE
 }
 
@@ -120,7 +120,7 @@ case "${COMMAND}" in
     require_file "${NODE_CONFIG}" "node config"
     require_file "${MANIFEST_PATH}" "signed manifest"
 
-    echo "[runbook] starting docker compose with signed manifest"
+    echo "[runbook] starting docker compose with manifest mounting"
     echo "[runbook] node config (host): ${NODE_CONFIG}"
     echo "[runbook] signed manifest (host): ${MANIFEST_PATH}"
     echo "[runbook] node config (container): ${CONTAINER_CONFIG_PATH}"
