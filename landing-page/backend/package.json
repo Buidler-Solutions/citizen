@@ -51,6 +51,10 @@
     },
     "serialize-javascript": "^7.0.3",
     "multer": "2.1.1",
-    "file-type": "21.3.2"
+    "file-type": "21.3.2",
+    "flatted": "3.4.1",
+    "flat-cache": {
+      "flatted": "3.4.1"
+    }
   }
 }
