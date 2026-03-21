@@ -4,6 +4,8 @@ This folder contains a pitch-driven full-stack landing page implementation based
 
 - `citizen-protocol/docs/GOVERNMENT_ADOPTION_PITCH.md`
 
+All workspace commands should be run from the `landing-page/` directory with `pnpm`.
+
 ## Stack
 
 - **Frontend:** Next.js (App Router)
@@ -15,8 +17,8 @@ This folder contains a pitch-driven full-stack landing page implementation based
 ### 1) Install dependencies
 
 ```bash
-cd landing-page/frontend && npm install
-cd ../backend && npm install
+cd landing-page
+pnpm install
 ```
 
 ## Run Locally (without Docker)
@@ -30,18 +32,30 @@ cp landing-page/backend/.env.example landing-page/backend/.env
 
 Update `JWT_SECRET` and `JWT_ADMIN_KEY` before non-local use.
 
-### 2) Start backend
+### 2) Start services from the workspace root
 
 ```bash
-cd landing-page/backend
-npm run start:dev
+cd landing-page
+pnpm run dev
 ```
 
-### 3) Start frontend
+This starts both the frontend and backend from the `landing-page/` folder.
+
+### 3) Start a single service when needed
 
 ```bash
-cd landing-page/frontend
-npm run dev
+cd landing-page
+pnpm run backend:dev
+pnpm run frontend:dev
+```
+
+Additional root commands:
+
+```bash
+pnpm run build
+pnpm run lint
+pnpm run backend:start
+pnpm run frontend:start
 ```
 
 App URLs:
