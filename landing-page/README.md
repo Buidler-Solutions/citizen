@@ -30,7 +30,7 @@ cp landing-page/frontend/.env.local.example landing-page/frontend/.env.local
 cp landing-page/backend/.env.example landing-page/backend/.env
 ```
 
-Update `JWT_SECRET` and `JWT_ADMIN_KEY` before non-local use.
+Update `JWT_SECRET`, `ADMIN_USERNAME`, and `ADMIN_PASSWORD` before non-local use.
 
 ### 2) Start services from the workspace root
 
@@ -84,12 +84,12 @@ docker compose up --build
 
 ## JWT Setup
 
-1. Request a token with the admin key:
+1. Request a token with the admin username and password:
 
 ```bash
 curl -X POST http://localhost:3001/auth/token \
   -H 'Content-Type: application/json' \
-  -d '{"adminKey":"change-me-admin-key","subject":"ops-user"}'
+  -d '{"username":"admin","password":"change-me-admin-password","subject":"ops-user"}'
 ```
 
 2. Use the returned `accessToken` as a bearer token to query stats:
