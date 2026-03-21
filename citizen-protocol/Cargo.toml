@@ -50,6 +50,7 @@ rocksdb = { version = "0.21", features = ["static"] }
 
 [patch.crates-io]
 rocksdb = { path = "vendor/rocksdb" }
+rustls-webpki = { path = "vendor/rustls-webpki" }
 
 [workspace.metadata]
 name = "citizen-protocol"

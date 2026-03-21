@@ -18,5 +18,21 @@
     "frontend:lint": "pnpm --filter citizen-landing-frontend lint",
     "docker:up": "docker compose up --build",
     "docker:down": "docker compose down"
+  },
+  "pnpm": {
+    "overrides": {
+      "lodash": "^4.17.23",
+      "webpack": "^5.104.1",
+      "tmp": "^0.2.4",
+      "file-type": "21.3.2",
+      "serialize-javascript": "^7.0.3",
+      "multer": "2.1.1",
+      "flatted": "3.4.2",
+      "minimatch": "^10.2.3",
+      "glob": "^10.5.0",
+      "@angular-devkit/core>ajv": "^8.18.0",
+      "@eslint/eslintrc>ajv": "6.14.0",
+      "flat-cache>flatted": "3.4.2"
+    }
   }
 }
