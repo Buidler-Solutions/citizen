@@ -17,9 +17,11 @@ export function AdminLoginForm() {
     setLoading(true);
 
     const formData = new FormData(event.currentTarget);
+    const username = String(formData.get('username') ?? '').trim();
     const payload = {
-      adminKey: String(formData.get('adminKey') ?? ''),
-      subject: String(formData.get('subject') ?? '').trim() || 'landing-admin',
+      username,
+      password: String(formData.get('password') ?? ''),
+      subject: String(formData.get('subject') ?? '').trim() || username || 'admin',
     };
 
     try {
@@ -51,9 +53,10 @@ export function AdminLoginForm() {
   return (
     <form className="admin-panel" onSubmit={submit}>
       <h1>Admin Login</h1>
-      <p>Use the configured JWT admin key to generate a bearer token.</p>
-      <input name="subject" placeholder="Subject (optional)" />
-      <input name="adminKey" type="password" placeholder="Admin key" required />
+      <p>Use the configured admin username and password to generate a bearer token.</p>
+      <input name="username" placeholder="Admin username" required />
+      <input name="password" type="password" placeholder="Admin password" required />
+      <input name="subject" placeholder="Subject override (optional)" />
       <button type="submit" disabled={loading}>{loading ? 'Signing in...' : 'Sign in'}</button>
       {error && <p className="status error">{error}</p>}
     </form>
