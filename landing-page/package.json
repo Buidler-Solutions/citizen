@@ -1,0 +1,22 @@
+{
+  "name": "citizen-landing-page",
+  "private": true,
+  "packageManager": "pnpm@10.6.5",
+  "scripts": {
+    "install:all": "pnpm install",
+    "dev": "pnpm --parallel --filter citizen-landing-backend --filter citizen-landing-frontend run dev",
+    "build": "pnpm -r run build",
+    "lint": "pnpm -r run lint",
+    "start": "pnpm --parallel --filter citizen-landing-backend --filter citizen-landing-frontend run start",
+    "backend:dev": "pnpm --filter citizen-landing-backend start:dev",
+    "backend:start": "pnpm --filter citizen-landing-backend start",
+    "backend:build": "pnpm --filter citizen-landing-backend build",
+    "backend:lint": "pnpm --filter citizen-landing-backend lint",
+    "frontend:dev": "pnpm --filter citizen-landing-frontend dev",
+    "frontend:start": "pnpm --filter citizen-landing-frontend start",
+    "frontend:build": "pnpm --filter citizen-landing-frontend build",
+    "frontend:lint": "pnpm --filter citizen-landing-frontend lint",
+    "docker:up": "docker compose up --build",
+    "docker:down": "docker compose down"
+  }
+}
