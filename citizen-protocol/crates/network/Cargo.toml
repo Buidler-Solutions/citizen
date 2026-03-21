@@ -24,7 +24,7 @@ bincode = { workspace = true }
 futures = { workspace = true }
 blake3 = { workspace = true }
 libp2p = { workspace = true, optional = true }
-rustls = "0.23"
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "logging", "tls12"] }
 ed25519-dalek = { workspace = true }
 hex = { workspace = true }
 
