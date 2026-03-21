@@ -31,18 +31,19 @@ export function AdminLoginForm() {
         body: JSON.stringify(payload),
       });
 
-      if (!response.ok) {
-        throw new Error('Invalid admin credentials');
-      }
+      const data = (await response.json().catch(() => ({}))) as { accessToken?: string; message?: string | string[] };
 
-      const data = (await response.json()) as { accessToken?: string };
+      if (!response.ok) {
+        const message = Array.isArray(data.message) ? data.message.join(', ') : data.message ?? 'Invalid username or password';
+        throw new Error(message);
+      }
 
       if (!data.accessToken) {
         throw new Error('Token missing in response');
       }
 
       localStorage.setItem(ADMIN_TOKEN_KEY, data.accessToken);
-      router.push('/admin/dashboard/applicants');
+      router.push('/admin/dashboard/users');
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : 'Login failed');
     } finally {
@@ -52,10 +53,10 @@ export function AdminLoginForm() {
 
   return (
     <form className="admin-panel" onSubmit={submit}>
-      <h1>Admin Login</h1>
-      <p>Use the configured admin username and password to generate a bearer token.</p>
-      <input name="username" placeholder="Admin username" required />
-      <input name="password" type="password" placeholder="Admin password" required />
+      <h1>Admin Console Login</h1>
+      <p>Sign in with your onboarding console credentials. The configured environment admin remains the seeded super admin account.</p>
+      <input name="username" placeholder="Username" required />
+      <input name="password" type="password" placeholder="Password" required />
       <input name="subject" placeholder="Subject override (optional)" />
       <button type="submit" disabled={loading}>{loading ? 'Signing in...' : 'Sign in'}</button>
       {error && <p className="status error">{error}</p>}

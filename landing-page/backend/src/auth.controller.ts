@@ -1,6 +1,6 @@
-import { Body, Controller, ForbiddenException, Post } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
+import { Body, Controller, Post } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
+import { UserService } from './user/user.service';
 
 interface TokenRequest {
   username: string;
@@ -11,27 +11,24 @@ interface TokenRequest {
 @Controller('auth')
 export class AuthController {
   constructor(
-    private readonly configService: ConfigService,
     private readonly jwtService: JwtService,
+    private readonly userService: UserService,
   ) {}
 
   @Post('token')
-  token(@Body() body: TokenRequest) {
-    const expectedUsername = this.configService.get<string>('ADMIN_USERNAME', 'admin');
-    const expectedPassword = this.configService.get<string>('ADMIN_PASSWORD', 'change-me-admin-password');
+  async token(@Body() body: TokenRequest) {
+    const user = await this.userService.validateCredentials(body?.username ?? '', body?.password ?? '');
+    const sub = body.subject?.trim() || user.username;
+    const accessToken = this.jwtService.sign({ sub, role: user.role, username: user.username });
 
-    if (
-      !body?.username
-      || !body?.password
-      || body.username !== expectedUsername
-      || body.password !== expectedPassword
-    ) {
-      throw new ForbiddenException('Invalid admin username or password');
-    }
-
-    const sub = body.subject?.trim() || body.username.trim() || 'admin';
-    const accessToken = this.jwtService.sign({ sub, role: 'admin' });
-
-    return { accessToken, tokenType: 'Bearer' };
+    return {
+      accessToken,
+      tokenType: 'Bearer',
+      user: {
+        username: user.username,
+        fullName: user.fullName,
+        role: user.role,
+      },
+    };
   }
 }
