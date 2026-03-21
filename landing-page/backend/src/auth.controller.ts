@@ -3,7 +3,8 @@ import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 
 interface TokenRequest {
-  adminKey: string;
+  username: string;
+  password: string;
   subject?: string;
 }
 
@@ -16,13 +17,19 @@ export class AuthController {
 
   @Post('token')
   token(@Body() body: TokenRequest) {
-    const expectedAdminKey = this.configService.get<string>('JWT_ADMIN_KEY', 'change-me-admin-key');
+    const expectedUsername = this.configService.get<string>('ADMIN_USERNAME', 'admin');
+    const expectedPassword = this.configService.get<string>('ADMIN_PASSWORD', 'change-me-admin-password');
 
-    if (!body?.adminKey || body.adminKey !== expectedAdminKey) {
-      throw new ForbiddenException('Invalid admin key');
+    if (
+      !body?.username
+      || !body?.password
+      || body.username !== expectedUsername
+      || body.password !== expectedPassword
+    ) {
+      throw new ForbiddenException('Invalid admin username or password');
     }
 
-    const sub = body.subject?.trim() || 'landing-admin';
+    const sub = body.subject?.trim() || body.username.trim() || 'admin';
     const accessToken = this.jwtService.sign({ sub, role: 'admin' });
 
     return { accessToken, tokenType: 'Bearer' };

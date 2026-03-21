@@ -42,7 +42,8 @@ DB_NAME=citizen_landing
 # Authentication
 JWT_SECRET=change-me-in-production
 JWT_EXPIRES_IN=1d
-JWT_ADMIN_KEY=change-me-admin-key
+ADMIN_USERNAME=admin
+ADMIN_PASSWORD=change-me-admin-password
 ```
 
 ## Code Organization
@@ -190,7 +191,7 @@ export class ExampleModule {}
 ### JWT Implementation
 
 - **Guard**: `JwtAuthGuard` validates Bearer tokens from `Authorization` header
-- **Token Generation**: `POST /auth/token` with admin key
+- **Token Generation**: `POST /auth/token` with admin username and password
 - **Payload Structure**: `{ sub: string, role: string }`
 
 ### Protecting Routes
@@ -236,7 +237,7 @@ docker run -p 3001:3001 --env-file .env citizen-landing-backend
 5. **CORS Origin**: Must be configured in env var, defaults to localhost:3000
 6. **Database Sync**: Synchronize is enabled, avoid in production for schema stability
 7. **No Tests**: No test files exist in the codebase
-8. **Admin Key**: JWT tokens require `JWT_ADMIN_KEY` to generate (admin-only endpoint)
+8. **Admin Credentials**: JWT tokens require `ADMIN_USERNAME` and `ADMIN_PASSWORD` to generate (admin-only endpoint)
 
 ## Dependencies
 
