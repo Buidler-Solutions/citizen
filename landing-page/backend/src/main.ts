@@ -14,9 +14,14 @@ async function bootstrap() {
 
   const uploadsRoot = join(process.cwd(), 'uploads');
   const castsRoot = join(uploadsRoot, 'casts');
+  const siteBrandingRoot = join(uploadsRoot, 'site-branding');
 
   if (!existsSync(castsRoot)) {
     mkdirSync(castsRoot, { recursive: true });
+  }
+
+  if (!existsSync(siteBrandingRoot)) {
+    mkdirSync(siteBrandingRoot, { recursive: true });
   }
 
   const allowedOrigins = parseCorsOrigins();

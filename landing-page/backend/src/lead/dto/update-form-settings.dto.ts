@@ -72,6 +72,17 @@ export class UpdateFormSettingsDto {
   subtitle?: string;
 
   @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  siteLogoUrl?: string;
+
+  @IsOptional()
+  @IsString()
+  @MinLength(2)
+  @MaxLength(180)
+  siteLogoAlt?: string;
+
+  @IsOptional()
   @IsArray()
   @ArrayMaxSize(30)
   @ValidateNested({ each: true })
