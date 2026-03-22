@@ -8,13 +8,15 @@ import { Button, Input, Label } from '@/components/admin-ui';
 import { ADMIN_TOKEN_KEY } from '@/components/admin-auth';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
-const REQUIRED_LOGO_WIDTH = 117;
-const REQUIRED_LOGO_HEIGHT = 68;
+const REQUIRED_LOGO_WIDTH = 97;
+const REQUIRED_LOGO_HEIGHT = 58;
 
 interface SiteSettingsResponse {
   siteLogoUrl: string;
   siteLogoAlt: string;
 }
+
+const ACCEPTED_LOGO_FORMATS = '.png,.apng,.jpg,.jpeg,.svg,.webp,image/png,image/apng,image/jpeg,image/svg+xml,image/webp';
 
 const DEFAULT_SETTINGS: SiteSettingsResponse = {
   siteLogoUrl: '',
@@ -194,7 +196,7 @@ export default function SiteSettingPage() {
             </div>
           </div>
           <div className="rounded-2xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-900">
-            Required landing-page logo size: <span className="font-semibold">117 × 68 px</span>
+            Required landing-page logo size: <span className="font-semibold">97 × 58 px</span>
           </div>
         </div>
       </div>
@@ -217,10 +219,10 @@ export default function SiteSettingPage() {
               <Input
                 id="siteLogoFile"
                 type="file"
-                accept=".png,.jpg,.jpeg,.svg,.webp,image/png,image/jpeg,image/svg+xml,image/webp"
+                accept={ACCEPTED_LOGO_FORMATS}
                 onChange={onFileChange}
               />
-              <p className="text-sm text-slate-500">Accepted formats: PNG, JPG, SVG, WEBP. Max file size: 2 MB.</p>
+              <p className="text-sm text-slate-500">Accepted formats: PNG, APNG, JPG, SVG, WEBP. Animated APNG logos remain animated on the landing page. Max file size: 2 MB.</p>
             </div>
 
             <Button onClick={uploadLogo} disabled={!logoFile || uploading} isLoading={uploading} className="gap-2">
@@ -237,14 +239,14 @@ export default function SiteSettingPage() {
           <div className="space-y-4">
             <div>
               <p className="text-sm font-semibold uppercase tracking-wide text-slate-500">Header preview</p>
-              <p className="mt-1 text-sm text-slate-600">Preview of the exact 117 × 68 px logo container used on the landing page.</p>
+              <p className="mt-1 text-sm text-slate-600">Preview of the exact 97 × 58 px logo container used on the landing page.</p>
             </div>
 
             <div className="rounded-[28px] border border-slate-800 bg-slate-950 p-5">
               <div className="flex items-center justify-between gap-6">
-                <div className="flex h-[68px] w-[117px] items-center justify-center overflow-hidden rounded-xl bg-white/5">
+                <div className="flex h-[58px] w-[97px] items-center justify-center overflow-hidden rounded-xl bg-white/5">
                   {currentLogoUrl ? (
-                    <img src={currentLogoUrl} alt={settings.siteLogoAlt || 'Citizen'} className="h-[68px] w-[117px] object-contain" />
+                    <img src={currentLogoUrl} alt={settings.siteLogoAlt || 'Citizen'} className="h-[58px] w-[97px] object-contain" />
                   ) : (
                     <span className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-300">Citizen</span>
                   )}
@@ -266,7 +268,7 @@ export default function SiteSettingPage() {
 
             <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-4 text-sm text-slate-600">
               <p className="font-medium text-slate-900">Tip</p>
-              <p className="mt-1">For the best result, upload artwork already prepared to 117 px wide by 68 px high. The landing page will preserve the full logo using object-contain.</p>
+              <p className="mt-1">For the best result, upload artwork already prepared to 97 px wide by 58 px high. The landing page preserves the full logo using object-contain, and APNG uploads keep their animation in the header.</p>
             </div>
           </div>
         </div>
