@@ -1,4 +1,5 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { unlink } from 'fs/promises';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { CreateLeadDto } from './dto/create-lead.dto';
@@ -151,6 +152,11 @@ export class LeadService {
     });
   }
 
+  private normalizeLogoAlt(value: string | undefined): string {
+    const trimmed = (value ?? '').trim();
+    return trimmed || 'Citizen';
+  }
+
   private normalizeShortcode(value: string | undefined): string {
     const raw = (value ?? '').trim().toLowerCase();
     const token = raw
@@ -168,6 +174,9 @@ export class LeadService {
 
     if (existing) {
       let needsSave = false;
+
+      existing.siteLogoUrl = (existing.siteLogoUrl ?? '').trim();
+      existing.siteLogoAlt = this.normalizeLogoAlt(existing.siteLogoAlt);
 
       if (!Array.isArray(existing.campaignCards) || existing.campaignCards.length === 0) {
         existing.campaignCards = DEFAULT_CAMPAIGN_CARDS;
@@ -188,6 +197,8 @@ export class LeadService {
 
     const created = this.formSettingsRepository.create({
       id: 'default',
+      siteLogoUrl: '',
+      siteLogoAlt: 'Citizen',
       campaignCards: DEFAULT_CAMPAIGN_CARDS,
       roles: DEFAULT_ROLE_OPTIONS,
     });
@@ -251,10 +262,33 @@ export class LeadService {
     return { deleted: true };
   }
 
+  async uploadSiteLogo(logoUrl: string, altText?: string): Promise<FormSettings> {
+    const settings = await this.getFormSettings();
+    const normalizedUrl = logoUrl.trim();
+
+    if (!normalizedUrl) {
+      throw new BadRequestException('Logo URL is required.');
+    }
+
+    if (settings.siteLogoUrl && settings.siteLogoUrl !== normalizedUrl) {
+      const previousPath = settings.siteLogoUrl.replace(/^\/uploads\//, 'uploads/');
+      if (previousPath.startsWith('uploads/')) {
+        await unlink(previousPath).catch(() => undefined);
+      }
+    }
+
+    settings.siteLogoUrl = normalizedUrl;
+    settings.siteLogoAlt = this.normalizeLogoAlt(altText);
+
+    return this.formSettingsRepository.save(settings);
+  }
+
   async updateFormSettings(payload: UpdateFormSettingsDto): Promise<FormSettings> {
     const settings = await this.getFormSettings();
     const sanitizedPayload = {
       ...payload,
+      siteLogoUrl: typeof payload.siteLogoUrl === 'string' ? payload.siteLogoUrl.trim() : payload.siteLogoUrl,
+      siteLogoAlt: typeof payload.siteLogoAlt === 'string' ? this.normalizeLogoAlt(payload.siteLogoAlt) : payload.siteLogoAlt,
       campaignCards: payload.campaignCards
         ? this.normalizeCampaignCards(payload.campaignCards)
         : payload.campaignCards,

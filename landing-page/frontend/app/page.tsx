@@ -1,3 +1,4 @@
+/* eslint-disable @next/next/no-img-element */
 'use client';
 
 import { useEffect, useState } from 'react';
@@ -32,11 +33,28 @@ export default function HomePage() {
     process.env.NEXT_PUBLIC_ONBOARDING_ASCIINEMA_URL ?? '[asciinema:onboarding-demo]',
   );
   const [shortcodeMap, setShortcodeMap] = useState<Record<string, string>>({});
+  const [siteLogoUrl, setSiteLogoUrl] = useState('');
+  const [siteLogoAlt, setSiteLogoAlt] = useState('Citizen');
 
   useEffect(() => {
     const loadRecordings = async () => {
       try {
-        const response = await fetch(`${API_URL}/interest/asciinema-recordings/public`);
+        const [recordingsResponse, settingsResponse] = await Promise.all([
+          fetch(`${API_URL}/interest/asciinema-recordings/public`),
+          fetch(`${API_URL}/interest/form-settings`),
+        ]);
+
+        if (settingsResponse.ok) {
+          const settingsData = (await settingsResponse.json()) as { siteLogoUrl?: string; siteLogoAlt?: string };
+          if (settingsData.siteLogoUrl) {
+            setSiteLogoUrl(toAbsoluteUrl(settingsData.siteLogoUrl));
+          }
+          if (settingsData.siteLogoAlt?.trim()) {
+            setSiteLogoAlt(settingsData.siteLogoAlt.trim());
+          }
+        }
+
+        const response = recordingsResponse;
         if (!response.ok) {
           return;
         }
@@ -68,8 +86,12 @@ export default function HomePage() {
       <main className="relative z-10 grid min-h-screen w-full grid-rows-[auto_1fr] gap-4 px-4 py-8 sm:px-6 lg:px-10">
         <header className="pointer-events-auto absolute left-4 right-4 top-5 z-20 rounded-[28px] border border-slate-200/10 bg-slate-950/10 px-4 py-2.5 backdrop-blur-md sm:left-6 sm:right-6 sm:top-6 sm:rounded-full sm:px-5 sm:py-3 lg:left-10 lg:right-10">
           <div className="flex items-center justify-between sm:grid sm:items-center sm:gap-4 sm:grid-cols-[1fr_auto_1fr]">
-            <a href="#" className="justify-self-start text-[0.68rem] font-semibold uppercase tracking-[0.22em] text-slate-100 sm:text-sm sm:tracking-[0.2em]">
-              Citizen
+            <a href="#" className="justify-self-start" aria-label={siteLogoAlt}>
+              {siteLogoUrl ? (
+                <img src={siteLogoUrl} alt={siteLogoAlt} className="h-[68px] w-[117px] object-contain" />
+              ) : (
+                <span className="text-[0.68rem] font-semibold uppercase tracking-[0.22em] text-slate-100 sm:text-sm sm:tracking-[0.2em]">Citizen</span>
+              )}
             </a>
 
             <nav aria-label="Primary" className="justify-self-center">
