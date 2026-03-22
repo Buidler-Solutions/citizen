@@ -10,16 +10,19 @@ import { AsciinemaRecording } from './asciinema-recording.entity';
 const DEFAULT_CAMPAIGN_CARDS = [
   {
     weight: 1,
+    eyebrow: 'citizen-protocol-v0.1.0',
     title: 'Citizen Protocol in one line',
     body: 'A governance-first blockchain for public truth, accountability, and tamper-evident civic records.',
   },
   {
     weight: 2,
+    eyebrow: 'citizen-protocol-v0.1.0',
     title: 'Why this project exists',
     body: 'Critical public records are fragmented and hard to trust. Citizen Protocol creates one auditable source of truth for civic systems.',
   },
   {
     weight: 3,
+    eyebrow: 'citizen-protocol-v0.1.0',
     title: 'What we are solving',
     body: 'We reduce record fraud, strengthen governance transparency, and improve institutional trust across agencies.',
   },
@@ -109,9 +112,13 @@ export class LeadService {
         const rawWeight = typeof card.weight === 'number' ? card.weight : index + 1;
         return {
           ...card,
+          eyebrow: (card.eyebrow ?? 'citizen-protocol-v0.1.0').trim(),
+          title: card.title.trim(),
+          body: card.body.trim(),
           weight: Math.max(1, Math.trunc(rawWeight)),
         };
       })
+      .filter((card) => card.eyebrow && card.title && card.body)
       .sort((a, b) => a.weight - b.weight)
       .map((card, index) => ({ ...card, weight: index + 1 }));
   }
