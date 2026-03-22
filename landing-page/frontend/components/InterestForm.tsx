@@ -547,10 +547,10 @@ export function InterestForm() {
   return (
     <form className="onboarding-typography grid min-h-[calc(100vh-160px)] content-center bg-slate-950/0 p-[clamp(1.2rem,4vw,3.2rem)] max-[680px]:min-h-[calc(100vh-140px)]" onSubmit={onSubmit}>
       {showOnboardingIntro ? (
-        <section className="grid min-h-[260px] content-center justify-items-start text-left" aria-label="Onboarding introduction">
-          <p className="font-display m-0 text-[clamp(1rem,1.5vw,1.25rem)] font-semibold tracking-[0.14em] text-cyan-300 mt-8">{activeIntroCard?.eyebrow ?? 'citizen-protocol-v0.1.0'}</p>
+        <section className="grid min-h-[260px] content-center justify-items-start text-left mt-8" aria-label="Onboarding introduction">
+          <p className="font-display mb-4 text-[clamp(1rem,1.5vw,1.25rem)] font-semibold tracking-[0.14em] text-cyan-300 mt-4">{activeIntroCard?.eyebrow ?? 'citizen-protocol-v0.1.0'}</p>
           <RotatingOnboardingText baseWord="Onboarding" rotatingWords={onboardingRoleLabels} />
-          <p className="font-onboarding-lead m-0 text-[clamp(1.2rem,2.3vw,1.8rem)] font-light leading-[1.15] text-slate-200 mt-1 mb-4 ">
+          <p className="font-onboarding-lead text-[clamp(1.2rem,2.3vw,1.8rem)] font-light leading-[1.15] text-slate-200 mt-1 mb-8 ">
             We are seeking individuals interested in participating in Citizen Protocol through this waitlist.
           </p>
           <p className="font-onboarding-lead m-0 text-[clamp(1.2rem,2.3vw,1.8rem)] font-light leading-[1.15] text-slate-200 mt-4 mb-6">
