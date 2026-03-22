@@ -65,6 +65,7 @@ App URLs:
 - Lead stats endpoint (JWT protected): `http://localhost:3001/interest/stats`
 - Admin login UI: `http://localhost:3000/admin/login`
 - Admin dashboard UI: `http://localhost:3000/admin/dashboard`
+- Site settings support static or animated APNG logo uploads for the landing-page header via the admin console.
 
 ## Run with Docker Compose
 
