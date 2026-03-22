@@ -16,6 +16,7 @@ interface StepConfig {
 
 interface CampaignCard {
   weight?: number;
+  eyebrow: string;
   title: string;
   body: string;
 }
@@ -155,16 +156,19 @@ const renderInlineShortcodeText = (
 const DEFAULT_CAMPAIGN_CARDS: CampaignCard[] = [
   {
     weight: 1,
+    eyebrow: 'citizen-protocol-v0.1.0',
     title: 'Citizen Protocol in one line',
     body: 'A governance-first blockchain for public truth, accountability, and tamper-evident civic records.',
   },
   {
     weight: 2,
+    eyebrow: 'citizen-protocol-v0.1.0',
     title: 'Why this project exists',
     body: 'Critical public records are fragmented and hard to trust. Citizen Protocol creates one auditable source of truth for civic systems.',
   },
   {
     weight: 3,
+    eyebrow: 'citizen-protocol-v0.1.0',
     title: 'What we are solving',
     body: 'We reduce record fraud, strengthen governance transparency, and improve institutional trust across agencies.',
   },
@@ -295,7 +299,14 @@ export function InterestForm() {
         setSettings((prev) => ({
           title: data.title ?? prev.title,
           subtitle: data.subtitle ?? prev.subtitle,
-          campaignCards: Array.isArray(data.campaignCards) ? data.campaignCards : prev.campaignCards,
+          campaignCards: Array.isArray(data.campaignCards)
+            ? data.campaignCards.map((card, index) => ({
+              weight: card.weight ?? index + 1,
+              eyebrow: card.eyebrow?.trim() || 'citizen-protocol-v0.1.0',
+              title: card.title ?? '',
+              body: card.body ?? '',
+            }))
+            : prev.campaignCards,
           roles: Array.isArray(data.roles) && data.roles.length > 0 ? data.roles : prev.roles,
         }));
       } catch {
@@ -333,7 +344,7 @@ export function InterestForm() {
   }, []);
 
   const introSlides = useMemo(() => settings.campaignCards
-    .filter((card) => card.title.trim() && card.body.trim())
+    .filter((card) => card.eyebrow.trim() && card.title.trim() && card.body.trim())
     .sort((a, b) => (a.weight ?? Number.MAX_SAFE_INTEGER) - (b.weight ?? Number.MAX_SAFE_INTEGER)), [settings.campaignCards]);
 
   useEffect(() => {
@@ -537,7 +548,7 @@ export function InterestForm() {
     <form className="onboarding-typography grid min-h-[calc(100vh-160px)] content-center bg-slate-950/0 p-[clamp(1.2rem,4vw,3.2rem)] max-[680px]:min-h-[calc(100vh-140px)]" onSubmit={onSubmit}>
       {showOnboardingIntro ? (
         <section className="grid min-h-[260px] content-center justify-items-start text-left" aria-label="Onboarding introduction">
-          <p className="font-display m-0 text-[clamp(1rem,1.5vw,1.25rem)] font-semibold tracking-[0.14em] text-cyan-300 mt-8">citizen-protocol-v0.1.0</p>
+          <p className="font-display m-0 text-[clamp(1rem,1.5vw,1.25rem)] font-semibold tracking-[0.14em] text-cyan-300 mt-8">{activeIntroCard?.eyebrow ?? 'citizen-protocol-v0.1.0'}</p>
           <RotatingOnboardingText baseWord="Onboarding" rotatingWords={onboardingRoleLabels} />
           <p className="font-onboarding-lead m-0 text-[clamp(1.2rem,2.3vw,1.8rem)] font-light leading-[1.15] text-slate-200 mt-1 mb-4 ">
             We are seeking individuals interested in participating in Citizen Protocol through this waitlist.
@@ -561,6 +572,7 @@ export function InterestForm() {
       ) : showIntro && introSlides.length > 0 ? (
         <>
           <p className="mt-8 mb-0 text-cyan-300">Info card {introIndex + 1} of {introSlides.length}</p>
+          <p className="font-display m-0 text-[clamp(1rem,1.5vw,1.25rem)] font-semibold tracking-[0.14em] text-cyan-300">{activeIntroCard?.eyebrow ?? 'citizen-protocol-v0.1.0'}</p>
           <div key={`intro-${introIndex}`} className={`will-change-[transform,opacity,filter] ${motionClass} motion-reduce:animate-none`}>
             <section className="grid content-center">
               <h2 className="font-display mb-4 text-[clamp(1.6rem,3.5vw,2.8rem)] font-bold leading-[1.2]">
