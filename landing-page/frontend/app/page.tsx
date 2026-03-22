@@ -88,7 +88,7 @@ export default function HomePage() {
           <div className="flex items-center justify-between sm:grid sm:items-center sm:gap-4 sm:grid-cols-[1fr_auto_1fr]">
             <a href="#" className="justify-self-start" aria-label={siteLogoAlt}>
               {siteLogoUrl ? (
-                <img src={siteLogoUrl} alt={siteLogoAlt} className="h-[68px] w-[117px] object-contain" />
+                <img src={siteLogoUrl} alt={siteLogoAlt} className="h-[58px] w-[97px] object-contain" />
               ) : (
                 <span className="text-[0.68rem] font-semibold uppercase tracking-[0.22em] text-slate-100 sm:text-sm sm:tracking-[0.2em]">Citizen</span>
               )}

@@ -51,18 +51,18 @@ export class LeadController {
       destination: 'uploads/site-branding',
       filename: (_request: unknown, file: { originalname: string }, callback: (error: Error | null, filename: string) => void) => {
         const extension = extname(file.originalname).toLowerCase();
-        const safeExtension = ['.png', '.jpg', '.jpeg', '.svg', '.webp'].includes(extension) ? extension : '.png';
+        const safeExtension = ['.png', '.apng', '.jpg', '.jpeg', '.svg', '.webp'].includes(extension) ? extension : '.png';
         callback(null, `site-logo-${Date.now()}${safeExtension}`);
       },
     }),
     limits: { fileSize: 2 * 1024 * 1024 },
     fileFilter: (_request: unknown, file: { mimetype: string; originalname: string }, callback: (error: Error | null, acceptFile: boolean) => void) => {
-      const allowedMimeTypes = ['image/png', 'image/jpeg', 'image/svg+xml', 'image/webp'];
+      const allowedMimeTypes = ['image/png', 'image/apng', 'image/jpeg', 'image/svg+xml', 'image/webp'];
       const extension = extname(file.originalname).toLowerCase();
-      const allowedExtensions = ['.png', '.jpg', '.jpeg', '.svg', '.webp'];
+      const allowedExtensions = ['.png', '.apng', '.jpg', '.jpeg', '.svg', '.webp'];
 
       if (!allowedMimeTypes.includes(file.mimetype) || !allowedExtensions.includes(extension)) {
-        callback(new BadRequestException('Only PNG, JPG, SVG, and WEBP logo files are supported.'), false);
+        callback(new BadRequestException('Only PNG, APNG, JPG, SVG, and WEBP logo files are supported.'), false);
         return;
       }
 
