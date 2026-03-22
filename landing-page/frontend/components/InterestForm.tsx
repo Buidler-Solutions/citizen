@@ -573,7 +573,7 @@ export function InterestForm() {
         <>
           <div className="mt-8 mb-0 flex flex-wrap items-center justify-between gap-3 text-cyan-300">
             <p className="font-display m-0 text-[clamp(1rem,1.5vw,1.25rem)] font-semibold tracking-[0.14em] text-cyan-300">{activeIntroCard?.eyebrow ?? 'citizen-protocol-v0.1.0'}</p>
-            <div className="bg-slate-950/10 px-4 py-2 text-center text-cyan-300 shadow-[0_20px_45px_rgba(3,7,18,0.35)] backdrop-blur-md">
+            <div className="px-4 py-2 text-center text-cyan-300">
               <p className="m-0 text-[0.72rem] font-semibold uppercase tracking-[0.2em] text-cyan-300/80">Info card</p>
               <div className="mt-1 flex items-baseline justify-end gap-2">
                 <p className="font-display m-0 text-[clamp(1.4rem,2vw,2rem)] font-bold leading-none text-cyan-200">{introIndex + 1}</p>
