@@ -18,6 +18,11 @@ export class CampaignCardDto {
 
   @IsString()
   @MinLength(2)
+  @MaxLength(80)
+  eyebrow!: string;
+
+  @IsString()
+  @MinLength(2)
   @MaxLength(120)
   title!: string;
 

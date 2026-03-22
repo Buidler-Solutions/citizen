@@ -10,6 +10,7 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
 
 interface CampaignCard {
   weight?: number;
+  eyebrow: string;
   title: string;
   body: string;
 }
@@ -20,6 +21,7 @@ interface FormSettingsResponse {
 
 const DEFAULT_CARD: CampaignCard = {
   weight: 1,
+  eyebrow: 'citizen-protocol-v0.1.0',
   title: 'New campaign card',
   body: 'Explain one key value proposition of Citizen Protocol before users start filling the form.',
 };
@@ -61,7 +63,11 @@ export default function CampaignCardsPage() {
 
         const data = (await response.json()) as Partial<FormSettingsResponse>;
         if (Array.isArray(data.campaignCards)) {
-          const sortedCards = [...data.campaignCards].sort((a, b) => (a.weight ?? Number.MAX_SAFE_INTEGER) - (b.weight ?? Number.MAX_SAFE_INTEGER));
+          const normalizedCards = data.campaignCards.map((card) => ({
+            ...card,
+            eyebrow: card.eyebrow?.trim() || DEFAULT_CARD.eyebrow,
+          }));
+          const sortedCards = [...normalizedCards].sort((a, b) => (a.weight ?? Number.MAX_SAFE_INTEGER) - (b.weight ?? Number.MAX_SAFE_INTEGER));
           setCards(normalizeWeights(sortedCards));
           setOpenCardIndex(sortedCards.length > 0 ? 0 : null);
         }
@@ -91,13 +97,14 @@ export default function CampaignCardsPage() {
   };
 
   const addCard = () => {
-    if (!newCard.title.trim() || !newCard.body.trim()) {
-      setStatus('Title and description are required to add a card.');
+    if (!newCard.eyebrow.trim() || !newCard.title.trim() || !newCard.body.trim()) {
+      setStatus('Eyebrow, title, and description are required to add a card.');
       return;
     }
 
     setCards((prev) => [...prev, {
       weight: prev.length + 1,
+      eyebrow: newCard.eyebrow.trim(),
       title: newCard.title.trim(),
       body: newCard.body.trim(),
     }]);
@@ -155,6 +162,7 @@ export default function CampaignCardsPage() {
       const payload = {
         campaignCards: cards.map((card, index) => ({
           weight: index + 1,
+          eyebrow: card.eyebrow.trim(),
           title: card.title.trim(),
           body: card.body.trim(),
         })),
@@ -271,6 +279,12 @@ export default function CampaignCardsPage() {
                     placeholder="1"
                   />
                   <Input
+                    label="Eyebrow"
+                    value={card.eyebrow}
+                    onChange={(event) => updateCard(index, 'eyebrow', event.target.value)}
+                    placeholder="citizen-protocol-v0.1.0"
+                  />
+                  <Input
                     label="Title"
                     value={card.title}
                     onChange={(event) => updateCard(index, 'title', event.target.value)}
@@ -309,6 +323,12 @@ export default function CampaignCardsPage() {
             </div>
 
             <div className="space-y-4">
+              <Input
+                label="Eyebrow"
+                value={newCard.eyebrow}
+                onChange={(event) => setNewCard((prev) => ({ ...prev, eyebrow: event.target.value }))}
+                placeholder="citizen-protocol-v0.1.0"
+              />
               <Input
                 label="Title"
                 value={newCard.title}
