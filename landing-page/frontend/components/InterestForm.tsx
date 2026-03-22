@@ -619,13 +619,12 @@ export function InterestForm() {
               {introIndex === introSlides.length - 1 ? 'Start form' : 'Next card →'}
             </button>
           </div>
-          <button
-            type="button"
-            className="w-full cursor-pointer rounded-x0 pt-2 font-semibold text-cyan-300"
-            onClick={() => setShowIntro(false)}
+          <p
+            className="w-full pt-2 text-center font-semibold text-cyan-300"
+            aria-live="polite"
           >
             Skip info-cards and fill form (Esc). Use ← / → to move between cards.
-          </button>
+          </p>
         </>
       ) : (
         <>
