@@ -571,8 +571,16 @@ export function InterestForm() {
         </section>
       ) : showIntro && introSlides.length > 0 ? (
         <>
-          <p className="mt-8 mb-0 text-cyan-300">Info card {introIndex + 1} of {introSlides.length}</p>
-          <p className="font-display m-0 text-[clamp(1rem,1.5vw,1.25rem)] font-semibold tracking-[0.14em] text-cyan-300">{activeIntroCard?.eyebrow ?? 'citizen-protocol-v0.1.0'}</p>
+          <div className="mt-8 mb-0 flex flex-wrap items-center justify-between gap-3 text-cyan-300">
+            <p className="font-display m-0 text-[clamp(1rem,1.5vw,1.25rem)] font-semibold tracking-[0.14em] text-cyan-300">{activeIntroCard?.eyebrow ?? 'citizen-protocol-v0.1.0'}</p>
+            <div className="rounded-full border border-cyan-300/30 bg-slate-950/10 px-4 py-2 text-center text-cyan-300 shadow-[0_20px_45px_rgba(3,7,18,0.35)] backdrop-blur-md">
+              <p className="m-0 text-[0.72rem] font-semibold uppercase tracking-[0.2em] text-cyan-300/80">Info card</p>
+              <div className="mt-1 flex items-baseline justify-end gap-2">
+                <p className="font-display m-0 text-[clamp(1.4rem,2vw,2rem)] font-bold leading-none text-cyan-200">{introIndex + 1}</p>
+                <p className="m-0 text-xs tracking-[0.16em] text-cyan-300/70">of {introSlides.length}</p>
+              </div>
+            </div>
+          </div>
           <div key={`intro-${introIndex}`} className={`will-change-[transform,opacity,filter] ${motionClass} motion-reduce:animate-none`}>
             <section className="grid content-center">
               <h2 className="font-display mb-4 text-[clamp(1.6rem,3.5vw,2.8rem)] font-bold leading-[1.2]">
