@@ -9,6 +9,7 @@ import {
   CircleUserRound,
   FileSearch,
   LogOut,
+  Mail,
   Menu,
   MessageSquareMore,
   RectangleEllipsis,
@@ -29,6 +30,7 @@ const NAV_GROUPS = [
     label: 'Configuration',
     items: [
       { href: '/admin/dashboard/form-settings', label: 'Form Settings', icon: Settings },
+      { href: '/admin/dashboard/email-center', label: 'Email Center', icon: Mail },
       { href: '/admin/dashboard/asciinema-storage', label: 'Asciinema Storage', icon: FileSearch },
       { href: '/admin/dashboard/campaign-cards', label: 'Info Cards', icon: RectangleEllipsis },
       { href: '/admin/dashboard/site-setting', label: 'Site Settings', icon: Settings },
