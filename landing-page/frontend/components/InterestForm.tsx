@@ -550,11 +550,14 @@ export function InterestForm() {
         <section className="grid min-h-[260px] content-center justify-items-start text-left mt-8" aria-label="Onboarding introduction">
           <p className="font-display mb-4 text-[clamp(1rem,1.5vw,1.25rem)] font-semibold tracking-[0.14em] text-cyan-300 mt-4">{activeIntroCard?.eyebrow ?? 'citizen-protocol-v0.1.0'}</p>
           <RotatingOnboardingText baseWord="Onboarding" rotatingWords={onboardingRoleLabels} />
-          <p className="font-onboarding-lead text-[clamp(1.2rem,2.3vw,1.8rem)] font-light leading-[1.15] text-slate-200 mt-1 mb-8 ">
-            We are seeking individuals interested in participating in Citizen Protocol through this waitlist.
+          <p className="font-onboarding-lead text-[clamp(1.2rem,2.3vw,1.8rem)] font-light leading-[1.15] text-slate-200 mt-1 mb-4 ">
+            Citizen Protocol is opening its initial waitlist for individuals committed to contributing to a governance-focused blockchain infrastructure.
+          </p>
+          <p className="font-onboarding-lead text-[clamp(1.2rem,2.3vw,1.8rem)] font-light leading-[1.15] text-slate-200">
+            Participants are expected to engage with the protocol not only as users, but as stewards of its integrity and evolution.
           </p>
           <p className="font-onboarding-lead m-0 text-[clamp(1.2rem,2.3vw,1.8rem)] font-light leading-[1.15] text-slate-200 mt-4 mb-6">
-            Before participating, we encourage you to first understand the project’s vision, architecture, and objectives so you can contribute meaningfully to its growth and integrity.
+            Prior to onboarding, it is essential to review and understand the project's vision, system architecture, and operational objectives. Informed participation is fundamental to maintaining transparency, resilience, and institutional-grade trust within the network.
           </p>
           <div className="grid grid-cols-[minmax(180px,280px)] justify-self-center gap-3 mb-6">
             <button
