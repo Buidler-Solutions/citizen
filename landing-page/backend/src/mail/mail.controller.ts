@@ -75,14 +75,19 @@ export class MailController {
   }
 
   @Get('onboarding-updates/audience')
-  previewAudience(@Query('role') role?: string, @Query('search') search?: string) {
-    return this.onboardingNotificationService.previewOnboardingUpdate({
+  async previewAudience(@Query('role') role?: string, @Query('search') search?: string) {
+    const preview = await this.onboardingNotificationService.previewOnboardingUpdate({
       audienceMode: role?.trim() ? 'role' : 'all',
       role,
       search,
       messageHtml: '<p>Audience preview</p>',
       includeAdminDashboardLink: false,
     });
+
+    return {
+      ...preview,
+      defaults: this.onboardingNotificationService.getUpdateExecutionDefaults(),
+    };
   }
 
   @Post('onboarding-updates/preview')

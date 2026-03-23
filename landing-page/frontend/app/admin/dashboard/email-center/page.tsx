@@ -61,6 +61,16 @@ interface AudienceRecipient {
   role: string;
 }
 
+interface UpdateExecutionPlan {
+  mode: "synchronous-inline";
+  recommendedMode: "synchronous-inline" | "queued-worker";
+  maxRecipientsPerRequest: number;
+  queueRecommendedThreshold: number;
+  queueRecommended: boolean;
+  audienceCount: number;
+  warning: string | null;
+}
+
 interface NotificationHistoryItem {
   id: string;
   leadId: string | null;
@@ -118,6 +128,7 @@ export default function EmailCenterPage() {
   const [notificationHistory, setNotificationHistory] = useState<
     NotificationHistoryItem[]
   >([]);
+  const [executionPlan, setExecutionPlan] = useState<UpdateExecutionPlan | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [savingSmtp, setSavingSmtp] = useState(false);
@@ -431,10 +442,12 @@ export default function EmailCenterPage() {
       const payload = (await response.json()) as {
         recipients: AudienceRecipient[];
         preview: { subject: string; html: string } | null;
+        executionPlan?: UpdateExecutionPlan;
       };
       setAudiencePreview(payload.recipients);
       setPreviewSubject(payload.preview?.subject ?? "");
       setPreviewHtml(payload.preview?.html ?? "");
+      setExecutionPlan(payload.executionPlan ?? null);
       if (audienceMode === "selected") {
         setSelectedLeadIds((current) =>
           current.filter((leadId) =>
@@ -511,7 +524,9 @@ export default function EmailCenterPage() {
         sent: number;
         logged: number;
         failed: number;
+        executionPlan?: UpdateExecutionPlan;
       };
+      setExecutionPlan(payload.executionPlan ?? null);
       setStatus(
         `Onboarding update attempted for ${payload.totalRecipients} recipient(s); ${payload.sent} sent, ${payload.logged} logged, ${payload.failed} failed.`,
       );
@@ -588,6 +603,33 @@ export default function EmailCenterPage() {
       {error && (
         <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
           {error}
+        </div>
+      )}
+
+      {executionPlan && (
+        <div
+          className={`rounded-xl px-4 py-3 text-sm ${executionPlan.warning ? "border border-amber-200 bg-amber-50 text-amber-900" : "border border-blue-200 bg-blue-50 text-blue-900"}`}
+        >
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge variant={executionPlan.queueRecommended ? "warning" : "info"}>
+              {executionPlan.mode}
+            </Badge>
+            <Badge
+              variant={
+                executionPlan.recommendedMode === "queued-worker"
+                  ? "warning"
+                  : "success"
+              }
+            >
+              Recommended: {executionPlan.recommendedMode}
+            </Badge>
+          </div>
+          <p className="mt-2">
+            Phase 1 sends onboarding updates inline in the request cycle. Audiences above {executionPlan.queueRecommendedThreshold} recipients should move to a queue worker, and requests are capped at {executionPlan.maxRecipientsPerRequest} recipients.
+          </p>
+          {executionPlan.warning ? (
+            <p className="mt-2 font-medium">{executionPlan.warning}</p>
+          ) : null}
         </div>
       )}
 
