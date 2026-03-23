@@ -131,6 +131,8 @@ const OPERATOR_UAT_STEPS = [
 type OperatorUatStepId = (typeof OPERATOR_UAT_STEPS)[number]["id"];
 type OperatorUatState = Record<OperatorUatStepId, boolean>;
 
+type OperatorUatTouchedState = Partial<Record<OperatorUatStepId, string>>;
+
 const EMPTY_OPERATOR_UAT_STATE: OperatorUatState = {
   "smtp-readiness": false,
   "smtp-update-test": false,
@@ -185,6 +187,8 @@ export default function EmailCenterPage() {
   const [executionPlan, setExecutionPlan] = useState<UpdateExecutionPlan | null>(null);
   const [operatorChecklist, setOperatorChecklist] =
     useState<OperatorUatState>(EMPTY_OPERATOR_UAT_STATE);
+  const [operatorTouchedAt, setOperatorTouchedAt] =
+    useState<OperatorUatTouchedState>({});
   const [operatorReviewer, setOperatorReviewer] = useState("");
   const [operatorNotes, setOperatorNotes] = useState("");
   const [error, setError] = useState("");
@@ -214,6 +218,7 @@ export default function EmailCenterPage() {
       const parsed = JSON.parse(stored) as Partial<OperatorUatState> & {
         reviewer?: string;
         notes?: string;
+        touchedAt?: OperatorUatTouchedState;
       };
 
       setOperatorChecklist({
@@ -224,6 +229,7 @@ export default function EmailCenterPage() {
           ),
         ),
       } as OperatorUatState);
+      setOperatorTouchedAt(parsed.touchedAt ?? {});
       setOperatorReviewer(parsed.reviewer ?? "");
       setOperatorNotes(parsed.notes ?? "");
     } catch {
@@ -240,11 +246,12 @@ export default function EmailCenterPage() {
       OPERATOR_UAT_STORAGE_KEY,
       JSON.stringify({
         ...operatorChecklist,
+        touchedAt: operatorTouchedAt,
         reviewer: operatorReviewer,
         notes: operatorNotes,
       }),
     );
-  }, [operatorChecklist, operatorNotes, operatorReviewer]);
+  }, [operatorChecklist, operatorNotes, operatorReviewer, operatorTouchedAt]);
 
   useEffect(() => {
     if (!token) {
@@ -381,11 +388,46 @@ export default function EmailCenterPage() {
     );
   };
 
+  const setOperatorStepState = (
+    stepId: OperatorUatStepId,
+    nextValue: boolean,
+    options?: { preserveExistingTimestamp?: boolean },
+  ) => {
+    setOperatorChecklist((current) => {
+      if (current[stepId] === nextValue) {
+        return current;
+      }
+
+      return {
+        ...current,
+        [stepId]: nextValue,
+      };
+    });
+
+    setOperatorTouchedAt((current) => {
+      if (!nextValue) {
+        if (!(stepId in current)) {
+          return current;
+        }
+
+        const nextTouched = { ...current };
+        delete nextTouched[stepId];
+        return nextTouched;
+      }
+
+      if (options?.preserveExistingTimestamp && current[stepId]) {
+        return current;
+      }
+
+      return {
+        ...current,
+        [stepId]: new Date().toISOString(),
+      };
+    });
+  };
+
   const toggleOperatorChecklistItem = (stepId: OperatorUatStepId) => {
-    setOperatorChecklist((current) => ({
-      ...current,
-      [stepId]: !current[stepId],
-    }));
+    setOperatorStepState(stepId, !operatorChecklist[stepId]);
   };
 
   const completedOperatorSteps = OPERATOR_UAT_STEPS.filter(
@@ -393,6 +435,66 @@ export default function EmailCenterPage() {
   ).length;
   const operatorValidationComplete =
     completedOperatorSteps === OPERATOR_UAT_STEPS.length;
+
+
+  useEffect(() => {
+    setOperatorStepState(
+      "smtp-readiness",
+      Boolean(smtp.transportStatus),
+      { preserveExistingTimestamp: true },
+    );
+  }, [smtp.transportStatus]);
+
+  useEffect(() => {
+    if (notificationHistory.length > 0) {
+      setOperatorStepState("history-review", true, {
+        preserveExistingTimestamp: true,
+      });
+    }
+  }, [notificationHistory.length]);
+
+  useEffect(() => {
+    if (executionPlan) {
+      setOperatorStepState("sync-warning", true, {
+        preserveExistingTimestamp: true,
+      });
+    }
+  }, [executionPlan]);
+
+  useEffect(() => {
+    if (audiencePreview.length > 0 && previewHtml && previewSubject) {
+      setOperatorStepState("preview-send-update", true, {
+        preserveExistingTimestamp: true,
+      });
+    }
+  }, [audiencePreview.length, previewHtml, previewSubject]);
+
+  const operatorSummary = useMemo(() => {
+    const lines = [
+      `Operator reviewer: ${operatorReviewer || "Pending assignment"}`,
+      `Checklist progress: ${completedOperatorSteps}/${OPERATOR_UAT_STEPS.length}`,
+    ];
+
+    for (const step of OPERATOR_UAT_STEPS) {
+      const checked = operatorChecklist[step.id];
+      const touchedAt = operatorTouchedAt[step.id];
+      lines.push(
+        `- [${checked ? "x" : " "}] ${step.label}${touchedAt ? ` (${new Date(touchedAt).toLocaleString()})` : ""}`,
+      );
+    }
+
+    if (operatorNotes.trim()) {
+      lines.push("Notes:", operatorNotes.trim());
+    }
+
+    return lines.join("\n");
+  }, [
+    completedOperatorSteps,
+    operatorChecklist,
+    operatorNotes,
+    operatorReviewer,
+    operatorTouchedAt,
+  ]);
 
   const saveSmtp = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -415,6 +517,9 @@ export default function EmailCenterPage() {
         throw new Error("Unable to save SMTP settings.");
       }
 
+      setOperatorStepState("smtp-update-test", true, {
+        preserveExistingTimestamp: true,
+      });
       setStatus("SMTP settings saved.");
     } catch (saveError) {
       setError(
@@ -451,6 +556,9 @@ export default function EmailCenterPage() {
         throw new Error("Unable to send SMTP test.");
       }
 
+      setOperatorStepState("smtp-update-test", true, {
+        preserveExistingTimestamp: true,
+      });
       setStatus("SMTP test request completed.");
     } catch (testError) {
       setError(
@@ -491,6 +599,9 @@ export default function EmailCenterPage() {
       }
 
       setTemplateDetails((await response.json()) as TemplateDetails);
+      setOperatorStepState("template-edit-reset", true, {
+        preserveExistingTimestamp: true,
+      });
       setStatus(`Template ${selectedTemplate} saved.`);
     } catch (saveError) {
       setError(
@@ -522,6 +633,9 @@ export default function EmailCenterPage() {
       }
 
       setTemplateDetails((await response.json()) as TemplateDetails);
+      setOperatorStepState("template-edit-reset", true, {
+        preserveExistingTimestamp: true,
+      });
       setStatus(`Template ${selectedTemplate} reset to defaults.`);
     } catch (resetError) {
       setError(
@@ -644,6 +758,9 @@ export default function EmailCenterPage() {
         executionPlan?: UpdateExecutionPlan;
       };
       setExecutionPlan(payload.executionPlan ?? null);
+      setOperatorStepState("preview-send-update", true, {
+        preserveExistingTimestamp: true,
+      });
       setStatus(
         `Onboarding update attempted for ${payload.totalRecipients} recipient(s); ${payload.sent} sent, ${payload.logged} logged, ${payload.failed} failed.`,
       );
@@ -744,10 +861,21 @@ export default function EmailCenterPage() {
             <Badge variant={operatorValidationComplete ? "success" : "info"}>
               {completedOperatorSteps}/{OPERATOR_UAT_STEPS.length} checks complete
             </Badge>
+            <Badge variant={operatorValidationComplete ? "success" : "warning"}>
+              {operatorValidationComplete ? "Ready for sign-off" : "Operator sign-off pending"}
+            </Badge>
             <p className="text-sm text-slate-600">
               Require one operator who did not implement the feature to complete
               this round without backend or source-code walkthroughs.
             </p>
+          </div>
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
+            <p className="font-semibold text-slate-900">Checklist usage notes</p>
+            <ul className="mt-2 list-disc space-y-1 pl-5">
+              <li>Checklist items auto-complete when the operator loads readiness, history, preview, or completes the related save/send action.</li>
+              <li>Operators can still manually adjust any item if remediation or retesting is required.</li>
+              <li>Use the copy button below to paste the sign-off summary into the release ticket or runbook evidence log.</li>
+            </ul>
           </div>
           <div className="grid gap-3 lg:grid-cols-2">
             {OPERATOR_UAT_STEPS.map((step) => (
@@ -767,10 +895,50 @@ export default function EmailCenterPage() {
                     <p className="mt-1 text-sm text-slate-600">
                       {step.description}
                     </p>
+                    {operatorTouchedAt[step.id] ? (
+                      <p className="mt-2 text-xs font-medium text-slate-500">
+                        Last updated {new Date(operatorTouchedAt[step.id] as string).toLocaleString()}
+                      </p>
+                    ) : null}
                   </div>
                 </div>
               </label>
             ))}
+          </div>
+          <div className="flex flex-wrap gap-3">
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={async () => {
+                try {
+                  await navigator.clipboard.writeText(operatorSummary);
+                  setStatus("Operator UAT summary copied to clipboard.");
+                  setError("");
+                } catch {
+                  setError("Unable to copy the operator summary from this browser.");
+                }
+              }}
+            >
+              Copy sign-off summary
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => {
+                setOperatorChecklist(EMPTY_OPERATOR_UAT_STATE);
+                setOperatorTouchedAt({});
+                setOperatorReviewer("");
+                setOperatorNotes("");
+                setStatus("Operator UAT checklist cleared for a fresh validation round.");
+                setError("");
+              }}
+            >
+              Reset checklist
+            </Button>
+          </div>
+          <div className="rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-700">
+            <p className="font-semibold text-slate-900">Sign-off summary preview</p>
+            <pre className="mt-3 whitespace-pre-wrap font-sans text-sm text-slate-700">{operatorSummary}</pre>
           </div>
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
