@@ -139,6 +139,8 @@ ONBOARDING_ADMIN_DASHBOARD_URL=http://localhost:3000/admin/dashboard
 ONBOARDING_RESET_PASSWORD_URL=http://localhost:3000/admin/reset-password
 ONBOARDING_ADMIN_LOGIN_URL=http://localhost:3000/admin/login
 PASSWORD_RESET_TTL_MINUTES=60
+ONBOARDING_UPDATE_QUEUE_THRESHOLD=25
+ONBOARDING_UPDATE_SYNC_LIMIT=100
 ```
 
 ## SMTP transport validation
@@ -147,3 +149,10 @@ PASSWORD_RESET_TTL_MINUTES=60
 - In development, missing SMTP settings or an unavailable transporter package degrade safely to log-only delivery.
 - In production, or whenever `SMTP_REQUIRED=true`, the backend fails fast if the resolved SMTP host/from-address pair is incomplete or if the runtime cannot load the Nodemailer transport package.
 - The admin email center also surfaces the current transport mode and validation issues from `GET /admin/email/smtp-settings`.
+
+## Onboarding update delivery mode
+
+- Phase 1 onboarding update broadcasts execute synchronously in the API request cycle.
+- The admin email center now surfaces the current synchronous-inline execution plan, including when queue-backed delivery is recommended.
+- `ONBOARDING_UPDATE_QUEUE_THRESHOLD` controls when the UI/API warn operators that a queue worker should take over for broader sends.
+- `ONBOARDING_UPDATE_SYNC_LIMIT` sets the hard per-request recipient cap for inline delivery; larger audiences are rejected until a worker/queue path exists.
