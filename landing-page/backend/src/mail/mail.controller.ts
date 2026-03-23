@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Put, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, DefaultValuePipe, Get, Param, ParseIntPipe, Post, Put, Query, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../jwt-auth.guard';
 import { EmailTemplateService } from './email-template.service';
 import { MailService } from './mail.service';
@@ -64,6 +64,12 @@ export class MailController {
   @Post('templates/:type/reset')
   resetTemplate(@Param('type') type: string) {
     return this.emailTemplateService.resetTemplate(type);
+  }
+
+
+  @Get('notifications/history')
+  listNotificationHistory(@Query('limit', new DefaultValuePipe(25), ParseIntPipe) limit: number) {
+    return this.onboardingNotificationService.listNotificationHistory(limit);
   }
 
   @Get('onboarding-updates/audience')
