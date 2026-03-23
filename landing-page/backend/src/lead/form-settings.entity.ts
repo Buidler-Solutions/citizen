@@ -33,6 +33,9 @@ export class FormSettings {
   @Column({ length: 180, default: 'Citizen' })
   siteLogoAlt!: string;
 
+  @Column({ length: 180, default: 'Citizen' })
+  siteName!: string;
+
   @Column({
     type: 'jsonb',
     default: () => `'[
