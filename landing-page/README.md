@@ -130,10 +130,20 @@ curl http://localhost:3001/interest/stats \
 The onboarding email workflows support these additional backend environment variables:
 
 ```bash
+NODE_ENV=development
+SMTP_REQUIRED=false
 ADMIN_EMAIL=ops@example.gov
 ONBOARDING_SUPPORT_EMAIL=support@example.gov
 ONBOARDING_NOTIFICATION_EMAILS=ops@example.gov;audit@example.gov
 ONBOARDING_ADMIN_DASHBOARD_URL=http://localhost:3000/admin/dashboard
 ONBOARDING_RESET_PASSWORD_URL=http://localhost:3000/admin/reset-password
+ONBOARDING_ADMIN_LOGIN_URL=http://localhost:3000/admin/login
 PASSWORD_RESET_TTL_MINUTES=60
 ```
+
+## SMTP transport validation
+
+- The backend validates SMTP readiness during boot through the shared mail service.
+- In development, missing SMTP settings or an unavailable transporter package degrade safely to log-only delivery.
+- In production, or whenever `SMTP_REQUIRED=true`, the backend fails fast if the resolved SMTP host/from-address pair is incomplete or if the runtime cannot load the Nodemailer transport package.
+- The admin email center also surfaces the current transport mode and validation issues from `GET /admin/email/smtp-settings`.

@@ -23,10 +23,12 @@ export class MailController {
   async getSmtpSettings() {
     const stored = await this.smtpSettingsService.getStoredSettings();
     const resolved = await this.smtpSettingsService.resolveSettings(true);
+    const transportStatus = await this.mailService.getTransportStatus();
     return {
       ...stored,
       password: stored.password ? '********' : '',
       resolvedSource: resolved.source,
+      transportStatus,
     };
   }
 

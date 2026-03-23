@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { SmtpSettingsService } from './smtp-settings.service';
 
@@ -14,8 +14,17 @@ interface MailTransporter {
   sendMail(message: Record<string, unknown>): Promise<unknown>;
 }
 
+export interface MailTransportStatus {
+  configured: boolean;
+  strict: boolean;
+  nodemailerInstalled: boolean;
+  source: 'database' | 'environment' | 'default';
+  mode: 'smtp' | 'logged';
+  issues: string[];
+}
+
 @Injectable()
-export class MailService {
+export class MailService implements OnModuleInit {
   private readonly logger = new Logger(MailService.name);
   private transporterCache = new Map<string, MailTransporter>();
   private nodemailerFactoryPromise: Promise<((config: Record<string, unknown>) => MailTransporter) | null> | null = null;
@@ -24,6 +33,27 @@ export class MailService {
     private readonly smtpSettingsService: SmtpSettingsService,
     private readonly configService: ConfigService,
   ) {}
+
+  async onModuleInit(): Promise<void> {
+    const status = await this.getTransportStatus();
+
+    if (status.strict && status.issues.length > 0) {
+      throw new Error(
+        `SMTP delivery validation failed: ${status.issues.join(' ')}`,
+      );
+    }
+
+    if (status.issues.length > 0) {
+      this.logger.warn(
+        `SMTP transport will fall back to development logging. ${status.issues.join(' ')}`,
+      );
+      return;
+    }
+
+    this.logger.log(
+      `SMTP transport ready using ${status.source}-sourced settings.`,
+    );
+  }
 
   async sendMail(input: SendMailInput): Promise<{ delivered: boolean; mode: 'smtp' | 'logged' }> {
     const smtp = await this.smtpSettingsService.resolveSettings();
@@ -57,6 +87,35 @@ export class MailService {
     });
 
     return { delivered: true, mode: 'smtp' };
+  }
+
+  async getTransportStatus(): Promise<MailTransportStatus> {
+    const smtp = await this.smtpSettingsService.resolveSettings(true);
+    const strict = this.isStrictMode();
+    const issues: string[] = [];
+    const configured = Boolean(smtp.host && smtp.fromAddress);
+    const nodemailerInstalled = Boolean(await this.loadNodemailerFactory());
+
+    if (!configured) {
+      issues.push(
+        `Missing SMTP host/from address in ${smtp.source} configuration.`,
+      );
+    }
+
+    if (configured && !nodemailerInstalled) {
+      issues.push(
+        'The nodemailer package is not available, so real SMTP delivery cannot start.',
+      );
+    }
+
+    return {
+      configured,
+      strict,
+      nodemailerInstalled,
+      source: smtp.source,
+      mode: issues.length === 0 ? 'smtp' : 'logged',
+      issues,
+    };
   }
 
   private async getTransporter(smtp: Awaited<ReturnType<SmtpSettingsService['resolveSettings']>>): Promise<MailTransporter | null> {
@@ -113,5 +172,14 @@ export class MailService {
 
   private uniqueEmails(values: string[]): string[] {
     return [...new Set(values.map((value) => value.trim().toLowerCase()).filter(Boolean))];
+  }
+
+  private isStrictMode(): boolean {
+    const explicit = this.configService.get<string>('SMTP_REQUIRED', '').trim().toLowerCase();
+    if (explicit) {
+      return ['1', 'true', 'yes', 'on'].includes(explicit);
+    }
+
+    return this.configService.get<string>('NODE_ENV', 'development') === 'production';
   }
 }
