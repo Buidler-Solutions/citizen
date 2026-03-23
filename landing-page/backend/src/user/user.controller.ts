@@ -1,7 +1,16 @@
-import { Body, Controller, ForbiddenException, Get, Post, Req, UseGuards } from '@nestjs/common';
-import { JwtAuthGuard } from '../jwt-auth.guard';
-import { CreateOnboardingUserDto } from './dto/create-onboarding-user.dto';
-import { UserService } from './user.service';
+import {
+  Body,
+  Controller,
+  ForbiddenException,
+  Get,
+  Post,
+  Req,
+  UseGuards,
+} from "@nestjs/common";
+import { JwtAuthGuard } from "../jwt-auth.guard";
+import { OnboardingNotificationService } from "../mail/onboarding-notification.service";
+import { CreateOnboardingUserDto } from "./dto/create-onboarding-user.dto";
+import { UserService } from "./user.service";
 
 interface AuthenticatedRequest {
   user?: {
@@ -10,10 +19,13 @@ interface AuthenticatedRequest {
   };
 }
 
-@Controller('users')
+@Controller("users")
 @UseGuards(JwtAuthGuard)
 export class UserController {
-  constructor(private readonly userService: UserService) {}
+  constructor(
+    private readonly userService: UserService,
+    private readonly onboardingNotificationService: OnboardingNotificationService,
+  ) {}
 
   @Get()
   listUsers() {
@@ -21,11 +33,20 @@ export class UserController {
   }
 
   @Post()
-  async createUser(@Body() payload: CreateOnboardingUserDto, @Req() request: AuthenticatedRequest) {
-    if (request.user?.role !== 'super_admin') {
-      throw new ForbiddenException('Only super admins can create onboarding users.');
+  async createUser(
+    @Body() payload: CreateOnboardingUserDto,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    if (request.user?.role !== "super_admin") {
+      throw new ForbiddenException(
+        "Only super admins can create onboarding users.",
+      );
     }
 
-    return this.userService.createUser(payload);
+    const user = await this.userService.createUser(payload);
+    await this.onboardingNotificationService.sendOnboardingUserWelcomeEmail(
+      user,
+    );
+    return user;
   }
 }
