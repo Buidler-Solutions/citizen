@@ -745,7 +745,14 @@ After smoke tests pass, run a short operator validation round entirely from the 
 - [ ] Admin can preview and send onboarding updates using the dashboard UI only.
 - [ ] Admin understands the synchronous-inline execution warning and cap messaging.
 
-Implementation start: the dashboard email center should include a dedicated **Operator / UAT validation checklist** that mirrors the items above, records the reviewer name and notes, and lets operators track completion without leaving the UI. Treat that checklist as an operator aid only; it does not replace the smoke-test evidence captured elsewhere in this runbook.
+Implementation status: the dashboard email center now includes a dedicated **Operator / UAT validation checklist** that mirrors the items above, records reviewer name and notes, persists progress in browser local storage, auto-completes checklist items when operators load readiness/history/preview data or finish the related save/send actions, and exposes a copyable sign-off summary for the release ticket or evidence log. Treat that checklist as an operator aid only; it does not replace the smoke-test evidence captured elsewhere in this runbook.
+
+Recommended validation flow:
+
+1. Use the checklist card at the top of the email center as the operator's working surface.
+2. Let the operator move through SMTP readiness, template editing, audit-log review, and onboarding update preview/send using only dashboard controls.
+3. Capture any remediation notes directly in the checklist card.
+4. Copy the generated sign-off summary into the release ticket, change log, or validation evidence thread.
 
 For sign-off, require one operator who did not implement the feature to complete this round and confirm that the UI text is sufficient without backend/source-code walkthroughs.
 
