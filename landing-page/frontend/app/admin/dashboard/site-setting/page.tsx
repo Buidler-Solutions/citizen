@@ -14,6 +14,7 @@ const REQUIRED_LOGO_HEIGHT = 58;
 interface SiteSettingsResponse {
   siteLogoUrl: string;
   siteLogoAlt: string;
+  siteName: string;
 }
 
 const ACCEPTED_LOGO_FORMATS = '.png,.apng,.jpg,.jpeg,.svg,.webp,image/png,image/apng,image/jpeg,image/svg+xml,image/webp';
@@ -21,6 +22,7 @@ const ACCEPTED_LOGO_FORMATS = '.png,.apng,.jpg,.jpeg,.svg,.webp,image/png,image/
 const DEFAULT_SETTINGS: SiteSettingsResponse = {
   siteLogoUrl: '',
   siteLogoAlt: 'Citizen',
+  siteName: 'Citizen',
 };
 
 const toAbsoluteUrl = (url: string) => {
@@ -37,6 +39,7 @@ export default function SiteSettingPage() {
   const [logoPreview, setLogoPreview] = useState('');
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
+  const [savingSiteName, setSavingSiteName] = useState(false);
   const [status, setStatus] = useState('');
   const [error, setError] = useState('');
 
@@ -60,6 +63,7 @@ export default function SiteSettingPage() {
         setSettings({
           siteLogoUrl: data.siteLogoUrl ?? '',
           siteLogoAlt: data.siteLogoAlt ?? 'Citizen',
+          siteName: data.siteName ?? 'Citizen',
         });
       } catch (loadError) {
         setError(loadError instanceof Error ? loadError.message : 'Unknown load error.');
@@ -84,6 +88,53 @@ export default function SiteSettingPage() {
   }, [logoFile]);
 
   const currentLogoUrl = useMemo(() => logoPreview || toAbsoluteUrl(settings.siteLogoUrl), [logoPreview, settings.siteLogoUrl]);
+
+  const saveSiteName = async () => {
+    const token = localStorage.getItem(ADMIN_TOKEN_KEY);
+
+    if (!token) {
+      router.replace('/admin/login');
+      return;
+    }
+
+    try {
+      setSavingSiteName(true);
+      setError('');
+      setStatus('Saving site name...');
+
+      const response = await fetch(`${API_URL}/interest/form-settings`, {
+        method: 'PUT',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ siteName: settings.siteName.trim() || 'Citizen' }),
+      });
+
+      if (response.status === 401) {
+        localStorage.removeItem(ADMIN_TOKEN_KEY);
+        router.replace('/admin/login');
+        return;
+      }
+
+      if (!response.ok) {
+        const details = await response.text();
+        throw new Error(details || 'Unable to save site name.');
+      }
+
+      const updatedSettings = (await response.json()) as Partial<SiteSettingsResponse>;
+      setSettings((prev) => ({
+        ...prev,
+        siteName: updatedSettings.siteName ?? prev.siteName,
+      }));
+      setStatus('Site name saved successfully.');
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : 'Unknown save error.');
+      setStatus('');
+    } finally {
+      setSavingSiteName(false);
+    }
+  };
 
   const onFileChange = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0] ?? null;
@@ -163,6 +214,7 @@ export default function SiteSettingPage() {
       setSettings({
         siteLogoUrl: updatedSettings.siteLogoUrl ?? '',
         siteLogoAlt: updatedSettings.siteLogoAlt ?? settings.siteLogoAlt,
+        siteName: updatedSettings.siteName ?? settings.siteName,
       });
       setLogoFile(null);
       setStatus('Site logo uploaded successfully. The landing page header now uses the new branding.');
@@ -204,6 +256,20 @@ export default function SiteSettingPage() {
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1.2fr)_minmax(320px,0.8fr)]">
         <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
           <div className="space-y-5">
+            <div className="space-y-2">
+              <Label htmlFor="siteName">Site name</Label>
+              <Input
+                id="siteName"
+                value={settings.siteName}
+                onChange={(event) => setSettings((prev) => ({ ...prev, siteName: event.target.value }))}
+                placeholder="Citizen"
+              />
+              <p className="text-sm text-slate-500">This label appears inline beside the landing-page logo.</p>
+              <Button onClick={saveSiteName} disabled={savingSiteName} isLoading={savingSiteName}>
+                Save site name
+              </Button>
+            </div>
+
             <div className="space-y-2">
               <Label htmlFor="siteLogoAlt">Logo alt text</Label>
               <Input
@@ -251,6 +317,9 @@ export default function SiteSettingPage() {
                     <span className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-300">Citizen</span>
                   )}
                 </div>
+                <span className="hidden text-sm font-semibold tracking-[0.18em] text-slate-200 md:inline-block">
+                  {settings.siteName || 'Citizen'}
+                </span>
                 <div className="hidden flex-1 justify-end gap-4 text-sm text-slate-400 md:flex">
                   <span>Onboarding</span>
                   <span>Validators</span>
