@@ -68,6 +68,7 @@ App URLs:
 - Admin email settings API (JWT protected): `http://localhost:3001/admin/email/smtp-settings`
 - Admin email templates API (JWT protected): `http://localhost:3001/admin/email/templates`
 - Admin onboarding update preview/send API (JWT protected): `http://localhost:3001/admin/email/onboarding-updates/preview` and `http://localhost:3001/admin/email/onboarding-updates/send`
+- Admin notification audit history API (JWT protected): `http://localhost:3001/admin/email/notifications/history?limit=25`
 - Admin reset-password UI: `http://localhost:3000/admin/reset-password`
 - Site settings support static or animated APNG logo uploads for the landing-page header via the admin console.
 

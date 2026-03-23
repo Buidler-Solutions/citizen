@@ -46,7 +46,7 @@ Use this checklist as the handoff between the work already merged and the next i
 - [x] Add the forgot-password implementation for onboarding console users: `password_resets` entity, token hashing, expiry handling, `POST /auth/forgot-password`, and `POST /auth/reset-password`.
 - [x] Add the remaining template defaults called out in this runbook, especially `forgotPassword`, `onboardingStatusUpdate`, and optional `onboardingUserWelcome`.
 - [x] Add admin/backend support for outbound onboarding updates to existing applicants, including preview/send routes and audience selection.
-- [ ] Add an optional notification audit log such as `lead_notifications` if onboarding updates need send history and per-recipient status tracking.
+- [x] Add an optional notification audit log such as `lead_notifications` for onboarding sends, including per-recipient status tracking and admin history review.
 - [x] Add admin UI surfaces for SMTP settings, email template editing, and onboarding update composition in the dashboard.
 - [ ] Install and validate the production SMTP transport dependency/configuration in the deployment environment so the shared delivery helper can use a real transporter instead of falling back to development logging when the SMTP transport package is unavailable.
 - [ ] Decide whether recurring/bulk sends should stay synchronous for phase 1 or move behind a queue/job worker before broader operator use.
@@ -491,6 +491,7 @@ These are the minimum routes to add for phase 1.
 - `GET /admin/email/templates/:type`
 - `PUT /admin/email/templates/:type`
 - `POST /admin/email/templates/:type/reset`
+- `GET /admin/email/notifications/history`
 
 ### Admin onboarding update routes
 
