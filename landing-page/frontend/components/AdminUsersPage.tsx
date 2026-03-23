@@ -13,6 +13,7 @@ type ManagedUserRole = 'super_admin' | 'admin' | 'user';
 interface ManagedUser {
   id: string;
   username: string;
+  email: string;
   fullName: string;
   role: ManagedUserRole;
   isActive: boolean;
@@ -22,6 +23,7 @@ interface ManagedUser {
 interface CreateUserFormState {
   fullName: string;
   username: string;
+  email: string;
   password: string;
   role: 'admin' | 'user';
 }
@@ -29,6 +31,7 @@ interface CreateUserFormState {
 const EMPTY_FORM: CreateUserFormState = {
   fullName: '',
   username: '',
+  email: '',
   password: '',
   role: 'admin',
 };
@@ -121,6 +124,7 @@ export function AdminUsersPage() {
         body: JSON.stringify({
           fullName: form.fullName,
           username: form.username,
+          email: form.email,
           password: form.password,
           role: form.role,
         }),
@@ -204,19 +208,21 @@ export function AdminUsersPage() {
               <p className="text-sm text-slate-500">Loading onboarding users…</p>
             ) : (
               <div className="overflow-hidden rounded-2xl border border-slate-200">
-                <div className="grid grid-cols-[1.2fr_1fr_0.8fr_0.8fr] gap-3 border-b border-slate-200 bg-slate-50 px-4 py-3 text-xs font-bold uppercase tracking-wider text-slate-500">
+                <div className="grid grid-cols-[1.1fr_1.1fr_1fr_0.8fr_0.8fr] gap-3 border-b border-slate-200 bg-slate-50 px-4 py-3 text-xs font-bold uppercase tracking-wider text-slate-500">
                   <span>User</span>
+                  <span>Email</span>
                   <span>Name</span>
                   <span>Role</span>
                   <span>Status</span>
                 </div>
                 <div className="divide-y divide-slate-200">
                   {users.map((user) => (
-                    <div key={user.id} className="grid grid-cols-[1.2fr_1fr_0.8fr_0.8fr] gap-3 px-4 py-4 text-sm text-slate-700">
+                    <div key={user.id} className="grid grid-cols-[1.1fr_1.1fr_1fr_0.8fr_0.8fr] gap-3 px-4 py-4 text-sm text-slate-700">
                       <div>
                         <p className="font-semibold text-slate-900">{user.username}</p>
                         <p className="text-xs text-slate-500">Created {new Date(user.createdAt).toLocaleDateString()}</p>
                       </div>
+                      <span className="break-all">{user.email || '—'}</span>
                       <span>{user.fullName || '—'}</span>
                       <span>{formatRole(user.role)}</span>
                       <span>{user.isActive ? 'Active' : 'Disabled'}</span>
@@ -252,6 +258,10 @@ export function AdminUsersPage() {
                   <Input id="username" value={form.username} onChange={(event) => setForm((previous) => ({ ...previous, username: event.target.value }))} placeholder="jane.admin" required />
                 </div>
                 <div className="space-y-2">
+                  <Label htmlFor="email">Email</Label>
+                  <Input id="email" type="email" value={form.email} onChange={(event) => setForm((previous) => ({ ...previous, email: event.target.value }))} placeholder="jane.admin@example.gov" required />
+                </div>
+                <div className="space-y-2">
                   <Label htmlFor="password">Temporary password</Label>
                   <Input id="password" type="password" value={form.password} onChange={(event) => setForm((previous) => ({ ...previous, password: event.target.value }))} placeholder="Minimum 8 characters" required />
                 </div>
@@ -260,19 +270,17 @@ export function AdminUsersPage() {
                   <select
                     id="role"
                     value={form.role}
-                    onChange={(event) => setForm((previous) => ({ ...previous, role: event.target.value as 'admin' | 'user' }))}
-                    className="w-full rounded-xl border-2 border-slate-200 bg-white px-3 py-2.5 text-sm font-medium text-slate-700 outline-none transition focus:border-blue-400"
+                    onChange={(event) => setForm((previous) => ({ ...previous, role: event.target.value as CreateUserFormState['role'] }))}
+                    className="w-full rounded-xl border-2 border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 outline-none transition focus:border-blue-400"
                   >
                     <option value="admin">Admin</option>
-                    <option value="user">Normal user</option>
+                    <option value="user">User</option>
                   </select>
                 </div>
-                <Button type="submit" isLoading={saving} className="w-full">Create user</Button>
+                <Button type="submit" disabled={saving}>{saving ? 'Creating…' : 'Create user'}</Button>
               </form>
             ) : (
-              <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
-                You are signed in as {session?.role ? formatRole(session.role) : 'User'}. Only the super admin can add onboarding admin and normal user accounts.
-              </div>
+              <p className="text-sm text-slate-500">Only the seeded or promoted super admin can create onboarding users.</p>
             )}
           </CardContent>
         </Card>

@@ -10,6 +10,9 @@ export class OnboardingUser {
   @Column({ unique: true, length: 80 })
   username!: string;
 
+  @Column({ length: 180, default: '' })
+  email!: string;
+
   @Column({ name: 'password_hash', length: 255 })
   passwordHash!: string;
 
