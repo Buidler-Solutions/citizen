@@ -10,7 +10,7 @@ export class PasswordReset {
   @JoinColumn({ name: 'user_id' })
   user!: OnboardingUser;
 
-  @Column({ name: 'user_id', length: 36 })
+  @Column({ name: 'user_id', type: 'uuid' })
   userId!: string;
 
   @Column({ length: 180 })
