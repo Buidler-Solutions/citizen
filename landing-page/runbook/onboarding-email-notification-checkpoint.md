@@ -560,6 +560,105 @@ For early onboarding traffic, inline request-cycle sending is acceptable. The cu
 
 ---
 
+## Post-implementation validation checklist
+
+Now that the checkpoint scope is implemented in the current codebase, the next step is not another feature slice by default. The immediate follow-up should be validating the implemented flows in a configured environment and then deciding whether phase 2 queue/worker delivery work should begin.
+
+### 1. Environment readiness
+
+Before smoke testing real delivery, verify:
+
+- backend environment variables are configured for SMTP, admin/support recipients, reset-password links, and onboarding update thresholds,
+- the SMTP relay accepts the configured sender identity,
+- the admin dashboard can authenticate and reach the protected `/admin/email/*` APIs,
+- the deployment image/runtime includes the mail transport dependency,
+- production or `SMTP_REQUIRED=true` boots fail fast if SMTP readiness is incomplete.
+
+### 2. Smoke-test checklist
+
+#### Forgot-password flow
+
+- [ ] Trigger `POST /auth/forgot-password` for an existing onboarding user.
+- [ ] Confirm the API returns the generic success response.
+- [ ] Confirm a `password_resets` record is created with hashed token + expiry metadata.
+- [ ] Confirm the forgot-password email is delivered or logged.
+- [ ] Complete `POST /auth/reset-password` with the issued token.
+- [ ] Confirm the new password works and prior active reset tokens are invalidated.
+- [ ] Confirm notification history shows the forgot-password send result.
+
+#### Lead submission confirmation
+
+- [ ] Submit a fresh onboarding interest form with a unique email.
+- [ ] Confirm the lead persists with the structured `role` field.
+- [ ] Confirm the applicant receives the `onboardingSubmissionConfirmation` email.
+- [ ] Confirm duplicate-email submissions are rejected.
+- [ ] Confirm notification history records the applicant confirmation result.
+
+#### Admin/internal notification
+
+- [ ] Configure at least one internal/admin recipient address.
+- [ ] Submit a fresh onboarding interest form.
+- [ ] Confirm all intended recipients receive the `onboardingSubmissionAdminNotification` email.
+- [ ] Confirm recipient deduplication works when support/admin addresses overlap.
+- [ ] Confirm notification history records one audit entry per admin recipient.
+
+#### Onboarding update preview/send
+
+- [ ] Open the admin email center and load the onboarding update composer.
+- [ ] Preview recipients by all applicants, by role, and by selected leads.
+- [ ] Confirm rendered preview subject/body load correctly from `onboardingStatusUpdate`.
+- [ ] Send a small onboarding update to a controlled audience.
+- [ ] Confirm sent/logged/failed counts match the response payload.
+- [ ] Confirm queue-threshold warnings appear for large but allowed audiences.
+- [ ] Confirm requests above the sync cap are rejected with the operator warning.
+
+#### Audit log visibility
+
+- [ ] Refresh `GET /admin/email/notifications/history` after each scenario above.
+- [ ] Confirm per-recipient status, subject snapshot, channel, audience mode, timestamps, and error messages are visible in the admin UI.
+- [ ] Confirm records are ordered newest-first and usable for operator review.
+
+### 3. Operator / UAT validation
+
+After smoke tests pass, run a short operator validation round:
+
+- [ ] Admin can review SMTP transport readiness in the email center.
+- [ ] Admin can update SMTP settings and send a test message.
+- [ ] Admin can edit and reset email templates.
+- [ ] Admin can review notification history without developer assistance.
+- [ ] Admin can preview and send onboarding updates using the dashboard UI only.
+- [ ] Admin understands the synchronous-inline execution warning and cap messaging.
+
+### 4. Phase-2 go / no-go decision
+
+Stay on the current implementation if:
+
+- expected onboarding update audiences are small,
+- sends are infrequent and operator-triggered,
+- synchronous request-cycle latency is acceptable,
+- the configured sync cap is comfortably above expected audience sizes,
+- smoke/UAT testing does not surface reliability issues.
+
+Start phase-2 queue/worker delivery work if:
+
+- onboarding broadcasts are expected to regularly approach the queue recommendation threshold,
+- any operator workflow is expected to exceed the per-request sync cap,
+- request-cycle sending becomes too slow or fragile,
+- retries, replayability, or worker-based operational controls are required.
+
+### 5. Recommended execution order
+
+1. Validate environment and SMTP readiness.
+2. Smoke-test forgot-password.
+3. Smoke-test lead submission confirmation.
+4. Smoke-test admin/internal notifications.
+5. Smoke-test onboarding update preview/send.
+6. Validate audit-log visibility.
+7. Run operator/UAT validation.
+8. Decide whether queue/worker phase-2 work should begin.
+
+---
+
 ## Checkpoint implementation plan
 
 ### Phase 1: foundation
