@@ -7,6 +7,7 @@ import { LeadInterest } from './lead.entity';
 import { FormSettings } from './form-settings.entity';
 import { UpdateFormSettingsDto } from './dto/update-form-settings.dto';
 import { AsciinemaRecording } from './asciinema-recording.entity';
+import { OnboardingNotificationService } from '../mail/onboarding-notification.service';
 
 const DEFAULT_CAMPAIGN_CARDS = [
   {
@@ -62,6 +63,7 @@ export class LeadService {
     private readonly formSettingsRepository: Repository<FormSettings>,
     @InjectRepository(AsciinemaRecording)
     private readonly asciinemaRecordingRepository: Repository<AsciinemaRecording>,
+    private readonly onboardingNotificationService: OnboardingNotificationService,
   ) {}
 
   async create(payload: CreateLeadDto): Promise<LeadInterest> {
@@ -75,12 +77,29 @@ export class LeadService {
       throw new ConflictException('A submission already exists for this email address.');
     }
 
+    const formSettings = await this.getFormSettings();
+    const normalizedRole = this.normalizeRole(payload.role, formSettings);
     const lead = this.leadRepository.create({
       ...payload,
       email: normalizedEmail,
+      role: normalizedRole,
+      missionNeed: payload.missionNeed.trim(),
     });
 
-    return this.leadRepository.save(lead);
+    const savedLead = await this.leadRepository.save(lead);
+    await this.onboardingNotificationService.sendLeadSubmissionNotifications(savedLead, formSettings);
+    return savedLead;
+  }
+
+  private normalizeRole(role: string, formSettings: FormSettings): string {
+    const normalizedRole = role.trim().toLowerCase();
+    const validRoles = new Set(formSettings.roles.map((item) => item.id));
+
+    if (!validRoles.has(normalizedRole)) {
+      throw new BadRequestException('Selected onboarding role is not supported.');
+    }
+
+    return normalizedRole;
   }
 
   async stats() {
@@ -258,48 +277,63 @@ export class LeadService {
     const result = await this.asciinemaRecordingRepository.delete({ id });
 
     if (!result.affected) {
-      throw new NotFoundException('Asciinema recording not found.');
+      throw new NotFoundException('Recording not found.');
     }
 
     return { deleted: true };
   }
 
-  async uploadSiteLogo(logoUrl: string, altText?: string): Promise<FormSettings> {
-    const settings = await this.getFormSettings();
-    const normalizedUrl = logoUrl.trim();
+  async updateFormSettings(payload: UpdateFormSettingsDto): Promise<FormSettings> {
+    const current = await this.getFormSettings();
 
-    if (!normalizedUrl) {
-      throw new BadRequestException('Logo URL is required.');
+    if (payload.title !== undefined) {
+      current.title = payload.title.trim();
     }
 
-    if (settings.siteLogoUrl && settings.siteLogoUrl !== normalizedUrl) {
-      const previousPath = settings.siteLogoUrl.replace(/^\/uploads\//, 'uploads/');
-      if (previousPath.startsWith('uploads/')) {
-        await unlink(previousPath).catch(() => undefined);
-      }
+    if (payload.subtitle !== undefined) {
+      current.subtitle = payload.subtitle.trim();
     }
 
-    settings.siteLogoUrl = normalizedUrl;
-    settings.siteLogoAlt = this.normalizeBrandText(altText);
+    if (payload.siteLogoUrl !== undefined) {
+      current.siteLogoUrl = payload.siteLogoUrl.trim();
+    }
 
-    return this.formSettingsRepository.save(settings);
+    if (payload.siteLogoAlt !== undefined) {
+      current.siteLogoAlt = this.normalizeBrandText(payload.siteLogoAlt);
+    }
+
+    if (payload.siteName !== undefined) {
+      current.siteName = this.normalizeBrandText(payload.siteName);
+    }
+
+    if (payload.campaignCards !== undefined) {
+      current.campaignCards = this.normalizeCampaignCards(payload.campaignCards);
+    }
+
+    if (payload.roles !== undefined) {
+      current.roles = this.normalizeRoleOptions(payload.roles);
+    }
+
+    return this.formSettingsRepository.save(current);
   }
 
-  async updateFormSettings(payload: UpdateFormSettingsDto): Promise<FormSettings> {
-    const settings = await this.getFormSettings();
-    const sanitizedPayload = {
-      ...payload,
-      siteLogoUrl: typeof payload.siteLogoUrl === 'string' ? payload.siteLogoUrl.trim() : payload.siteLogoUrl,
-      siteLogoAlt: typeof payload.siteLogoAlt === 'string' ? this.normalizeBrandText(payload.siteLogoAlt) : payload.siteLogoAlt,
-      siteName: typeof payload.siteName === 'string' ? this.normalizeBrandText(payload.siteName) : payload.siteName,
-      campaignCards: payload.campaignCards
-        ? this.normalizeCampaignCards(payload.campaignCards)
-        : payload.campaignCards,
-      roles: payload.roles
-        ? this.normalizeRoleOptions(payload.roles)
-        : payload.roles,
-    };
-    const updated = this.formSettingsRepository.merge(settings, sanitizedPayload);
-    return this.formSettingsRepository.save(updated);
+  async uploadSiteLogo(siteLogoUrl: string, siteLogoAlt?: string): Promise<FormSettings> {
+    const current = await this.getFormSettings();
+    const previousSiteLogoUrl = current.siteLogoUrl;
+
+    current.siteLogoUrl = siteLogoUrl.trim();
+
+    if (siteLogoAlt !== undefined) {
+      current.siteLogoAlt = this.normalizeBrandText(siteLogoAlt);
+    }
+
+    const saved = await this.formSettingsRepository.save(current);
+
+    if (previousSiteLogoUrl && previousSiteLogoUrl !== saved.siteLogoUrl && previousSiteLogoUrl.startsWith('/uploads/site-branding/')) {
+      const previousPath = previousSiteLogoUrl.replace(/^\//, '');
+      await unlink(previousPath).catch(() => undefined);
+    }
+
+    return saved;
   }
 }

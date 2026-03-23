@@ -486,7 +486,8 @@ export function InterestForm() {
       institution: formValues.institution.trim(),
       email: formValues.email.trim(),
       country: formValues.country.trim(),
-      missionNeed: `[${role}] ${formValues.missionNeed.trim()}`,
+      role,
+      missionNeed: formValues.missionNeed.trim(),
     };
 
     try {
@@ -557,7 +558,7 @@ export function InterestForm() {
             Participants are expected to engage with the protocol not only as users, but as stewards of its integrity and evolution.
           </p>
           <p className="font-onboarding-lead m-0 text-[clamp(1.2rem,2.3vw,1.8rem)] font-light leading-[1.15] text-slate-200 mt-4 mb-6">
-            Prior to onboarding, it is essential to review and understand the project's vision, system architecture, and operational objectives. Informed participation is fundamental to maintaining transparency, resilience, and institutional-grade trust within the network.
+            Prior to onboarding, it is essential to review and understand the project&rsquo;s vision, system architecture, and operational objectives. Informed participation is fundamental to maintaining transparency, resilience, and institutional-grade trust within the network.
           </p>
           <div className="grid grid-cols-[minmax(180px,280px)] justify-self-center gap-3 mb-6">
             <button
