@@ -1,4 +1,4 @@
-import { Injectable, Logger } from "@nestjs/common";
+import { BadRequestException, Injectable, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
@@ -21,9 +21,22 @@ export interface UpdateRecipientPreview {
   institution: string;
 }
 
+export interface OnboardingUpdateExecutionPlan {
+  mode: "synchronous-inline";
+  recommendedMode: "synchronous-inline" | "queued-worker";
+  maxRecipientsPerRequest: number;
+  queueRecommendedThreshold: number;
+  queueRecommended: boolean;
+  audienceCount: number;
+  warning: string | null;
+}
+
 @Injectable()
 export class OnboardingNotificationService {
   private readonly logger = new Logger(OnboardingNotificationService.name);
+
+  private static readonly DEFAULT_SYNC_LIMIT = 100;
+  private static readonly DEFAULT_QUEUE_RECOMMENDATION_THRESHOLD = 25;
 
   constructor(
     @InjectRepository(LeadInterest)
@@ -244,6 +257,8 @@ export class OnboardingNotificationService {
         )
       : null;
 
+    const executionPlan = this.buildExecutionPlan(recipients.length);
+
     return {
       audienceCount: recipients.length,
       recipients,
@@ -253,12 +268,18 @@ export class OnboardingNotificationService {
             html: rendered.html,
           }
         : null,
+      executionPlan,
     };
   }
 
   async sendOnboardingUpdate(payload: OnboardingUpdateDto) {
     const formSettings = await this.getFormSettings();
     const recipients = await this.resolveAudience(payload);
+    const executionPlan = this.buildExecutionPlan(recipients.length);
+
+    if (recipients.length > executionPlan.maxRecipientsPerRequest) {
+      throw new BadRequestException(executionPlan.warning);
+    }
     const supportEmail = this.configService
       .get<string>("ONBOARDING_SUPPORT_EMAIL", "")
       .trim()
@@ -346,7 +367,12 @@ export class OnboardingNotificationService {
       sent,
       logged,
       failed,
+      executionPlan,
     };
+  }
+
+  getUpdateExecutionDefaults() {
+    return this.buildExecutionPlan(0);
   }
 
   async listNotificationHistory(limit = 25) {
@@ -373,6 +399,45 @@ export class OnboardingNotificationService {
       sentAt: record.sentAt?.toISOString() ?? null,
       createdAt: record.createdAt.toISOString(),
     }));
+  }
+
+  private buildExecutionPlan(
+    audienceCount: number,
+  ): OnboardingUpdateExecutionPlan {
+    const maxRecipientsPerRequest = this.getPositiveIntFromConfig(
+      "ONBOARDING_UPDATE_SYNC_LIMIT",
+      OnboardingNotificationService.DEFAULT_SYNC_LIMIT,
+    );
+    const queueRecommendedThreshold = Math.min(
+      maxRecipientsPerRequest,
+      this.getPositiveIntFromConfig(
+        "ONBOARDING_UPDATE_QUEUE_THRESHOLD",
+        OnboardingNotificationService.DEFAULT_QUEUE_RECOMMENDATION_THRESHOLD,
+      ),
+    );
+    const queueRecommended = audienceCount >= queueRecommendedThreshold;
+    const warning =
+      audienceCount > maxRecipientsPerRequest
+        ? `This phase-1 onboarding email flow sends synchronously in the request cycle and is limited to ${maxRecipientsPerRequest} recipients per request. Narrow the audience or move recurring/bulk sends behind a queue worker before broader operator use.`
+        : queueRecommended
+          ? `This send will still run synchronously for phase 1, but queue-backed delivery is recommended once an audience reaches ${queueRecommendedThreshold}+ recipients.`
+          : null;
+
+    return {
+      mode: "synchronous-inline",
+      recommendedMode: queueRecommended ? "queued-worker" : "synchronous-inline",
+      maxRecipientsPerRequest,
+      queueRecommendedThreshold,
+      queueRecommended,
+      audienceCount,
+      warning,
+    };
+  }
+
+  private getPositiveIntFromConfig(key: string, fallback: number): number {
+    const raw = this.configService.get<string>(key, "").trim();
+    const parsed = Number.parseInt(raw, 10);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
   }
 
   private async sendApplicantConfirmation(

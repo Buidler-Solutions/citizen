@@ -49,7 +49,7 @@ Use this checklist as the handoff between the work already merged and the next i
 - [x] Add an optional notification audit log such as `lead_notifications` for onboarding sends, including per-recipient status tracking and admin history review.
 - [x] Add admin UI surfaces for SMTP settings, email template editing, and onboarding update composition in the dashboard.
 - [x] Added explicit SMTP transport readiness validation so production (or `SMTP_REQUIRED=true`) boots fail fast when SMTP config is incomplete or the transporter package/runtime is unavailable, and surfaced the validation state in the admin email center/API for operator review.
-- [ ] Decide whether recurring/bulk sends should stay synchronous for phase 1 or move behind a queue/job worker before broader operator use.
+- [x] Decided that phase-1 onboarding updates stay synchronous inline, with operator-visible warnings once audiences reach the queue threshold and a hard per-request recipient cap until a queue/worker implementation is added.
 
 ### Suggested next task order
 
@@ -556,7 +556,7 @@ At minimum, log:
 
 ### Scalability note
 
-For early onboarding traffic, inline request-cycle sending is acceptable. If the landing page scales or starts broadcasting many updates, move dispatch to a queue/worker model.
+For early onboarding traffic, inline request-cycle sending is acceptable. The current implementation now treats synchronous inline delivery as the explicit phase-1 default, warns operators once an audience reaches the queue recommendation threshold, and rejects oversized broadcasts above the configured sync cap. If the landing page scales or starts broadcasting many updates, move dispatch to a queue/worker model.
 
 ---
 
