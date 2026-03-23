@@ -20,6 +20,19 @@ export interface RenderedTemplate {
 }
 
 const TEMPLATE_DEFINITIONS: Record<string, TemplateDefinition> = {
+  forgotPassword: {
+    type: 'forgotPassword',
+    subject: 'Reset your {{site_name}} onboarding password',
+    html: `
+      <p>Hello {{full_name}},</p>
+      <p>We received a request to reset the password for your {{site_name}} onboarding account.</p>
+      <p><a href="{{reset_link}}">Reset your password</a></p>
+      <p>This link expires at {{reset_expires_at}}.</p>
+      <p>If you did not request this change, you can ignore this message.</p>
+      <p>Need help? Contact {{support_email}}.</p>
+    `,
+    placeholders: ['full_name', 'reset_link', 'reset_expires_at', 'site_name', 'support_email'],
+  },
   onboardingSubmissionConfirmation: {
     type: 'onboardingSubmissionConfirmation',
     subject: 'We received your {{role_label}} onboarding request',
@@ -51,6 +64,31 @@ const TEMPLATE_DEFINITIONS: Record<string, TemplateDefinition> = {
       <p>— {{site_name}}</p>
     `,
     placeholders: ['full_name', 'email', 'institution', 'country', 'mission_need', 'role_label', 'submitted_at', 'admin_dashboard_link', 'site_name'],
+  },
+  onboardingStatusUpdate: {
+    type: 'onboardingStatusUpdate',
+    subject: '{{site_name}} onboarding update for {{role_label}} applicants',
+    html: `
+      <p>Hello {{full_name}},</p>
+      <p>We have an onboarding update for your {{role_label}} application.</p>
+      <div>{{update_message}}</div>
+      <p>If you have questions, contact {{support_email}}.</p>
+      <p>{{admin_dashboard_link}}</p>
+      <p>— {{site_name}}</p>
+    `,
+    placeholders: ['full_name', 'role_label', 'institution', 'update_message', 'support_email', 'site_name', 'admin_dashboard_link'],
+  },
+  onboardingUserWelcome: {
+    type: 'onboardingUserWelcome',
+    subject: 'Your {{site_name}} onboarding console account is ready',
+    html: `
+      <p>Hello {{full_name}},</p>
+      <p>Your onboarding console account is active.</p>
+      <p>Username: <strong>{{username}}</strong></p>
+      <p>You can sign in at {{admin_login_link}} and request a password reset any time.</p>
+      <p>— {{site_name}}</p>
+    `,
+    placeholders: ['full_name', 'username', 'admin_login_link', 'site_name'],
   },
 };
 
@@ -89,7 +127,9 @@ export class EmailTemplateService {
       throw new Error(`Unknown email template type: ${type}`);
     }
 
+    const existing = await this.templateRepository.findOne({ where: { type } });
     const template = this.templateRepository.create({
+      ...(existing ?? {}),
       type,
       subject: payload.subject.trim(),
       html: payload.html.trim(),

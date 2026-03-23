@@ -1,11 +1,13 @@
-import { Body, Controller, Get, Param, Post, Put, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Put, Query, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../jwt-auth.guard';
 import { EmailTemplateService } from './email-template.service';
 import { MailService } from './mail.service';
+import { OnboardingUpdateDto } from './dto/onboarding-update.dto';
 import { SmtpSettingsService } from './smtp-settings.service';
 import { TestSmtpSettingsDto } from './dto/test-smtp-settings.dto';
 import { UpdateEmailTemplateDto } from './dto/update-email-template.dto';
 import { UpdateSmtpSettingsDto } from './dto/update-smtp-settings.dto';
+import { OnboardingNotificationService } from './onboarding-notification.service';
 
 @Controller('admin/email')
 @UseGuards(JwtAuthGuard)
@@ -14,6 +16,7 @@ export class MailController {
     private readonly smtpSettingsService: SmtpSettingsService,
     private readonly emailTemplateService: EmailTemplateService,
     private readonly mailService: MailService,
+    private readonly onboardingNotificationService: OnboardingNotificationService,
   ) {}
 
   @Get('smtp-settings')
@@ -61,5 +64,26 @@ export class MailController {
   @Post('templates/:type/reset')
   resetTemplate(@Param('type') type: string) {
     return this.emailTemplateService.resetTemplate(type);
+  }
+
+  @Get('onboarding-updates/audience')
+  previewAudience(@Query('role') role?: string, @Query('search') search?: string) {
+    return this.onboardingNotificationService.previewOnboardingUpdate({
+      audienceMode: role?.trim() ? 'role' : 'all',
+      role,
+      search,
+      messageHtml: '<p>Audience preview</p>',
+      includeAdminDashboardLink: false,
+    });
+  }
+
+  @Post('onboarding-updates/preview')
+  previewOnboardingUpdate(@Body() payload: OnboardingUpdateDto) {
+    return this.onboardingNotificationService.previewOnboardingUpdate(payload);
+  }
+
+  @Post('onboarding-updates/send')
+  sendOnboardingUpdate(@Body() payload: OnboardingUpdateDto) {
+    return this.onboardingNotificationService.sendOnboardingUpdate(payload);
   }
 }
