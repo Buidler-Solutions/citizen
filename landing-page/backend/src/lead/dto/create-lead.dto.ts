@@ -1,4 +1,4 @@
-import { IsEmail, IsNotEmpty, IsString, MaxLength, MinLength } from 'class-validator';
+import { IsEmail, IsNotEmpty, IsString, Matches, MaxLength, MinLength } from 'class-validator';
 
 export class CreateLeadDto {
   @IsString()
@@ -19,6 +19,11 @@ export class CreateLeadDto {
   @MinLength(2)
   @MaxLength(120)
   country!: string;
+
+  @IsString()
+  @Matches(/^[a-z0-9-]+$/)
+  @MaxLength(80)
+  role!: string;
 
   @IsString()
   @IsNotEmpty()
