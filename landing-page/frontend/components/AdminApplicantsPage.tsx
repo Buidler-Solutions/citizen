@@ -19,6 +19,7 @@ interface InterestSubmission {
   institution: string;
   email: string;
   country: string;
+  role?: string;
   missionNeed: string;
   createdAt: string;
 }
@@ -41,8 +42,22 @@ async function parseErrorMessage(response: Response, fallback = 'Request failed'
   return fallback;
 }
 
-function extractRole(missionNeed: string): Exclude<ApplicantRole, 'All'> {
-  const roleMatch = missionNeed.match(/^\s*\[(Validator|Observer|Builder)\]/i);
+function extractRole(submission: InterestSubmission): Exclude<ApplicantRole, 'All'> {
+  const explicitRole = submission.role?.trim().toLowerCase();
+
+  if (explicitRole === 'validator') {
+    return 'Validator';
+  }
+
+  if (explicitRole === 'observer') {
+    return 'Observer';
+  }
+
+  if (explicitRole === 'builder') {
+    return 'Builder';
+  }
+
+  const roleMatch = submission.missionNeed.match(/^\s*\[(Validator|Observer|Builder)\]/i);
 
   if (!roleMatch) {
     return 'Unknown';
@@ -111,7 +126,7 @@ export function AdminApplicantsPage() {
     const normalizedCountry = countryQuery.trim().toLowerCase();
 
     return submissions.filter((submission) => {
-      const submissionRole = extractRole(submission.missionNeed);
+      const submissionRole = extractRole(submission);
       const roleMatches = roleFilter === 'All' ? true : submissionRole === roleFilter;
       const textMatches =
         normalizedSearch.length === 0
@@ -302,7 +317,7 @@ export function AdminApplicantsPage() {
                 </thead>
                 <tbody>
                   {filteredSubmissions.map((submission) => {
-                    const role = extractRole(submission.missionNeed);
+                    const role = extractRole(submission);
 
                     return (
                       <tr

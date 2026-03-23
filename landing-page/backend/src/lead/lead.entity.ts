@@ -17,6 +17,9 @@ export class LeadInterest {
   @Column({ length: 120 })
   country!: string;
 
+  @Column({ length: 80, default: 'builder' })
+  role!: string;
+
   @Column({ type: 'text' })
   missionNeed!: string;
 

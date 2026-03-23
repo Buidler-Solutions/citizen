@@ -26,6 +26,40 @@ In short: the landing page already has submissions, users, admin access, and rol
 
 ---
 
+## Implementation status checklist
+
+Use this checklist as the handoff between the work already merged and the next implementation slice.
+
+### Completed in the current codebase
+
+- [x] Added a backend `mail` module with SMTP settings storage, template storage, admin email-management routes, and a shared delivery helper.
+- [x] Added `smtp_settings` and `email_templates` entities and connected them through TypeORM-backed services.
+- [x] Added code-default templates for `onboardingSubmissionConfirmation` and `onboardingSubmissionAdminNotification`, plus DB override support.
+- [x] Added admin APIs for `GET/PUT /admin/email/smtp-settings`, `POST /admin/email/smtp-settings/test`, `GET /admin/email/templates`, `GET /admin/email/templates/:type`, `PUT /admin/email/templates/:type`, and `POST /admin/email/templates/:type/reset`.
+- [x] Updated onboarding submissions to store an explicit `role` field instead of relying only on a mission-text prefix.
+- [x] Wired `LeadService.create()` to send best-effort applicant confirmation and internal/admin notification emails after the submission is saved.
+- [x] Updated the public onboarding form and admin applicants view to read/write the structured lead role.
+- [x] Documented SMTP-related environment variables and surfaced the new admin email endpoints in the landing-page README.
+
+### Still to do next
+
+- [ ] Add the forgot-password implementation for onboarding console users: `password_resets` entity, token hashing, expiry handling, `POST /auth/forgot-password`, and `POST /auth/reset-password`.
+- [ ] Add the remaining template defaults called out in this runbook, especially `forgotPassword`, `onboardingStatusUpdate`, and optional `onboardingUserWelcome`.
+- [ ] Add admin/backend support for outbound onboarding updates to existing applicants, including preview/send routes and audience selection.
+- [ ] Add an optional notification audit log such as `lead_notifications` if onboarding updates need send history and per-recipient status tracking.
+- [ ] Add admin UI surfaces for SMTP settings, email template editing, and onboarding update composition in the dashboard.
+- [ ] Install and validate the production SMTP transport dependency/configuration in the deployment environment so the shared delivery helper can use a real transporter instead of falling back to development logging when the SMTP transport package is unavailable.
+- [ ] Decide whether recurring/bulk sends should stay synchronous for phase 1 or move behind a queue/job worker before broader operator use.
+
+### Suggested next task order
+
+1. Implement forgot-password end to end for `OnboardingUser`.
+2. Add the onboarding update template + admin preview/send endpoints.
+3. Add dashboard UI for SMTP/template management and onboarding broadcasts.
+4. Add audit logging / queueing only after the core flows above are stable.
+
+---
+
 ## Scope for the onboarding-site email system
 
 This checkpoint targets **transactional email notifications**, not a bell icon or in-app inbox.
