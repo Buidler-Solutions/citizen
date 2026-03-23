@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { Mail, Send, Settings2, ShieldCheck } from "lucide-react";
+import { CheckSquare, Mail, Send, Settings2, ShieldCheck } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { ADMIN_TOKEN_KEY } from "@/components/admin-auth";
 import {
@@ -86,6 +86,60 @@ interface NotificationHistoryItem {
   createdAt: string;
 }
 
+
+const OPERATOR_UAT_STORAGE_KEY = "citizen-email-center-operator-uat";
+
+const OPERATOR_UAT_STEPS = [
+  {
+    id: "smtp-readiness",
+    label: "Review SMTP transport readiness",
+    description:
+      "Confirm the email center shows the current SMTP source, readiness mode, and any validation issues before sending mail.",
+  },
+  {
+    id: "smtp-update-test",
+    label: "Update SMTP settings and send a test",
+    description:
+      "Adjust the relay settings from the dashboard, save them, and trigger a test message to a controlled recipient.",
+  },
+  {
+    id: "template-edit-reset",
+    label: "Edit and reset email templates",
+    description:
+      "Load a template, change the subject/body, save the override, then reset it back to the code default.",
+  },
+  {
+    id: "history-review",
+    label: "Review notification history",
+    description:
+      "Use the audit log cards to confirm recipient, template, status, timestamps, and any delivery errors without developer help.",
+  },
+  {
+    id: "preview-send-update",
+    label: "Preview and send onboarding updates",
+    description:
+      "Use only the onboarding update composer to preview the audience, inspect the rendered body, and send a controlled update.",
+  },
+  {
+    id: "sync-warning",
+    label: "Acknowledge sync execution warning",
+    description:
+      "Review the phase-1 synchronous delivery warning, queue recommendation threshold, and per-request recipient cap messaging.",
+  },
+] as const;
+
+type OperatorUatStepId = (typeof OPERATOR_UAT_STEPS)[number]["id"];
+type OperatorUatState = Record<OperatorUatStepId, boolean>;
+
+const EMPTY_OPERATOR_UAT_STATE: OperatorUatState = {
+  "smtp-readiness": false,
+  "smtp-update-test": false,
+  "template-edit-reset": false,
+  "history-review": false,
+  "preview-send-update": false,
+  "sync-warning": false,
+};
+
 const EMPTY_SMTP: SmtpSettingsResponse = {
   host: "",
   port: 587,
@@ -129,6 +183,10 @@ export default function EmailCenterPage() {
     NotificationHistoryItem[]
   >([]);
   const [executionPlan, setExecutionPlan] = useState<UpdateExecutionPlan | null>(null);
+  const [operatorChecklist, setOperatorChecklist] =
+    useState<OperatorUatState>(EMPTY_OPERATOR_UAT_STATE);
+  const [operatorReviewer, setOperatorReviewer] = useState("");
+  const [operatorNotes, setOperatorNotes] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [savingSmtp, setSavingSmtp] = useState(false);
@@ -141,6 +199,52 @@ export default function EmailCenterPage() {
     typeof window !== "undefined"
       ? localStorage.getItem(ADMIN_TOKEN_KEY)
       : null;
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    try {
+      const stored = window.localStorage.getItem(OPERATOR_UAT_STORAGE_KEY);
+      if (!stored) {
+        return;
+      }
+
+      const parsed = JSON.parse(stored) as Partial<OperatorUatState> & {
+        reviewer?: string;
+        notes?: string;
+      };
+
+      setOperatorChecklist({
+        ...EMPTY_OPERATOR_UAT_STATE,
+        ...Object.fromEntries(
+          Object.entries(parsed).filter(([key]) =>
+            key in EMPTY_OPERATOR_UAT_STATE,
+          ),
+        ),
+      } as OperatorUatState);
+      setOperatorReviewer(parsed.reviewer ?? "");
+      setOperatorNotes(parsed.notes ?? "");
+    } catch {
+      window.localStorage.removeItem(OPERATOR_UAT_STORAGE_KEY);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    window.localStorage.setItem(
+      OPERATOR_UAT_STORAGE_KEY,
+      JSON.stringify({
+        ...operatorChecklist,
+        reviewer: operatorReviewer,
+        notes: operatorNotes,
+      }),
+    );
+  }, [operatorChecklist, operatorNotes, operatorReviewer]);
 
   useEffect(() => {
     if (!token) {
@@ -158,7 +262,7 @@ export default function EmailCenterPage() {
             fetch(`${API_URL}/admin/email/templates`, {
               headers: { Authorization: `Bearer ${token}` },
             }),
-            fetch(`${API_URL}/admin/email/notifications/history?limit=12`, {
+            fetch(`${API_URL}/admin/email/notifications/history?limit=25`, {
               headers: { Authorization: `Bearer ${token}` },
             }),
           ]);
@@ -276,6 +380,19 @@ export default function EmailCenterPage() {
         : [...current, leadId],
     );
   };
+
+  const toggleOperatorChecklistItem = (stepId: OperatorUatStepId) => {
+    setOperatorChecklist((current) => ({
+      ...current,
+      [stepId]: !current[stepId],
+    }));
+  };
+
+  const completedOperatorSteps = OPERATOR_UAT_STEPS.filter(
+    (step) => operatorChecklist[step.id],
+  ).length;
+  const operatorValidationComplete =
+    completedOperatorSteps === OPERATOR_UAT_STEPS.length;
 
   const saveSmtp = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -475,7 +592,7 @@ export default function EmailCenterPage() {
 
     try {
       const response = await fetch(
-        `${API_URL}/admin/email/notifications/history?limit=12`,
+        `${API_URL}/admin/email/notifications/history?limit=25`,
         {
           headers: { Authorization: `Bearer ${token}` },
         },
@@ -605,6 +722,79 @@ export default function EmailCenterPage() {
           {error}
         </div>
       )}
+
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-3">
+            <div className="rounded-2xl bg-indigo-100 p-3 text-indigo-700">
+              <CheckSquare className="h-5 w-5" />
+            </div>
+            <div>
+              <CardTitle>Operator / UAT validation checklist</CardTitle>
+              <CardDescription>
+                Start the dashboard-only validation round from the runbook and
+                record who completed it. Progress is stored locally in this
+                browser.
+              </CardDescription>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex flex-wrap items-center gap-3">
+            <Badge variant={operatorValidationComplete ? "success" : "info"}>
+              {completedOperatorSteps}/{OPERATOR_UAT_STEPS.length} checks complete
+            </Badge>
+            <p className="text-sm text-slate-600">
+              Require one operator who did not implement the feature to complete
+              this round without backend or source-code walkthroughs.
+            </p>
+          </div>
+          <div className="grid gap-3 lg:grid-cols-2">
+            {OPERATOR_UAT_STEPS.map((step) => (
+              <label
+                key={step.id}
+                className={`rounded-2xl border p-4 transition ${operatorChecklist[step.id] ? "border-emerald-300 bg-emerald-50" : "border-slate-200 bg-white"}`}
+              >
+                <div className="flex items-start gap-3">
+                  <input
+                    type="checkbox"
+                    checked={operatorChecklist[step.id]}
+                    onChange={() => toggleOperatorChecklistItem(step.id)}
+                    className="mt-1"
+                  />
+                  <div>
+                    <p className="font-semibold text-slate-900">{step.label}</p>
+                    <p className="mt-1 text-sm text-slate-600">
+                      {step.description}
+                    </p>
+                  </div>
+                </div>
+              </label>
+            ))}
+          </div>
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="operatorReviewer">Operator reviewer</Label>
+              <Input
+                id="operatorReviewer"
+                value={operatorReviewer}
+                onChange={(event) => setOperatorReviewer(event.target.value)}
+                placeholder="Name of non-implementing reviewer"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="operatorNotes">Reviewer notes</Label>
+              <Textarea
+                id="operatorNotes"
+                rows={3}
+                value={operatorNotes}
+                onChange={(event) => setOperatorNotes(event.target.value)}
+                placeholder="Record any remediation tasks, risk acceptance, or sign-off context."
+              />
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       {executionPlan && (
         <div
@@ -915,7 +1105,8 @@ export default function EmailCenterPage() {
               <CardTitle>Notification audit log</CardTitle>
               <CardDescription>
                 Recent per-recipient onboarding email activity and delivery
-                status.
+                status. Load the newest 25 records for operator review without
+                developer assistance.
               </CardDescription>
             </div>
             <Button
