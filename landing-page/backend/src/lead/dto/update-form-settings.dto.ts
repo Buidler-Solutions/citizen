@@ -83,6 +83,12 @@ export class UpdateFormSettingsDto {
   siteLogoAlt?: string;
 
   @IsOptional()
+  @IsString()
+  @MinLength(2)
+  @MaxLength(180)
+  siteName?: string;
+
+  @IsOptional()
   @IsArray()
   @ArrayMaxSize(30)
   @ValidateNested({ each: true })
