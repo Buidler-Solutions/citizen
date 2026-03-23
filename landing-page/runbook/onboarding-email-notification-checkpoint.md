@@ -745,6 +745,8 @@ After smoke tests pass, run a short operator validation round entirely from the 
 - [ ] Admin can preview and send onboarding updates using the dashboard UI only.
 - [ ] Admin understands the synchronous-inline execution warning and cap messaging.
 
+Implementation start: the dashboard email center should include a dedicated **Operator / UAT validation checklist** that mirrors the items above, records the reviewer name and notes, and lets operators track completion without leaving the UI. Treat that checklist as an operator aid only; it does not replace the smoke-test evidence captured elsewhere in this runbook.
+
 For sign-off, require one operator who did not implement the feature to complete this round and confirm that the UI text is sufficient without backend/source-code walkthroughs.
 
 ### 5. Exit criteria for validation
