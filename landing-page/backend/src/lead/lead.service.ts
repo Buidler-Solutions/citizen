@@ -152,7 +152,7 @@ export class LeadService {
     });
   }
 
-  private normalizeLogoAlt(value: string | undefined): string {
+  private normalizeBrandText(value: string | undefined): string {
     const trimmed = (value ?? '').trim();
     return trimmed || 'Citizen';
   }
@@ -176,7 +176,8 @@ export class LeadService {
       let needsSave = false;
 
       existing.siteLogoUrl = (existing.siteLogoUrl ?? '').trim();
-      existing.siteLogoAlt = this.normalizeLogoAlt(existing.siteLogoAlt);
+      existing.siteLogoAlt = this.normalizeBrandText(existing.siteLogoAlt);
+      existing.siteName = this.normalizeBrandText(existing.siteName);
 
       if (!Array.isArray(existing.campaignCards) || existing.campaignCards.length === 0) {
         existing.campaignCards = DEFAULT_CAMPAIGN_CARDS;
@@ -199,6 +200,7 @@ export class LeadService {
       id: 'default',
       siteLogoUrl: '',
       siteLogoAlt: 'Citizen',
+      siteName: 'Citizen',
       campaignCards: DEFAULT_CAMPAIGN_CARDS,
       roles: DEFAULT_ROLE_OPTIONS,
     });
@@ -278,7 +280,7 @@ export class LeadService {
     }
 
     settings.siteLogoUrl = normalizedUrl;
-    settings.siteLogoAlt = this.normalizeLogoAlt(altText);
+    settings.siteLogoAlt = this.normalizeBrandText(altText);
 
     return this.formSettingsRepository.save(settings);
   }
@@ -288,7 +290,8 @@ export class LeadService {
     const sanitizedPayload = {
       ...payload,
       siteLogoUrl: typeof payload.siteLogoUrl === 'string' ? payload.siteLogoUrl.trim() : payload.siteLogoUrl,
-      siteLogoAlt: typeof payload.siteLogoAlt === 'string' ? this.normalizeLogoAlt(payload.siteLogoAlt) : payload.siteLogoAlt,
+      siteLogoAlt: typeof payload.siteLogoAlt === 'string' ? this.normalizeBrandText(payload.siteLogoAlt) : payload.siteLogoAlt,
+      siteName: typeof payload.siteName === 'string' ? this.normalizeBrandText(payload.siteName) : payload.siteName,
       campaignCards: payload.campaignCards
         ? this.normalizeCampaignCards(payload.campaignCards)
         : payload.campaignCards,
