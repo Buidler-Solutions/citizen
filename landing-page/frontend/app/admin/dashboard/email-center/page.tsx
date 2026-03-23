@@ -32,6 +32,14 @@ interface SmtpSettingsResponse {
   defaultBcc: string;
   rejectUnauthorized: boolean;
   resolvedSource?: string;
+  transportStatus?: {
+    configured: boolean;
+    strict: boolean;
+    nodemailerInstalled: boolean;
+    source: "database" | "environment" | "default";
+    mode: "smtp" | "logged";
+    issues: string[];
+  };
 }
 
 interface TemplateListItem {
@@ -592,7 +600,34 @@ export default function EmailCenterPage() {
               message.
             </CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="space-y-4">
+            {smtp.transportStatus?.issues?.length ? (
+              <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge variant="warning">
+                    {smtp.transportStatus.mode === "smtp"
+                      ? "SMTP ready"
+                      : "Fallback active"}
+                  </Badge>
+                  <Badge
+                    variant={smtp.transportStatus.strict ? "error" : "info"}
+                  >
+                    {smtp.transportStatus.strict
+                      ? "Strict delivery"
+                      : "Development-safe"}
+                  </Badge>
+                </div>
+                <ul className="mt-3 list-disc space-y-1 pl-5">
+                  {smtp.transportStatus.issues.map((issue) => (
+                    <li key={issue}>{issue}</li>
+                  ))}
+                </ul>
+              </div>
+            ) : (
+              <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+                Real SMTP delivery is ready for the current configuration.
+              </div>
+            )}
             <form className="space-y-4" onSubmit={saveSmtp}>
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="space-y-2">
