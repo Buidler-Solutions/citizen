@@ -1,14 +1,17 @@
-import { Injectable, Logger } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { FormSettings } from '../lead/form-settings.entity';
-import { LeadInterest } from '../lead/lead.entity';
-import { OnboardingUser } from '../user/onboarding-user.entity';
-import { EmailTemplateService } from './email-template.service';
-import { LeadNotification, LeadNotificationStatus } from './lead-notification.entity';
-import { MailService } from './mail.service';
-import { OnboardingUpdateDto } from './dto/onboarding-update.dto';
+import { Injectable, Logger } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
+import { InjectRepository } from "@nestjs/typeorm";
+import { Repository } from "typeorm";
+import { FormSettings } from "../lead/form-settings.entity";
+import { LeadInterest } from "../lead/lead.entity";
+import { OnboardingUser } from "../user/onboarding-user.entity";
+import { EmailTemplateService } from "./email-template.service";
+import {
+  LeadNotification,
+  LeadNotificationStatus,
+} from "./lead-notification.entity";
+import { MailService } from "./mail.service";
+import { OnboardingUpdateDto } from "./dto/onboarding-update.dto";
 
 export interface UpdateRecipientPreview {
   id: string;
@@ -34,13 +37,26 @@ export class OnboardingNotificationService {
     private readonly configService: ConfigService,
   ) {}
 
-  async sendLeadSubmissionNotifications(lead: LeadInterest, formSettings: FormSettings): Promise<void> {
+  async sendLeadSubmissionNotifications(
+    lead: LeadInterest,
+    formSettings: FormSettings,
+  ): Promise<void> {
     const role = formSettings.roles.find((item) => item.id === lead.role);
     const roleLabel = role?.label ?? this.humanizeRole(lead.role);
-    const thankYouNote = role?.thankYouNote ?? 'Thank you for your interest in Citizen. We will send onboarding updates by email.';
-    const siteName = formSettings.siteName?.trim() || 'Citizen';
-    const supportEmail = this.configService.get<string>('ONBOARDING_SUPPORT_EMAIL', '').trim().toLowerCase();
-    const adminDashboardLink = this.configService.get<string>('ONBOARDING_ADMIN_DASHBOARD_URL', 'http://localhost:3000/admin/dashboard').trim();
+    const thankYouNote =
+      role?.thankYouNote ??
+      "Thank you for your interest in Citizen. We will send onboarding updates by email.";
+    const siteName = formSettings.siteName?.trim() || "Citizen";
+    const supportEmail = this.configService
+      .get<string>("ONBOARDING_SUPPORT_EMAIL", "")
+      .trim()
+      .toLowerCase();
+    const adminDashboardLink = this.configService
+      .get<string>(
+        "ONBOARDING_ADMIN_DASHBOARD_URL",
+        "http://localhost:3000/admin/dashboard",
+      )
+      .trim();
     const sharedVariables = {
       full_name: lead.fullName,
       email: lead.email,
@@ -59,24 +75,42 @@ export class OnboardingNotificationService {
     await this.sendAdminNotification(lead, sharedVariables, supportEmail);
   }
 
-  async sendForgotPasswordEmail(user: OnboardingUser, token: string, expiresAt: Date): Promise<void> {
+  async sendForgotPasswordEmail(
+    user: OnboardingUser,
+    token: string,
+    expiresAt: Date,
+  ): Promise<void> {
     if (!user.email) {
       return;
     }
 
-    const siteName = (await this.getFormSettings()).siteName?.trim() || 'Citizen';
-    const supportEmail = this.configService.get<string>('ONBOARDING_SUPPORT_EMAIL', '').trim().toLowerCase();
-    const resetBaseUrl = this.configService.get<string>('ONBOARDING_RESET_PASSWORD_URL', 'http://localhost:3000/admin/reset-password').trim();
+    const siteName =
+      (await this.getFormSettings()).siteName?.trim() || "Citizen";
+    const supportEmail = this.configService
+      .get<string>("ONBOARDING_SUPPORT_EMAIL", "")
+      .trim()
+      .toLowerCase();
+    const resetBaseUrl = this.configService
+      .get<string>(
+        "ONBOARDING_RESET_PASSWORD_URL",
+        "http://localhost:3000/admin/reset-password",
+      )
+      .trim();
     const resetLink = `${resetBaseUrl}?token=${encodeURIComponent(token)}&email=${encodeURIComponent(user.email)}`;
 
     try {
-      const template = await this.emailTemplateService.render('forgotPassword', {
-        full_name: user.fullName || user.username,
-        reset_link: resetLink,
-        reset_expires_at: expiresAt.toISOString(),
-        site_name: siteName,
-        support_email: supportEmail,
-      });
+      const template = await this.emailTemplateService.render(
+        "forgotPassword",
+        {
+          full_name: user.fullName || user.username,
+          username: user.username,
+          reset_link: resetLink,
+          reset_expires_at: expiresAt.toISOString(),
+          expires_in: this.describeResetExpiry(expiresAt),
+          site_name: siteName,
+          support_email: supportEmail || "the onboarding team",
+        },
+      );
 
       const delivery = await this.mailService.sendMail({
         to: user.email,
@@ -86,29 +120,96 @@ export class OnboardingNotificationService {
 
       await this.recordNotification({
         leadId: null,
-        templateType: 'forgotPassword',
+        templateType: "forgotPassword",
         recipientEmail: user.email,
         recipientName: user.fullName || user.username,
         subjectSnapshot: template.subject,
         status: this.deliveryStatus(delivery),
         channel: delivery.mode,
-        audienceMode: 'single-user',
+        audienceMode: "single-user",
         errorMessage: null,
       });
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'unknown error';
+      const message = error instanceof Error ? error.message : "unknown error";
       await this.recordNotification({
         leadId: null,
-        templateType: 'forgotPassword',
+        templateType: "forgotPassword",
         recipientEmail: user.email,
         recipientName: user.fullName || user.username,
-        subjectSnapshot: 'Reset your onboarding password',
-        status: 'failed',
-        channel: 'smtp',
-        audienceMode: 'single-user',
+        subjectSnapshot: "Reset your onboarding password",
+        status: "failed",
+        channel: "smtp",
+        audienceMode: "single-user",
         errorMessage: message,
       });
-      this.logger.warn(`Failed to send forgot-password email to ${user.email}: ${message}`);
+      this.logger.warn(
+        `Failed to send forgot-password email to ${user.email}: ${message}`,
+      );
+    }
+  }
+
+  async sendOnboardingUserWelcomeEmail(
+    user: Pick<OnboardingUser, "username" | "email" | "fullName">,
+  ): Promise<void> {
+    if (!user.email) {
+      return;
+    }
+
+    const siteName =
+      (await this.getFormSettings()).siteName?.trim() || "Citizen";
+    const loginLink = this.configService
+      .get<string>(
+        "ONBOARDING_ADMIN_LOGIN_URL",
+        "http://localhost:3000/admin/login",
+      )
+      .trim();
+
+    try {
+      const template = await this.emailTemplateService.render(
+        "onboardingUserWelcome",
+        {
+          full_name: user.fullName || user.username,
+          username: user.username,
+          temporary_password_notice:
+            "Use the password shared by your onboarding administrator, then rotate it through the reset-password flow if needed.",
+          login_link: loginLink,
+          site_name: siteName,
+        },
+      );
+
+      const delivery = await this.mailService.sendMail({
+        to: user.email,
+        subject: template.subject,
+        html: template.html,
+      });
+
+      await this.recordNotification({
+        leadId: null,
+        templateType: "onboardingUserWelcome",
+        recipientEmail: user.email,
+        recipientName: user.fullName || user.username,
+        subjectSnapshot: template.subject,
+        status: this.deliveryStatus(delivery),
+        channel: delivery.mode,
+        audienceMode: "single-user",
+        errorMessage: null,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "unknown error";
+      await this.recordNotification({
+        leadId: null,
+        templateType: "onboardingUserWelcome",
+        recipientEmail: user.email,
+        recipientName: user.fullName || user.username,
+        subjectSnapshot: "Your onboarding console account is ready",
+        status: "failed",
+        channel: "smtp",
+        audienceMode: "single-user",
+        errorMessage: message,
+      });
+      this.logger.warn(
+        `Failed to send onboarding welcome email to ${user.email}: ${message}`,
+      );
     }
   }
 
@@ -116,21 +217,31 @@ export class OnboardingNotificationService {
     const formSettings = await this.getFormSettings();
     const recipients = await this.resolveAudience(payload);
     const previewRecipient = recipients[0];
-    const supportEmail = this.configService.get<string>('ONBOARDING_SUPPORT_EMAIL', '').trim().toLowerCase();
-    const adminDashboardLink = payload.includeAdminDashboardLink === false
-      ? ''
-      : this.configService.get<string>('ONBOARDING_ADMIN_DASHBOARD_URL', 'http://localhost:3000/admin/dashboard').trim();
+    const supportEmail = this.configService
+      .get<string>("ONBOARDING_SUPPORT_EMAIL", "")
+      .trim()
+      .toLowerCase();
+    const adminDashboardLink =
+      payload.includeAdminDashboardLink === false
+        ? ""
+        : this.configService
+            .get<string>(
+              "ONBOARDING_ADMIN_DASHBOARD_URL",
+              "http://localhost:3000/admin/dashboard",
+            )
+            .trim();
 
     const rendered = previewRecipient
-      ? await this.emailTemplateService.render('onboardingStatusUpdate', {
-        full_name: previewRecipient.fullName,
-        role_label: this.labelForRole(previewRecipient.role, formSettings),
-        institution: previewRecipient.institution,
-        update_message: payload.messageHtml,
-        support_email: supportEmail,
-        site_name: formSettings.siteName?.trim() || 'Citizen',
-        admin_dashboard_link: adminDashboardLink,
-      })
+      ? await this.emailTemplateService.render(
+          "onboardingStatusUpdate",
+          this.buildOnboardingUpdateVariables({
+            recipient: previewRecipient,
+            formSettings,
+            supportEmail,
+            adminDashboardLink,
+            payload,
+          }),
+        )
       : null;
 
     return {
@@ -148,27 +259,39 @@ export class OnboardingNotificationService {
   async sendOnboardingUpdate(payload: OnboardingUpdateDto) {
     const formSettings = await this.getFormSettings();
     const recipients = await this.resolveAudience(payload);
-    const supportEmail = this.configService.get<string>('ONBOARDING_SUPPORT_EMAIL', '').trim().toLowerCase();
-    const adminDashboardLink = payload.includeAdminDashboardLink === false
-      ? ''
-      : this.configService.get<string>('ONBOARDING_ADMIN_DASHBOARD_URL', 'http://localhost:3000/admin/dashboard').trim();
+    const supportEmail = this.configService
+      .get<string>("ONBOARDING_SUPPORT_EMAIL", "")
+      .trim()
+      .toLowerCase();
+    const adminDashboardLink =
+      payload.includeAdminDashboardLink === false
+        ? ""
+        : this.configService
+            .get<string>(
+              "ONBOARDING_ADMIN_DASHBOARD_URL",
+              "http://localhost:3000/admin/dashboard",
+            )
+            .trim();
 
     let sent = 0;
     let logged = 0;
     let failed = 0;
 
     for (const recipient of recipients) {
-      const fallbackSubject = payload.customSubject?.trim() || `${formSettings.siteName?.trim() || 'Citizen'} onboarding update`;
+      const fallbackSubject =
+        payload.customSubject?.trim() ||
+        `${formSettings.siteName?.trim() || "Citizen"} onboarding update`;
       try {
-        const template = await this.emailTemplateService.render('onboardingStatusUpdate', {
-          full_name: recipient.fullName,
-          role_label: this.labelForRole(recipient.role, formSettings),
-          institution: recipient.institution,
-          update_message: payload.messageHtml,
-          support_email: supportEmail,
-          site_name: formSettings.siteName?.trim() || 'Citizen',
-          admin_dashboard_link: adminDashboardLink,
-        });
+        const template = await this.emailTemplateService.render(
+          "onboardingStatusUpdate",
+          this.buildOnboardingUpdateVariables({
+            recipient,
+            formSettings,
+            supportEmail,
+            adminDashboardLink,
+            payload,
+          }),
+        );
 
         const subject = payload.customSubject?.trim() || template.subject;
         const delivery = await this.mailService.sendMail({
@@ -178,16 +301,16 @@ export class OnboardingNotificationService {
         });
 
         const status = this.deliveryStatus(delivery);
-        if (status === 'sent') {
+        if (status === "sent") {
           sent += 1;
         }
-        if (status === 'logged') {
+        if (status === "logged") {
           logged += 1;
         }
 
         await this.recordNotification({
           leadId: recipient.id,
-          templateType: 'onboardingStatusUpdate',
+          templateType: "onboardingStatusUpdate",
           recipientEmail: recipient.email,
           recipientName: recipient.fullName,
           subjectSnapshot: subject,
@@ -198,29 +321,41 @@ export class OnboardingNotificationService {
         });
       } catch (error) {
         failed += 1;
-        const message = error instanceof Error ? error.message : 'unknown error';
+        const message =
+          error instanceof Error ? error.message : "unknown error";
         await this.recordNotification({
           leadId: recipient.id,
-          templateType: 'onboardingStatusUpdate',
+          templateType: "onboardingStatusUpdate",
           recipientEmail: recipient.email,
           recipientName: recipient.fullName,
           subjectSnapshot: fallbackSubject,
-          status: 'failed',
-          channel: 'smtp',
+          status: "failed",
+          channel: "smtp",
           audienceMode: payload.audienceMode,
           errorMessage: message,
         });
-        this.logger.warn(`Failed to send onboarding update to ${recipient.email}: ${message}`);
+        this.logger.warn(
+          `Failed to send onboarding update to ${recipient.email}: ${message}`,
+        );
       }
     }
 
-    return { ok: true, totalRecipients: recipients.length, sent, logged, failed };
+    return {
+      ok: true,
+      totalRecipients: recipients.length,
+      sent,
+      logged,
+      failed,
+    };
   }
 
   async listNotificationHistory(limit = 25) {
-    const safeLimit = Math.min(Math.max(Number.isFinite(limit) ? limit : 25, 1), 100);
+    const safeLimit = Math.min(
+      Math.max(Number.isFinite(limit) ? limit : 25, 1),
+      100,
+    );
     const records = await this.leadNotificationRepository.find({
-      order: { createdAt: 'DESC' },
+      order: { createdAt: "DESC" },
       take: safeLimit,
     });
 
@@ -240,9 +375,15 @@ export class OnboardingNotificationService {
     }));
   }
 
-  private async sendApplicantConfirmation(lead: LeadInterest, variables: Record<string, string>): Promise<void> {
+  private async sendApplicantConfirmation(
+    lead: LeadInterest,
+    variables: Record<string, string>,
+  ): Promise<void> {
     try {
-      const template = await this.emailTemplateService.render('onboardingSubmissionConfirmation', variables);
+      const template = await this.emailTemplateService.render(
+        "onboardingSubmissionConfirmation",
+        variables,
+      );
       const delivery = await this.mailService.sendMail({
         to: lead.email,
         subject: template.subject,
@@ -251,80 +392,156 @@ export class OnboardingNotificationService {
 
       await this.recordNotification({
         leadId: lead.id,
-        templateType: 'onboardingSubmissionConfirmation',
+        templateType: "onboardingSubmissionConfirmation",
         recipientEmail: lead.email,
         recipientName: lead.fullName,
         subjectSnapshot: template.subject,
         status: this.deliveryStatus(delivery),
         channel: delivery.mode,
-        audienceMode: 'single-lead',
+        audienceMode: "single-lead",
         errorMessage: null,
       });
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'unknown error';
+      const message = error instanceof Error ? error.message : "unknown error";
       await this.recordNotification({
         leadId: lead.id,
-        templateType: 'onboardingSubmissionConfirmation',
+        templateType: "onboardingSubmissionConfirmation",
         recipientEmail: lead.email,
         recipientName: lead.fullName,
-        subjectSnapshot: 'We received your onboarding request',
-        status: 'failed',
-        channel: 'smtp',
-        audienceMode: 'single-lead',
+        subjectSnapshot: "We received your onboarding request",
+        status: "failed",
+        channel: "smtp",
+        audienceMode: "single-lead",
         errorMessage: message,
       });
-      this.logger.warn(`Failed to send onboarding confirmation to ${lead.email}: ${message}`);
+      this.logger.warn(
+        `Failed to send onboarding confirmation to ${lead.email}: ${message}`,
+      );
     }
   }
 
-  private async sendAdminNotification(lead: LeadInterest, variables: Record<string, string>, supportEmail: string): Promise<void> {
+  private async sendAdminNotification(
+    lead: LeadInterest,
+    variables: Record<string, string>,
+    supportEmail: string,
+  ): Promise<void> {
     const recipients = this.getAdminRecipients(supportEmail);
     if (recipients.length === 0) {
       return;
     }
 
     try {
-      const template = await this.emailTemplateService.render('onboardingSubmissionAdminNotification', variables);
+      const template = await this.emailTemplateService.render(
+        "onboardingSubmissionAdminNotification",
+        variables,
+      );
       const delivery = await this.mailService.sendMail({
         to: recipients,
         subject: template.subject,
         html: template.html,
       });
 
-      await Promise.all(recipients.map((recipientEmail) => this.recordNotification({
-        leadId: lead.id,
-        templateType: 'onboardingSubmissionAdminNotification',
-        recipientEmail,
-        recipientName: 'Citizen admin',
-        subjectSnapshot: template.subject,
-        status: this.deliveryStatus(delivery),
-        channel: delivery.mode,
-        audienceMode: 'admin-notification',
-        errorMessage: null,
-      })));
+      await Promise.all(
+        recipients.map((recipientEmail) =>
+          this.recordNotification({
+            leadId: lead.id,
+            templateType: "onboardingSubmissionAdminNotification",
+            recipientEmail,
+            recipientName: "Citizen admin",
+            subjectSnapshot: template.subject,
+            status: this.deliveryStatus(delivery),
+            channel: delivery.mode,
+            audienceMode: "admin-notification",
+            errorMessage: null,
+          }),
+        ),
+      );
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'unknown error';
-      await Promise.all(recipients.map((recipientEmail) => this.recordNotification({
-        leadId: lead.id,
-        templateType: 'onboardingSubmissionAdminNotification',
-        recipientEmail,
-        recipientName: 'Citizen admin',
-        subjectSnapshot: `New onboarding submission: ${lead.fullName}`,
-        status: 'failed',
-        channel: 'smtp',
-        audienceMode: 'admin-notification',
-        errorMessage: message,
-      })));
-      this.logger.warn(`Failed to send onboarding admin notification: ${message}`);
+      const message = error instanceof Error ? error.message : "unknown error";
+      await Promise.all(
+        recipients.map((recipientEmail) =>
+          this.recordNotification({
+            leadId: lead.id,
+            templateType: "onboardingSubmissionAdminNotification",
+            recipientEmail,
+            recipientName: "Citizen admin",
+            subjectSnapshot: `New onboarding submission: ${lead.fullName}`,
+            status: "failed",
+            channel: "smtp",
+            audienceMode: "admin-notification",
+            errorMessage: message,
+          }),
+        ),
+      );
+      this.logger.warn(
+        `Failed to send onboarding admin notification: ${message}`,
+      );
     }
   }
 
-  private deliveryStatus(delivery: { delivered: boolean; mode: 'smtp' | 'logged' }): LeadNotificationStatus {
-    if (delivery.mode === 'logged') {
-      return 'logged';
+  private buildOnboardingUpdateVariables(input: {
+    recipient: UpdateRecipientPreview;
+    formSettings: FormSettings;
+    supportEmail: string;
+    adminDashboardLink: string;
+    payload: OnboardingUpdateDto;
+  }): Record<string, string> {
+    const updateBody = this.normalizeUpdateBody(
+      input.payload.updateBody,
+      input.payload.messageHtml,
+      input.adminDashboardLink,
+    );
+    return {
+      full_name: input.recipient.fullName,
+      email: input.recipient.email,
+      role_label: this.labelForRole(input.recipient.role, input.formSettings),
+      institution: input.recipient.institution,
+      update_title:
+        input.payload.updateTitle?.trim() || "Application status update",
+      update_body: updateBody,
+      next_step:
+        input.payload.nextStep?.trim() ||
+        "We will share the next checkpoint by email.",
+      cta_link: input.payload.ctaLink?.trim() || input.adminDashboardLink,
+      support_email: input.supportEmail || "the onboarding team",
+      site_name: input.formSettings.siteName?.trim() || "Citizen",
+    };
+  }
+
+  private normalizeUpdateBody(
+    updateBody?: string,
+    legacyMessageHtml?: string,
+    adminDashboardLink?: string,
+  ): string {
+    const body = updateBody?.trim() || legacyMessageHtml?.trim();
+    if (body) {
+      return body;
     }
 
-    return delivery.delivered ? 'sent' : 'failed';
+    if (adminDashboardLink) {
+      return `<p>We are reviewing the next onboarding cohort now. Track your next step here: <a href="${adminDashboardLink}">${adminDashboardLink}</a>.</p>`;
+    }
+
+    return "<p>We are reviewing the next onboarding cohort and will share the next milestone soon.</p>";
+  }
+
+  private describeResetExpiry(expiresAt: Date): string {
+    const remainingMinutes = Math.max(
+      1,
+      Math.round((expiresAt.getTime() - Date.now()) / 60_000),
+    );
+    return remainingMinutes === 1 ? "1 minute" : `${remainingMinutes} minutes`;
+  }
+
+  private deliveryStatus(delivery: {
+    delivered: boolean;
+    mode: "smtp" | "logged";
+  }): LeadNotificationStatus {
+    if (delivery.mode === "logged") {
+      return "logged";
+    }
+
+    return delivery.delivered ? "sent" : "failed";
   }
 
   private async recordNotification(input: {
@@ -349,17 +566,22 @@ export class OnboardingNotificationService {
         channel: input.channel,
         audienceMode: input.audienceMode,
         errorMessage: input.errorMessage,
-        sentAt: input.status === 'failed' ? null : new Date(),
+        sentAt: input.status === "failed" ? null : new Date(),
       });
       await this.leadNotificationRepository.save(record);
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'unknown error';
-      this.logger.warn(`Failed to record notification audit entry for ${input.recipientEmail}: ${message}`);
+      const message = error instanceof Error ? error.message : "unknown error";
+      this.logger.warn(
+        `Failed to record notification audit entry for ${input.recipientEmail}: ${message}`,
+      );
     }
   }
 
   private getAdminRecipients(supportEmail: string): string[] {
-    const configured = this.configService.get<string>('ONBOARDING_NOTIFICATION_EMAILS', '');
+    const configured = this.configService.get<string>(
+      "ONBOARDING_NOTIFICATION_EMAILS",
+      "",
+    );
     const recipients = configured
       .split(/[;,]/)
       .map((entry) => entry.trim().toLowerCase())
@@ -373,38 +595,52 @@ export class OnboardingNotificationService {
   }
 
   private async getFormSettings(): Promise<FormSettings> {
-    const existing = await this.formSettingsRepository.findOne({ where: { id: 'default' } });
-    return existing ?? this.formSettingsRepository.create({
-      id: 'default',
-      siteName: 'Citizen',
-      title: 'Build Public Truth with Citizen',
-      subtitle: 'Validator · Builder · Observer onboarding',
-      siteLogoUrl: '',
-      siteLogoAlt: 'Citizen',
-      campaignCards: [],
-      roles: [],
+    const existing = await this.formSettingsRepository.findOne({
+      where: { id: "default" },
     });
+    return (
+      existing ??
+      this.formSettingsRepository.create({
+        id: "default",
+        siteName: "Citizen",
+        title: "Build Public Truth with Citizen",
+        subtitle: "Validator · Builder · Observer onboarding",
+        siteLogoUrl: "",
+        siteLogoAlt: "Citizen",
+        campaignCards: [],
+        roles: [],
+      })
+    );
   }
 
-  private async resolveAudience(payload: OnboardingUpdateDto): Promise<UpdateRecipientPreview[]> {
-    const query = this.leadRepository.createQueryBuilder('lead').orderBy('lead.createdAt', 'DESC');
+  private async resolveAudience(
+    payload: OnboardingUpdateDto,
+  ): Promise<UpdateRecipientPreview[]> {
+    const query = this.leadRepository
+      .createQueryBuilder("lead")
+      .orderBy("lead.createdAt", "DESC");
 
-    if (payload.audienceMode === 'role' && payload.role?.trim()) {
-      query.andWhere('LOWER(lead.role) = :role', { role: payload.role.trim().toLowerCase() });
+    if (payload.audienceMode === "role" && payload.role?.trim()) {
+      query.andWhere("LOWER(lead.role) = :role", {
+        role: payload.role.trim().toLowerCase(),
+      });
     }
 
-    if (payload.audienceMode === 'selected') {
+    if (payload.audienceMode === "selected") {
       const leadIds = (payload.leadIds ?? []).filter(Boolean);
       if (leadIds.length === 0) {
         return [];
       }
-      query.andWhere('lead.id IN (:...leadIds)', { leadIds });
+      query.andWhere("lead.id IN (:...leadIds)", { leadIds });
     }
 
     if (payload.search?.trim()) {
-      query.andWhere('(LOWER(lead.fullName) LIKE :query OR LOWER(lead.email) LIKE :query OR LOWER(lead.institution) LIKE :query)', {
-        query: `%${payload.search.trim().toLowerCase()}%`,
-      });
+      query.andWhere(
+        "(LOWER(lead.fullName) LIKE :query OR LOWER(lead.email) LIKE :query OR LOWER(lead.institution) LIKE :query)",
+        {
+          query: `%${payload.search.trim().toLowerCase()}%`,
+        },
+      );
     }
 
     const leads = await query.getMany();
@@ -418,14 +654,19 @@ export class OnboardingNotificationService {
   }
 
   private labelForRole(role: string, formSettings: FormSettings): string {
-    return formSettings.roles.find((item) => item.id === role)?.label ?? this.humanizeRole(role);
+    return (
+      formSettings.roles.find((item) => item.id === role)?.label ??
+      this.humanizeRole(role)
+    );
   }
 
   private humanizeRole(role: string): string {
-    return role
-      .split(/[-_\s]+/)
-      .filter(Boolean)
-      .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
-      .join(' ') || 'Applicant';
+    return (
+      role
+        .split(/[-_\s]+/)
+        .filter(Boolean)
+        .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
+        .join(" ") || "Applicant"
+    );
   }
 }
