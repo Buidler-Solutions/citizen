@@ -67,6 +67,8 @@ App URLs:
 - Admin dashboard UI: `http://localhost:3000/admin/dashboard`
 - Admin email settings API (JWT protected): `http://localhost:3001/admin/email/smtp-settings`
 - Admin email templates API (JWT protected): `http://localhost:3001/admin/email/templates`
+- Admin onboarding update preview/send API (JWT protected): `http://localhost:3001/admin/email/onboarding-updates/preview` and `http://localhost:3001/admin/email/onboarding-updates/send`
+- Admin reset-password UI: `http://localhost:3000/admin/reset-password`
 - Site settings support static or animated APNG logo uploads for the landing-page header via the admin console.
 
 ## Run with Docker Compose
@@ -121,3 +123,16 @@ curl http://localhost:3001/interest/stats \
 - How-to (install + record): `landing-page/howtos/installing-asciinema-for-recording.md`
 - Runbook (upload + shortcode): `landing-page/runbook/asciinema-admin-upload-and-onboarding-shortcode.md`
 - Runbook (email architecture checkpoint): `landing-page/runbook/onboarding-email-notification-checkpoint.md`
+
+## Email + password reset environment additions
+
+The onboarding email workflows support these additional backend environment variables:
+
+```bash
+ADMIN_EMAIL=ops@example.gov
+ONBOARDING_SUPPORT_EMAIL=support@example.gov
+ONBOARDING_NOTIFICATION_EMAILS=ops@example.gov;audit@example.gov
+ONBOARDING_ADMIN_DASHBOARD_URL=http://localhost:3000/admin/dashboard
+ONBOARDING_RESET_PASSWORD_URL=http://localhost:3000/admin/reset-password
+PASSWORD_RESET_TTL_MINUTES=60
+```
