@@ -562,9 +562,31 @@ For early onboarding traffic, inline request-cycle sending is acceptable. The cu
 
 ## Post-implementation validation checklist
 
-Now that the checkpoint scope is implemented in the current codebase, the next step is not another feature slice by default. The immediate follow-up should be validating the implemented flows in a configured environment and then deciding whether phase 2 queue/worker delivery work should begin.
+Now that the checkpoint scope is implemented in the current codebase, the next step is not another feature slice by default. The immediate follow-up should be validating the implemented flows in a configured environment, capturing evidence for each flow, and then deciding whether phase-2 queue/worker delivery work should begin.
 
-### 1. Environment readiness
+### 1. Validation setup and evidence capture
+
+Use a short-lived validation environment with:
+
+- the landing-page backend and frontend running from the current workspace,
+- PostgreSQL pointed at a disposable database,
+- a reachable SMTP relay or inbox sandbox,
+- one seeded super admin account plus at least one non-super-admin onboarding user,
+- a controlled list of applicant email addresses that can safely receive test mail.
+
+Create a lightweight validation log before testing. For every scenario below, capture:
+
+- request timestamp,
+- actor/test account used,
+- target recipient(s),
+- API response or UI screenshot,
+- DB verification result,
+- notification-history verification result,
+- pass/fail notes and follow-up actions.
+
+A simple markdown table or ticket comment is sufficient. The goal is to leave an operator-readable record, not just rely on ad hoc terminal output.
+
+### 2. Environment readiness
 
 Before smoke testing real delivery, verify:
 
@@ -574,53 +596,147 @@ Before smoke testing real delivery, verify:
 - the deployment image/runtime includes the mail transport dependency,
 - production or `SMTP_REQUIRED=true` boots fail fast if SMTP readiness is incomplete.
 
-### 2. Smoke-test checklist
+#### Minimum preflight commands
+
+Run these from `landing-page/` once the environment files are configured:
+
+```bash
+pnpm run backend:lint
+pnpm run frontend:lint
+pnpm run build
+```
+
+Then verify the email-center APIs with an authenticated admin token:
+
+```bash
+curl -X POST http://localhost:3001/auth/token \
+  -H 'Content-Type: application/json' \
+  -d '{"username":"admin","password":"change-me-admin-password","subject":"validation-user"}'
+
+curl http://localhost:3001/admin/email/smtp-settings \
+  -H "Authorization: Bearer <accessToken>"
+
+curl http://localhost:3001/admin/email/templates \
+  -H "Authorization: Bearer <accessToken>"
+```
+
+Record the returned SMTP readiness state before continuing. If the readiness response already reports validation issues, stop and fix configuration before running message-flow tests.
+
+### 3. Smoke-test checklist
 
 #### Forgot-password flow
 
-- [ ] Trigger `POST /auth/forgot-password` for an existing onboarding user.
-- [ ] Confirm the API returns the generic success response.
-- [ ] Confirm a `password_resets` record is created with hashed token + expiry metadata.
-- [ ] Confirm the forgot-password email is delivered or logged.
-- [ ] Complete `POST /auth/reset-password` with the issued token.
-- [ ] Confirm the new password works and prior active reset tokens are invalidated.
-- [ ] Confirm notification history shows the forgot-password send result.
+1. Trigger `POST /auth/forgot-password` for an existing onboarding user.
+
+   ```bash
+   curl -X POST http://localhost:3001/auth/forgot-password \
+     -H 'Content-Type: application/json' \
+     -d '{"email":"operator.one@example.gov"}'
+   ```
+
+2. Confirm the API returns the generic success response.
+3. Confirm a `password_resets` record is created with hashed token + expiry metadata.
+4. Confirm the forgot-password email is delivered or logged.
+5. Complete `POST /auth/reset-password` with the issued token.
+
+   ```bash
+   curl -X POST http://localhost:3001/auth/reset-password \
+     -H 'Content-Type: application/json' \
+     -d '{"token":"<issuedToken>","newPassword":"StrongerPassphrase123!"}'
+   ```
+
+6. Confirm the new password works and prior active reset tokens are invalidated.
+7. Confirm notification history shows the forgot-password send result.
 
 #### Lead submission confirmation
 
-- [ ] Submit a fresh onboarding interest form with a unique email.
-- [ ] Confirm the lead persists with the structured `role` field.
-- [ ] Confirm the applicant receives the `onboardingSubmissionConfirmation` email.
-- [ ] Confirm duplicate-email submissions are rejected.
-- [ ] Confirm notification history records the applicant confirmation result.
+1. Submit a fresh onboarding interest form with a unique email.
+
+   ```bash
+   curl -X POST http://localhost:3001/interest \
+     -H 'Content-Type: application/json' \
+     -d '{
+       "fullName":"Validation Lead One",
+       "institution":"Validation Ministry",
+       "email":"lead.one+validation@example.gov",
+       "country":"Kenya",
+       "role":"validator",
+       "missionNeed":"Validation smoke test for onboarding email flows"
+     }'
+   ```
+
+2. Confirm the lead persists with the structured `role` field.
+3. Confirm the applicant receives the `onboardingSubmissionConfirmation` email.
+4. Re-submit the same payload and confirm duplicate-email submissions are rejected.
+5. Confirm notification history records the applicant confirmation result.
 
 #### Admin/internal notification
 
-- [ ] Configure at least one internal/admin recipient address.
-- [ ] Submit a fresh onboarding interest form.
-- [ ] Confirm all intended recipients receive the `onboardingSubmissionAdminNotification` email.
-- [ ] Confirm recipient deduplication works when support/admin addresses overlap.
-- [ ] Confirm notification history records one audit entry per admin recipient.
+1. Configure at least one internal/admin recipient address.
+2. Submit a fresh onboarding interest form.
+3. Confirm all intended recipients receive the `onboardingSubmissionAdminNotification` email.
+4. Confirm recipient deduplication works when support/admin addresses overlap.
+5. Confirm notification history records one audit entry per admin recipient.
 
 #### Onboarding update preview/send
 
-- [ ] Open the admin email center and load the onboarding update composer.
-- [ ] Preview recipients by all applicants, by role, and by selected leads.
-- [ ] Confirm rendered preview subject/body load correctly from `onboardingStatusUpdate`.
-- [ ] Send a small onboarding update to a controlled audience.
-- [ ] Confirm sent/logged/failed counts match the response payload.
-- [ ] Confirm queue-threshold warnings appear for large but allowed audiences.
-- [ ] Confirm requests above the sync cap are rejected with the operator warning.
+Use the authenticated admin token for the preview and send routes that exist today:
+
+```bash
+curl -X POST http://localhost:3001/admin/email/onboarding-updates/preview \
+  -H 'Content-Type: application/json' \
+  -H "Authorization: Bearer <accessToken>" \
+  -d '{
+    "audienceMode":"role",
+    "role":"validator",
+    "updateTitle":"Validation checkpoint",
+    "headline":"Validation cohort update",
+    "bodyHtml":"<p>This is a validation send for the onboarding email checkpoint.</p>",
+    "callToActionLabel":"Open dashboard",
+    "callToActionUrl":"http://localhost:3000/admin/dashboard"
+  }'
+
+curl -X POST http://localhost:3001/admin/email/onboarding-updates/send \
+  -H 'Content-Type: application/json' \
+  -H "Authorization: Bearer <accessToken>" \
+  -d '{
+    "audienceMode":"selected",
+    "leadIds":[1],
+    "updateTitle":"Validation checkpoint",
+    "headline":"Validation cohort update",
+    "bodyHtml":"<p>This is a controlled validation send for the onboarding email checkpoint.</p>",
+    "callToActionLabel":"Open dashboard",
+    "callToActionUrl":"http://localhost:3000/admin/dashboard"
+  }'
+```
+
+Validate the following after the requests above:
+
+- preview recipients can be inspected by all applicants, by role, and by selected leads,
+- rendered preview subject/body load correctly from `onboardingStatusUpdate`,
+- a small onboarding update can be sent to a controlled audience,
+- sent/logged/failed counts match the response payload,
+- queue-threshold warnings appear for large but allowed audiences,
+- requests above the sync cap are rejected with the operator warning.
 
 #### Audit log visibility
 
-- [ ] Refresh `GET /admin/email/notifications/history` after each scenario above.
-- [ ] Confirm per-recipient status, subject snapshot, channel, audience mode, timestamps, and error messages are visible in the admin UI.
-- [ ] Confirm records are ordered newest-first and usable for operator review.
+After each scenario above, refresh:
 
-### 3. Operator / UAT validation
+```bash
+curl "http://localhost:3001/admin/email/notifications/history?limit=25" \
+  -H "Authorization: Bearer <accessToken>"
+```
 
-After smoke tests pass, run a short operator validation round:
+Confirm:
+
+- per-recipient status, subject snapshot, channel, audience mode, timestamps, and error messages are visible in the admin UI,
+- records are ordered newest-first and usable for operator review,
+- each scenario leaves an audit trail that matches the captured evidence log.
+
+### 4. Operator / UAT validation
+
+After smoke tests pass, run a short operator validation round entirely from the dashboard UI:
 
 - [ ] Admin can review SMTP transport readiness in the email center.
 - [ ] Admin can update SMTP settings and send a test message.
@@ -629,7 +745,19 @@ After smoke tests pass, run a short operator validation round:
 - [ ] Admin can preview and send onboarding updates using the dashboard UI only.
 - [ ] Admin understands the synchronous-inline execution warning and cap messaging.
 
-### 4. Phase-2 go / no-go decision
+For sign-off, require one operator who did not implement the feature to complete this round and confirm that the UI text is sufficient without backend/source-code walkthroughs.
+
+### 5. Exit criteria for validation
+
+Treat the validation round as complete only when all of the following are true:
+
+- every scenario above has a recorded pass/fail result,
+- any failures have linked remediation tasks or explicit risk acceptance,
+- SMTP readiness and template configuration were checked in the same environment used for smoke testing,
+- the notification history confirms the same sends observed in SMTP/inbox testing,
+- the operator/UAT reviewer signs off on the dashboard-only workflow.
+
+### 6. Phase-2 go / no-go decision
 
 Stay on the current implementation if:
 
@@ -646,16 +774,17 @@ Start phase-2 queue/worker delivery work if:
 - request-cycle sending becomes too slow or fragile,
 - retries, replayability, or worker-based operational controls are required.
 
-### 5. Recommended execution order
+### 7. Recommended execution order
 
 1. Validate environment and SMTP readiness.
-2. Smoke-test forgot-password.
-3. Smoke-test lead submission confirmation.
-4. Smoke-test admin/internal notifications.
-5. Smoke-test onboarding update preview/send.
-6. Validate audit-log visibility.
-7. Run operator/UAT validation.
-8. Decide whether queue/worker phase-2 work should begin.
+2. Record the initial SMTP-readiness response and template baseline.
+3. Smoke-test forgot-password.
+4. Smoke-test lead submission confirmation.
+5. Smoke-test admin/internal notifications.
+6. Smoke-test onboarding update preview/send.
+7. Validate audit-log visibility.
+8. Run operator/UAT validation.
+9. Decide whether queue/worker phase-2 work should begin.
 
 ---
 
