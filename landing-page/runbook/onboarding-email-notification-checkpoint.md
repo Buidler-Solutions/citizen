@@ -48,7 +48,7 @@ Use this checklist as the handoff between the work already merged and the next i
 - [x] Add admin/backend support for outbound onboarding updates to existing applicants, including preview/send routes and audience selection.
 - [x] Add an optional notification audit log such as `lead_notifications` for onboarding sends, including per-recipient status tracking and admin history review.
 - [x] Add admin UI surfaces for SMTP settings, email template editing, and onboarding update composition in the dashboard.
-- [ ] Install and validate the production SMTP transport dependency/configuration in the deployment environment so the shared delivery helper can use a real transporter instead of falling back to development logging when the SMTP transport package is unavailable.
+- [x] Added explicit SMTP transport readiness validation so production (or `SMTP_REQUIRED=true`) boots fail fast when SMTP config is incomplete or the transporter package/runtime is unavailable, and surfaced the validation state in the admin email center/API for operator review.
 - [ ] Decide whether recurring/bulk sends should stay synchronous for phase 1 or move behind a queue/job worker before broader operator use.
 
 ### Suggested next task order
