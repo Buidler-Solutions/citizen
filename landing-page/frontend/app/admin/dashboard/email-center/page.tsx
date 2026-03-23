@@ -42,6 +42,21 @@ interface AudienceRecipient {
   role: string;
 }
 
+interface NotificationHistoryItem {
+  id: string;
+  leadId: string | null;
+  templateType: string;
+  recipientEmail: string;
+  recipientName: string;
+  subjectSnapshot: string;
+  status: 'sent' | 'failed' | 'logged';
+  channel: string;
+  audienceMode: string;
+  errorMessage: string | null;
+  sentAt: string | null;
+  createdAt: string;
+}
+
 const EMPTY_SMTP: SmtpSettingsResponse = {
   host: '',
   port: 587,
@@ -70,6 +85,7 @@ export default function EmailCenterPage() {
   const [previewHtml, setPreviewHtml] = useState('');
   const [previewSubject, setPreviewSubject] = useState('');
   const [status, setStatus] = useState('');
+  const [notificationHistory, setNotificationHistory] = useState<NotificationHistoryItem[]>([]);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
   const [savingSmtp, setSavingSmtp] = useState(false);
@@ -88,18 +104,19 @@ export default function EmailCenterPage() {
 
     const load = async () => {
       try {
-        const [smtpResponse, templatesResponse] = await Promise.all([
+        const [smtpResponse, templatesResponse, historyResponse] = await Promise.all([
           fetch(`${API_URL}/admin/email/smtp-settings`, { headers: { Authorization: `Bearer ${token}` } }),
           fetch(`${API_URL}/admin/email/templates`, { headers: { Authorization: `Bearer ${token}` } }),
+          fetch(`${API_URL}/admin/email/notifications/history?limit=12`, { headers: { Authorization: `Bearer ${token}` } }),
         ]);
 
-        if (smtpResponse.status === 401 || templatesResponse.status === 401) {
+        if (smtpResponse.status === 401 || templatesResponse.status === 401 || historyResponse.status === 401) {
           localStorage.removeItem(ADMIN_TOKEN_KEY);
           router.replace('/admin/login');
           return;
         }
 
-        if (!smtpResponse.ok || !templatesResponse.ok) {
+        if (!smtpResponse.ok || !templatesResponse.ok || !historyResponse.ok) {
           throw new Error('Unable to load email center configuration.');
         }
 
@@ -107,6 +124,7 @@ export default function EmailCenterPage() {
         setSmtp((previous) => ({ ...previous, ...smtpData }));
         const templateList = (await templatesResponse.json()) as TemplateListItem[];
         setTemplates(templateList);
+        setNotificationHistory((await historyResponse.json()) as NotificationHistoryItem[]);
         const firstTemplate = templateList[0]?.type ?? 'forgotPassword';
         setSelectedTemplate(firstTemplate);
       } catch (loadError) {
@@ -291,6 +309,24 @@ export default function EmailCenterPage() {
     }
   };
 
+  const loadNotificationHistory = async () => {
+    if (!token) return;
+
+    try {
+      const response = await fetch(`${API_URL}/admin/email/notifications/history?limit=12`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (!response.ok) {
+        throw new Error('Unable to load notification history.');
+      }
+
+      setNotificationHistory((await response.json()) as NotificationHistoryItem[]);
+    } catch (historyError) {
+      setError(historyError instanceof Error ? historyError.message : 'Unable to load notification history');
+    }
+  };
+
   const sendUpdate = async () => {
     if (!token) return;
     setSendingUpdate(true);
@@ -307,8 +343,9 @@ export default function EmailCenterPage() {
         throw new Error('Unable to send onboarding update.');
       }
 
-      const payload = (await response.json()) as { totalRecipients: number; sent: number };
-      setStatus(`Onboarding update attempted for ${payload.totalRecipients} recipient(s); ${payload.sent} sent.`);
+      const payload = (await response.json()) as { totalRecipients: number; sent: number; logged: number; failed: number };
+      setStatus(`Onboarding update attempted for ${payload.totalRecipients} recipient(s); ${payload.sent} sent, ${payload.logged} logged, ${payload.failed} failed.`);
+      await loadNotificationHistory();
     } catch (sendError) {
       setError(sendError instanceof Error ? sendError.message : 'Unable to send onboarding update');
       setStatus('');
@@ -418,6 +455,48 @@ export default function EmailCenterPage() {
           </CardContent>
         </Card>
       </div>
+
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <CardTitle>Notification audit log</CardTitle>
+              <CardDescription>Recent per-recipient onboarding email activity and delivery status.</CardDescription>
+            </div>
+            <Button type="button" variant="secondary" onClick={loadNotificationHistory}>Refresh history</Button>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-3">
+            {notificationHistory.length === 0 ? (
+              <p className="text-sm text-slate-500">No notification history yet.</p>
+            ) : (
+              notificationHistory.map((item) => (
+                <div key={item.id} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <p className="font-semibold text-slate-900">{item.recipientName || item.recipientEmail}</p>
+                      <p className="text-sm text-slate-600">{item.recipientEmail}</p>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <Badge variant={item.status === 'sent' ? 'success' : item.status === 'logged' ? 'default' : 'error'}>{item.status}</Badge>
+                      <Badge>{item.templateType}</Badge>
+                    </div>
+                  </div>
+                  <p className="mt-3 text-sm font-medium text-slate-900">{item.subjectSnapshot}</p>
+                  <div className="mt-2 grid gap-1 text-xs text-slate-500 md:grid-cols-2">
+                    <p>Audience: {item.audienceMode || 'n/a'}</p>
+                    <p>Channel: {item.channel || 'n/a'}</p>
+                    <p>Created: {new Date(item.createdAt).toLocaleString()}</p>
+                    <p>Sent: {item.sentAt ? new Date(item.sentAt).toLocaleString() : '—'}</p>
+                  </div>
+                  {item.errorMessage ? <p className="mt-2 text-sm text-red-600">{item.errorMessage}</p> : null}
+                </div>
+              ))
+            )}
+          </div>
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>
