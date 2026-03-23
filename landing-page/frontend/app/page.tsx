@@ -90,14 +90,16 @@ export default function HomePage() {
       <main className="relative z-10 grid min-h-screen w-full grid-rows-[auto_1fr] gap-4 px-4 py-6 sm:px-6 sm:py-8 lg:px-10">
         <header className="pointer-events-auto absolute left-4 right-4 top-4 z-20 rounded-[28px] border border-slate-200/10 bg-slate-950/10 px-4 py-2.5 backdrop-blur-md sm:left-6 sm:right-6 sm:top-6 sm:rounded-full sm:px-5 sm:py-3 lg:left-10 lg:right-10">
           <div className="flex items-center justify-between sm:grid sm:items-center sm:gap-4 sm:grid-cols-[1fr_auto_1fr]">
-            <a href="#" className="flex items-center gap-3 justify-self-start" aria-label={siteLogoAlt}>
+            <a href="#" className="flex min-w-0 items-center gap-2 justify-self-start md:gap-3" aria-label={siteLogoAlt}>
               {siteLogoUrl ? (
-                <img src={siteLogoUrl} alt={siteLogoAlt} className="h-[58px] w-[97px] object-contain" />
+                <span className="shrink-0">
+                  <img src={siteLogoUrl} alt={siteLogoAlt} className="h-[58px] w-[97px] object-contain" />
+                </span>
               ) : (
                 <span className="text-[0.68rem] font-semibold uppercase tracking-[0.22em] text-slate-100 sm:text-sm sm:tracking-[0.2em]">Citizen</span>
               )}
               {siteLogoUrl ? (
-                <span className="hidden text-sm font-semibold tracking-[0.18em] text-slate-100/90 sm:inline-block">
+                <span className="block max-w-[calc(100vw-10.5rem)] truncate whitespace-nowrap text-xs font-semibold tracking-[0.18em] text-slate-100/90 md:max-w-none md:text-sm">
                   {siteName}
                 </span>
               ) : null}
