@@ -1,7 +1,7 @@
 'use client';
 
 import { FormEvent, useEffect, useMemo, useState } from 'react';
-import { ShieldCheck, UserCog, UserPlus, Users } from 'lucide-react';
+import { ShieldCheck, Trash2, UserCog, UserPlus, Users } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { ADMIN_TOKEN_KEY, getAdminSession, type AdminSession } from './admin-auth';
 import { Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Input, Label } from './admin-ui';
@@ -47,6 +47,7 @@ export function AdminUsersPage() {
   const [form, setForm] = useState<CreateUserFormState>(EMPTY_FORM);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [deletingUserId, setDeletingUserId] = useState<string | null>(null);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
@@ -155,6 +156,57 @@ export function AdminUsersPage() {
     }
   };
 
+  const deleteUser = async (user: ManagedUser) => {
+    if (!session || session.role !== 'super_admin') {
+      return;
+    }
+
+    const token = localStorage.getItem(ADMIN_TOKEN_KEY);
+
+    if (!token) {
+      router.replace('/admin/login');
+      return;
+    }
+
+    const shouldDelete = window.confirm(`Delete ${user.username}? This action cannot be undone.`);
+
+    if (!shouldDelete) {
+      return;
+    }
+
+    setError('');
+    setSuccess('');
+    setDeletingUserId(user.id);
+
+    try {
+      const response = await fetch(`${API_URL}/users/${user.id}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (response.status === 401) {
+        localStorage.removeItem(ADMIN_TOKEN_KEY);
+        router.replace('/admin/login');
+        return;
+      }
+
+      if (!response.ok) {
+        const payload = (await response.json().catch(() => null)) as { message?: string | string[] } | null;
+        const message = Array.isArray(payload?.message)
+          ? payload?.message.join(', ')
+          : payload?.message ?? 'Unable to delete user.';
+        throw new Error(message);
+      }
+
+      setUsers((previous) => previous.filter((existingUser) => existingUser.id !== user.id));
+      setSuccess(`${formatRole(user.role)} ${user.username} deleted successfully.`);
+    } catch (deleteError) {
+      setError(deleteError instanceof Error ? deleteError.message : 'Unknown user delete error');
+    } finally {
+      setDeletingUserId(null);
+    }
+  };
+
   const canManageUsers = session?.role === 'super_admin';
 
   return (
@@ -208,16 +260,17 @@ export function AdminUsersPage() {
               <p className="text-sm text-slate-500">Loading onboarding users…</p>
             ) : (
               <div className="overflow-hidden rounded-2xl border border-slate-200">
-                <div className="grid grid-cols-[1.1fr_1.1fr_1fr_0.8fr_0.8fr] gap-3 border-b border-slate-200 bg-slate-50 px-4 py-3 text-xs font-bold uppercase tracking-wider text-slate-500">
+                <div className="grid grid-cols-[1.1fr_1.1fr_1fr_0.8fr_0.8fr_0.7fr] gap-3 border-b border-slate-200 bg-slate-50 px-4 py-3 text-xs font-bold uppercase tracking-wider text-slate-500">
                   <span>User</span>
                   <span>Email</span>
                   <span>Name</span>
                   <span>Role</span>
                   <span>Status</span>
+                  <span className="text-right">Actions</span>
                 </div>
                 <div className="divide-y divide-slate-200">
                   {users.map((user) => (
-                    <div key={user.id} className="grid grid-cols-[1.1fr_1.1fr_1fr_0.8fr_0.8fr] gap-3 px-4 py-4 text-sm text-slate-700">
+                    <div key={user.id} className="grid grid-cols-[1.1fr_1.1fr_1fr_0.8fr_0.8fr_0.7fr] gap-3 px-4 py-4 text-sm text-slate-700">
                       <div>
                         <p className="font-semibold text-slate-900">{user.username}</p>
                         <p className="text-xs text-slate-500">Created {new Date(user.createdAt).toLocaleDateString()}</p>
@@ -226,6 +279,22 @@ export function AdminUsersPage() {
                       <span>{user.fullName || '—'}</span>
                       <span>{formatRole(user.role)}</span>
                       <span>{user.isActive ? 'Active' : 'Disabled'}</span>
+                      <div className="flex justify-end">
+                        {canManageUsers && user.role !== 'super_admin' ? (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            className="text-red-600 hover:text-red-700"
+                            onClick={() => deleteUser(user)}
+                            disabled={deletingUserId === user.id}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                            <span className="ml-2">{deletingUserId === user.id ? 'Deleting…' : 'Delete'}</span>
+                          </Button>
+                        ) : (
+                          <span className="text-xs text-slate-400">—</span>
+                        )}
+                      </div>
                     </div>
                   ))}
                 </div>

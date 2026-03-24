@@ -1,8 +1,10 @@
 import {
   Body,
   Controller,
+  Delete,
   ForbiddenException,
   Get,
+  Param,
   Post,
   Req,
   UseGuards,
@@ -48,5 +50,16 @@ export class UserController {
       user,
     );
     return user;
+  }
+
+  @Delete(":id")
+  deleteUser(@Param("id") id: string, @Req() request: AuthenticatedRequest) {
+    if (request.user?.role !== "super_admin") {
+      throw new ForbiddenException(
+        "Only super admins can delete onboarding users.",
+      );
+    }
+
+    return this.userService.deleteUser(id, request.user?.sub);
   }
 }
