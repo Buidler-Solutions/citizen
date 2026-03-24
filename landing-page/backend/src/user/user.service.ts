@@ -1,4 +1,11 @@
-import { BadRequestException, ConflictException, Injectable, UnauthorizedException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { ConfigService } from '@nestjs/config';
 import { createHash, randomBytes, scryptSync, timingSafeEqual } from 'crypto';
@@ -158,6 +165,35 @@ export class UserService {
     const saved = await this.userRepository.save(user);
     const { id, fullName, role, isActive, createdAt } = saved;
     return { id, username: saved.username, email: saved.email, fullName, role, isActive, createdAt };
+  }
+
+  async deleteUser(
+    userId: string,
+    actorUserId?: string,
+  ): Promise<{ deletedId: string }> {
+    await this.ensureSuperAdmin();
+    const normalizedUserId = userId.trim();
+
+    if (!normalizedUserId) {
+      throw new BadRequestException('User id is required.');
+    }
+
+    const target = await this.userRepository.findOne({ where: { id: normalizedUserId } });
+
+    if (!target) {
+      throw new NotFoundException('Onboarding user not found.');
+    }
+
+    if (target.role === 'super_admin') {
+      throw new ForbiddenException('Super admin accounts cannot be deleted.');
+    }
+
+    if (actorUserId && target.id === actorUserId) {
+      throw new ForbiddenException('You cannot delete your own account.');
+    }
+
+    await this.userRepository.remove(target);
+    return { deletedId: normalizedUserId };
   }
 
   async createPasswordReset(identifier: string): Promise<{ user: OnboardingUser; token: string; expiresAt: Date } | null> {
