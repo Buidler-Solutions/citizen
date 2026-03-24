@@ -3,7 +3,7 @@
 import { CSSProperties, FormEvent, ReactNode, useEffect, useMemo, useState } from 'react';
 import { AsciinemaModal } from '@/components/AsciinemaModal';
 
-type Role = string;
+type RoleId = string;
 type MotionDirection = 'forward' | 'backward';
 
 interface StepConfig {
@@ -261,7 +261,7 @@ function RotatingOnboardingText({
 export function InterestForm() {
   const [status, setStatus] = useState('');
   const [loading, setLoading] = useState(false);
-  const [role, setRole] = useState<Role | null>(null);
+  const [roleId, setRoleId] = useState<RoleId | null>(null);
   const [stepIndex, setStepIndex] = useState(0);
   const [motionDirection, setMotionDirection] = useState<MotionDirection>('forward');
   const [settings, setSettings] = useState<PublicFormSettings>(DEFAULT_SETTINGS);
@@ -413,7 +413,7 @@ export function InterestForm() {
     return DEFAULT_ROLES;
   }, [settings.roles]);
 
-  const selectedRoleOption = availableRoles.find((option) => option.label === role) ?? null;
+  const selectedRoleOption = availableRoles.find((option) => option.id === roleId) ?? null;
 
   const steps = useMemo<StepConfig[]>(() => {
     if (!selectedRoleOption) return BASE_STEPS;
@@ -432,7 +432,7 @@ export function InterestForm() {
 
   const validateStep = () => {
     if (stepIndex === 0) {
-      if (!role) {
+      if (!roleId) {
         setStatus('Please choose a role to continue.');
         return false;
       }
@@ -476,7 +476,7 @@ export function InterestForm() {
   };
 
   const submit = async () => {
-    if (!role) {
+    if (!roleId) {
       setStatus('Please choose a role to continue.');
       return;
     }
@@ -486,7 +486,7 @@ export function InterestForm() {
       institution: formValues.institution.trim(),
       email: formValues.email.trim(),
       country: formValues.country.trim(),
-      role,
+      role: roleId,
       missionNeed: formValues.missionNeed.trim(),
     };
 
@@ -503,13 +503,13 @@ export function InterestForm() {
         throw new Error('Submission failed');
       }
 
-      const selectedRole = role;
+      const selectedRole = selectedRoleOption?.label ?? roleId;
       const thankYouMessage = selectedRoleOption?.thankYouNote ?? '';
 
       setSubmittedThankYouNote(thankYouMessage);
       setSubmittedRole(selectedRole);
       setStatus('');
-      setRole(null);
+      setRoleId(null);
       setStepIndex(0);
       setMotionDirection('forward');
       setFormValues({ fullName: '', institution: '', email: '', country: '', missionNeed: '' });
@@ -643,9 +643,9 @@ export function InterestForm() {
                     <button
                       key={option.id}
                       type="button"
-                      className={`font-display w-full rounded-xl border bg-blue-950/90 p-4 text-left text-[1.05rem] ${role === option.label ? 'border-cyan-300 shadow-[0_0_0_1px_rgba(85,214,255,0.35)]' : 'border-blue-200/30'}`}
+                      className={`font-display w-full rounded-xl border bg-blue-950/90 p-4 text-left text-[1.05rem] ${roleId === option.id ? 'border-cyan-300 shadow-[0_0_0_1px_rgba(85,214,255,0.35)]' : 'border-blue-200/30'}`}
                       onClick={() => {
-                        setRole(option.label);
+                        setRoleId(option.id);
                         setStatus('');
                       }}
                     >
