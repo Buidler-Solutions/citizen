@@ -180,8 +180,13 @@ export default function HomePage() {
         shortcodeMap={shortcodeMap}
         onClose={() => setIsAsciinemaOpen(false)}
       />
-      <footer className="pointer-events-none fixed inset-x-0 bottom-3 z-[5] px-4 text-right text-[0.72rem] tracking-[0.08em] text-slate-300/60">
-        <span>ToS | GDPR | Terms | About</span>
+      <footer className="pointer-events-none fixed inset-x-0 bottom-3 z-[5] px-4 text-[0.72rem] tracking-[0.08em] text-slate-300/70 sm:px-6 lg:px-10">
+        <div className="mx-auto flex w-full max-w-[1200px] items-center justify-between gap-4">
+          <span className="text-left">
+            Copyright © {new Date().getFullYear()} {siteName}, All rights reserved.
+          </span>
+          <span className="text-right">Privacy Policy | Cookie Policy</span>
+        </div>
       </footer>
     </>
   );
