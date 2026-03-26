@@ -468,6 +468,7 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
         let asset_positions_ledger = Arc::clone(&self.ledger);
         let module_runtime_ledger = Arc::clone(&self.ledger);
         let interop_status_ledger = Arc::clone(&self.ledger);
+        let governance_proposals_ledger = Arc::clone(&self.ledger);
         Router::new()
             .route("/health", get(Self::health))
             .route(
@@ -628,6 +629,13 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
                 get(move |Path(object_id): Path<String>| {
                     let ledger = Arc::clone(&interop_status_ledger);
                     async move { Self::handle_get_interop_status(ledger, object_id).await }
+                }),
+            )
+            .route(
+                "/api/v1/governance/proposals",
+                get(move || {
+                    let ledger = Arc::clone(&governance_proposals_ledger);
+                    async move { Self::handle_get_governance_proposals(ledger).await }
                 }),
             )
     }
@@ -2651,6 +2659,11 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
                 .and_then(|entry| entry.payload.get("proof_hash"))
                 .and_then(|value| value.as_str())
         }))
+    }
+
+    async fn handle_get_governance_proposals(ledger: Arc<Ledger<S>>) -> Json<serde_json::Value> {
+        let proposals = ledger.governance_proposals().unwrap_or_default();
+        Json(serde_json::json!({ "proposals": proposals }))
     }
 
     fn build_did_document(did: &str, entries: &[LedgerEntry]) -> Option<DidDocument> {
