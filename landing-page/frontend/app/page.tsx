@@ -1,11 +1,14 @@
 /* eslint-disable @next/next/no-img-element */
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { OnboardingNetworkBackground } from '@/components/OnboardingNetworkBackground';
+import { ensureGsapWithScrollTo } from '@/lib/gsapLoader';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
+
+type SectionId = 'onboarding' | 'validators' | 'builders' | 'docs';
 
 const toAbsoluteUrl = (url: string) => {
   if (!url) return '';
@@ -18,17 +21,25 @@ const toAbsoluteUrl = (url: string) => {
   return `${API_URL}/${url}`;
 };
 
-const navItems = [
-  { label: 'Onboarding', href: '#onboarding' },
-  { label: 'Validators', href: '#validators' },
-  { label: 'Builders', href: '#builders' },
-  { label: 'Docs', href: '#docs' },
+const navItems: Array<{ label: string; href: string; sectionId: SectionId }> = [
+  { label: 'Onboarding', href: '#onboarding', sectionId: 'onboarding' },
+  { label: 'Validators', href: '#validators', sectionId: 'validators' },
+  { label: 'Builders', href: '#builders', sectionId: 'builders' },
+  { label: 'Docs', href: '#docs', sectionId: 'docs' },
 ];
 
 export default function MainPage() {
   const [siteLogoUrl, setSiteLogoUrl] = useState('');
   const [siteLogoAlt, setSiteLogoAlt] = useState('Citizen');
   const [siteName, setSiteName] = useState('Citizen');
+  const sectionRefs = useRef<Record<SectionId, HTMLElement | null>>({
+    onboarding: null,
+    validators: null,
+    builders: null,
+    docs: null,
+  });
+
+  const sectionIds = useMemo(() => navItems.map((item) => item.sectionId), []);
 
   useEffect(() => {
     const loadSiteSettings = async () => {
@@ -62,6 +73,74 @@ export default function MainPage() {
     void loadSiteSettings();
   }, []);
 
+  useEffect(() => {
+    void ensureGsapWithScrollTo().catch(() => {
+      // Keep page functional if GSAP scripts cannot load.
+    });
+  }, []);
+
+  const scrollToSection = (sectionId: SectionId) => {
+    const section = sectionRefs.current[sectionId];
+    if (!section) return;
+
+    void ensureGsapWithScrollTo()
+      .then(() => {
+        const topOffset = Math.max(section.offsetTop - 130, 0);
+
+        if (window.gsap) {
+          window.gsap.to(window, {
+            duration: 1,
+            ease: 'power3.inOut',
+            scrollTo: { y: topOffset, autoKill: true },
+          });
+          return;
+        }
+
+        window.scrollTo({ top: topOffset, behavior: 'smooth' });
+      })
+      .catch(() => {
+        const topOffset = Math.max(section.offsetTop - 130, 0);
+        window.scrollTo({ top: topOffset, behavior: 'smooth' });
+      });
+  };
+
+  useEffect(() => {
+    const sections = sectionIds
+      .map((id) => sectionRefs.current[id])
+      .filter((section): section is HTMLElement => Boolean(section));
+
+    if (sections.length === 0) return undefined;
+
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (!entry.isIntersecting) return;
+
+        void ensureGsapWithScrollTo()
+          .then(() => {
+            if (!window.gsap) return;
+
+            window.gsap.fromTo(entry.target,
+              { autoAlpha: 0.35, y: 52, filter: 'blur(10px)' },
+              {
+                autoAlpha: 1,
+                y: 0,
+                filter: 'blur(0px)',
+                duration: 0.95,
+                ease: 'power3.out',
+                overwrite: 'auto',
+              });
+          })
+          .catch(() => {
+            // Non-blocking: no animation if GSAP fails.
+          });
+      });
+    }, { threshold: 0.35 });
+
+    sections.forEach((section) => observer.observe(section));
+
+    return () => observer.disconnect();
+  }, [sectionIds]);
+
   return (
     <>
       <OnboardingNetworkBackground />
@@ -87,7 +166,14 @@ export default function MainPage() {
               <ul className="m-0 flex list-none items-center gap-6 p-0 text-sm font-medium text-slate-200">
                 {navItems.map((item) => (
                   <li key={item.label}>
-                    <a href={item.href} className="transition-colors hover:text-cyan-300">
+                    <a
+                      href={item.href}
+                      className="transition-colors hover:text-cyan-300"
+                      onClick={(event) => {
+                        event.preventDefault();
+                        scrollToSection(item.sectionId);
+                      }}
+                    >
                       {item.label}
                     </a>
                   </li>
@@ -107,6 +193,9 @@ export default function MainPage() {
         <div className="mx-auto grid w-full max-w-[1240px] gap-8 pb-16 pt-28 sm:pt-32 lg:gap-10">
           <section
             id="onboarding"
+            ref={(node) => {
+              sectionRefs.current.onboarding = node;
+            }}
             className="rounded-3xl border border-slate-100/10 bg-slate-950/35 p-8 shadow-[0_30px_100px_rgba(2,8,30,0.5)] backdrop-blur-md sm:p-10"
           >
             <p className="text-xs font-semibold uppercase tracking-[0.2em] text-cyan-300">Onboarding</p>
@@ -126,27 +215,49 @@ export default function MainPage() {
               <a
                 href="#validators"
                 className="inline-flex rounded-full border border-cyan-300/40 px-6 py-3 text-sm font-semibold text-cyan-100 transition-colors hover:border-cyan-200 hover:text-cyan-50"
+                onClick={(event) => {
+                  event.preventDefault();
+                  scrollToSection('validators');
+                }}
               >
                 Explore sections
               </a>
             </div>
           </section>
 
-          <section id="validators" className="rounded-3xl border border-slate-100/10 bg-slate-950/30 p-8 backdrop-blur-md sm:p-10">
+          <section
+            id="validators"
+            ref={(node) => {
+              sectionRefs.current.validators = node;
+            }}
+            className="rounded-3xl border border-slate-100/10 bg-slate-950/30 p-8 backdrop-blur-md sm:p-10"
+          >
             <h2 className="text-3xl font-semibold text-slate-50">Validators</h2>
             <p className="mt-4 max-w-3xl text-slate-200/80">
               Describe validator operations, namespace policy enforcement, and how governance readiness gates participation for production deployments.
             </p>
           </section>
 
-          <section id="builders" className="rounded-3xl border border-slate-100/10 bg-slate-950/30 p-8 backdrop-blur-md sm:p-10">
+          <section
+            id="builders"
+            ref={(node) => {
+              sectionRefs.current.builders = node;
+            }}
+            className="rounded-3xl border border-slate-100/10 bg-slate-950/30 p-8 backdrop-blur-md sm:p-10"
+          >
             <h2 className="text-3xl font-semibold text-slate-50">Builders</h2>
             <p className="mt-4 max-w-3xl text-slate-200/80">
               Show how builder teams use the SDK, API layer, and local-stack workflows to ship deterministic, policy-aware applications.
             </p>
           </section>
 
-          <section id="docs" className="rounded-3xl border border-slate-100/10 bg-slate-950/30 p-8 backdrop-blur-md sm:p-10">
+          <section
+            id="docs"
+            ref={(node) => {
+              sectionRefs.current.docs = node;
+            }}
+            className="rounded-3xl border border-slate-100/10 bg-slate-950/30 p-8 backdrop-blur-md sm:p-10"
+          >
             <h2 className="text-3xl font-semibold text-slate-50">Docs</h2>
             <p className="mt-4 max-w-3xl text-slate-200/80">
               Link architecture baselines, runbooks, readiness reviews, and implementation guides used by operators and integrators.
