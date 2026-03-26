@@ -205,6 +205,26 @@ RUST_LOG=info ./citizen-node ./node.toml
 If your `node.toml` references `manifest_path`, keep that path valid relative to
 where the process starts (or use an absolute path).
 
+### Optional: auto-promote standby runtime helper
+
+If an operator wants runtime role toggling to follow governance rotations, this
+helper can watch governance rotation proposals and automatically:
+
+1. detect when your `validator_id` appears in the active set,
+2. set `standby_only = false` when active and `standby_only = true` when standby,
+3. restart the node process whenever the local runtime mode needs to change.
+
+```bash
+VALIDATOR_ID=validator.alpha \
+CONFIG_PATH=/etc/citizen/node.toml \
+NODE_BIN=./citizen-node \
+API_BASE_URL=http://127.0.0.1:8081 \
+citizen-protocol/scripts/auto_promote_standby.sh
+```
+
+The helper expects `GET /api/v1/governance/proposals` and requires `curl` + `jq`.
+It runs continuously so promotion and demotion transitions are both automated.
+
 ### About `manifest_path` in `validator-sample.toml`
 
 `config/*/validator-sample.toml` files intentionally keep

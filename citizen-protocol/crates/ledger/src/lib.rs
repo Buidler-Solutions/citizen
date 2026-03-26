@@ -1521,6 +1521,10 @@ impl<S: LedgerStorage + 'static> Ledger<S> {
         self.storage.track_governance_proposal(proposal)
     }
 
+    pub fn governance_proposals(&self) -> Result<Vec<GovernanceProposal>> {
+        self.storage.governance_proposals()
+    }
+
     pub fn storage(&self) -> Arc<S> {
         Arc::clone(&self.storage)
     }
