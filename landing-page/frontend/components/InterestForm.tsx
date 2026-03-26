@@ -1,7 +1,8 @@
 'use client';
 
-import { CSSProperties, FormEvent, ReactNode, useEffect, useMemo, useState } from 'react';
+import { CSSProperties, FormEvent, ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { AsciinemaModal } from '@/components/AsciinemaModal';
+import { ensureGsap } from '@/lib/gsapLoader';
 
 type RoleId = string;
 type MotionDirection = 'forward' | 'backward';
@@ -275,6 +276,14 @@ export function InterestForm() {
   const [submittedRole, setSubmittedRole] = useState<string | null>(null);
   const [isAsciinemaOpen, setIsAsciinemaOpen] = useState(false);
   const [shortcodeMap, setShortcodeMap] = useState<Record<string, string>>({});
+  const stageContainerRef = useRef<HTMLElement | null>(null);
+  const stageContentRef = useRef<HTMLElement | null>(null);
+  const setStageContainerRef = (node: HTMLElement | null) => {
+    stageContainerRef.current = node;
+  };
+  const setStageContentRef = (node: HTMLElement | null) => {
+    stageContentRef.current = node;
+  };
 
   const validCountryNames = useMemo(() => {
     const displayNames = new Intl.DisplayNames(['en'], { type: 'region' });
@@ -530,10 +539,54 @@ export function InterestForm() {
   };
 
 
-  const motionClass = motionDirection === 'forward'
-    ? '[animation:slideInForward_420ms_cubic-bezier(0.22,0.61,0.36,1)]'
-    : '[animation:slideInBackward_420ms_cubic-bezier(0.22,0.61,0.36,1)]';
   const primaryButtonClass = 'w-full cursor-pointer rounded-xl bg-white/10 backdrop-blur-md border border-white/20 p-4 font-bold text-white transition-all duration-300 hover:-translate-y-0.5 hover:bg-white/20 hover:shadow-[0_8px_30px_rgba(255,255,255,0.15)] disabled:cursor-not-allowed disabled:opacity-60 motion-reduce:transition-none';
+
+
+  useEffect(() => {
+    if (!stageContainerRef.current || !stageContentRef.current) return undefined;
+
+    let cleanup = () => {};
+    let isCancelled = false;
+
+    void ensureGsap()
+      .then(() => {
+        if (isCancelled || !window.gsap || !stageContainerRef.current || !stageContentRef.current) return;
+
+        const travelY = motionDirection === 'forward' ? 34 : -34;
+        const context = window.gsap.context(() => {
+          window.gsap?.fromTo(stageContainerRef.current,
+            { autoAlpha: 0, y: travelY, filter: 'blur(8px)' },
+            {
+              autoAlpha: 1,
+              y: 0,
+              filter: 'blur(0px)',
+              duration: 0.55,
+              ease: 'power3.out',
+            });
+
+          window.gsap?.fromTo(stageContentRef.current?.querySelectorAll('[data-stage-item]') ?? [],
+            { autoAlpha: 0, y: 18 },
+            {
+              autoAlpha: 1,
+              y: 0,
+              duration: 0.5,
+              ease: 'power2.out',
+              stagger: 0.05,
+              delay: 0.08,
+            });
+        }, stageContainerRef.current);
+
+        cleanup = () => context.revert();
+      })
+      .catch(() => {
+        // Fall back to static rendering when GSAP cannot be loaded.
+      });
+
+    return () => {
+      isCancelled = true;
+      cleanup();
+    };
+  }, [motionDirection, stepIndex, introIndex, showOnboardingIntro, showIntro]);
 
   if (submittedThankYouNote) {
     return (
@@ -548,8 +601,9 @@ export function InterestForm() {
   return (
     <form className="onboarding-typography grid min-h-[calc(100vh-160px)] content-center bg-slate-950/0 p-[clamp(1.2rem,4vw,3.2rem)] max-[680px]:min-h-[calc(100vh-140px)]" onSubmit={onSubmit}>
       {showOnboardingIntro ? (
-        <section className="grid min-h-[260px] content-center justify-items-start text-left mt-8" aria-label="Onboarding introduction">
-          <p className="font-display mb-4 text-[clamp(1rem,1.5vw,1.25rem)] font-semibold tracking-[0.14em] text-cyan-300 mt-4">{activeIntroCard?.eyebrow ?? 'citizen-protocol-v0.1.0'}</p>
+        <section ref={setStageContainerRef} className="grid min-h-[260px] content-center justify-items-start text-left mt-8" aria-label="Onboarding introduction">
+          <div ref={setStageContentRef} className="contents">
+          <p data-stage-item className="font-display mb-4 text-[clamp(1rem,1.5vw,1.25rem)] font-semibold tracking-[0.14em] text-cyan-300 mt-4">{activeIntroCard?.eyebrow ?? 'citizen-protocol-v0.1.0'}</p>
           <RotatingOnboardingText baseWord="Onboarding" rotatingWords={onboardingRoleLabels} />
           <p className="font-onboarding-lead text-[clamp(1.2rem,2.3vw,1.8rem)] font-light leading-[1.15] text-slate-200 mt-1 mb-4 ">
             Citizen Protocol is opening its initial waitlist for individuals committed to contributing to a governance-focused blockchain infrastructure.
@@ -560,7 +614,7 @@ export function InterestForm() {
           <p className="font-onboarding-lead m-0 text-[clamp(1.2rem,2.3vw,1.8rem)] font-light leading-[1.15] text-slate-200 mt-4 mb-6">
             Prior to onboarding, it is essential to review and understand the project&rsquo;s vision, system architecture, and operational objectives. Informed participation is fundamental to maintaining transparency, resilience, and institutional-grade trust within the network.
           </p>
-          <div className="grid grid-cols-[minmax(180px,280px)] justify-self-center gap-3 mb-6">
+          <div data-stage-item className="grid grid-cols-[minmax(180px,280px)] justify-self-center gap-3 mb-6">
             <button
               type="button"
               className={primaryButtonClass}
@@ -571,6 +625,7 @@ export function InterestForm() {
             >
               → Start
             </button>
+          </div>
           </div>
         </section>
       ) : showIntro && introSlides.length > 0 ? (
@@ -585,18 +640,18 @@ export function InterestForm() {
               </div>
             </div>
           </div>
-          <div key={`intro-${introIndex}`} className={`will-change-[transform,opacity,filter] ${motionClass} motion-reduce:animate-none`}>
-            <section className="grid content-center">
-              <h2 className="font-display mb-4 text-[clamp(1.6rem,3.5vw,2.8rem)] font-bold leading-[1.2]">
+          <div key={`intro-${introIndex}`} ref={setStageContainerRef} className="will-change-[transform,opacity,filter]">
+            <section ref={setStageContentRef} className="grid content-center">
+              <h2 data-stage-item className="font-display mb-4 text-[clamp(1.6rem,3.5vw,2.8rem)] font-bold leading-[1.2]">
                 {renderInlineShortcodeText(introSlides[introIndex].title, Boolean(resolvedIntroRecording), () => setIsAsciinemaOpen(true), activeIntroLabel)}
               </h2>
-              <p className="font-onboarding-lead mb-8 text-[clamp(1.2rem,2.3vw,1.8rem)] font-light leading-[1.15] text-slate-200">
+              <p data-stage-item className="font-onboarding-lead mb-8 text-[clamp(1.2rem,2.3vw,1.8rem)] font-light leading-[1.15] text-slate-200">
                 {renderInlineShortcodeText(introSlides[introIndex].body, Boolean(resolvedIntroRecording), () => setIsAsciinemaOpen(true), activeIntroLabel)}
               </p>
             </section>
           </div>
 
-          <div className="grid gap-3 [grid-template-columns:1fr_1fr] max-[680px]:grid-cols-1">
+          <div data-stage-item className="grid gap-3 [grid-template-columns:1fr_1fr] max-[680px]:grid-cols-1">
             <button
               type="button"
               className={primaryButtonClass}
@@ -632,11 +687,11 @@ export function InterestForm() {
         </>
       ) : (
         <>
-          <p className="mt-8 text-cyan-300">Step {stepIndex + 1} of {totalSteps}</p>
+          <p data-stage-item className="mt-8 text-cyan-300">Step {stepIndex + 1} of {totalSteps}</p>
 
-          <div key={`step-${stepIndex}`} className={`will-change-[transform,opacity,filter] ${motionClass} motion-reduce:animate-none`}>
+          <div key={`step-${stepIndex}`} ref={setStageContainerRef} className="will-change-[transform,opacity,filter]">
             {stepIndex === 0 ? (
-              <section className="grid gap-4">
+              <section ref={setStageContentRef} data-stage-item className="grid gap-4">
                 <h2 className="font-display text-[clamp(1.6rem,3.5vw,2.8rem)] font-bold leading-[1.2]">I want to participate as a...</h2>
                 <div className="mb-8 grid gap-3">
                   {availableRoles.map((option) => (
@@ -655,7 +710,7 @@ export function InterestForm() {
                 </div>
               </section>
             ) : currentStep ? (
-              <section className="grid gap-4">
+              <section ref={setStageContentRef} data-stage-item className="grid gap-4">
                 <label className="font-display m-0 text-[clamp(1.6rem,3.5vw,2.8rem)] font-bold leading-[1.2]" htmlFor={currentStep.name}>{currentStep.label}</label>
                 <input
                   className="mb-6 w-full rounded-xl border border-blue-200/30 bg-blue-950/90 p-4 text-[clamp(1.05rem,2.2vw,1.35rem)] text-slate-100"
@@ -675,7 +730,7 @@ export function InterestForm() {
             ) : null}
           </div>
 
-          <div className="grid gap-3 [grid-template-columns:1fr_1fr] max-[680px]:grid-cols-1">
+          <div data-stage-item className="grid gap-3 [grid-template-columns:1fr_1fr] max-[680px]:grid-cols-1">
             <button className={primaryButtonClass} type="button" onClick={previousStep} disabled={stepIndex === 0 || loading}>Back</button>
             <button className={primaryButtonClass} type="submit" disabled={loading}>
               {loading ? 'Submitting...' : stepIndex === totalSteps - 1 ? 'Submit' : 'Continue'}
