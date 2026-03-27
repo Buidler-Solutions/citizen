@@ -22,7 +22,13 @@ The protocol mission is to provide verifiable public truth infrastructure (recor
 
 ```text
 .
-├── citizen-protocol/    # Core protocol workspace (Rust node, crates, docs, SDKs, demo/explorer/wallet)
+├── citizen-protocol/    # Core Rust protocol workspace (node, crates, docs, config, scripts)
+├── sdk/                 # Builder-facing SDKs (Node.js package + docs)
+├── wallet/              # Wallet surfaces (CLI + browser + React)
+├── explorer/            # Explorer backend/frontend + infra
+├── demo/                # Demo application surface
+├── dapp/                # dApp surfaces and local-stack pieces
+├── whitepaper/          # Whitepaper web/docs surface
 ├── landing-page/        # Government adoption landing page (frontend + backend)
 ├── LICENSE              # Citizen Protocol Non-Commercial License (CPNCL) v1.0
 └── README.md            # This file
@@ -34,7 +40,7 @@ The protocol mission is to provide verifiable public truth infrastructure (recor
 
 - Rust workspace crates for consensus, ledger, governance, crypto, storage, API, networking, node runtime, simulation, and wallet components.
 - Protocol and operator documentation, including architecture baseline and rollout runbooks.
-- Builder-facing SDK surfaces and local development/testing scripts.
+- Local-stack product surfaces at monorepo root (`sdk/`, `wallet/`, `explorer/`, `demo/`, and `dapp/`).
 
 See: `citizen-protocol/README.md` for module-level details and run instructions.
 

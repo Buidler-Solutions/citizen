@@ -2,7 +2,7 @@
 
 Status: Draft (fast-path to move SDK release readiness from **NO-GO** to **GO**)
 
-Scope: `citizen-protocol/sdk/nodejs` and its runtime integration path used by `citizen-protocol/dapp/apps/api`.
+Scope: `sdk/nodejs` and its runtime integration path used by `dapp/apps/api`.
 
 ## 1. Goal
 
@@ -17,7 +17,7 @@ A release candidate is valid only if all jobs below are green on the release bra
 ### Job A — `sdk-unit-node18`
 
 - Runtime: Node.js 18.x
-- Working dir: `citizen-protocol/sdk/nodejs`
+- Working dir: `sdk/nodejs`
 - Commands:
   - `npm ci`
   - `npm test`
@@ -34,7 +34,7 @@ A release candidate is valid only if all jobs below are green on the release bra
 ### Job B — `sdk-unit-node20`
 
 - Runtime: Node.js 20.x
-- Working dir: `citizen-protocol/sdk/nodejs`
+- Working dir: `sdk/nodejs`
 - Commands:
   - `npm ci`
   - `npm test`
@@ -51,7 +51,7 @@ A release candidate is valid only if all jobs below are green on the release bra
 ### Job C — `sdk-package-audit`
 
 - Runtime: Node.js 20.x
-- Working dir: `citizen-protocol/sdk/nodejs`
+- Working dir: `sdk/nodejs`
 - Commands:
   - `npm ci`
   - `npm pack --dry-run`
@@ -80,7 +80,7 @@ A release candidate is valid only if all jobs below are green on the release bra
 2. Wait for health:
    - `curl --fail http://127.0.0.1:8081/health`
 3. Run SDK smoke script (checked into repo):
-   - `node citizen-protocol/sdk/nodejs/scripts/live_node_smoke.mjs`
+   - `node sdk/nodejs/scripts/live_node_smoke.mjs`
 
 **Smoke script contract**
 - Uses `CitizenNodeClient` against `http://127.0.0.1:8081`.
@@ -118,7 +118,7 @@ Use strict semantic versioning for `@citizen-protocol/nodejs-sdk`:
 - **MAJOR**: any API removal/rename, behavior change that can break existing dApps.
 
 Release PR must include:
-1. Version bump in `citizen-protocol/sdk/nodejs/package.json`.
+1. Version bump in `sdk/nodejs/package.json`.
 2. Short changelog section in PR body:
    - Added
    - Changed
@@ -133,13 +133,13 @@ Mark release status as **GO** only when all are true:
 2. Package dry-run output matches expected file list.
 3. Semver bump classification is documented in PR.
 4. DApp compatibility check is recorded:
-   - `citizen-protocol/dapp/apps/api` still resolves SDK and starts without SDK import/runtime errors.
+   - `dapp/apps/api` still resolves SDK and starts without SDK import/runtime errors.
 
 Otherwise status is **NO-GO**.
 
 ## 6. Fast Adoption Plan (to implement this spec quickly)
 
-1. Add `citizen-protocol/sdk/nodejs/scripts/live_node_smoke.mjs`.
+1. Add `sdk/nodejs/scripts/live_node_smoke.mjs`.
 2. Add CI workflow implementing the four jobs in this spec.
 3. Make these checks required in branch protection.
 4. Use this document as the release checklist source of truth.

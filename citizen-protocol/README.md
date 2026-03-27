@@ -18,14 +18,18 @@ citizen-protocol/
 │   ├── simulation/           # 50–100 validator stress-test harness + golden reports
 │   ├── storage/              # Persistence traits + RocksDB + in-memory backends
 │   └── types/                # Shared protocol data structures
-├── sdk/
-│   └── nodejs/               # Node.js SDK for dApp builders (signed envelope submit + receipt lookup)
 └── docs/
     ├── CITIZEN_MANIFESTO.md  # Positioning + civic mission statement
     ├── DEVELOPER_EXPERIENCE_BLUEPRINT.md # Validator + dApp + wallet + explorer + laboratory plan
     └── GOVERNANCE_CHARTER_V1.md
 ```
 
+Related monorepo surfaces now live at repository root:
+
+- `../sdk/nodejs` — Node.js SDK for dApp builders.
+- `../wallet` — wallet CLI, browser extension, and React surface.
+- `../explorer` — explorer backend/frontend stack.
+- `../demo` and `../dapp` — demo + dApp integration surfaces.
 
 ## Strategic Overhaul Baseline
 

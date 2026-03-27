@@ -57,7 +57,7 @@ If unset, the API defaults to local validator trio endpoints on `127.0.0.1:8081-
 ### Run backend with explicit network targets
 
 ```bash
-cd citizen-protocol/dapp/apps/api
+cd dapp/apps/api
 CITIZEN_TESTNET_SUBMIT_URL=https://testnet.your-citizen-node/api/v1/envelopes/submit \
 CITIZEN_FUTURENET_SUBMIT_URL=https://futurenet.your-citizen-node/api/v1/envelopes/submit \
 CITIZEN_MAINNET_SUBMIT_URL=https://mainnet.your-citizen-node/api/v1/envelopes/submit \
@@ -107,7 +107,7 @@ The DApp API defaults already target those local Rust node endpoints:
 Optional override:
 
 ```bash
-cd citizen-protocol/dapp/apps/api
+cd dapp/apps/api
 CITIZEN_TESTNET_SUBMIT_URL=http://127.0.0.1:8081/api/v1/envelopes/submit CITIZEN_FUTURENET_SUBMIT_URL=http://127.0.0.1:8082/api/v1/envelopes/submit CITIZEN_MAINNET_SUBMIT_URL=http://127.0.0.1:8083/api/v1/envelopes/submit npm run start:dev
 ```
 

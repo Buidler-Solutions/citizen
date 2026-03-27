@@ -5,7 +5,7 @@ This guide explains how to run the Node.js SDK live smoke script end-to-end.
 Script path:
 
 ```bash
-citizen-protocol/sdk/nodejs/scripts/live_node_smoke.mjs
+sdk/nodejs/scripts/live_node_smoke.mjs
 ```
 
 ## What this smoke test validates
@@ -23,7 +23,7 @@ The smoke script verifies the minimum runtime integration path:
 - SDK dependencies installed:
 
 ```bash
-cd citizen-protocol/sdk/nodejs
+cd sdk/nodejs
 npm ci
 ```
 
@@ -33,7 +33,7 @@ Use this when your CITIZEN node is already running.
 
 ```bash
 CITIZEN_NODE_URL=http://127.0.0.1:8081 \
-node citizen-protocol/sdk/nodejs/scripts/live_node_smoke.mjs
+node sdk/nodejs/scripts/live_node_smoke.mjs
 ```
 
 ## Mode 2: Local non-Docker node (cargo run)
@@ -44,7 +44,7 @@ Use this when you want the smoke script to launch the local blockchain node itse
 CITIZEN_NODE_MODE=local \
 CITIZEN_LOCAL_PROTOCOL_DIR=citizen-protocol \
 CITIZEN_LOCAL_CONFIG_PATH=config/localnet/validator-alpha.toml \
-node citizen-protocol/sdk/nodejs/scripts/live_node_smoke.mjs
+node sdk/nodejs/scripts/live_node_smoke.mjs
 ```
 
 ## Mode 3: Command mode (Docker/custom runtime)
@@ -55,7 +55,7 @@ Use this when startup/shutdown requires custom commands.
 CITIZEN_NODE_MODE=command \
 CITIZEN_NODE_START_COMMAND="docker compose -f my-stack.yml up -d citizen-node" \
 CITIZEN_NODE_STOP_COMMAND="docker compose -f my-stack.yml down" \
-node citizen-protocol/sdk/nodejs/scripts/live_node_smoke.mjs
+node sdk/nodejs/scripts/live_node_smoke.mjs
 ```
 
 ## Environment variables

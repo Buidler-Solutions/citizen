@@ -15,7 +15,7 @@ This demo under `demo/` now runs as a **real node-runtime client**:
 ## Run locally
 
 ```bash
-cd citizen-protocol/demo
+cd demo
 npm install
 CITIZEN_NODE_URL=http://127.0.0.1:8081 CITIZEN_CONTENT_NAMESPACE=content.article npm run start
 ```

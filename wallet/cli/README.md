@@ -18,7 +18,7 @@ from the workspace (or from the monorepo root with a manifest path):
 cargo install --path wallet/cli
 
 # from monorepo root (/workspace/citizen)
-cargo install --path citizen-protocol/wallet/cli --root "$HOME/.local"
+cargo install --path wallet/cli --root "$HOME/.local"
 export PATH="$HOME/.local/bin:$PATH"
 ```
 

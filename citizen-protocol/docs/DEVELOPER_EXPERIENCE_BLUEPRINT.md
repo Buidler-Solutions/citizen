@@ -61,7 +61,7 @@ Citizen dApps should follow the governed flow:
 ### 2.1 Start the dApp stack
 
 ```bash
-cd citizen-protocol/dapp
+cd dapp
 npm install
 npm run dev:api
 npm run dev:web
@@ -95,7 +95,7 @@ Citizen signer keeper is the `wallet/browser` extension project.
 ### 3.1 Build and load extension
 
 ```bash
-cd citizen-protocol/wallet/browser
+cd wallet/browser
 npm install
 npm run build -- --watch
 ```
@@ -105,7 +105,7 @@ Then in Chromium browser:
 1. Open `chrome://extensions`
 2. Enable **Developer mode**
 3. Click **Load unpacked**
-4. Select `citizen-protocol/wallet/browser/dist`
+4. Select `wallet/browser/dist`
 5. Pin extension and open popup
 
 ### 3.2 User signing experience (current model)
@@ -127,7 +127,7 @@ Run the explorer stack:
 ### 4.1 Explorer backend
 
 ```bash
-cd citizen-protocol/explorer/backend
+cd explorer/backend
 npm install
 PORT=4010 CITIZEN_NODE_URL=http://127.0.0.1:8081 npm run start:dev
 ```
@@ -135,7 +135,7 @@ PORT=4010 CITIZEN_NODE_URL=http://127.0.0.1:8081 npm run start:dev
 ### 4.2 Explorer frontend
 
 ```bash
-cd citizen-protocol/explorer/frontend
+cd explorer/frontend
 npm install
 NEXT_PUBLIC_API_BASE_URL=http://127.0.0.1:4010 npm run dev -- --port 4020
 ```
