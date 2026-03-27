@@ -4,6 +4,7 @@ citizen-protocol/.tmp-wallet-e2e/
 # TypeScript build cache
 *.tsbuildinfo
 
+#
 citizen-protocol/data/
 compilation/
 
