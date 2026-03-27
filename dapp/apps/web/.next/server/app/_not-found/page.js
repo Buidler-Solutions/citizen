@@ -1,0 +1,13 @@
+var R=require("../../chunks/ssr/[turbopack]_runtime.js")("server/app/_not-found/page.js")
+R.c("server/chunks/ssr/citizen_citizen-protocol_dapp_6c99fc59._.js")
+R.c("server/chunks/ssr/[root-of-the-server]__33859df9._.js")
+R.c("server/chunks/ssr/5b1e8_next_dist_esm_build_templates_app-page_218558b1.js")
+R.c("server/chunks/ssr/[root-of-the-server]__5b5f4f15._.js")
+R.c("server/chunks/ssr/[root-of-the-server]__465d9006._.js")
+R.c("server/chunks/ssr/[root-of-the-server]__75a5fb35._.js")
+R.c("server/chunks/ssr/citizen_citizen-protocol_dapp_apps_web_app_layout_tsx_79f037aa._.js")
+R.c("server/chunks/ssr/5b1e8_next_dist_client_components_6388caf8._.js")
+R.c("server/chunks/ssr/5b1e8_next_dist_client_components_builtin_forbidden_1b7d08e2.js")
+R.c("server/chunks/ssr/9a47a_dapp_apps_web__next-internal_server_app__not-found_page_actions_90bc6166.js")
+R.m(15004)
+module.exports=R.m(15004).exports
