@@ -1,0 +1,15 @@
+version: "3.9"
+services:
+  postgres:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: citizen
+      POSTGRES_PASSWORD: citizen
+      POSTGRES_DB: citizen
+    ports:
+      - "5432:5432"
+    volumes:
+      - citizen_pgdata:/var/lib/postgresql/data
+volumes:
+  citizen_pgdata:
