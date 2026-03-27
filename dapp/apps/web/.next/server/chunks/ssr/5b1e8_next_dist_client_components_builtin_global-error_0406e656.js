@@ -1,0 +1,3 @@
+module.exports=[14447,(a,b,c)=>{let{createClientModuleProxy:d}=a.r(67146);a.n(d("[project]/citizen/citizen-protocol/dapp/node_modules/next/dist/client/components/builtin/global-error.js <module evaluation>"))},54188,(a,b,c)=>{let{createClientModuleProxy:d}=a.r(67146);a.n(d("[project]/citizen/citizen-protocol/dapp/node_modules/next/dist/client/components/builtin/global-error.js"))},81198,a=>{"use strict";a.i(14447);var b=a.i(54188);a.n(b)}];
+
+//# sourceMappingURL=5b1e8_next_dist_client_components_builtin_global-error_0406e656.js.map
