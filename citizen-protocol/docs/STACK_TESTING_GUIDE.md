@@ -64,7 +64,7 @@ curl http://127.0.0.1:8081/namespaces
 ### Terminal B — demo blog backend + web UI
 
 ```bash
-cd citizen-protocol/demo
+cd demo
 npm run start
 ```
 
@@ -80,7 +80,7 @@ What you get:
 For extension loading in browser, keep an incremental build running:
 
 ```bash
-cd citizen-protocol/wallet/browser
+cd wallet/browser
 npm run build -- --watch
 ```
 
@@ -91,7 +91,7 @@ This writes extension assets into `wallet/browser/dist/` whenever files change.
 Run explorer API on a dedicated port and point it at the local validator node API:
 
 ```bash
-cd citizen-protocol/explorer/backend
+cd explorer/backend
 PORT=4010 CITIZEN_NODE_URL=http://127.0.0.1:8081 npm run start:dev
 ```
 
@@ -108,7 +108,7 @@ What you get:
 Point the UI to the explorer backend API:
 
 ```bash
-cd citizen-protocol/explorer/frontend
+cd explorer/frontend
 NEXT_PUBLIC_API_BASE_URL=http://127.0.0.1:4010 npm run dev -- --port 4020
 ```
 
@@ -122,7 +122,7 @@ What you get:
 1. Open `chrome://extensions`
 2. Enable **Developer mode**
 3. Click **Load unpacked**
-4. Select: `citizen-protocol/wallet/browser/dist`
+4. Select: `wallet/browser/dist`
 5. Pin the extension from the browser toolbar
 
 When you make code changes, click **Reload** on the extension card after the watch build completes.

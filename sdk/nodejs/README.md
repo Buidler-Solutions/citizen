@@ -15,7 +15,7 @@ npm install @citizen-protocol/nodejs-sdk
 For local development in this repository:
 
 ```bash
-cd citizen-protocol/sdk/nodejs
+cd sdk/nodejs
 npm install
 ```
 
@@ -78,19 +78,19 @@ The release-gate smoke script supports both externally managed nodes and self-st
 
 ```bash
 # default: expect node already running at CITIZEN_NODE_URL
-node citizen-protocol/sdk/nodejs/scripts/live_node_smoke.mjs
+node sdk/nodejs/scripts/live_node_smoke.mjs
 
 # start a local blockchain node without Docker (cargo run)
 CITIZEN_NODE_MODE=local \
 CITIZEN_LOCAL_PROTOCOL_DIR=citizen-protocol \
 CITIZEN_LOCAL_CONFIG_PATH=config/localnet/validator-alpha.toml \
-node citizen-protocol/sdk/nodejs/scripts/live_node_smoke.mjs
+node sdk/nodejs/scripts/live_node_smoke.mjs
 
 # start/stop through custom commands (for Docker or other runtimes)
 CITIZEN_NODE_MODE=command \
 CITIZEN_NODE_START_COMMAND="docker compose -f my-stack.yml up -d citizen-node" \
 CITIZEN_NODE_STOP_COMMAND="docker compose -f my-stack.yml down" \
-node citizen-protocol/sdk/nodejs/scripts/live_node_smoke.mjs
+node sdk/nodejs/scripts/live_node_smoke.mjs
 ```
 
 Environment variables:

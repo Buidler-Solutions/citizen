@@ -11,14 +11,15 @@ This repository is no longer just a high-level protocol sketch. The codebase alr
 .
 ├── AGENTS.md                  # This repo-wide guide
 ├── README.md                  # Monorepo overview
-├── citizen-protocol/          # Main protocol workspace and product surfaces
+├── citizen-protocol/          # Main Rust protocol workspace
 │   ├── crates/                # Rust protocol/runtime crates
-│   ├── docs/                  # Architecture, runbooks, readiness reviews, rollout plans
-│   ├── sdk/nodejs/            # Builder-facing Node.js SDK
-│   ├── wallet/                # CLI + browser/react wallet surfaces
-│   ├── explorer/              # Explorer backend/frontend
-│   ├── demo/                  # Demo application
-│   └── dapp/                  # dApp surfaces and local-stack pieces
+│   └── docs/                  # Architecture, runbooks, readiness reviews, rollout plans
+├── sdk/                       # Builder-facing SDKs
+├── wallet/                    # CLI + browser/react wallet surfaces
+├── explorer/                  # Explorer backend/frontend
+├── demo/                      # Demo application
+├── dapp/                      # dApp surfaces and local-stack pieces
+├── whitepaper/                # Whitepaper surface
 └── landing-page/              # Separate marketing/government adoption app
 ```
 

@@ -53,28 +53,28 @@ scripts/run_localnet.sh
 ### Terminal B: Demo Blog (runtime-backed mode)
 
 ```bash
-cd citizen-protocol/demo
+cd demo
 CITIZEN_NODE_URL=http://127.0.0.1:8081 CITIZEN_CONTENT_NAMESPACE=content.article npm run start
 ```
 
 ### Terminal C: Browser wallet extension build/watch
 
 ```bash
-cd citizen-protocol/wallet/browser
+cd wallet/browser
 npm run build -- --watch
 ```
 
 ### Terminal D: Explorer backend
 
 ```bash
-cd citizen-protocol/explorer/backend
+cd explorer/backend
 PORT=4010 CITIZEN_NODE_URL=http://127.0.0.1:8081 npm run start:dev
 ```
 
 ### Terminal E: Explorer frontend
 
 ```bash
-cd citizen-protocol/explorer/frontend
+cd explorer/frontend
 NEXT_PUBLIC_API_BASE_URL=http://127.0.0.1:4010 npm run dev -- --port 4020
 ```
 
@@ -83,7 +83,7 @@ NEXT_PUBLIC_API_BASE_URL=http://127.0.0.1:4010 npm run dev -- --port 4020
 1. Open `chrome://extensions`.
 2. Enable **Developer mode**.
 3. Click **Load unpacked**.
-4. Select `citizen-protocol/wallet/browser/dist`.
+4. Select `wallet/browser/dist`.
 
 ## 6. Validation checks (must pass)
 
