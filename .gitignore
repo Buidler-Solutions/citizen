@@ -4,6 +4,7 @@ citizen-protocol/.tmp-wallet-e2e/
 # TypeScript build cache
 *.tsbuildinfo
 
+#
 citizen-protocol/data/
 compilation/
 
@@ -12,3 +13,28 @@ whitepaper/backend/.env
 whitepaper/backend/dist/
 whitepaper/backend/node_modules/
 whitepaper/frontend/.env.local
+
+# Moved non-Rust projects (repo root)
+dapp/node_modules/
+dapp/apps/api/node_modules/
+dapp/apps/api/dist/
+dapp/apps/api/.env
+dapp/apps/web/node_modules/
+dapp/apps/web/.next/
+dapp/apps/web/.env.local
+
+demo/node_modules/
+
+explorer/backend/node_modules/
+explorer/backend/dist/
+explorer/backend/.env
+explorer/frontend/node_modules/
+explorer/frontend/.next/
+explorer/frontend/.env.local
+
+sdk/nodejs/node_modules/
+
+wallet/browser/node_modules/
+wallet/browser/dist/
+wallet/react/node_modules/
+wallet/react/dist/

@@ -1,0 +1,3 @@
+module.exports=[25993,a=>{"use strict";var b=a.i(23229);function c({children:a}){return(0,b.jsx)("html",{lang:"en",children:(0,b.jsx)("body",{children:a})})}a.s(["default",()=>c,"metadata",0,{title:"Citizen DApp Showcase",description:"Explore Citizen blockchain capabilities with a Next.js + NestJS demo."}])}];
+
+//# sourceMappingURL=citizen_citizen-protocol_dapp_apps_web_app_layout_tsx_79f037aa._.js.map

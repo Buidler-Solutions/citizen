@@ -1,0 +1,165 @@
+/* [project]/app/globals.css [app-client] (css) */
+:root {
+  --lightningcss-light: initial;
+  --lightningcss-dark: ;
+  color-scheme: light;
+  color: #0b0d17;
+  background: #f6f7fb;
+  font-family: Inter, Segoe UI, system-ui, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+}
+
+.page {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 48px 24px 72px;
+}
+
+.hero {
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 32px;
+  margin-bottom: 40px;
+  display: flex;
+}
+
+.eyebrow {
+  text-transform: uppercase;
+  letter-spacing: .18em;
+  color: #5c6b82;
+  margin-bottom: 8px;
+  font-size: 12px;
+}
+
+h1 {
+  margin: 0 0 8px;
+  font-size: 40px;
+}
+
+.subtitle {
+  color: #4c5568;
+  margin: 0;
+}
+
+.meta {
+  background: #fff;
+  border-radius: 12px;
+  min-width: 280px;
+  padding: 16px 20px;
+  box-shadow: 0 10px 30px #0c142414;
+}
+
+.meta div {
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 12px;
+  display: flex;
+}
+
+.meta div:last-child {
+  margin-bottom: 0;
+}
+
+.label {
+  color: #8a93a5;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  font-size: 12px;
+}
+
+.grid {
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 24px;
+  display: grid;
+}
+
+.card {
+  background: #fff;
+  border-radius: 16px;
+  padding: 24px;
+  box-shadow: 0 20px 40px #0c142414;
+}
+
+.card h2 {
+  margin-top: 0;
+  margin-bottom: 16px;
+}
+
+.card ul {
+  gap: 16px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+}
+
+.card li {
+  border: 1px solid #e4e9f1;
+  border-radius: 12px;
+  padding: 16px;
+}
+
+.row {
+  justify-content: space-between;
+  margin-bottom: 6px;
+  font-size: 14px;
+  display: flex;
+}
+
+.row:last-child {
+  margin-bottom: 0;
+}
+
+.mono {
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 180px;
+  font-family: Fira Code, Courier New, monospace;
+  font-size: 12px;
+  overflow: hidden;
+}
+
+.policy-note {
+  color: #44526b;
+  margin: 10px 0 0;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.privacy-note {
+  color: #4c5568;
+  margin: 0 0 10px;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.status-chip {
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  border-radius: 999px;
+  align-items: center;
+  padding: 2px 10px;
+  font-size: 12px;
+  display: inline-flex;
+}
+
+.status-chip.ok {
+  color: #0f7a3d;
+  background: #e7f9ef;
+}
+
+.status-chip.warn {
+  color: #ad5e00;
+  background: #fff4e5;
+}
+
+/*# sourceMappingURL=app_globals_71f961d1.css.map*/
