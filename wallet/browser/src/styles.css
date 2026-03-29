@@ -47,9 +47,34 @@ body {
   border-bottom: 1px solid #1f315f;
 }
 
+.brand-row {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  margin-bottom: 0.7rem;
+}
+
+.brand-logo {
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+  border: 1px solid #2b4576;
+  background: #0f1a36;
+  object-fit: cover;
+  box-shadow: 0 8px 20px rgba(44, 137, 255, 0.35);
+}
+
+.brand-kicker {
+  margin: 0;
+  font-size: 0.68rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #9fb7e7;
+}
+
 .wallet-header h1 {
-  margin: 0.35rem 0;
-  font-size: 1.05rem;
+  margin: 0.1rem 0 0;
+  font-size: 1rem;
 }
 
 .wallet-header p {
