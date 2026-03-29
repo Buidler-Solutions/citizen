@@ -6,7 +6,7 @@ Dedicated browser-wallet UX project for transaction/event signing flows.
 
 Current status is **aligned for mnemonic UX defaults**:
 
-- Browser extension signer now persists mnemonic metadata and supports seed phrase generation/reveal/import in the popup.
+- Browser extension signer now persists mnemonic metadata and supports seed phrase generation/reveal/import in the side panel.
 - Extension default derivation path is `m/44'/930'/0'/0'/0'`, matching the CLI default.
 - `citizen-wallet` CLI in `citizen-protocol/crates/wallet/src/cli.rs` supports mnemonic-based keygen/import with hardened-path validation.
 
@@ -16,7 +16,7 @@ Important: the browser extension still signs via the EVM wallet provider surface
 
 The existing `wallet/react` app is a broad web console for onboarding, governance, and operational workflows. Browser wallets require a focused interaction model optimized for:
 
-- Popup-sized viewport (~380–420px wide)
+- Side-panel viewport (~380–420px wide)
 - Fast transaction/event review
 - Security/risk signal clarity
 - Explicit sign/reject actions
@@ -38,7 +38,7 @@ npm run dev
 
 ## Builder credit authoring helper
 
-The popup now includes a **Sponsorship draft builder** to generate strict `builder.credits` / `SPONSOR_USAGE` payloads with required fields (`credit_grant_id`, `sponsorship_id`, `sponsored_did`, `amount`) and optional `sponsor_builder_id` fallback behavior. Preset templates (article/governance) and an inline strict-field checklist help authors verify grant linkage before signing.
+The side panel now includes a **Sponsorship draft builder** to generate strict `builder.credits` / `SPONSOR_USAGE` payloads with required fields (`credit_grant_id`, `sponsorship_id`, `sponsored_did`, `amount`) and optional `sponsor_builder_id` fallback behavior. Preset templates (article/governance) and an inline strict-field checklist help authors verify grant linkage before signing.
 
 ## Quality gates
 
@@ -59,13 +59,15 @@ npm run build
 
 Build output is written to `dist/`.
 
+Note: `dist/` is generated locally and intentionally not versioned in git. Re-run `npm run build` before loading the unpacked extension.
+
 ## Load extension in Chromium browsers
 
 1. Open `chrome://extensions`
 2. Enable **Developer mode**
 3. Click **Load unpacked**
 4. Select `wallet/browser/dist`
-5. Pin and open the extension popup
+5. Pin the extension and click the toolbar icon to open the side panel
 
 ## Watch mode for extension development
 
