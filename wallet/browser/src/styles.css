@@ -42,6 +42,34 @@ body {
   flex-direction: column;
 }
 
+.loading-state,
+.auth-state {
+  padding: 1rem;
+}
+
+.loading-state {
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 0.6rem;
+}
+
+.loading-state h1 {
+  margin: 0.2rem 0 0;
+  font-size: 1.05rem;
+}
+
+.loading-state p {
+  margin: 0;
+  color: #c0d2f6;
+  font-size: 0.84rem;
+}
+
+.loading-logo {
+  width: 64px;
+  height: 64px;
+}
+
 .wallet-header {
   padding: 0.95rem 1rem 0.75rem;
   border-bottom: 1px solid #1f315f;
@@ -52,6 +80,11 @@ body {
   align-items: center;
   gap: 0.65rem;
   margin-bottom: 0.7rem;
+}
+
+.centered-brand {
+  justify-content: center;
+  margin-top: 0.4rem;
 }
 
 .brand-logo {
