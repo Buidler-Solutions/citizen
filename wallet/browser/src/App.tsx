@@ -60,6 +60,8 @@ async function callWallet(method: string, params?: unknown[]): Promise<WalletRes
 }
 
 export function App() {
+  const [isLoading, setIsLoading] = useState(true);
+  const [hasStoredWallet, setHasStoredWallet] = useState(false);
   const [state, setState] = useState<WalletState>({
     account: 'Not initialized',
     network: 'mainnet',
@@ -98,37 +100,45 @@ export function App() {
   });
 
   const refreshState = async () => {
-    const stored = await chrome.storage.local.get([STORAGE_KEY, LAST_REQUEST_KEY]);
-    const wallet = stored[STORAGE_KEY] as { privateKey?: string } | undefined;
-    const lastRequest = stored[LAST_REQUEST_KEY] as WalletState['lastRequest'];
+    setIsLoading(true);
+    try {
+      const stored = await chrome.storage.local.get([STORAGE_KEY, LAST_REQUEST_KEY]);
+      const lastRequest = stored[LAST_REQUEST_KEY] as WalletState['lastRequest'];
 
-    const passwordSet = await callWallet('wallet_isPasswordSet');
-    setNeedsPasswordSetup(passwordSet.ok ? !(passwordSet.result as boolean) : true);
+      const walletExists = await callWallet('wallet_hasStoredWallet');
+      const hasWallet = walletExists.ok ? Boolean(walletExists.result) : false;
+      setHasStoredWallet(hasWallet);
 
-    const unlocked = await callWallet('wallet_isUnlocked');
-    const isUnlocked = unlocked.ok ? (unlocked.result as boolean) : false;
-    setLocked(!isUnlocked);
+      const passwordSet = await callWallet('wallet_isPasswordSet');
+      setNeedsPasswordSetup(passwordSet.ok ? !(passwordSet.result as boolean) : true);
 
-    const selectedNetwork = await callWallet('wallet_getNetwork');
-    const network = selectedNetwork.ok
-      ? (selectedNetwork.result as NetworkId)
-      : 'mainnet';
+      const unlocked = await callWallet('wallet_isUnlocked');
+      const isUnlocked = unlocked.ok ? (unlocked.result as boolean) : false;
+      setLocked(!isUnlocked);
 
-    if (!wallet?.privateKey || !isUnlocked) {
-      setState({
-        account: isUnlocked ? 'Wallet will initialize on first request' : 'Locked',
-        network,
-        lastRequest: lastRequest ?? null,
-      });
-      if (!isUnlocked) {
-        setSecretKey('');
+      const selectedNetwork = await callWallet('wallet_getNetwork');
+      const network = selectedNetwork.ok
+        ? (selectedNetwork.result as NetworkId)
+        : 'mainnet';
+
+      if (!hasWallet || !isUnlocked) {
+        setState({
+          account: hasWallet ? (isUnlocked ? 'Ready' : 'Locked') : 'Wallet not configured',
+          network,
+          lastRequest: lastRequest ?? null,
+        });
+        if (!isUnlocked) {
+          setSecretKey('');
+        }
+        return;
       }
-      return;
-    }
 
-    const accountResponse = (await callWallet('citizen_accounts')) as { ok: boolean; result?: string[] };
-    const account = accountResponse.ok ? accountResponse.result?.[0] ?? 'Unavailable' : 'Unavailable';
-    setState({ account, network, lastRequest: lastRequest ?? null });
+      const accountResponse = (await callWallet('citizen_accounts')) as { ok: boolean; result?: string[] };
+      const account = accountResponse.ok ? accountResponse.result?.[0] ?? 'Unavailable' : 'Unavailable';
+      setState({ account, network, lastRequest: lastRequest ?? null });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   useEffect(() => {
@@ -152,6 +162,23 @@ export function App() {
     setPasswordInput('');
     setStatus(needsPasswordSetup ? 'Password set. Wallet unlocked.' : 'Wallet unlocked.');
     await refreshState();
+  };
+
+  const ensurePasswordSetupIfNeeded = async () => {
+    if (!needsPasswordSetup) {
+      return true;
+    }
+    if (!passwordInput) {
+      setStatus('Set a password before creating or importing a wallet.');
+      return false;
+    }
+    const result = await callWallet('wallet_setPassword', [passwordInput]);
+    if (!result.ok) {
+      setStatus(result.error ?? 'Unable to set wallet password.');
+      return false;
+    }
+    setPasswordInput('');
+    return true;
   };
 
   const handleLock = async () => {
@@ -216,6 +243,9 @@ export function App() {
 
   const handleImportMnemonic = async () => {
     setStatus('');
+    if (!(await ensurePasswordSetupIfNeeded())) {
+      return;
+    }
     if (!importMnemonicPhrase.trim()) {
       setStatus('Enter a seed phrase to import.');
       return;
@@ -235,6 +265,9 @@ export function App() {
 
   const handleGenerateMnemonicWallet = async () => {
     setStatus('');
+    if (!(await ensurePasswordSetupIfNeeded())) {
+      return;
+    }
     const result = await callWallet('wallet_generateMnemonicWallet', [derivationPath]);
     if (!result.ok || typeof result.result !== 'object' || result.result === null) {
       setStatus(result.error ?? 'Failed to generate wallet.');
@@ -298,6 +331,99 @@ export function App() {
     setSponsorshipId(config.sponsorshipId);
     setStatus(`Applied ${preset} sponsorship preset.`);
   };
+
+  if (isLoading) {
+    return (
+      <main className="wallet-root">
+        <section className="wallet-frame loading-state" aria-label="wallet loading">
+          <img className="brand-logo loading-logo" src="/icons/icon128.png" alt="Citizen Wallet logo" />
+          <h1>Citizen Wallet</h1>
+          <p>Loading secure signer session…</p>
+        </section>
+      </main>
+    );
+  }
+
+  if (!hasStoredWallet) {
+    return (
+      <main className="wallet-root">
+        <section className="wallet-frame auth-state" aria-label="wallet onboarding">
+          <div className="brand-row centered-brand">
+            <img className="brand-logo" src="/icons/icon128.png" alt="Citizen Wallet logo" />
+            <div>
+              <p className="brand-kicker">Citizen Protocol</p>
+              <h1>Welcome to Signer Wallet</h1>
+            </div>
+          </div>
+          <article className="request-card">
+            <h2>First-time setup</h2>
+            <p className="meta-text">Import an existing wallet or create a new one to continue.</p>
+            <div className="form-grid">
+              {needsPasswordSetup ? (
+                <input
+                  type="password"
+                  placeholder="Set wallet password"
+                  value={passwordInput}
+                  onChange={(event) => setPasswordInput(event.target.value)}
+                />
+              ) : null}
+              <input
+                type="text"
+                placeholder="Derivation path"
+                value={derivationPath}
+                onChange={(event) => setDerivationPath(event.target.value)}
+              />
+              <input
+                type="text"
+                placeholder="Import seed phrase"
+                value={importMnemonicPhrase}
+                onChange={(event) => setImportMnemonicPhrase(event.target.value)}
+              />
+              <button className="ghost" onClick={handleImportMnemonic}>Import existing wallet</button>
+              <button className="primary" onClick={handleGenerateMnemonicWallet}>Create new wallet</button>
+              {status ? <p>{status}</p> : null}
+            </div>
+          </article>
+        </section>
+      </main>
+    );
+  }
+
+  if (locked || needsPasswordSetup) {
+    return (
+      <main className="wallet-root">
+        <section className="wallet-frame auth-state" aria-label="wallet unlock">
+          <div className="brand-row centered-brand">
+            <img className="brand-logo" src="/icons/icon128.png" alt="Citizen Wallet logo" />
+            <div>
+              <p className="brand-kicker">Citizen Protocol</p>
+              <h1>{needsPasswordSetup ? 'Set wallet password' : 'Unlock wallet'}</h1>
+            </div>
+          </div>
+          <article className="request-card">
+            <h2>{needsPasswordSetup ? 'Protect this wallet' : 'Session locked'}</h2>
+            <p className="meta-text">
+              {needsPasswordSetup
+                ? 'Set your password to protect wallet access.'
+                : 'Enter your password to continue.'}
+            </p>
+            <div className="form-grid">
+              <input
+                type="password"
+                placeholder={needsPasswordSetup ? 'Set wallet password' : 'Enter wallet password'}
+                value={passwordInput}
+                onChange={(event) => setPasswordInput(event.target.value)}
+              />
+              <button className="primary" onClick={handlePasswordSubmit}>
+                {needsPasswordSetup ? 'Set password & unlock' : 'Unlock wallet'}
+              </button>
+              {status ? <p>{status}</p> : null}
+            </div>
+          </article>
+        </section>
+      </main>
+    );
+  }
 
   return (
     <main className="wallet-root">

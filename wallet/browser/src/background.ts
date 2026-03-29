@@ -190,6 +190,12 @@ async function getStoredWallet(): Promise<WalletSigner> {
   return derived;
 }
 
+async function hasStoredWallet(): Promise<boolean> {
+  const existing = await chrome.storage.local.get(STORAGE_KEY);
+  const stored = existing[STORAGE_KEY] as StoredWallet | undefined;
+  return Boolean(stored?.privateKey || stored?.mnemonicPhrase);
+}
+
 async function recordRequest(request: WalletRequest, account: string) {
   await chrome.storage.local.set({
     [LAST_REQUEST_KEY]: {
@@ -325,6 +331,10 @@ async function handleWalletRequest(
 
   if (request.method === 'wallet_isPasswordSet') {
     return { ok: true, result: (await getPasswordHash()) !== null };
+  }
+
+  if (request.method === 'wallet_hasStoredWallet') {
+    return { ok: true, result: await hasStoredWallet() };
   }
 
   if (request.method === 'wallet_isUnlocked') {
