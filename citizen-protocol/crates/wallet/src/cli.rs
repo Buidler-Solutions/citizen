@@ -11,9 +11,10 @@ use std::path::{Path, PathBuf};
 use uuid::Uuid;
 
 use crate::{
-    compute_file_manifest_commitment, decrypt_secret_key, encrypt_secret_key, parse_verifying_key,
-    sign_entry, verify_entry_signature, verify_offchain_file_reconciliation, ActionPolicy,
-    EncryptedSecretKey, EntryDraft, WalletKeypair,
+    compute_file_manifest_commitment, decrypt_secret_key, encrypt_secret_key,
+    generate_mnemonic_phrase, parse_verifying_key, sign_entry, verify_entry_signature,
+    verify_offchain_file_reconciliation, ActionPolicy, EncryptedSecretKey, EntryDraft,
+    WalletKeypair,
 };
 
 #[derive(Debug, Parser)]
@@ -36,6 +37,14 @@ enum Commands {
         label: Option<String>,
         #[arg(long)]
         password: Option<String>,
+        #[arg(long)]
+        with_mnemonic: bool,
+        #[arg(long, default_value_t = 12)]
+        mnemonic_words: u8,
+        #[arg(long)]
+        mnemonic_passphrase: Option<String>,
+        #[arg(long, default_value = "m/44'/930'/0'/0'/0'")]
+        derivation_path: String,
     },
     ImportKey {
         #[arg(long, default_value = "wallet.json")]
@@ -46,6 +55,22 @@ enum Commands {
         key_id: Option<Uuid>,
         #[arg(long)]
         secret_key_hex: String,
+        #[arg(long)]
+        password: Option<String>,
+    },
+    ImportMnemonic {
+        #[arg(long, default_value = "wallet.json")]
+        path: PathBuf,
+        #[arg(long)]
+        label: Option<String>,
+        #[arg(long)]
+        key_id: Option<Uuid>,
+        #[arg(long)]
+        mnemonic: Option<String>,
+        #[arg(long)]
+        mnemonic_passphrase: Option<String>,
+        #[arg(long, default_value = "m/44'/930'/0'/0'/0'")]
+        derivation_path: String,
         #[arg(long)]
         password: Option<String>,
     },
@@ -454,9 +479,26 @@ pub fn run() -> anyhow::Result<()> {
             path,
             label,
             password,
+            with_mnemonic,
+            mnemonic_words,
+            mnemonic_passphrase,
+            derivation_path,
         } => {
             let mut store = Keystore::load_or_create(&path)?;
-            let keypair = WalletKeypair::generate();
+            let keypair = if with_mnemonic {
+                let mnemonic = generate_mnemonic_phrase(mnemonic_words as usize)?;
+                let keypair = WalletKeypair::from_mnemonic(
+                    Uuid::new_v4(),
+                    &mnemonic,
+                    mnemonic_passphrase.as_deref(),
+                    Some(&derivation_path),
+                )?;
+                println!("Mnemonic phrase: {mnemonic}");
+                println!("Derivation path: {derivation_path}");
+                keypair
+            } else {
+                WalletKeypair::generate()
+            };
             let password = load_password(password)?;
             let encrypted = encrypt_secret_key(keypair.secret_key_bytes(), &password)?;
             let record = KeyRecord {
@@ -498,6 +540,42 @@ pub fn run() -> anyhow::Result<()> {
             store.add_key(record);
             store.save(&path)?;
             println!("Imported key {}", keypair.key_id);
+        }
+        Commands::ImportMnemonic {
+            path,
+            label,
+            key_id,
+            mnemonic,
+            mnemonic_passphrase,
+            derivation_path,
+            password,
+        } => {
+            let mut store = Keystore::load_or_create(&path)?;
+            let password = load_password(password)?;
+            let key_id = key_id.unwrap_or_else(Uuid::new_v4);
+            if store.has_key(key_id) {
+                return Err(anyhow::anyhow!("key_id {key_id} already exists"));
+            }
+            let mnemonic = load_mnemonic_phrase(mnemonic)?;
+            let keypair = WalletKeypair::from_mnemonic(
+                key_id,
+                &mnemonic,
+                mnemonic_passphrase.as_deref(),
+                Some(&derivation_path),
+            )?;
+            let encrypted = encrypt_secret_key(keypair.secret_key_bytes(), &password)?;
+            let record = KeyRecord {
+                key_id: keypair.key_id,
+                label,
+                public_key_hex: keypair.verifying_key_hex(),
+                secret_key_hex: None,
+                encrypted_secret_key: Some(encrypted),
+                created_at: Utc::now().timestamp(),
+            };
+            store.add_key(record);
+            store.save(&path)?;
+            println!("Imported mnemonic key {}", keypair.key_id);
+            println!("Derivation path: {derivation_path}");
         }
         Commands::PublicKey { path, key_id } => {
             let store = Keystore::load_or_create(&path)?;
@@ -1039,6 +1117,15 @@ fn load_password(explicit: Option<String>) -> anyhow::Result<String> {
     }
     std::env::var("CITIZEN_WALLET_PASSWORD").map_err(|_| {
         anyhow::anyhow!("password required (pass --password or set CITIZEN_WALLET_PASSWORD)")
+    })
+}
+
+fn load_mnemonic_phrase(explicit: Option<String>) -> anyhow::Result<String> {
+    if let Some(mnemonic) = explicit {
+        return Ok(mnemonic);
+    }
+    std::env::var("CITIZEN_WALLET_MNEMONIC").map_err(|_| {
+        anyhow::anyhow!("mnemonic required (pass --mnemonic or set CITIZEN_WALLET_MNEMONIC)")
     })
 }
 

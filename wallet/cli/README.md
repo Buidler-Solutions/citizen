@@ -29,7 +29,7 @@ citizen-wallet-cli --help
 ```
 
 ## Implemented command groups
-- Key lifecycle: `init`, `keygen`, `import-key`, `list-keys`, `public-key`, `export-key`
+- Key lifecycle: `init`, `keygen`, `import-key`, `import-mnemonic`, `list-keys`, `public-key`, `export-key`
 - Entry signing: `sign-entry`, `sign-identity-register`, `sign-governance-vote`,
   `sign-registry-transfer`, `sign-audit-record`, `sign-builder-credit-grant`,
   `sign-sponsor-usage`

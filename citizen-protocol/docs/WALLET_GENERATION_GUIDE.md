@@ -4,6 +4,15 @@ This guide captures the exact CLI flows for generating a wallet key and viewing 
 
 > ⚠️ Security warning: `secret_key_hex` is private key material. Do not share it, commit it, or paste it into logs.
 
+## Seed phrase support
+
+Wallet CLI now supports mnemonic-aware key flows:
+
+- `keygen --with-mnemonic` generates a BIP-39 mnemonic, derives an Ed25519 key using hardened-path derivation, stores the encrypted secret key in the keystore, and prints the mnemonic once.
+- `import-mnemonic` derives and imports a key from an existing mnemonic.
+- `--mnemonic-passphrase` is optional for both flows.
+- `--derivation-path` defaults to `m/44'/930'/0'/0'/0'` and accepts hardened segments only.
+
 ## 1) Generate a wallet key
 
 ```bash
@@ -20,6 +29,35 @@ Generated key <KEY_ID>
 
 - `<KEY_ID>` is the wallet key identifier (`key_id`).
 - The keystore file is written at `/tmp/citizen-wallet-test.json`.
+
+### Mnemonic-backed key generation
+
+```bash
+cd citizen-protocol
+export CITIZEN_WALLET_PASSWORD='change-me'
+cargo run -p citizen-wallet --bin wallet -- keygen \
+  --path /tmp/citizen-wallet-test.json \
+  --label seed-backed \
+  --with-mnemonic \
+  --mnemonic-words 24 \
+  --mnemonic-passphrase 'optional-passphrase' \
+  --derivation-path "m/44'/930'/0'/0'/0'"
+```
+
+The CLI prints the mnemonic phrase once; store it securely offline.
+
+### Import from existing mnemonic
+
+```bash
+cd citizen-protocol
+export CITIZEN_WALLET_PASSWORD='change-me'
+export CITIZEN_WALLET_MNEMONIC='<YOUR BIP39 PHRASE>'
+cargo run -p citizen-wallet --bin wallet -- import-mnemonic \
+  --path /tmp/citizen-wallet-test.json \
+  --label recovered \
+  --mnemonic-passphrase 'optional-passphrase' \
+  --derivation-path "m/44'/930'/0'/0'/0'"
+```
 
 ## 2) Show only wallet key (public key) and secret key in plain text
 
