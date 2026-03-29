@@ -424,7 +424,7 @@ async function handleWalletRequest(
   }
 
   if (await isWalletLocked()) {
-    return { ok: false, error: 'Wallet is locked. Open the extension popup to unlock.' };
+    return { ok: false, error: 'Wallet is locked. Open the extension side panel to unlock.' };
   }
 
   const wallet = await getStoredWallet();
@@ -473,3 +473,12 @@ chrome.runtime.onMessage.addListener((
 
   return true;
 });
+
+if (chrome.sidePanel) {
+  chrome.sidePanel
+    .setPanelBehavior({ openPanelOnActionClick: true })
+    .catch((error: unknown) => {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error(`Unable to enable side panel action behavior: ${message}`);
+    });
+}
