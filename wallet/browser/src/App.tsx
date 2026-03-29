@@ -303,6 +303,13 @@ export function App() {
     <main className="wallet-root">
       <section className="wallet-frame" aria-label="browser wallet status">
         <header className="wallet-header">
+          <div className="brand-row">
+            <img className="brand-logo" src="/icons/icon128.png" alt="Citizen Wallet logo" />
+            <div>
+              <p className="brand-kicker">Citizen Protocol</p>
+              <h1>Signer Wallet</h1>
+            </div>
+          </div>
           <div className="header-controls">
             <label htmlFor="network" className="network-label">Network</label>
             <select
@@ -317,8 +324,7 @@ export function App() {
           </div>
           <p className="network-pill">citizen-{state.network}</p>
           <p className="top-address" title={state.account}>Wallet: {state.account}</p>
-          <h1>Citizen Signer Wallet</h1>
-          <p>Password lock is required before account access and signing.</p>
+          <p>Secure signing and consent flows for browser requests.</p>
           <p className="security-note">Seed phrase flow now supports CLI-style derivation path defaults.</p>
         </header>
 
