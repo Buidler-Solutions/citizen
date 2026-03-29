@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "lint": "tsc --noEmit && tsc --noEmit -p tsconfig.node.json",
-    "test": "vitest run --environment jsdom",
+    "pretest": "node ./scripts/ensure-test-deps.mjs",
+    "test": "npx --yes vitest run --environment jsdom",
     "build": "tsc -b && vite build",
     "preview": "vite preview"
   },

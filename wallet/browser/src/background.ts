@@ -1,4 +1,4 @@
-import { Wallet } from 'ethers';
+import { HDNodeWallet, Wallet } from 'ethers';
 
 type WalletRequest = {
   method: string;
@@ -24,6 +24,8 @@ type WalletSigner = {
 
 type StoredWallet = {
   privateKey: string;
+  mnemonicPhrase?: string;
+  derivationPath?: string;
 };
 
 const STORAGE_KEY = 'citizen.browser.wallet.v1';
@@ -31,6 +33,7 @@ const LAST_REQUEST_KEY = 'citizen.browser.wallet.last_request.v1';
 const PASSWORD_HASH_KEY = 'citizen.browser.wallet.password_hash.v1';
 const SESSION_UNLOCKED_KEY = 'citizen.browser.wallet.unlocked.v1';
 const NETWORK_KEY = 'citizen.browser.wallet.network.v1';
+const DEFAULT_DERIVATION_PATH = "m/44'/930'/0'/0'/0'";
 
 const NETWORKS = {
   mainnet: {
@@ -150,15 +153,41 @@ async function getStoredWallet(): Promise<WalletSigner> {
   const existing = await chrome.storage.local.get(STORAGE_KEY);
   const stored = existing[STORAGE_KEY] as StoredWallet | undefined;
 
+  if (stored?.mnemonicPhrase) {
+    const derived = HDNodeWallet.fromPhrase(
+      stored.mnemonicPhrase,
+      undefined,
+      stored.derivationPath ?? DEFAULT_DERIVATION_PATH,
+    );
+    if (stored.privateKey !== derived.privateKey) {
+      await chrome.storage.local.set({
+        [STORAGE_KEY]: {
+          privateKey: derived.privateKey,
+          mnemonicPhrase: stored.mnemonicPhrase,
+          derivationPath: stored.derivationPath ?? DEFAULT_DERIVATION_PATH,
+        } satisfies StoredWallet,
+      });
+    }
+    return derived;
+  }
+
   if (stored?.privateKey) {
     return new Wallet(stored.privateKey);
   }
 
   const created = Wallet.createRandom();
+  const mnemonicPhrase = created.mnemonic?.phrase;
+  const derived = mnemonicPhrase
+    ? HDNodeWallet.fromPhrase(mnemonicPhrase, undefined, DEFAULT_DERIVATION_PATH)
+    : created;
   await chrome.storage.local.set({
-    [STORAGE_KEY]: { privateKey: created.privateKey } satisfies StoredWallet,
+    [STORAGE_KEY]: {
+      privateKey: derived.privateKey,
+      mnemonicPhrase,
+      derivationPath: DEFAULT_DERIVATION_PATH,
+    } satisfies StoredWallet,
   });
-  return created;
+  return derived;
 }
 
 async function recordRequest(request: WalletRequest, account: string) {
@@ -191,6 +220,101 @@ async function exportPrivateKey(password: string): Promise<WalletResponse> {
 
   const wallet = await getStoredWallet();
   return { ok: true, result: wallet.privateKey };
+}
+
+async function exportMnemonic(password: string): Promise<WalletResponse> {
+  const unlocked = await isUnlocked();
+  if (!unlocked) {
+    return { ok: false, error: 'Unlock wallet before exporting seed phrase.' };
+  }
+
+  const storedHash = await getPasswordHash();
+  if (!storedHash) {
+    return { ok: false, error: 'No password configured.' };
+  }
+
+  const inputHash = await sha256Hex(password);
+  if (inputHash !== storedHash) {
+    return { ok: false, error: 'Invalid password.' };
+  }
+
+  const existing = await chrome.storage.local.get(STORAGE_KEY);
+  const stored = existing[STORAGE_KEY] as StoredWallet | undefined;
+  if (!stored?.mnemonicPhrase) {
+    return { ok: false, error: 'Mnemonic is unavailable for this wallet.' };
+  }
+
+  return {
+    ok: true,
+    result: {
+      mnemonicPhrase: stored.mnemonicPhrase,
+      derivationPath: stored.derivationPath ?? DEFAULT_DERIVATION_PATH,
+    },
+  };
+}
+
+async function importMnemonic(
+  mnemonicPhrase: string,
+  derivationPath = DEFAULT_DERIVATION_PATH,
+): Promise<WalletResponse> {
+  const normalizedPhrase = mnemonicPhrase.trim().toLowerCase();
+  if (!normalizedPhrase) {
+    return { ok: false, error: 'Mnemonic phrase is required.' };
+  }
+
+  let derived: HDNodeWallet;
+  try {
+    derived = HDNodeWallet.fromPhrase(normalizedPhrase, undefined, derivationPath);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Invalid mnemonic phrase.';
+    return { ok: false, error: message };
+  }
+
+  await chrome.storage.local.set({
+    [STORAGE_KEY]: {
+      privateKey: derived.privateKey,
+      mnemonicPhrase: normalizedPhrase,
+      derivationPath,
+    } satisfies StoredWallet,
+  });
+  await markUnlocked();
+
+  return {
+    ok: true,
+    result: {
+      account: derived.address,
+      derivationPath,
+    },
+  };
+}
+
+async function generateMnemonicWallet(
+  derivationPath = DEFAULT_DERIVATION_PATH,
+): Promise<WalletResponse> {
+  const created = Wallet.createRandom();
+  const mnemonicPhrase = created.mnemonic?.phrase;
+  if (!mnemonicPhrase) {
+    return { ok: false, error: 'Unable to generate mnemonic phrase for new wallet.' };
+  }
+
+  const derived = HDNodeWallet.fromPhrase(mnemonicPhrase, undefined, derivationPath);
+  await chrome.storage.local.set({
+    [STORAGE_KEY]: {
+      privateKey: derived.privateKey,
+      mnemonicPhrase,
+      derivationPath,
+    } satisfies StoredWallet,
+  });
+  await markUnlocked();
+
+  return {
+    ok: true,
+    result: {
+      account: derived.address,
+      mnemonicPhrase,
+      derivationPath,
+    },
+  };
 }
 
 async function handleWalletRequest(
@@ -245,6 +369,42 @@ async function handleWalletRequest(
       return { ok: false, error: 'wallet_exportPrivateKey requires your password.' };
     }
     return exportPrivateKey(password);
+  }
+
+  if (request.method === 'wallet_exportMnemonic') {
+    if (!isUiRequest) {
+      return { ok: false, error: 'Unauthorized wallet method.' };
+    }
+    const [password] = request.params ?? [];
+    if (typeof password !== 'string') {
+      return { ok: false, error: 'wallet_exportMnemonic requires your password.' };
+    }
+    return exportMnemonic(password);
+  }
+
+  if (request.method === 'wallet_importMnemonic') {
+    if (!isUiRequest) {
+      return { ok: false, error: 'Unauthorized wallet method.' };
+    }
+    const [mnemonicPhrase, derivationPath] = request.params ?? [];
+    if (typeof mnemonicPhrase !== 'string') {
+      return { ok: false, error: 'wallet_importMnemonic requires a mnemonic phrase.' };
+    }
+    if (derivationPath !== undefined && typeof derivationPath !== 'string') {
+      return { ok: false, error: 'wallet_importMnemonic derivation path must be a string.' };
+    }
+    return importMnemonic(mnemonicPhrase, derivationPath ?? DEFAULT_DERIVATION_PATH);
+  }
+
+  if (request.method === 'wallet_generateMnemonicWallet') {
+    if (!isUiRequest) {
+      return { ok: false, error: 'Unauthorized wallet method.' };
+    }
+    const [derivationPath] = request.params ?? [];
+    if (derivationPath !== undefined && typeof derivationPath !== 'string') {
+      return { ok: false, error: 'wallet_generateMnemonicWallet derivation path must be a string.' };
+    }
+    return generateMnemonicWallet(derivationPath ?? DEFAULT_DERIVATION_PATH);
   }
 
   if (request.method === 'wallet_getNetwork') {
