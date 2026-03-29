@@ -296,7 +296,7 @@ fn derive_ed25519_slip10_secret(seed: &[u8], derivation_path: &str) -> Result<[u
     type HmacSha512Real = Hmac<sha2::Sha512>;
 
     let segments = parse_hardened_derivation_path(derivation_path)?;
-    let mut mac = HmacSha512Real::new_from_slice(b"ed25519 seed")
+    let mut mac = <HmacSha512Real as Mac>::new_from_slice(b"ed25519 seed")
         .map_err(|err| ProtocolError::crypto(format!("failed to init HMAC: {err}")))?;
     mac.update(seed);
     let master = mac.finalize().into_bytes();
@@ -311,7 +311,7 @@ fn derive_ed25519_slip10_secret(seed: &[u8], derivation_path: &str) -> Result<[u
         data.extend_from_slice(&secret);
         data.extend_from_slice(&(index | 0x8000_0000).to_be_bytes());
 
-        let mut step_mac = HmacSha512Real::new_from_slice(&chain_code)
+        let mut step_mac = <HmacSha512Real as Mac>::new_from_slice(&chain_code)
             .map_err(|err| ProtocolError::crypto(format!("failed to init child HMAC: {err}")))?;
         step_mac.update(&data);
         let output = step_mac.finalize().into_bytes();
