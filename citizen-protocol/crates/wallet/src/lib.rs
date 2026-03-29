@@ -1,4 +1,5 @@
 use argon2::{Algorithm, Argon2, Params, Version};
+use bip39::{Language, Mnemonic};
 use chacha20poly1305::{
     aead::{Aead, KeyInit},
     ChaCha20Poly1305, Key, Nonce, XChaCha20Poly1305, XNonce,
@@ -10,6 +11,7 @@ use citizen_types::{
 use ed25519_dalek::{
     Signature, Signer, SigningKey, VerifyingKey, PUBLIC_KEY_LENGTH, SECRET_KEY_LENGTH,
 };
+use hmac::{Hmac, Mac};
 use rand::rngs::OsRng;
 use rand::RngCore;
 use serde::{Deserialize, Serialize};
@@ -24,6 +26,8 @@ pub type Result<T> = std::result::Result<T, ProtocolError>;
 
 pub mod cli;
 pub mod privacy;
+
+const DEFAULT_HARDENED_DERIVATION_PATH: &str = "m/44'/930'/0'/0'/0'";
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct NamespaceFieldPolicy {
@@ -249,6 +253,112 @@ impl WalletKeypair {
     pub fn sign_bytes(&self, payload: &[u8]) -> Signature {
         self.signing_key.sign(payload)
     }
+
+    pub fn from_mnemonic(
+        key_id: Uuid,
+        mnemonic_phrase: &str,
+        passphrase: Option<&str>,
+        derivation_path: Option<&str>,
+    ) -> Result<Self> {
+        let mnemonic = Mnemonic::parse_in_normalized(Language::English, mnemonic_phrase)
+            .map_err(|err| ProtocolError::crypto(format!("invalid mnemonic phrase: {err}")))?;
+        let seed = mnemonic.to_seed_normalized(passphrase.unwrap_or_default());
+        let secret = derive_ed25519_slip10_secret(
+            &seed,
+            derivation_path.unwrap_or(DEFAULT_HARDENED_DERIVATION_PATH),
+        )?;
+        Self::from_secret_bytes(key_id, &secret)
+    }
+}
+
+pub fn generate_mnemonic_phrase(word_count: usize) -> Result<String> {
+    let entropy_len = match word_count {
+        12 => 16,
+        15 => 20,
+        18 => 24,
+        21 => 28,
+        24 => 32,
+        _ => {
+            return Err(ProtocolError::crypto(
+                "mnemonic word count must be one of 12, 15, 18, 21, or 24".to_string(),
+            ))
+        }
+    };
+    let mut entropy = vec![0u8; entropy_len];
+    OsRng.fill_bytes(&mut entropy);
+    let mnemonic = Mnemonic::from_entropy_in(Language::English, &entropy)
+        .map_err(|err| ProtocolError::crypto(format!("failed to generate mnemonic: {err}")))?;
+    Ok(mnemonic.to_string())
+}
+
+fn derive_ed25519_slip10_secret(seed: &[u8], derivation_path: &str) -> Result<[u8; 32]> {
+    // SLIP-0010 for Ed25519 uses HMAC-SHA512.
+    type HmacSha512Real = Hmac<sha2::Sha512>;
+
+    let segments = parse_hardened_derivation_path(derivation_path)?;
+    let mut mac = HmacSha512Real::new_from_slice(b"ed25519 seed")
+        .map_err(|err| ProtocolError::crypto(format!("failed to init HMAC: {err}")))?;
+    mac.update(seed);
+    let master = mac.finalize().into_bytes();
+    let mut secret = [0u8; 32];
+    let mut chain_code = [0u8; 32];
+    secret.copy_from_slice(&master[..32]);
+    chain_code.copy_from_slice(&master[32..]);
+
+    for index in segments {
+        let mut data = Vec::with_capacity(1 + 32 + 4);
+        data.push(0u8);
+        data.extend_from_slice(&secret);
+        data.extend_from_slice(&(index | 0x8000_0000).to_be_bytes());
+
+        let mut step_mac = HmacSha512Real::new_from_slice(&chain_code)
+            .map_err(|err| ProtocolError::crypto(format!("failed to init child HMAC: {err}")))?;
+        step_mac.update(&data);
+        let output = step_mac.finalize().into_bytes();
+        secret.copy_from_slice(&output[..32]);
+        chain_code.copy_from_slice(&output[32..]);
+    }
+
+    Ok(secret)
+}
+
+fn parse_hardened_derivation_path(path: &str) -> Result<Vec<u32>> {
+    if !path.starts_with("m/") {
+        return Err(ProtocolError::crypto(format!(
+            "invalid derivation path `{path}`: expected `m/...`"
+        )));
+    }
+    let mut out = Vec::new();
+    for segment in path.split('/').skip(1) {
+        if segment.is_empty() {
+            return Err(ProtocolError::crypto(format!(
+                "invalid derivation path `{path}`: empty segment"
+            )));
+        }
+        if !segment.ends_with('\'') {
+            return Err(ProtocolError::crypto(format!(
+                "invalid derivation path `{path}`: only hardened segments are supported (append ')"
+            )));
+        }
+        let raw = &segment[..segment.len() - 1];
+        let value: u32 = raw.parse().map_err(|_| {
+            ProtocolError::crypto(format!(
+                "invalid derivation path `{path}`: non-numeric segment `{segment}`"
+            ))
+        })?;
+        if value >= 0x8000_0000 {
+            return Err(ProtocolError::crypto(format!(
+                "invalid derivation path `{path}`: segment out of range `{segment}`"
+            )));
+        }
+        out.push(value);
+    }
+    if out.is_empty() {
+        return Err(ProtocolError::crypto(format!(
+            "invalid derivation path `{path}`: at least one hardened segment is required"
+        )));
+    }
+    Ok(out)
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -2261,5 +2371,36 @@ mod tests {
         assert_eq!(partitioned.public_fields.len(), 1_334);
         assert_eq!(partitioned.committed_fields.len(), 1_333);
         assert_eq!(partitioned.offchain_encrypted_fields.len(), 1_333);
+    }
+
+    #[test]
+    fn derives_deterministic_keypair_from_mnemonic() {
+        let phrase = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
+        let key_a = WalletKeypair::from_mnemonic(
+            Uuid::new_v4(),
+            phrase,
+            Some("wallet-passphrase"),
+            Some("m/44'/930'/0'/0'/0'"),
+        )
+        .expect("derive key a");
+        let key_b = WalletKeypair::from_mnemonic(
+            Uuid::new_v4(),
+            phrase,
+            Some("wallet-passphrase"),
+            Some("m/44'/930'/0'/0'/0'"),
+        )
+        .expect("derive key b");
+        assert_eq!(key_a.verifying_key_hex(), key_b.verifying_key_hex());
+    }
+
+    #[test]
+    fn rejects_non_hardened_derivation_paths_for_mnemonic_keys() {
+        let phrase = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
+        let err =
+            WalletKeypair::from_mnemonic(Uuid::new_v4(), phrase, None, Some("m/44'/930'/0'/0/0"))
+                .expect_err("non-hardened path must fail");
+        assert!(err
+            .to_string()
+            .contains("only hardened segments are supported"));
     }
 }
