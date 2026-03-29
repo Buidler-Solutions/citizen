@@ -71,6 +71,10 @@ export function App() {
   const [status, setStatus] = useState('');
   const [secretPassword, setSecretPassword] = useState('');
   const [secretKey, setSecretKey] = useState('');
+  const [mnemonicPassword, setMnemonicPassword] = useState('');
+  const [mnemonicPhrase, setMnemonicPhrase] = useState('');
+  const [importMnemonicPhrase, setImportMnemonicPhrase] = useState('');
+  const [derivationPath, setDerivationPath] = useState("m/44'/930'/0'/0'/0'");
   const [grantId, setGrantId] = useState('grant:builder:alpha');
   const [sponsorDid, setSponsorDid] = useState('did:ledger:builder:alpha');
   const [sponsoredDid, setSponsoredDid] = useState('did:ledger:app:citizen-blog');
@@ -184,6 +188,66 @@ export function App() {
     setStatus('Secret key copied to clipboard.');
   };
 
+  const handleRevealMnemonic = async () => {
+    setStatus('');
+    if (!mnemonicPassword) {
+      setStatus('Enter password to view seed phrase.');
+      return;
+    }
+
+    const result = await callWallet('wallet_exportMnemonic', [mnemonicPassword]);
+    if (!result.ok || typeof result.result !== 'object' || result.result === null) {
+      setStatus(result.error ?? 'Unable to reveal seed phrase.');
+      return;
+    }
+
+    const value = result.result as { mnemonicPhrase?: string; derivationPath?: string };
+    if (!value.mnemonicPhrase) {
+      setStatus('Mnemonic phrase is unavailable for this wallet.');
+      return;
+    }
+    setMnemonicPhrase(value.mnemonicPhrase);
+    if (value.derivationPath) {
+      setDerivationPath(value.derivationPath);
+    }
+    setMnemonicPassword('');
+    setStatus('Seed phrase revealed. Store offline only.');
+  };
+
+  const handleImportMnemonic = async () => {
+    setStatus('');
+    if (!importMnemonicPhrase.trim()) {
+      setStatus('Enter a seed phrase to import.');
+      return;
+    }
+
+    const result = await callWallet('wallet_importMnemonic', [importMnemonicPhrase, derivationPath]);
+    if (!result.ok) {
+      setStatus(result.error ?? 'Failed to import seed phrase.');
+      return;
+    }
+
+    setMnemonicPhrase('');
+    setImportMnemonicPhrase('');
+    setStatus('Seed phrase imported. Wallet account updated.');
+    await refreshState();
+  };
+
+  const handleGenerateMnemonicWallet = async () => {
+    setStatus('');
+    const result = await callWallet('wallet_generateMnemonicWallet', [derivationPath]);
+    if (!result.ok || typeof result.result !== 'object' || result.result === null) {
+      setStatus(result.error ?? 'Failed to generate wallet.');
+      return;
+    }
+
+    const value = result.result as { mnemonicPhrase?: string };
+    setMnemonicPhrase(value.mnemonicPhrase ?? '');
+    setImportMnemonicPhrase('');
+    setStatus('Generated new wallet + seed phrase. Back it up now.');
+    await refreshState();
+  };
+
   const handleNetworkChange = async (network: NetworkId) => {
     const result = await callWallet('wallet_setNetwork', [network]);
     if (!result.ok) {
@@ -255,6 +319,7 @@ export function App() {
           <p className="top-address" title={state.account}>Wallet: {state.account}</p>
           <h1>Citizen Signer Wallet</h1>
           <p>Password lock is required before account access and signing.</p>
+          <p className="security-note">Seed phrase flow now supports CLI-style derivation path defaults.</p>
         </header>
 
         <div className="wallet-scroll">
@@ -300,6 +365,35 @@ export function App() {
               <button className="primary" onClick={handleRevealSecret}>Reveal secret key</button>
               {secretKey ? <button className="ghost" onClick={handleCopySecret}>Copy secret key</button> : null}
               {secretKey ? <code className="secret-box">{secretKey}</code> : <p className="meta-text">Hidden</p>}
+            </div>
+          </article>
+
+          <article className="request-card">
+            <h2>Seed phrase (secure reveal + import)</h2>
+            <p className="meta-text">Default derivation path mirrors wallet CLI: <code>m/44'/930'/0'/0'/0'</code>.</p>
+            <div className="form-grid">
+              <input
+                type="password"
+                placeholder="Re-enter password to reveal seed phrase"
+                value={mnemonicPassword}
+                onChange={(event) => setMnemonicPassword(event.target.value)}
+              />
+              <button className="primary" onClick={handleRevealMnemonic}>Reveal seed phrase</button>
+              <input
+                type="text"
+                placeholder="Derivation path"
+                value={derivationPath}
+                onChange={(event) => setDerivationPath(event.target.value)}
+              />
+              <input
+                type="text"
+                placeholder="Import seed phrase"
+                value={importMnemonicPhrase}
+                onChange={(event) => setImportMnemonicPhrase(event.target.value)}
+              />
+              <button className="ghost" onClick={handleImportMnemonic}>Import seed phrase</button>
+              <button className="ghost" onClick={handleGenerateMnemonicWallet}>Generate new wallet + seed</button>
+              {mnemonicPhrase ? <code className="secret-box">{mnemonicPhrase}</code> : <p className="meta-text">Hidden</p>}
             </div>
           </article>
 

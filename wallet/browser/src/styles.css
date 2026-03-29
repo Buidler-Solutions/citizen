@@ -58,6 +58,12 @@ body {
   font-size: 0.84rem;
 }
 
+.security-note {
+  margin-top: 0.35rem !important;
+  color: #ffca89 !important;
+  font-size: 0.76rem !important;
+}
+
 .header-controls {
   display: flex;
   align-items: center;
