@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { InterestForm } from '@/components/InterestForm';
 import { OnboardingNetworkBackground } from '@/components/OnboardingNetworkBackground';
 import { AsciinemaModal } from '@/components/AsciinemaModal';
+import { WalletOnboardingLogin } from '@/components/WalletOnboardingLogin';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
 
@@ -117,9 +118,7 @@ export default function OnboardingPage() {
             </nav>
 
             <div className="hidden justify-self-end text-right sm:block">
-              <button type="button" className="rounded-full border border-cyan-300/40 px-4 py-1.5 text-xs font-semibold tracking-[0.08em] text-cyan-200 transition-colors hover:border-cyan-200 hover:text-cyan-100">
-                Login · Guest
-              </button>
+              <WalletOnboardingLogin />
             </div>
 
             <details
@@ -162,12 +161,9 @@ export default function OnboardingPage() {
                     </button>
                   </li>
                 </ul>
-                <button
-                  type="button"
-                  className="mt-4 w-full rounded-full border border-cyan-300/40 px-4 py-2 text-xs font-semibold tracking-[0.08em] text-cyan-200 transition-colors hover:border-cyan-200 hover:text-cyan-100"
-                >
-                  Login · Guest
-                </button>
+                <div className="mt-4">
+                  <WalletOnboardingLogin />
+                </div>
               </div>
             </details>
           </div>

@@ -8,6 +8,7 @@ This directory contains the wallet application surfaces that sit on top of the s
 - `react/` — broader web wallet console for onboarding, key management, namespace operations, receipts, and governance UX.
 - `browser/` — focused signer-keeper browser extension for popup request review and explicit sign/reject flows.
 - `backend/` — lightweight wallet-auth backend for challenge/verify login APIs used by dApps.
+- `sdk/typescript-auth/` — reusable TypeScript SDK for browser wallet login (`challenge`/`verify`) usable by onboarding sites and dApps.
 
 ## Implementation Status
 
