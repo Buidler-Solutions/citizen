@@ -15,6 +15,19 @@ type SubmitBody = {
   signature: string;
 };
 
+type AuthChallengeBody = {
+  wallet: string;
+  domain?: string;
+  uri?: string;
+  network?: string;
+};
+
+type AuthVerifyBody = {
+  challengeId: string;
+  wallet: string;
+  signature: string;
+};
+
 @Controller()
 export class AppController {
   constructor(private readonly appService: AppService) {}
@@ -66,5 +79,15 @@ export class AppController {
   @Post("/articles/submit")
   submitArticle(@Body() body: SubmitBody) {
     return this.appService.submitSignedArticle(body.challengeId, body.signature);
+  }
+
+  @Post("/auth/challenge")
+  createAuthChallenge(@Body() body: AuthChallengeBody) {
+    return this.appService.createWalletAuthChallenge(body.wallet, body.domain, body.uri, body.network);
+  }
+
+  @Post("/auth/verify")
+  verifyAuthChallenge(@Body() body: AuthVerifyBody) {
+    return this.appService.verifyWalletAuthChallenge(body.challengeId, body.wallet, body.signature);
   }
 }

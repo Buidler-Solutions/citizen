@@ -3,7 +3,7 @@ import {
   Injectable,
   ServiceUnavailableException
 } from "@nestjs/common";
-import { createHash, randomUUID } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { verifyMessage } from "ethers";
 import { DatabaseService } from "./db.service";
 
@@ -51,7 +51,21 @@ type PublishedArticle = {
   nodeSubmission: NodeSubmission;
 };
 
+type WalletAuthChallenge = {
+  id: string;
+  wallet: string;
+  network: TargetNetwork;
+  domain: string;
+  uri: string;
+  nonce: string;
+  message: string;
+  createdAt: number;
+  expiresAt: number;
+  consumed: boolean;
+};
+
 const CHALLENGE_TTL_MS = 5 * 60 * 1000;
+const AUTH_CHALLENGE_TTL_MS = 5 * 60 * 1000;
 const DEFAULT_NETWORK: TargetNetwork = "futurenet";
 
 const NODE_ENDPOINTS: Record<TargetNetwork, string> = {
@@ -66,6 +80,7 @@ const NODE_ENDPOINTS: Record<TargetNetwork, string> = {
 @Injectable()
 export class AppService {
   private readonly challenges = new Map<string, ArticleChallenge>();
+  private readonly authChallenges = new Map<string, WalletAuthChallenge>();
   private readonly articles: PublishedArticle[] = [];
   private readonly sdkClients = new Map<TargetNetwork, CitizenNodeClientInstance>();
 
@@ -82,6 +97,9 @@ export class AppService {
         publishedCount: this.articles.length,
         defaultNetwork: DEFAULT_NETWORK,
         networkEndpoints: NODE_ENDPOINTS
+      },
+      walletAuth: {
+        challengeTtlSeconds: AUTH_CHALLENGE_TTL_MS / 1000
       }
     };
   }
@@ -123,6 +141,11 @@ export class AppService {
         name: "Wallet Sign and Submit",
         detail:
           "Article publishing signs a challenge, verifies signature server-side, and submits to selected network (testnet/futurenet/mainnet)."
+      },
+      walletAuth: {
+        name: "Wallet Login (Backend Verified)",
+        detail:
+          "MetaMask-style login pattern with backend nonce challenge, signature verification, and session issuance for Citizen dApps."
       }
     };
   }
@@ -199,6 +222,107 @@ export class AppService {
 
   getArticles() {
     return this.articles;
+  }
+
+  createWalletAuthChallenge(wallet: string, domain?: string, uri?: string, network?: string) {
+    const normalizedWallet = this.validateWallet(wallet);
+    const selectedNetwork = this.resolveNetwork(network);
+    const normalizedDomain =
+      typeof domain === "string" && domain.trim().length > 0 ? domain.trim() : "unknown-domain";
+    const normalizedUri =
+      typeof uri === "string" && uri.trim().length > 0 ? uri.trim() : "unknown-uri";
+    const id = randomUUID();
+    const nonce = randomBytes(16).toString("hex");
+    const createdAt = Date.now();
+    const expiresAt = createdAt + AUTH_CHALLENGE_TTL_MS;
+
+    const message = [
+      "Citizen Protocol Wallet Login",
+      `Challenge: ${id}`,
+      `Wallet: ${normalizedWallet}`,
+      `Network: ${selectedNetwork}`,
+      `Domain: ${normalizedDomain}`,
+      `URI: ${normalizedUri}`,
+      `Nonce: ${nonce}`,
+      `Issued At: ${new Date(createdAt).toISOString()}`,
+      `Expires At: ${new Date(expiresAt).toISOString()}`
+    ].join("\n");
+
+    this.authChallenges.set(id, {
+      id,
+      wallet: normalizedWallet,
+      network: selectedNetwork,
+      domain: normalizedDomain,
+      uri: normalizedUri,
+      nonce,
+      message,
+      createdAt,
+      expiresAt,
+      consumed: false
+    });
+
+    return {
+      challengeId: id,
+      wallet: normalizedWallet,
+      network: selectedNetwork,
+      nonce,
+      message,
+      issuedAt: new Date(createdAt).toISOString(),
+      expiresAt: new Date(expiresAt).toISOString()
+    };
+  }
+
+  verifyWalletAuthChallenge(challengeId: string, wallet: string, signature: string) {
+    const challenge = this.authChallenges.get(challengeId);
+    if (!challenge) {
+      throw new BadRequestException("Unknown auth challenge.");
+    }
+
+    if (challenge.consumed) {
+      throw new BadRequestException("Auth challenge already consumed.");
+    }
+
+    if (Date.now() > challenge.expiresAt) {
+      throw new BadRequestException("Auth challenge expired.");
+    }
+
+    const normalizedWallet = this.validateWallet(wallet);
+    if (normalizedWallet !== challenge.wallet) {
+      throw new BadRequestException("Challenge wallet mismatch.");
+    }
+
+    let recoveredAddress: string;
+    try {
+      recoveredAddress = verifyMessage(challenge.message, signature).toLowerCase();
+    } catch {
+      throw new BadRequestException("Invalid auth signature payload.");
+    }
+
+    if (recoveredAddress !== challenge.wallet) {
+      throw new BadRequestException("Auth signature does not match challenge wallet.");
+    }
+
+    challenge.consumed = true;
+    const sessionId = randomUUID();
+    const issuedAt = new Date().toISOString();
+    const expiresAt = new Date(Date.now() + AUTH_CHALLENGE_TTL_MS).toISOString();
+
+    return {
+      status: "authenticated",
+      session: {
+        sessionId,
+        wallet: challenge.wallet,
+        network: challenge.network,
+        issuedAt,
+        expiresAt
+      },
+      proof: {
+        challengeId: challenge.id,
+        nonce: challenge.nonce,
+        message: challenge.message,
+        signature
+      }
+    };
   }
 
   createArticleChallenge(

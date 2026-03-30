@@ -6,6 +6,23 @@ type WalletRequest = {
   origin?: string;
 };
 
+type DappLoginParams = {
+  domain?: string;
+  uri?: string;
+  statement?: string;
+  nonce?: string;
+  issuedAt?: string;
+  expirationTime?: string;
+  chainId?: string;
+};
+
+type TypedDataPayload = {
+  domain?: Record<string, unknown>;
+  types?: Record<string, Array<{ name: string; type: string }>>;
+  primaryType?: string;
+  message?: Record<string, unknown>;
+};
+
 type WalletResponse =
   | {
       ok: true;
@@ -20,6 +37,11 @@ type WalletSigner = {
   address: string;
   privateKey: string;
   signMessage: (message: string) => Promise<string>;
+  signTypedData: (
+    domain: Record<string, unknown>,
+    types: Record<string, Array<{ name: string; type: string }>>,
+    value: Record<string, unknown>,
+  ) => Promise<string>;
 };
 
 type StoredWallet = {
@@ -62,6 +84,18 @@ type NetworkId = keyof typeof NETWORKS;
 
 function isNetworkId(value: unknown): value is NetworkId {
   return typeof value === 'string' && value in NETWORKS;
+}
+
+function getNetworkIdFromChainIdHex(value: unknown): NetworkId | null {
+  if (typeof value !== 'string') {
+    return null;
+  }
+  const normalized = value.toLowerCase();
+  return (
+    (Object.keys(NETWORKS) as NetworkId[]).find(
+      (networkId) => NETWORKS[networkId].chainIdHex.toLowerCase() === normalized,
+    ) ?? null
+  );
 }
 
 async function getSelectedNetwork(): Promise<NetworkId> {
@@ -206,6 +240,70 @@ async function recordRequest(request: WalletRequest, account: string) {
       account,
     },
   });
+}
+
+function randomNonce(length = 16): string {
+  const alphabet = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+  const bytes = crypto.getRandomValues(new Uint8Array(length));
+  return Array.from(bytes)
+    .map((value) => alphabet[value % alphabet.length])
+    .join('');
+}
+
+function normalizeLoginPayload(origin: string, payload: DappLoginParams) {
+  let fallbackDomain = origin;
+  try {
+    fallbackDomain = new URL(origin).host;
+  } catch {
+    // keep raw origin if URL parsing fails
+  }
+  const nonce = payload.nonce?.trim() || randomNonce();
+  const issuedAt = payload.issuedAt?.trim() || new Date().toISOString();
+  return {
+    domain: payload.domain?.trim() || fallbackDomain,
+    uri: payload.uri?.trim() || origin,
+    chainId: payload.chainId?.trim() || NETWORKS.mainnet.chainIdHex,
+    nonce,
+    issuedAt,
+    statement: payload.statement?.trim() || 'Sign in with Citizen Wallet',
+    expirationTime: payload.expirationTime?.trim() || undefined,
+  };
+}
+
+function buildLoginMessage(account: string, login: ReturnType<typeof normalizeLoginPayload>): string {
+  const lines = [
+    `${login.domain} wants you to sign in with your wallet:`,
+    account,
+    '',
+    login.statement,
+    '',
+    `URI: ${login.uri}`,
+    `Chain ID: ${login.chainId}`,
+    `Nonce: ${login.nonce}`,
+    `Issued At: ${login.issuedAt}`,
+  ];
+
+  if (login.expirationTime) {
+    lines.push(`Expiration Time: ${login.expirationTime}`);
+  }
+
+  return lines.join('\n');
+}
+
+function parseTypedDataPayload(input: unknown): TypedDataPayload | null {
+  if (typeof input === 'string') {
+    try {
+      return JSON.parse(input) as TypedDataPayload;
+    } catch {
+      return null;
+    }
+  }
+
+  if (typeof input === 'object' && input !== null) {
+    return input as TypedDataPayload;
+  }
+
+  return null;
 }
 
 async function exportPrivateKey(password: string): Promise<WalletResponse> {
@@ -450,18 +548,96 @@ async function handleWalletRequest(
     case 'citizen_chainId':
     case 'eth_chainId':
       return { ok: true, result: NETWORKS[await getSelectedNetwork()].chainIdHex };
+    case 'wallet_switchEthereumChain': {
+      const [chainConfig] = request.params ?? [];
+      if (typeof chainConfig !== 'object' || chainConfig === null) {
+        return { ok: false, error: 'wallet_switchEthereumChain requires { chainId }.' };
+      }
+      const chainId = (chainConfig as { chainId?: unknown }).chainId;
+      const nextNetwork = getNetworkIdFromChainIdHex(chainId);
+      if (!nextNetwork) {
+        return { ok: false, error: 'Unsupported chainId for wallet_switchEthereumChain.' };
+      }
+      await setSelectedNetwork(nextNetwork);
+      return { ok: true, result: null };
+    }
+    case 'wallet_addEthereumChain':
+      return {
+        ok: false,
+        error: 'wallet_addEthereumChain is not supported. Supported chains are preconfigured.',
+      };
+    case 'citizen_login':
+    case 'wallet_login': {
+      const [loginParams] = request.params ?? [];
+      if (loginParams !== undefined && (typeof loginParams !== 'object' || loginParams === null)) {
+        return { ok: false, error: 'citizen_login expects an optional object param.' };
+      }
+
+      const payload = (loginParams ?? {}) as DappLoginParams;
+      const origin = request.origin ?? 'unknown';
+      const selectedNetwork = await getSelectedNetwork();
+      const loginPayload = normalizeLoginPayload(origin, {
+        ...payload,
+        chainId: payload.chainId ?? NETWORKS[selectedNetwork].chainIdHex,
+      });
+      const message = buildLoginMessage(account, loginPayload);
+      const signature = await wallet.signMessage(message);
+      return {
+        ok: true,
+        result: {
+          account,
+          origin,
+          message,
+          signature,
+          domain: loginPayload.domain,
+          uri: loginPayload.uri,
+          chainId: loginPayload.chainId,
+          statement: loginPayload.statement,
+          expirationTime: loginPayload.expirationTime ?? null,
+          issuedAt: loginPayload.issuedAt,
+          nonce: loginPayload.nonce,
+        },
+      };
+    }
     case 'personal_sign': {
       const [rawMessage, requestedAccount] = request.params ?? [];
-      if (typeof rawMessage !== 'string') {
-        return { ok: false, error: 'personal_sign requires message as first param' };
+      const messageCandidateA = rawMessage;
+      const messageCandidateB = requestedAccount;
+      const message = typeof messageCandidateA === 'string'
+        ? messageCandidateA
+        : typeof messageCandidateB === 'string'
+          ? messageCandidateB
+          : null;
+      const targetAccount = typeof messageCandidateA === 'string'
+        ? requestedAccount
+        : rawMessage;
+
+      if (typeof message !== 'string') {
+        return { ok: false, error: 'personal_sign requires message + account params' };
       }
       if (
-        typeof requestedAccount === 'string' &&
-        requestedAccount.toLowerCase() !== account.toLowerCase()
+        typeof targetAccount === 'string' &&
+        targetAccount.toLowerCase() !== account.toLowerCase()
       ) {
         return { ok: false, error: 'Requested account does not match active wallet account' };
       }
-      const signature = await wallet.signMessage(rawMessage);
+      const signature = await wallet.signMessage(message);
+      return { ok: true, result: signature };
+    }
+    case 'eth_signTypedData_v4': {
+      const [requestedAccount, typedDataRaw] = request.params ?? [];
+      if (
+        typeof requestedAccount !== 'string' ||
+        requestedAccount.toLowerCase() !== account.toLowerCase()
+      ) {
+        return { ok: false, error: 'eth_signTypedData_v4 requires the active account as first param.' };
+      }
+      const typedData = parseTypedDataPayload(typedDataRaw);
+      if (!typedData?.domain || !typedData?.types || !typedData?.message) {
+        return { ok: false, error: 'Invalid EIP-712 payload for eth_signTypedData_v4.' };
+      }
+      const { EIP712Domain: _ignoredDomain, ...types } = typedData.types;
+      const signature = await wallet.signTypedData(typedData.domain, types, typedData.message);
       return { ok: true, result: signature };
     }
     default:

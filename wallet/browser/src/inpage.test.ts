@@ -22,18 +22,18 @@ describe('browser wallet provider injection and signing smoke flow', () => {
     document.body.innerHTML = '';
   });
 
-  it('injects provider and resolves personal_sign requests through content bridge', async () => {
-    let captured: { method: string; params?: unknown[] } | null = null;
+  it('injects provider and resolves personal_sign/typed-data requests through content bridge', async () => {
+    const captured: Array<{ method: string; params?: unknown[] }> = [];
 
     const handler = (event: MessageEvent) => {
       if (event.data?.target !== 'citizen-wallet-content') {
         return;
       }
 
-      captured = {
+      captured.push({
         method: event.data.method as string,
         params: event.data.params as unknown[] | undefined,
-      };
+      });
 
       window.dispatchEvent(
         new MessageEvent('message', {
@@ -41,7 +41,10 @@ describe('browser wallet provider injection and signing smoke flow', () => {
             target: 'citizen-wallet-inpage',
             id: event.data.id,
             ok: true,
-            result: '0xsigned-smoke-result',
+            result:
+              event.data.method === 'eth_signTypedData_v4'
+                ? '0xtyped-signature'
+                : '0xsigned-smoke-result',
           },
           source: window,
         }),
@@ -59,8 +62,18 @@ describe('browser wallet provider injection and signing smoke flow', () => {
       params: ['hello-citizen', '0xabc'],
     });
 
-    expect(captured).toEqual({ method: 'personal_sign', params: ['hello-citizen', '0xabc'] });
+    expect(captured[0]).toEqual({ method: 'personal_sign', params: ['hello-citizen', '0xabc'] });
     expect(signature).toBe('0xsigned-smoke-result');
+
+    const typedSig = await window.ethereum!.request({
+      method: 'eth_signTypedData_v4',
+      params: ['0xabc', '{"domain":{},"types":{"EIP712Domain":[]},"message":{"nonce":"123"}}'],
+    });
+    expect(captured[1]).toEqual({
+      method: 'eth_signTypedData_v4',
+      params: ['0xabc', '{"domain":{},"types":{"EIP712Domain":[]},"message":{"nonce":"123"}}'],
+    });
+    expect(typedSig).toBe('0xtyped-signature');
 
     window.removeEventListener('message', handler);
   });
