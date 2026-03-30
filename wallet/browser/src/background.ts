@@ -45,17 +45,32 @@ type WalletSigner = {
 };
 
 type StoredWallet = {
+  id: string;
+  name: string;
+  createdAt: string;
   privateKey: string;
   mnemonicPhrase?: string;
   derivationPath?: string;
 };
 
+type ActivityEntry = {
+  requestedAt: string;
+  origin: string;
+  method: string;
+  params: unknown[];
+  account: string;
+};
+
 const STORAGE_KEY = 'citizen.browser.wallet.v1';
 const LAST_REQUEST_KEY = 'citizen.browser.wallet.last_request.v1';
+const ACTIVITY_KEY = 'citizen.browser.wallet.activity.v1';
+const VAULT_KEY = 'citizen.browser.wallet.vault.v1';
+const ACTIVE_WALLET_ID_KEY = 'citizen.browser.wallet.active_wallet_id.v1';
 const PASSWORD_HASH_KEY = 'citizen.browser.wallet.password_hash.v1';
 const SESSION_UNLOCKED_KEY = 'citizen.browser.wallet.unlocked.v1';
 const NETWORK_KEY = 'citizen.browser.wallet.network.v1';
 const DEFAULT_DERIVATION_PATH = "m/44'/930'/0'/0'/0'";
+const MAX_ACTIVITY = 100;
 
 const NETWORKS = {
   mainnet: {
@@ -183,51 +198,98 @@ async function lockWallet(): Promise<WalletResponse> {
   return { ok: true, result: true };
 }
 
-async function getStoredWallet(): Promise<WalletSigner> {
-  const existing = await chrome.storage.local.get(STORAGE_KEY);
-  const stored = existing[STORAGE_KEY] as StoredWallet | undefined;
+function createWalletId() {
+  return `wallet-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
 
-  if (stored?.mnemonicPhrase) {
-    const derived = HDNodeWallet.fromPhrase(
-      stored.mnemonicPhrase,
-      undefined,
-      stored.derivationPath ?? DEFAULT_DERIVATION_PATH,
-    );
-    if (stored.privateKey !== derived.privateKey) {
-      await chrome.storage.local.set({
-        [STORAGE_KEY]: {
-          privateKey: derived.privateKey,
-          mnemonicPhrase: stored.mnemonicPhrase,
-          derivationPath: stored.derivationPath ?? DEFAULT_DERIVATION_PATH,
-        } satisfies StoredWallet,
-      });
-    }
+function toStoredWallet(wallet: WalletSigner, mnemonicPhrase?: string, derivationPath?: string): StoredWallet {
+  return {
+    id: createWalletId(),
+    name: `Wallet ${wallet.address.slice(0, 6)}…${wallet.address.slice(-4)}`,
+    createdAt: new Date().toISOString(),
+    privateKey: wallet.privateKey,
+    mnemonicPhrase,
+    derivationPath,
+  };
+}
+
+async function getWalletVault(): Promise<StoredWallet[]> {
+  const existing = await chrome.storage.local.get(VAULT_KEY);
+  const stored = existing[VAULT_KEY];
+  return Array.isArray(stored) ? (stored as StoredWallet[]) : [];
+}
+
+async function saveWalletVault(vault: StoredWallet[], activeWalletId?: string): Promise<void> {
+  const nextActiveId = activeWalletId ?? vault[0]?.id ?? null;
+  await chrome.storage.local.set({
+    [VAULT_KEY]: vault,
+    [ACTIVE_WALLET_ID_KEY]: nextActiveId,
+    [STORAGE_KEY]: vault.find((wallet) => wallet.id === nextActiveId) ?? vault[0] ?? null,
+  });
+}
+
+async function ensureVaultInitialized(): Promise<StoredWallet[]> {
+  const vault = await getWalletVault();
+  if (vault.length > 0) {
+    return vault;
+  }
+
+  const existing = await chrome.storage.local.get(STORAGE_KEY);
+  const legacy = existing[STORAGE_KEY] as Partial<StoredWallet> | undefined;
+  if (legacy?.privateKey) {
+    const migrated: StoredWallet = {
+      id: createWalletId(),
+      name: `Wallet ${legacy.privateKey.slice(2, 8)}…`,
+      createdAt: new Date().toISOString(),
+      privateKey: legacy.privateKey,
+      mnemonicPhrase: legacy.mnemonicPhrase,
+      derivationPath: legacy.derivationPath,
+    };
+    await saveWalletVault([migrated], migrated.id);
+    return [migrated];
+  }
+
+  return [];
+}
+
+async function getActiveWalletRecord(): Promise<StoredWallet | null> {
+  const vault = await ensureVaultInitialized();
+  if (vault.length === 0) {
+    return null;
+  }
+  const stored = await chrome.storage.local.get(ACTIVE_WALLET_ID_KEY);
+  const activeId = stored[ACTIVE_WALLET_ID_KEY];
+  const active = typeof activeId === 'string' ? vault.find((wallet) => wallet.id === activeId) : null;
+  return active ?? vault[0];
+}
+
+async function getStoredWallet(): Promise<WalletSigner> {
+  const active = await getActiveWalletRecord();
+  if (!active) {
+    const created = Wallet.createRandom();
+    const mnemonicPhrase = created.mnemonic?.phrase;
+    const derived = mnemonicPhrase
+      ? HDNodeWallet.fromPhrase(mnemonicPhrase, undefined, DEFAULT_DERIVATION_PATH)
+      : created;
+    const firstWallet = toStoredWallet(derived, mnemonicPhrase, DEFAULT_DERIVATION_PATH);
+    await saveWalletVault([firstWallet], firstWallet.id);
     return derived;
   }
 
-  if (stored?.privateKey) {
-    return new Wallet(stored.privateKey);
+  if (active.mnemonicPhrase) {
+    const derived = HDNodeWallet.fromPhrase(
+      active.mnemonicPhrase,
+      undefined,
+      active.derivationPath ?? DEFAULT_DERIVATION_PATH,
+    );
+    return derived;
   }
 
-  const created = Wallet.createRandom();
-  const mnemonicPhrase = created.mnemonic?.phrase;
-  const derived = mnemonicPhrase
-    ? HDNodeWallet.fromPhrase(mnemonicPhrase, undefined, DEFAULT_DERIVATION_PATH)
-    : created;
-  await chrome.storage.local.set({
-    [STORAGE_KEY]: {
-      privateKey: derived.privateKey,
-      mnemonicPhrase,
-      derivationPath: DEFAULT_DERIVATION_PATH,
-    } satisfies StoredWallet,
-  });
-  return derived;
+  return new Wallet(active.privateKey);
 }
 
 async function hasStoredWallet(): Promise<boolean> {
-  const existing = await chrome.storage.local.get(STORAGE_KEY);
-  const stored = existing[STORAGE_KEY] as StoredWallet | undefined;
-  return Boolean(stored?.privateKey || stored?.mnemonicPhrase);
+  return (await ensureVaultInitialized()).length > 0;
 }
 
 function shouldPromptWalletUi(method: string): boolean {
@@ -255,14 +317,19 @@ async function openWalletSidePanel(sender: chrome.runtime.MessageSender): Promis
 }
 
 async function recordRequest(request: WalletRequest, account: string) {
+  const nextEntry: ActivityEntry = {
+    requestedAt: new Date().toISOString(),
+    origin: request.origin ?? 'unknown',
+    method: request.method,
+    params: request.params ?? [],
+    account,
+  };
+  const existing = await chrome.storage.local.get(ACTIVITY_KEY);
+  const list = Array.isArray(existing[ACTIVITY_KEY]) ? (existing[ACTIVITY_KEY] as ActivityEntry[]) : [];
+  const trimmed = [nextEntry, ...list].slice(0, MAX_ACTIVITY);
   await chrome.storage.local.set({
-    [LAST_REQUEST_KEY]: {
-      requestedAt: new Date().toISOString(),
-      origin: request.origin ?? 'unknown',
-      method: request.method,
-      params: request.params ?? [],
-      account,
-    },
+    [LAST_REQUEST_KEY]: nextEntry,
+    [ACTIVITY_KEY]: trimmed,
   });
 }
 
@@ -366,8 +433,7 @@ async function exportMnemonic(password: string): Promise<WalletResponse> {
     return { ok: false, error: 'Invalid password.' };
   }
 
-  const existing = await chrome.storage.local.get(STORAGE_KEY);
-  const stored = existing[STORAGE_KEY] as StoredWallet | undefined;
+  const stored = await getActiveWalletRecord();
   if (!stored?.mnemonicPhrase) {
     return { ok: false, error: 'Mnemonic is unavailable for this wallet.' };
   }
@@ -398,19 +464,23 @@ async function importMnemonic(
     return { ok: false, error: message };
   }
 
-  await chrome.storage.local.set({
-    [STORAGE_KEY]: {
-      privateKey: derived.privateKey,
-      mnemonicPhrase: normalizedPhrase,
-      derivationPath,
-    } satisfies StoredWallet,
-  });
+  const vault = await ensureVaultInitialized();
+  const nextWallet: StoredWallet = {
+    id: createWalletId(),
+    name: `Imported ${derived.address.slice(0, 6)}…${derived.address.slice(-4)}`,
+    createdAt: new Date().toISOString(),
+    privateKey: derived.privateKey,
+    mnemonicPhrase: normalizedPhrase,
+    derivationPath,
+  };
+  await saveWalletVault([nextWallet, ...vault], nextWallet.id);
   await markUnlocked();
 
   return {
     ok: true,
     result: {
       account: derived.address,
+      walletId: nextWallet.id,
       derivationPath,
     },
   };
@@ -426,19 +496,23 @@ async function generateMnemonicWallet(
   }
 
   const derived = HDNodeWallet.fromPhrase(mnemonicPhrase, undefined, derivationPath);
-  await chrome.storage.local.set({
-    [STORAGE_KEY]: {
-      privateKey: derived.privateKey,
-      mnemonicPhrase,
-      derivationPath,
-    } satisfies StoredWallet,
-  });
+  const vault = await ensureVaultInitialized();
+  const nextWallet: StoredWallet = {
+    id: createWalletId(),
+    name: `Wallet ${derived.address.slice(0, 6)}…${derived.address.slice(-4)}`,
+    createdAt: new Date().toISOString(),
+    privateKey: derived.privateKey,
+    mnemonicPhrase,
+    derivationPath,
+  };
+  await saveWalletVault([nextWallet, ...vault], nextWallet.id);
   await markUnlocked();
 
   return {
     ok: true,
     result: {
       account: derived.address,
+      walletId: nextWallet.id,
       mnemonicPhrase,
       derivationPath,
     },
@@ -462,6 +536,45 @@ async function handleWalletRequest(
 
   if (request.method === 'wallet_hasStoredWallet') {
     return { ok: true, result: await hasStoredWallet() };
+  }
+
+  if (request.method === 'wallet_getActivity') {
+    const stored = await chrome.storage.local.get(ACTIVITY_KEY);
+    const list = Array.isArray(stored[ACTIVITY_KEY]) ? stored[ACTIVITY_KEY] : [];
+    return { ok: true, result: list };
+  }
+
+  if (request.method === 'wallet_listVault') {
+    const vault = await ensureVaultInitialized();
+    const activeWallet = await getActiveWalletRecord();
+    return {
+      ok: true,
+      result: vault.map((wallet) => ({
+        id: wallet.id,
+        name: wallet.name,
+        address: new Wallet(wallet.privateKey).address,
+        hasMnemonic: Boolean(wallet.mnemonicPhrase),
+        createdAt: wallet.createdAt,
+        isActive: wallet.id === activeWallet?.id,
+      })),
+    };
+  }
+
+  if (request.method === 'wallet_setActiveWallet') {
+    if (!isUiRequest) {
+      return { ok: false, error: 'Unauthorized wallet method.' };
+    }
+    const [walletId] = request.params ?? [];
+    if (typeof walletId !== 'string') {
+      return { ok: false, error: 'wallet_setActiveWallet requires a wallet id.' };
+    }
+    const vault = await ensureVaultInitialized();
+    const found = vault.find((wallet) => wallet.id === walletId);
+    if (!found) {
+      return { ok: false, error: 'Wallet not found in vault.' };
+    }
+    await saveWalletVault(vault, walletId);
+    return { ok: true, result: true };
   }
 
   if (request.method === 'wallet_isUnlocked') {

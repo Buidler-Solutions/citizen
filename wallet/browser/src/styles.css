@@ -75,11 +75,35 @@ body {
   border-bottom: 1px solid #1f315f;
 }
 
+.top-nav {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.menu-button {
+  background: #1a284d;
+  color: #d2def5;
+  padding: 0.5rem 0.7rem;
+  border-radius: 10px;
+}
+
+.menu-panel {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.35rem;
+  margin: 0.6rem 0;
+}
+
 .brand-row {
   display: flex;
   align-items: center;
   gap: 0.65rem;
   margin-bottom: 0.7rem;
+}
+
+.no-margin {
+  margin-bottom: 0;
 }
 
 .centered-brand {
@@ -110,23 +134,12 @@ body {
   font-size: 1rem;
 }
 
-.wallet-header p {
-  margin: 0;
-  color: #c0d2f6;
-  font-size: 0.84rem;
-}
-
-.security-note {
-  margin-top: 0.35rem !important;
-  color: #ffca89 !important;
-  font-size: 0.76rem !important;
-}
-
 .header-controls {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 0.5rem;
+  margin-top: 0.5rem;
 }
 
 .network-label {
@@ -145,7 +158,7 @@ body {
 
 .network-pill {
   display: inline-block;
-  margin: 0;
+  margin: 0.35rem 0 0;
   border-radius: 999px;
   padding: 0.22rem 0.56rem;
   font-size: 0.72rem;
@@ -154,7 +167,7 @@ body {
 }
 
 .top-address {
-  margin-top: 0.45rem;
+  margin: 0.45rem 0 0;
   color: #d6e5ff;
   font-weight: 700;
   font-size: 0.75rem;
@@ -198,7 +211,7 @@ body {
 .request-card dt,
 .request-card span {
   color: #9fb6e6;
-  font-size: 0.78rem;
+  font-size: 0.74rem;
   flex-shrink: 0;
 }
 
@@ -219,12 +232,19 @@ body {
   gap: 0.52rem;
 }
 
-.ok {
-  color: #7ef0be;
+.activity-item {
+  border: 1px solid #314b7f;
+  border-radius: 10px;
+  padding: 0.45rem 0.55rem;
 }
 
-.warn {
-  color: #ffca89;
+.vault-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border: 1px solid #314b7f;
+  border-radius: 10px;
+  padding: 0.45rem 0.55rem;
 }
 
 button {
@@ -246,7 +266,8 @@ button.primary {
   color: #041027;
 }
 
-input {
+input,
+textarea {
   width: 100%;
   border: 1px solid #314b7f;
   border-radius: 10px;
@@ -266,6 +287,12 @@ input::placeholder {
   gap: 0.5rem;
 }
 
+.hero-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.45rem;
+}
+
 .meta-text {
   color: #a7bce6;
   font-size: 0.76rem;
@@ -283,4 +310,23 @@ input::placeholder {
   background: #0b1733;
   color: #bfe1ff;
   font-size: 0.72rem;
+}
+
+.checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: #cde0ff;
+  font-size: 0.8rem;
+}
+
+.checkbox-row input {
+  width: 16px;
+  height: 16px;
+}
+
+.status-line {
+  margin: 0;
+  color: #89f2c5;
+  font-size: 0.75rem;
 }
