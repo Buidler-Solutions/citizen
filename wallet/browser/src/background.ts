@@ -230,6 +230,30 @@ async function hasStoredWallet(): Promise<boolean> {
   return Boolean(stored?.privateKey || stored?.mnemonicPhrase);
 }
 
+function shouldPromptWalletUi(method: string): boolean {
+  return [
+    'citizen_requestAccounts',
+    'eth_requestAccounts',
+    'citizen_login',
+    'wallet_login',
+    'personal_sign',
+    'eth_signTypedData_v4',
+  ].includes(method);
+}
+
+async function openWalletSidePanel(sender: chrome.runtime.MessageSender): Promise<void> {
+  if (!chrome.sidePanel || sender.tab?.id === undefined) {
+    return;
+  }
+
+  try {
+    await chrome.sidePanel.open({ tabId: sender.tab.id });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.warn(`Unable to open wallet side panel for dapp request: ${message}`);
+  }
+}
+
 async function recordRequest(request: WalletRequest, account: string) {
   await chrome.storage.local.set({
     [LAST_REQUEST_KEY]: {
@@ -426,6 +450,11 @@ async function handleWalletRequest(
   sender: chrome.runtime.MessageSender,
 ): Promise<WalletResponse> {
   const isUiRequest = isExtensionUiMessage(sender);
+  const isDappRequest = !isUiRequest;
+
+  if (isDappRequest && shouldPromptWalletUi(request.method)) {
+    await openWalletSidePanel(sender);
+  }
 
   if (request.method === 'wallet_isPasswordSet') {
     return { ok: true, result: (await getPasswordHash()) !== null };
@@ -533,6 +562,17 @@ async function handleWalletRequest(
 
   if (await isWalletLocked()) {
     return { ok: false, error: 'Wallet is locked. Open the extension side panel to unlock.' };
+  }
+
+  if (
+    isDappRequest
+    && shouldPromptWalletUi(request.method)
+    && !(await hasStoredWallet())
+  ) {
+    return {
+      ok: false,
+      error: 'Wallet is not configured. Open the extension side panel to create or import a wallet first.',
+    };
   }
 
   const wallet = await getStoredWallet();

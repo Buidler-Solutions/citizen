@@ -18,7 +18,8 @@ const TOKEN_AUDIENCE = process.env.AUTH_TOKEN_AUDIENCE ?? "citizen-dapps";
 
 const ALLOWED_NETWORKS = new Set(["mainnet", "futurenet", "testnet", "localnode"]);
 const ALLOWED_ORIGINS = new Set(
-  (process.env.AUTH_ALLOWED_ORIGINS ?? "http://localhost:3000,http://127.0.0.1:3000")
+  (process.env.AUTH_ALLOWED_ORIGINS
+    ?? "http://localhost:3000,http://127.0.0.1:3000,http://localhost:3001,http://127.0.0.1:3001")
     .split(",")
     .map((value) => value.trim())
     .filter(Boolean)
