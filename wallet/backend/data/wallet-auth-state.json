@@ -1,4 +1,13 @@
 {
   "challenges": [],
-  "sessions": []
+  "sessions": [
+    {
+      "sessionId": "fdf2e05e-3e11-4ea9-81fe-6fc153e516a3",
+      "wallet": "0x21b2b734e60a0b14cfdc3d3fcb32f1255b6c9292",
+      "network": "futurenet",
+      "issuedAt": 1774862297731,
+      "expiresAt": 1774864097731,
+      "revoked": false
+    }
+  ]
 }

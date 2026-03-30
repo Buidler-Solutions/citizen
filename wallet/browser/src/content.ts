@@ -33,7 +33,9 @@ window.addEventListener('message', (event: MessageEvent) => {
       const runtimeError = chrome.runtime.lastError;
       const payload = runtimeError
         ? { id, ok: false, error: runtimeError.message }
-        : response ?? { id, ok: false, error: 'No wallet response' };
+        : response
+          ? { id, ...response }
+          : { id, ok: false, error: 'No wallet response' };
 
       window.postMessage({ target: INPAGE_RESPONSE_TARGET, ...payload }, '*');
     },
