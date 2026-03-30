@@ -89,6 +89,11 @@ Set this frontend environment variable when your wallet auth backend runs on a d
 NEXT_PUBLIC_WALLET_AUTH_API_URL=http://127.0.0.1:4499
 ```
 
+Notes:
+
+- There is no frontend env var to "connect" to the browser extension itself; the extension injects `window.citizen` / `window.ethereum` into the page when installed and enabled.
+- The backend must allow your frontend origin via `AUTH_ALLOWED_ORIGINS` in `wallet/backend/.env`.
+
 ## Run with Docker Compose
 
 ### 1) Create Docker environment file

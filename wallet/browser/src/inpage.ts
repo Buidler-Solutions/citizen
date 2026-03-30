@@ -3,16 +3,27 @@ export {}
 type PendingRequest = {
   resolve: (value: unknown) => void;
   reject: (reason?: unknown) => void;
+  timeoutId: ReturnType<typeof setTimeout>;
 };
 
 const pending = new Map<string, PendingRequest>();
 const CONTENT_REQUEST_TARGET = 'citizen-wallet-content';
 const INPAGE_RESPONSE_TARGET = 'citizen-wallet-inpage';
+const REQUEST_TIMEOUT_MS = 15_000;
 
 function request(method: string, params?: unknown[]): Promise<unknown> {
   return new Promise((resolve, reject) => {
     const id = crypto.randomUUID();
-    pending.set(id, { resolve, reject });
+    const timeoutId = window.setTimeout(() => {
+      pending.delete(id);
+      reject(
+        new Error(
+          'Citizen Wallet request timed out waiting for extension response. '
+          + 'Reload the page and confirm the extension is installed, unlocked, and enabled for this site.',
+        ),
+      );
+    }, REQUEST_TIMEOUT_MS);
+    pending.set(id, { resolve, reject, timeoutId });
     window.postMessage(
       {
         target: CONTENT_REQUEST_TARGET,
@@ -43,6 +54,7 @@ window.addEventListener('message', (event: MessageEvent) => {
   }
 
   pending.delete(id);
+  clearTimeout(tracked.timeoutId);
   if (ok) {
     tracked.resolve(result);
   } else {
