@@ -71,6 +71,23 @@ App URLs:
 - Admin notification audit history API (JWT protected): `http://localhost:3001/admin/email/notifications/history?limit=25`
 - Admin reset-password UI: `http://localhost:3000/admin/reset-password`
 - Site settings support static or animated APNG logo uploads for the landing-page header via the admin console.
+- Onboarding wallet login uses the wallet auth backend (`POST /auth/challenge` + `POST /auth/verify`) and defaults to `http://127.0.0.1:4499`.
+
+### Wallet login integration (onboarding)
+
+The onboarding page now uses the `wallet/sdk/typescript-auth` library and Citizen wallet login flow directly from the landing-page frontend:
+
+1. Connect wallet with `eth_requestAccounts`.
+2. Request backend challenge from `${NEXT_PUBLIC_WALLET_AUTH_API_URL}/auth/challenge`.
+3. Sign challenge with `personal_sign`.
+4. Verify with `${NEXT_PUBLIC_WALLET_AUTH_API_URL}/auth/verify`.
+5. Store session token in browser local storage for onboarding session continuity.
+
+Set this frontend environment variable when your wallet auth backend runs on a different host:
+
+```bash
+NEXT_PUBLIC_WALLET_AUTH_API_URL=http://127.0.0.1:4499
+```
 
 ## Run with Docker Compose
 
