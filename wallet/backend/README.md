@@ -72,10 +72,23 @@ If valid, returns:
 ```bash
 cd wallet/backend
 npm install
+cp .env.example .env
+set -a; source .env; set +a
 npm run start
 ```
 
 Default port: `4499` (override with `PORT`).
+
+If you prefer not to source `.env`, you can also run:
+
+```bash
+node --env-file=.env src/server.js
+```
+
+Important for onboarding integration:
+
+- `NEXT_PUBLIC_WALLET_AUTH_API_URL` is set in `landing-page/frontend/.env.local`
+- `AUTH_ALLOWED_ORIGINS` in `wallet/backend/.env` must include that frontend origin (host + port)
 
 ### Security environment variables
 

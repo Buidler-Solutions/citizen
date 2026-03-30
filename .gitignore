@@ -39,3 +39,5 @@ wallet/browser/node_modules/
 wallet/react/node_modules/
 wallet/react/dist/
 wallet/backend/node_modules/
+
+wallet/backend/.env

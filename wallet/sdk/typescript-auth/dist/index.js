@@ -2,6 +2,7 @@ const DEFAULT_AUTH_API_URL = 'http://127.0.0.1:4499';
 const DEFAULT_STORAGE_KEY = 'citizen.wallet.auth.session';
 const DEFAULT_NETWORK = 'futurenet';
 const DEFAULT_ONBOARDING_PATH = '/onboarding';
+const PROVIDER_REQUEST_TIMEOUT_MS = 15_000;
 
 const normalizeWalletAddress = (address) => address.trim().toLowerCase();
 
@@ -79,7 +80,11 @@ export class WalletAuthClient {
       throw new WalletAuthClientError('Citizen wallet extension was not detected in this browser.');
     }
 
-    const accountsResult = await provider.request({ method: 'eth_requestAccounts' });
+    const accountsResult = await this.requestWithTimeout(
+      provider,
+      { method: 'eth_requestAccounts' },
+      'Timed out while requesting wallet accounts. Confirm the extension is installed, unlocked, and enabled for this site.',
+    );
     const accounts = parseAccounts(accountsResult);
     const selectedWallet = accounts[0];
 
@@ -89,10 +94,14 @@ export class WalletAuthClient {
 
     const challenge = await this.requestChallenge(selectedWallet);
 
-    const signatureResult = await provider.request({
-      method: 'personal_sign',
-      params: [challenge.message, selectedWallet],
-    });
+    const signatureResult = await this.requestWithTimeout(
+      provider,
+      {
+        method: 'personal_sign',
+        params: [challenge.message, selectedWallet],
+      },
+      'Timed out while waiting for signature confirmation. Open the wallet extension and approve the signing request.',
+    );
 
     if (typeof signatureResult !== 'string' || !signatureResult.startsWith('0x')) {
       throw new WalletAuthClientError('Wallet returned an invalid signature.');
@@ -126,6 +135,19 @@ export class WalletAuthClient {
   clearStoredToken() {
     const windowObject = this.getWindowObject();
     windowObject.localStorage?.removeItem(this.storageKey);
+  }
+
+  async requestWithTimeout(provider, args, timeoutMessage) {
+    const timerPromise = new Promise((_, reject) => {
+      setTimeout(() => {
+        reject(new WalletAuthClientError(timeoutMessage));
+      }, PROVIDER_REQUEST_TIMEOUT_MS);
+    });
+
+    return Promise.race([
+      provider.request(args),
+      timerPromise,
+    ]);
   }
 }
 
