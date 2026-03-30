@@ -35,7 +35,7 @@ explorer/frontend/.env.local
 sdk/nodejs/node_modules/
 
 wallet/browser/node_modules/
-/wallet/browser/dist/
+wallet/browser/dist/
 wallet/react/node_modules/
 wallet/react/dist/
 wallet/backend/node_modules/
