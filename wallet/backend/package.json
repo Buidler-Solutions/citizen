@@ -1,0 +1,13 @@
+{
+  "name": "citizen-wallet-auth-backend",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node src/server.js",
+    "lint": "node --check src/server.js"
+  },
+  "dependencies": {
+    "ethers": "^6.16.0"
+  }
+}

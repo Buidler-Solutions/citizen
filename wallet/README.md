@@ -7,6 +7,7 @@ This directory contains the wallet application surfaces that sit on top of the s
 - `cli/` — standalone command-line wallet client for operators/builders.
 - `react/` — broader web wallet console for onboarding, key management, namespace operations, receipts, and governance UX.
 - `browser/` — focused signer-keeper browser extension for popup request review and explicit sign/reject flows.
+- `backend/` — lightweight wallet-auth backend for challenge/verify login APIs used by dApps.
 
 ## Implementation Status
 
@@ -26,6 +27,7 @@ Delivered baseline:
 - `docs/WALLET_READINESS_REVIEW.md`
 - `docs/WALLET_SECURITY_REVIEW.md`
 - `docs/WALLET_DECISIONS.md`
+- `docs/WALLET_DAPP_AUTH_DEVELOPER_GUIDE.md`
 
 ## Validation Entrypoints
 

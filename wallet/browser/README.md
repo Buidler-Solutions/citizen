@@ -40,6 +40,24 @@ npm run dev
 
 The side panel now includes a **Sponsorship draft builder** to generate strict `builder.credits` / `SPONSOR_USAGE` payloads with required fields (`credit_grant_id`, `sponsorship_id`, `sponsored_did`, `amount`) and optional `sponsor_builder_id` fallback behavior. Preset templates (article/governance) and an inline strict-field checklist help authors verify grant linkage before signing.
 
+## dApp login support
+
+The injected provider now supports MetaMask-style login patterns for dApps:
+
+```ts
+const accounts = await window.ethereum.request({ method: "eth_requestAccounts" });
+const signature = await window.ethereum.request({
+  method: "personal_sign",
+  params: ["Sign-in challenge from backend", accounts[0]]
+});
+```
+
+For richer typed auth payloads, dApps can also use `eth_signTypedData_v4`.
+
+Like MetaMask-based SIWE integrations, production login should verify signatures and nonces server-side before issuing app sessions.
+
+For full implementation/operations guidance, see `docs/DAPP_LOGIN_RUNBOOK.md`.
+
 ## Quality gates
 
 ```bash

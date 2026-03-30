@@ -586,11 +586,11 @@ export function App() {
               </div>
               <div>
                 <dt>Capabilities</dt>
-                <dd>citizen_accounts, citizen_requestAccounts, personal_sign</dd>
+                <dd>eth_accounts, eth_requestAccounts, personal_sign, eth_signTypedData_v4, wallet_switchEthereumChain</dd>
               </div>
               <div>
                 <dt>Behavior</dt>
-                <dd>Signs any namespace challenge submitted by the demo app when unlocked</dd>
+                <dd>MetaMask-style provider methods for account, chain, and signature-driven dApp auth flows</dd>
               </div>
             </dl>
           </article>
