@@ -1,0 +1,2 @@
+{"event":"server_started","at":"2026-03-30T04:59:12.098Z","port":4499,"allowedOrigins":["http://localhost:3000","http://127.0.0.1:3000"],"challengeTtlMs":300000,"sessionTtlMs":1800000,"activeSigningKid":"v1"}
+{"event":"server_started","at":"2026-03-30T04:59:50.231Z","port":4499,"allowedOrigins":["http://localhost:3000","http://127.0.0.1:3000"],"challengeTtlMs":300000,"sessionTtlMs":1800000,"activeSigningKid":"v1"}
