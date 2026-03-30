@@ -254,8 +254,10 @@ export function App() {
   const handleLock = async () => {
     const result = await callWallet('wallet_lock');
     setStatus(result.ok ? 'Wallet locked.' : result.error ?? 'Failed to lock wallet.');
+    setMenuOpen(false);
     setSecretKey('');
     setSecretPassword('');
+    setComposeSignature('');
     await refreshState();
   };
 
@@ -554,6 +556,9 @@ export function App() {
                   {item.label}
                 </button>
               ))}
+              <button className="ghost menu-action" onClick={() => void handleLock()}>
+                Logout
+              </button>
             </nav>
           ) : null}
           <div className="header-controls">

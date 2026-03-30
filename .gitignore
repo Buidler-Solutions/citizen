@@ -41,3 +41,4 @@ wallet/react/dist/
 wallet/backend/node_modules/
 
 wallet/backend/.env
+wallet/backend/data/
