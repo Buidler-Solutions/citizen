@@ -433,6 +433,15 @@ export function App() {
     setStatus('Profile details saved locally by user choice.');
   };
 
+  const handleCopyWalletAddress = async () => {
+    if (!state.account || state.account === 'Unavailable') {
+      setStatus('Wallet address is unavailable to copy.');
+      return;
+    }
+    await navigator.clipboard.writeText(state.account);
+    setStatus('Wallet address copied to clipboard.');
+  };
+
   if (isLoading) {
     return (
       <main className="wallet-root">
@@ -555,7 +564,17 @@ export function App() {
             </select>
           </div>
           <p className="network-pill">citizen-{state.network}</p>
-          <p className="top-address" title={state.account}>Wallet: {mask(state.account)}</p>
+          <div className="top-address-row">
+            <p className="top-address" title={state.account}>Wallet: {mask(state.account)}</p>
+            <button
+              className="copy-address-button"
+              onClick={() => void handleCopyWalletAddress()}
+              aria-label="Copy wallet address to clipboard"
+              title="Copy wallet address"
+            >
+              📋
+            </button>
+          </div>
         </header>
         {menuOpen ? (
           <nav className="menu-panel" aria-label="Wallet menu">
