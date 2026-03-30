@@ -3,7 +3,7 @@ export {}
 type PendingRequest = {
   resolve: (value: unknown) => void;
   reject: (reason?: unknown) => void;
-  timeoutId: ReturnType<typeof setTimeout>;
+  timeoutId: number;
 };
 
 const pending = new Map<string, PendingRequest>();
@@ -54,7 +54,7 @@ window.addEventListener('message', (event: MessageEvent) => {
   }
 
   pending.delete(id);
-  clearTimeout(tracked.timeoutId);
+  window.clearTimeout(tracked.timeoutId);
   if (ok) {
     tracked.resolve(result);
   } else {
