@@ -542,25 +542,6 @@ export function App() {
               ☰
             </button>
           </div>
-          {menuOpen ? (
-            <nav className="menu-panel">
-              {NAV_ITEMS.map((item) => (
-                <button
-                  key={item.id}
-                  className={item.id === activeTab ? 'primary' : 'ghost'}
-                  onClick={() => {
-                    setActiveTab(item.id);
-                    setMenuOpen(false);
-                  }}
-                >
-                  {item.label}
-                </button>
-              ))}
-              <button className="ghost menu-action" onClick={() => void handleLock()}>
-                Logout
-              </button>
-            </nav>
-          ) : null}
           <div className="header-controls">
             <label htmlFor="network" className="network-label">Network</label>
             <select
@@ -576,6 +557,25 @@ export function App() {
           <p className="network-pill">citizen-{state.network}</p>
           <p className="top-address" title={state.account}>Wallet: {mask(state.account)}</p>
         </header>
+        {menuOpen ? (
+          <nav className="menu-panel" aria-label="Wallet menu">
+            {NAV_ITEMS.map((item) => (
+              <button
+                key={item.id}
+                className={item.id === activeTab ? 'primary' : 'ghost'}
+                onClick={() => {
+                  setActiveTab(item.id);
+                  setMenuOpen(false);
+                }}
+              >
+                {item.label}
+              </button>
+            ))}
+            <button className="ghost menu-action" onClick={() => void handleLock()}>
+              Logout
+            </button>
+          </nav>
+        ) : null}
 
         <div className="wallet-scroll">
           {activeTab === 'activity' ? (
