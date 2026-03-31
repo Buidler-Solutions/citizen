@@ -10,7 +10,7 @@ Implement dApp login for Citizen blockchain in the same operating model most Met
 
 1. Request account access.
 2. Ask backend for nonce/challenge.
-3. Sign with wallet (`personal_sign` or `eth_signTypedData_v4`).
+3. Sign with wallet (`personal_sign` or `ctzn_signTypedData_v4`).
 4. Verify server-side.
 5. Issue backend-owned session.
 
@@ -20,12 +20,12 @@ This keeps wallet signatures as identity proof and backend sessions as access co
 
 ## Supported Provider Methods (Login-Relevant)
 
-- `eth_requestAccounts`
-- `eth_accounts`
-- `eth_chainId`
+- `ctzn_requestAccounts`
+- `ctzn_accounts`
+- `ctzn_chainId`
 - `personal_sign`
-- `eth_signTypedData_v4`
-- `wallet_switchEthereumChain`
+- `ctzn_signTypedData_v4`
+- `wallet_switchCtznChain`
 
 Citizen-namespace aliases (`citizen_requestAccounts`, `citizen_accounts`, `citizen_chainId`) are also available for compatibility.
 
@@ -35,12 +35,12 @@ Citizen-namespace aliases (`citizen_requestAccounts`, `citizen_accounts`, `citiz
 
 ### Frontend
 
-1. Detect provider: `window.citizen ?? window.ethereum`.
-2. Connect wallet with `eth_requestAccounts`.
+1. Detect provider: `window.citizen ?? window.ctzn`.
+2. Connect wallet with `ctzn_requestAccounts`.
 3. Call backend `POST /auth/challenge` to fetch nonce + message template.
 4. Sign backend message with:
    - `personal_sign` for text-based challenges, or
-   - `eth_signTypedData_v4` for EIP-712 typed payloads.
+   - `ctzn_signTypedData_v4` for EIP-712 typed payloads.
 5. Submit signature to backend `POST /auth/verify`.
 6. Store only backend session token/cookie.
 
@@ -58,8 +58,8 @@ Citizen-namespace aliases (`citizen_requestAccounts`, `citizen_accounts`, `citiz
 ## Login Flow A: `personal_sign` (MetaMask-Common)
 
 ```ts
-const provider = window.citizen ?? window.ethereum;
-const [account] = await provider.request({ method: "eth_requestAccounts" });
+const provider = window.citizen ?? window.ctzn;
+const [account] = await provider.request({ method: "ctzn_requestAccounts" });
 
 const challenge = await fetch("/auth/challenge", {
   method: "POST",
@@ -81,11 +81,11 @@ await fetch("/auth/verify", {
 
 ---
 
-## Login Flow B: `eth_signTypedData_v4` (EIP-712)
+## Login Flow B: `ctzn_signTypedData_v4` (EIP-712)
 
 ```ts
-const provider = window.citizen ?? window.ethereum;
-const [account] = await provider.request({ method: "eth_requestAccounts" });
+const provider = window.citizen ?? window.ctzn;
+const [account] = await provider.request({ method: "ctzn_requestAccounts" });
 
 const typed = await fetch("/auth/typed-challenge", {
   method: "POST",
@@ -94,7 +94,7 @@ const typed = await fetch("/auth/typed-challenge", {
 }).then((r) => r.json());
 
 const signature = await provider.request({
-  method: "eth_signTypedData_v4",
+  method: "ctzn_signTypedData_v4",
   params: [account, JSON.stringify(typed)]
 });
 
@@ -109,7 +109,7 @@ await fetch("/auth/verify-typed", {
 
 ## Chain Management (MetaMask-Like)
 
-Use `wallet_switchEthereumChain` with configured Citizen chain IDs:
+Use `wallet_switchCtznChain` with configured Citizen chain IDs:
 
 - Mainnet: `0xc17`
 - Futurenet: `0xc18`
@@ -120,7 +120,7 @@ Example:
 
 ```ts
 await provider.request({
-  method: "wallet_switchEthereumChain",
+  method: "wallet_switchCtznChain",
   params: [{ chainId: "0xc18" }]
 });
 ```
@@ -141,7 +141,7 @@ await provider.request({
 
 ## Troubleshooting
 
-### `Unsupported method: wallet_switchEthereumChain`
+### `Unsupported method: wallet_switchCtznChain`
 - Ensure wallet extension is on an updated build.
 
 ### `Requested account does not match active wallet account`
@@ -150,7 +150,7 @@ await provider.request({
 ### Signature verifies locally but backend rejects
 - Check message canonicalization (line breaks/whitespace), nonce reuse, timestamp, and expected domain/origin.
 
-### `eth_signTypedData_v4` invalid payload
+### `ctzn_signTypedData_v4` invalid payload
 - Ensure the payload has `domain`, `types`, `message` and is valid JSON when stringified.
 
 ---

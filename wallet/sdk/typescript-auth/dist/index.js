@@ -13,7 +13,7 @@ export class WalletAuthClientError extends Error {
   }
 }
 
-export const detectWalletProvider = (windowObject) => windowObject.citizen ?? windowObject.ethereum ?? null;
+export const detectWalletProvider = (windowObject) => windowObject.citizen ?? windowObject.ctzn ?? null;
 
 const parseAccounts = (result) => (Array.isArray(result) ? result : []);
 
@@ -82,7 +82,7 @@ export class WalletAuthClient {
 
     const accountsResult = await this.requestWithTimeout(
       provider,
-      { method: 'eth_requestAccounts' },
+      { method: 'ctzn_requestAccounts' },
       'Timed out while requesting wallet accounts. Confirm the extension is installed, unlocked, and enabled for this site.',
     );
     const accounts = parseAccounts(accountsResult);

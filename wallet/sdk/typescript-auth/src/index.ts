@@ -4,7 +4,7 @@ export type WalletProvider = {
 
 export interface WalletAuthWindow {
   citizen?: WalletProvider;
-  ethereum?: WalletProvider;
+  ctzn?: WalletProvider;
   location: {
     host: string;
     origin: string;
@@ -74,7 +74,7 @@ const PROVIDER_REQUEST_TIMEOUT_MS = 15_000;
 const normalizeWalletAddress = (address: string) => address.trim().toLowerCase();
 
 export const detectWalletProvider = (windowObject: WalletAuthWindow): WalletProvider | null => (
-  windowObject.citizen ?? windowObject.ethereum ?? null
+  windowObject.citizen ?? windowObject.ctzn ?? null
 );
 
 const parseAccounts = (result: unknown): string[] => (Array.isArray(result) ? (result as string[]) : []);
@@ -154,7 +154,7 @@ export class WalletAuthClient {
 
     const accountsResult = await this.requestWithTimeout(
       provider,
-      { method: 'eth_requestAccounts' },
+      { method: 'ctzn_requestAccounts' },
       'Timed out while requesting wallet accounts. Confirm the extension is installed, unlocked, and enabled for this site.',
     );
     const accounts = parseAccounts(accountsResult);

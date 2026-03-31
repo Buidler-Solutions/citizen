@@ -77,7 +77,7 @@ App URLs:
 
 The onboarding page now uses the `wallet/sdk/typescript-auth` library and Citizen wallet login flow directly from the landing-page frontend:
 
-1. Connect wallet with `eth_requestAccounts`.
+1. Connect wallet with `ctzn_requestAccounts`.
 2. Request backend challenge from `${NEXT_PUBLIC_WALLET_AUTH_API_URL}/auth/challenge`.
 3. Sign challenge with `personal_sign`.
 4. Verify with `${NEXT_PUBLIC_WALLET_AUTH_API_URL}/auth/verify`.
@@ -91,7 +91,7 @@ NEXT_PUBLIC_WALLET_AUTH_API_URL=http://127.0.0.1:4499
 
 Notes:
 
-- There is no frontend env var to "connect" to the browser extension itself; the extension injects `window.citizen` / `window.ethereum` into the page when installed and enabled.
+- There is no frontend env var to "connect" to the browser extension itself; the extension injects `window.citizen` / `window.ctzn` into the page when installed and enabled.
 - The backend must allow your frontend origin via `AUTH_ALLOWED_ORIGINS` in `wallet/backend/.env`.
 
 ## Run with Docker Compose

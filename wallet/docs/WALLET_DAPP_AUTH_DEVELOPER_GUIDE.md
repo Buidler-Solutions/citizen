@@ -20,7 +20,7 @@ Citizen wallet auth is intentionally backend-first:
 
 1. **Web dApp** requests wallet account access.
 2. **Backend** issues one-time login challenge (`nonce`, `message`, expiry).
-3. **Browser wallet** signs the backend challenge (`personal_sign` or `eth_signTypedData_v4`).
+3. **Browser wallet** signs the backend challenge (`personal_sign` or `ctzn_signTypedData_v4`).
 4. **Backend** verifies signature + nonce + expiry + policy checks.
 5. **Backend** issues short-lived signed session token.
 
@@ -36,10 +36,10 @@ Citizen wallet auth is intentionally backend-first:
 
 ### Account + chain methods
 
-- `eth_requestAccounts`
-- `eth_accounts`
-- `eth_chainId`
-- `wallet_switchEthereumChain`
+- `ctzn_requestAccounts`
+- `ctzn_accounts`
+- `ctzn_chainId`
+- `wallet_switchCtznChain`
 
 Citizen aliases are also available for compatibility:
 
@@ -50,7 +50,7 @@ Citizen aliases are also available for compatibility:
 ### Signing methods
 
 - `personal_sign`
-- `eth_signTypedData_v4`
+- `ctzn_signTypedData_v4`
 
 ### Optional helper
 

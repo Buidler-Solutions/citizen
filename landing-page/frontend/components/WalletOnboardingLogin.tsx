@@ -1,34 +1,98 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { WalletAuthClientError, createWalletAuthClient } from '@citizen/wallet-auth-typescript';
+
+type WalletProvider = {
+  request: (args: { method: string; params?: unknown[] }) => Promise<unknown>;
+};
+
+type WalletAuthChallengeResponse = {
+  challengeId: string;
+  message: string;
+};
+
+type WalletAuthVerifyResponse = {
+  token?: string;
+};
+
+const detectProvider = (): WalletProvider | null => {
+  const candidate = (window as typeof window & { citizen?: WalletProvider; ctzn?: WalletProvider });
+  return candidate.citizen ?? candidate.ctzn ?? null;
+};
 
 export function WalletOnboardingLogin() {
   const [wallet, setWallet] = useState<string | null>(null);
   const [status, setStatus] = useState('Connect your wallet to continue onboarding.');
   const [busy, setBusy] = useState(false);
 
-  const authClient = useMemo(() => createWalletAuthClient({
-    authApiUrl: process.env.NEXT_PUBLIC_WALLET_AUTH_API_URL ?? 'http://127.0.0.1:4499',
-    onboardingPath: '/onboarding',
-    network: 'futurenet',
-    storageKey: 'citizen.wallet.auth.session',
-  }), []);
+  const authApiUrl = useMemo(
+    () => process.env.NEXT_PUBLIC_WALLET_AUTH_API_URL ?? 'http://127.0.0.1:4499',
+    [],
+  );
 
   const connectAndLogin = async () => {
     setBusy(true);
     setStatus('Connecting wallet and requesting one-time login challenge...');
 
     try {
-      const result = await authClient.loginWithBrowserWallet();
-      setWallet(result.wallet);
+      const provider = detectProvider();
+      if (!provider) {
+        throw new Error('Citizen wallet extension was not detected in this browser.');
+      }
+
+      const accountsResult = await provider.request({ method: 'ctzn_requestAccounts' });
+      const accounts = Array.isArray(accountsResult) ? accountsResult : [];
+      const selectedWallet = typeof accounts[0] === 'string' ? accounts[0] : null;
+      if (!selectedWallet) {
+        throw new Error('Wallet did not return an account.');
+      }
+
+      const challengeResponse = await fetch(`${authApiUrl}/auth/challenge`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          wallet: selectedWallet,
+          domain: window.location.host,
+          uri: `${window.location.origin}/onboarding`,
+          network: 'futurenet',
+        }),
+      });
+      if (!challengeResponse.ok) {
+        throw new Error(`Challenge request failed with status ${challengeResponse.status}.`);
+      }
+      const challenge = (await challengeResponse.json()) as WalletAuthChallengeResponse;
+
+      const signature = await provider.request({
+        method: 'personal_sign',
+        params: [challenge.message, selectedWallet],
+      });
+      if (typeof signature !== 'string' || !signature.startsWith('0x')) {
+        throw new Error('Wallet returned an invalid signature.');
+      }
+
+      const verifyResponse = await fetch(`${authApiUrl}/auth/verify`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          challengeId: challenge.challengeId,
+          wallet: selectedWallet,
+          signature,
+        }),
+      });
+      if (!verifyResponse.ok) {
+        throw new Error(`Signature verification failed with status ${verifyResponse.status}.`);
+      }
+      const verified = (await verifyResponse.json()) as WalletAuthVerifyResponse;
+      const token = typeof verified.token === 'string' ? verified.token.trim() : '';
+      if (!token) {
+        throw new Error('Wallet auth backend did not return a session token.');
+      }
+      window.localStorage.setItem('citizen.wallet.auth.session', token);
+
+      setWallet(selectedWallet.toLowerCase());
       setStatus('Wallet login successful. Your onboarding session is active.');
     } catch (error) {
-      const message = error instanceof WalletAuthClientError
-        ? error.message
-        : error instanceof Error
-          ? error.message
-          : 'Unknown wallet login error.';
+      const message = error instanceof Error ? error.message : 'Unknown wallet login error.';
       setStatus(`Wallet login failed: ${message}`);
     } finally {
       setBusy(false);
