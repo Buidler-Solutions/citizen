@@ -74,11 +74,11 @@ Object.defineProperty(window, 'citizen', {
   writable: false,
 });
 
-Object.defineProperty(window, 'ethereum', {
+Object.defineProperty(window, 'ctzn', {
   value: provider,
   configurable: false,
   writable: false,
 });
 
 window.dispatchEvent(new Event('citizen#initialized'));
-window.dispatchEvent(new Event('ethereum#initialized'));
+window.dispatchEvent(new Event('ctzn#initialized'));

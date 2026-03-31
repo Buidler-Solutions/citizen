@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 declare global {
   interface Window {
-    ethereum?: {
+    ctzn?: {
       isCitizenWallet: boolean;
       request: (args: { method: string; params?: unknown[] }) => Promise<unknown>;
     };
@@ -42,7 +42,7 @@ describe('browser wallet provider injection and signing smoke flow', () => {
             id: event.data.id,
             ok: true,
             result:
-              event.data.method === 'eth_signTypedData_v4'
+              event.data.method === 'ctzn_signTypedData_v4'
                 ? '0xtyped-signature'
                 : '0xsigned-smoke-result',
           },
@@ -54,10 +54,10 @@ describe('browser wallet provider injection and signing smoke flow', () => {
     window.addEventListener('message', handler);
     await import('./inpage');
 
-    expect(window.ethereum?.isCitizenWallet).toBe(true);
+    expect(window.ctzn?.isCitizenWallet).toBe(true);
     expect(window.citizen?.isCitizenWallet).toBe(true);
 
-    const signature = await window.ethereum!.request({
+    const signature = await window.ctzn!.request({
       method: 'personal_sign',
       params: ['hello-citizen', '0xabc'],
     });
@@ -65,12 +65,12 @@ describe('browser wallet provider injection and signing smoke flow', () => {
     expect(captured[0]).toEqual({ method: 'personal_sign', params: ['hello-citizen', '0xabc'] });
     expect(signature).toBe('0xsigned-smoke-result');
 
-    const typedSig = await window.ethereum!.request({
-      method: 'eth_signTypedData_v4',
+    const typedSig = await window.ctzn!.request({
+      method: 'ctzn_signTypedData_v4',
       params: ['0xabc', '{"domain":{},"types":{"EIP712Domain":[]},"message":{"nonce":"123"}}'],
     });
     expect(captured[1]).toEqual({
-      method: 'eth_signTypedData_v4',
+      method: 'ctzn_signTypedData_v4',
       params: ['0xabc', '{"domain":{},"types":{"EIP712Domain":[]},"message":{"nonce":"123"}}'],
     });
     expect(typedSig).toBe('0xtyped-signature');

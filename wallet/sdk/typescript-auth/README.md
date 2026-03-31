@@ -1,10 +1,10 @@
 # Citizen Wallet Auth TypeScript SDK
 
-Browser-first SDK for integrating Citizen wallet login (`eth_requestAccounts` + backend challenge/verify).
+Browser-first SDK for integrating Citizen wallet login (`ctzn_requestAccounts` + backend challenge/verify).
 
 ## Features
 
-- Provider detection: `window.citizen` fallback to `window.ethereum`
+- Provider detection: `window.citizen` fallback to `window.ctzn`
 - Backend-first auth flow support:
   - `POST /auth/challenge`
   - `personal_sign`

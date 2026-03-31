@@ -4,7 +4,7 @@ export type WalletProvider = {
 
 export interface WalletAuthWindow {
   citizen?: WalletProvider;
-  ethereum?: WalletProvider;
+  ctzn?: WalletProvider;
   location: {
     host: string;
     origin: string;

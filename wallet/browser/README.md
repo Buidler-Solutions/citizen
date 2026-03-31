@@ -45,14 +45,14 @@ The side panel now includes a **Sponsorship draft builder** to generate strict `
 The injected provider now supports MetaMask-style login patterns for dApps:
 
 ```ts
-const accounts = await window.ethereum.request({ method: "eth_requestAccounts" });
-const signature = await window.ethereum.request({
+const accounts = await window.ctzn.request({ method: "ctzn_requestAccounts" });
+const signature = await window.ctzn.request({
   method: "personal_sign",
   params: ["Sign-in challenge from backend", accounts[0]]
 });
 ```
 
-For richer typed auth payloads, dApps can also use `eth_signTypedData_v4`.
+For richer typed auth payloads, dApps can also use `ctzn_signTypedData_v4`.
 
 Like MetaMask-based SIWE integrations, production login should verify signatures and nonces server-side before issuing app sessions.
 

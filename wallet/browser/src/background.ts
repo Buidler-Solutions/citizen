@@ -294,12 +294,12 @@ async function hasStoredWallet(): Promise<boolean> {
 
 function shouldPromptWalletUi(method: string): boolean {
   return [
+    'ctzn_requestAccounts',
     'citizen_requestAccounts',
-    'eth_requestAccounts',
     'citizen_login',
     'wallet_login',
     'personal_sign',
-    'eth_signTypedData_v4',
+    'ctzn_signTypedData_v4',
   ].includes(method);
 }
 
@@ -693,31 +693,31 @@ async function handleWalletRequest(
   await recordRequest(request, account);
 
   switch (request.method) {
+    case 'ctzn_requestAccounts':
+    case 'ctzn_accounts':
     case 'citizen_requestAccounts':
     case 'citizen_accounts':
-    case 'eth_requestAccounts':
-    case 'eth_accounts':
       return { ok: true, result: [account] };
+    case 'ctzn_chainId':
     case 'citizen_chainId':
-    case 'eth_chainId':
       return { ok: true, result: NETWORKS[await getSelectedNetwork()].chainIdHex };
-    case 'wallet_switchEthereumChain': {
+    case 'wallet_switchCtznChain': {
       const [chainConfig] = request.params ?? [];
       if (typeof chainConfig !== 'object' || chainConfig === null) {
-        return { ok: false, error: 'wallet_switchEthereumChain requires { chainId }.' };
+        return { ok: false, error: 'wallet_switchCtznChain requires { chainId }.' };
       }
       const chainId = (chainConfig as { chainId?: unknown }).chainId;
       const nextNetwork = getNetworkIdFromChainIdHex(chainId);
       if (!nextNetwork) {
-        return { ok: false, error: 'Unsupported chainId for wallet_switchEthereumChain.' };
+        return { ok: false, error: 'Unsupported chainId for wallet_switchCtznChain.' };
       }
       await setSelectedNetwork(nextNetwork);
       return { ok: true, result: null };
     }
-    case 'wallet_addEthereumChain':
+    case 'wallet_addCtznChain':
       return {
         ok: false,
-        error: 'wallet_addEthereumChain is not supported. Supported chains are preconfigured.',
+        error: 'wallet_addCtznChain is not supported. Supported chains are preconfigured.',
       };
     case 'citizen_login':
     case 'wallet_login': {
@@ -777,17 +777,17 @@ async function handleWalletRequest(
       const signature = await wallet.signMessage(message);
       return { ok: true, result: signature };
     }
-    case 'eth_signTypedData_v4': {
+    case 'ctzn_signTypedData_v4': {
       const [requestedAccount, typedDataRaw] = request.params ?? [];
       if (
         typeof requestedAccount !== 'string' ||
         requestedAccount.toLowerCase() !== account.toLowerCase()
       ) {
-        return { ok: false, error: 'eth_signTypedData_v4 requires the active account as first param.' };
+        return { ok: false, error: 'Typed-data signing requires the active account as first param.' };
       }
       const typedData = parseTypedDataPayload(typedDataRaw);
       if (!typedData?.domain || !typedData?.types || !typedData?.message) {
-        return { ok: false, error: 'Invalid EIP-712 payload for eth_signTypedData_v4.' };
+        return { ok: false, error: 'Invalid typed payload for typed-data signing.' };
       }
       const { EIP712Domain: _ignoredDomain, ...types } = typedData.types;
       const signature = await wallet.signTypedData(typedData.domain, types, typedData.message);
