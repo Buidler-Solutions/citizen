@@ -9,7 +9,6 @@ const walletStatus = document.querySelector("#wallet-status");
 
 let connectedWallet = "";
 
-
 function getWalletProvider() {
   return window.citizen ?? window.ethereum;
 }
@@ -18,10 +17,9 @@ async function requestAccountsFromProvider(provider) {
   try {
     return await provider.request({ method: "citizen_requestAccounts" });
   } catch {
-    return await provider.request({ method: "eth_requestAccounts" });
+    return await provider.request({ method: "ctzn_requestAccounts" });
   }
 }
-
 
 function setMessage(text, mode) {
   message.hidden = false;
@@ -66,22 +64,24 @@ function renderArticles(articles) {
         <p class="meta">Block #${article.blockHeight} • hash ${article.contentHash.slice(0, 16)}...</p>
         ${article.authorWallet ? `<p class="meta">Wallet ${maskWallet(article.authorWallet)}</p>` : ""}
       </article>
-    `
+    `,
     )
     .join("");
 }
 
 function renderChain(chain) {
-  const namespaceCount = Array.isArray(chain.namespaces) ? chain.namespaces.length : 0;
+  const namespaceCount = Array.isArray(chain.namespaces)
+    ? chain.namespaces.length
+    : 0;
   chainMeta.textContent = `Network ${chain.network} · Runtime ${chain.nodeRuntimeUrl} · Namespace ${chain.namespace} · Namespaces registered ${namespaceCount}`;
   chainBlocks.textContent = JSON.stringify(
     {
       health: chain.health,
       genesis: chain.genesis,
-      namespaces: chain.namespaces
+      namespaces: chain.namespaces,
     },
     null,
-    2
+    2,
   );
 }
 
@@ -97,7 +97,7 @@ async function fetchJson(path, options = {}) {
 async function refresh() {
   const [articlesData, chainData] = await Promise.all([
     fetchJson("/api/articles"),
-    fetchJson("/api/chain")
+    fetchJson("/api/chain"),
   ]);
 
   renderArticles(articlesData.articles);
@@ -107,13 +107,18 @@ async function refresh() {
 async function connectWallet() {
   const provider = getWalletProvider();
   if (!provider?.request) {
-    setWalletStatus("No injected Citizen wallet found. Start Citizen Browser Wallet extension.");
+    setWalletStatus(
+      "No injected Citizen wallet found. Start Citizen Browser Wallet extension.",
+    );
     return;
   }
 
   try {
     const accounts = await requestAccountsFromProvider(provider);
-    const wallet = Array.isArray(accounts) && typeof accounts[0] === "string" ? accounts[0].toLowerCase() : "";
+    const wallet =
+      Array.isArray(accounts) && typeof accounts[0] === "string"
+        ? accounts[0].toLowerCase()
+        : "";
     if (!wallet) {
       setWalletStatus("Wallet connected but no account returned.");
       return;
@@ -155,7 +160,7 @@ form.addEventListener("submit", async (event) => {
     content: form.content.value,
     creditGrantId: form.creditGrantId.value,
     sponsorBuilderId: form.sponsorBuilderId.value || undefined,
-    wallet: connectedWallet
+    wallet: connectedWallet,
   };
 
   const provider = getWalletProvider();
@@ -168,12 +173,12 @@ form.addEventListener("submit", async (event) => {
     const challenge = await fetchJson("/api/wallet/challenge", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload)
+      body: JSON.stringify(payload),
     });
 
     const walletSignature = await provider.request({
       method: "personal_sign",
-      params: [challenge.message, connectedWallet]
+      params: [challenge.message, connectedWallet],
     });
 
     const result = await fetchJson("/api/articles", {
@@ -182,12 +187,15 @@ form.addEventListener("submit", async (event) => {
       body: JSON.stringify({
         challengeId: challenge.challengeId,
         wallet: connectedWallet,
-        walletSignature
-      })
+        walletSignature,
+      }),
     });
 
     receipt.textContent = JSON.stringify(result.receipt, null, 2);
-    setMessage("Article signed by wallet, DID-linked, and anchored successfully.", "success");
+    setMessage(
+      "Article signed by wallet, DID-linked, and anchored successfully.",
+      "success",
+    );
     form.reset();
     await refresh();
   } catch (error) {

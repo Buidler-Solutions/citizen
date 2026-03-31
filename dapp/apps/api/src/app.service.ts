@@ -145,7 +145,7 @@ export class AppService {
       walletAuth: {
         name: "Wallet Login (Backend Verified)",
         detail:
-          "MetaMask-style login pattern with backend nonce challenge, signature verification, and session issuance for Citizen dApps."
+          "Citizen wallet login pattern with backend nonce challenge, signature verification, and session issuance for Citizen dApps."
       }
     };
   }
