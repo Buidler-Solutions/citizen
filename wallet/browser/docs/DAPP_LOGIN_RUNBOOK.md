@@ -1,4 +1,4 @@
-# Citizen Browser Wallet Runbook: MetaMask-Style dApp Login
+# Citizen Browser Wallet Runbook: Citizen Wallet dApp Login
 
 For cross-component developer documentation (backend, API, extension, operations), see:
 
@@ -6,7 +6,7 @@ For cross-component developer documentation (backend, API, extension, operations
 
 ## Goal
 
-Implement dApp login for Citizen blockchain in the same operating model most MetaMask-integrated apps use:
+Implement dApp login for Citizen blockchain in a Citizen-native wallet operating model:
 
 1. Request account access.
 2. Ask backend for nonce/challenge.
@@ -55,7 +55,7 @@ Citizen-namespace aliases (`citizen_requestAccounts`, `citizen_accounts`, `citiz
 
 ---
 
-## Login Flow A: `personal_sign` (MetaMask-Common)
+## Login Flow A: `personal_sign` (Citizen-Common)
 
 ```ts
 const provider = window.citizen ?? window.ctzn;
@@ -107,7 +107,7 @@ await fetch("/auth/verify-typed", {
 
 ---
 
-## Chain Management (MetaMask-Like)
+## Chain Management (Citizen Wallet)
 
 Use `wallet_switchCtznChain` with configured Citizen chain IDs:
 

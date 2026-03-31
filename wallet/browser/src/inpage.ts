@@ -63,7 +63,6 @@ window.addEventListener('message', (event: MessageEvent) => {
 });
 
 const provider = {
-  isMetaMask: false,
   isCitizenWallet: true,
   request: ({ method, params }: { method: string; params?: unknown[] }) => request(method, params),
 };

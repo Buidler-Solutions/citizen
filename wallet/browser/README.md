@@ -10,7 +10,7 @@ Current status is **aligned for mnemonic UX defaults**:
 - Extension default derivation path is `m/44'/930'/0'/0'/0'`, matching the CLI default.
 - `citizen-wallet` CLI in `citizen-protocol/crates/wallet/src/cli.rs` supports mnemonic-based keygen/import with hardened-path validation.
 
-Important: the browser extension still signs via the EVM wallet provider surface, while the Rust CLI key material is managed in the protocol wallet crate. Treat cross-surface restoration as environment-specific until full cryptographic parity is explicitly documented.
+Important: the browser extension still signs via the injected wallet provider surface, while the Rust CLI key material is managed in the protocol wallet crate. Treat cross-surface restoration as environment-specific until full cryptographic parity is explicitly documented.
 
 ## Why this project exists
 
@@ -42,7 +42,7 @@ The side panel now includes a **Sponsorship draft builder** to generate strict `
 
 ## dApp login support
 
-The injected provider now supports MetaMask-style login patterns for dApps:
+The injected provider now supports Citizen wallet login patterns for dApps:
 
 ```ts
 const accounts = await window.ctzn.request({ method: "ctzn_requestAccounts" });
@@ -54,7 +54,7 @@ const signature = await window.ctzn.request({
 
 For richer typed auth payloads, dApps can also use `ctzn_signTypedData_v4`.
 
-Like MetaMask-based SIWE integrations, production login should verify signatures and nonces server-side before issuing app sessions.
+Like backend-verified wallet sign-in integrations, production login should verify signatures and nonces server-side before issuing app sessions.
 
 For full implementation/operations guidance, see `docs/DAPP_LOGIN_RUNBOOK.md`.
 

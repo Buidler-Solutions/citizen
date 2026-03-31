@@ -85,7 +85,7 @@ The integration path is:
 
 ## Wallet login API (Citizen-native backend flow)
 
-For MetaMask-style wallet login semantics adapted to Citizen protocol environments, `apps/api` now exposes:
+For Citizen wallet login semantics adapted to Citizen protocol environments, `apps/api` now exposes:
 
 - `POST /auth/challenge` → issues a Citizen login challenge (`challengeId`, `nonce`, `message`, TTL)
 - `POST /auth/verify` → verifies signed challenge + wallet match and returns a backend session envelope
@@ -93,10 +93,10 @@ For MetaMask-style wallet login semantics adapted to Citizen protocol environmen
 This is intentionally **backend-first**:
 
 1. frontend requests challenge from DApp API,
-2. wallet signs via injected provider (`personal_sign` / `eth_signTypedData_v4`),
+2. wallet signs via injected provider (`personal_sign` / `ctzn_signTypedData_v4`),
 3. backend verifies signature and nonce before issuing session state.
 
-Even though the wallet uses Ethereum-compatible signing primitives, the challenge semantics and network selection are Citizen-protocol aware (`testnet` / `futurenet` / `mainnet`).
+Even though the wallet uses compatibility signing primitives, the challenge semantics and network selection are Citizen-protocol aware (`testnet` / `futurenet` / `mainnet`).
 
 ### Current state of Rust node API
 
@@ -125,4 +125,3 @@ Optional override:
 cd dapp/apps/api
 CITIZEN_TESTNET_SUBMIT_URL=http://127.0.0.1:8081/api/v1/envelopes/submit CITIZEN_FUTURENET_SUBMIT_URL=http://127.0.0.1:8082/api/v1/envelopes/submit CITIZEN_MAINNET_SUBMIT_URL=http://127.0.0.1:8083/api/v1/envelopes/submit npm run start:dev
 ```
-

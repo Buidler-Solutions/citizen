@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -25,6 +26,21 @@ class StubSigner {
   async sign(message) {
     return `sig:${Buffer.from(message).toString("base64url")}`;
   }
+}
+
+function resolveVectorFixturePath(filename) {
+  const testDir = path.dirname(fileURLToPath(import.meta.url));
+  const candidatePaths = [
+    path.resolve(testDir, "../../../docs/test-vectors", filename),
+    path.resolve(testDir, "../../../citizen-protocol/docs/test-vectors", filename)
+  ];
+
+  const fixturePath = candidatePaths.find((candidate) => existsSync(candidate));
+  if (!fixturePath) {
+    throw new Error(`Fixture ${filename} not found in expected test-vector directories`);
+  }
+
+  return fixturePath;
 }
 
 test("canonicalizeJson sorts keys recursively", () => {
@@ -260,10 +276,7 @@ test("submitTransaction validates builder.credits payloads before submitting", a
 });
 
 test("file commitment vectors match canonical hash outputs", async () => {
-  const fixturePath = path.resolve(
-    path.dirname(fileURLToPath(import.meta.url)),
-    "../../../docs/test-vectors/file_commitment_test_vectors.json"
-  );
+  const fixturePath = resolveVectorFixturePath("file_commitment_test_vectors.json");
   const fixture = JSON.parse(await readFile(fixturePath, "utf8"));
 
   for (const vector of fixture.vectors) {
@@ -274,10 +287,7 @@ test("file commitment vectors match canonical hash outputs", async () => {
 });
 
 test("payload field commitment vectors match canonical hash outputs", async () => {
-  const fixturePath = path.resolve(
-    path.dirname(fileURLToPath(import.meta.url)),
-    "../../../docs/test-vectors/payload_field_commitment_test_vectors.json"
-  );
+  const fixturePath = resolveVectorFixturePath("payload_field_commitment_test_vectors.json");
   const fixture = JSON.parse(await readFile(fixturePath, "utf8"));
 
   for (const vector of fixture.vectors) {

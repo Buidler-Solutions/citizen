@@ -60,9 +60,9 @@ function resolveWalletProvider(explicitProvider) {
     throw new Error("Browser wallet provider is unavailable outside a browser context");
   }
 
-  const provider = window.citizen ?? window.ethereum;
+  const provider = window.citizen ?? window.ctzn;
   if (!provider || typeof provider.request !== "function") {
-    throw new Error("Citizen wallet extension provider was not found on window.citizen/window.ethereum");
+    throw new Error("Citizen wallet extension provider was not found on window.citizen/window.ctzn");
   }
 
   return provider;

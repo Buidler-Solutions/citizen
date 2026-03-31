@@ -29,7 +29,7 @@ const client = new CitizenNodeClient({
   apiKey: process.env.NEXT_PUBLIC_CITIZEN_API_KEY
 });
 
-// Uses window.citizen (or window.ethereum fallback) to:
+// Uses window.citizen (or window.ctzn alias) to:
 // 1) request wallet account
 // 2) sign entry payload + envelope with personal_sign
 // 3) submit to runtime

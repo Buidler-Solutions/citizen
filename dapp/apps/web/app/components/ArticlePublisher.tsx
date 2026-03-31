@@ -53,7 +53,7 @@ async function requestAccountsFromProvider(provider: {
   try {
     return (await provider.request({ method: "citizen_requestAccounts" })) as string[];
   } catch {
-    return (await provider.request({ method: "eth_requestAccounts" })) as string[];
+    return (await provider.request({ method: "ctzn_requestAccounts" })) as string[];
   }
 }
 
