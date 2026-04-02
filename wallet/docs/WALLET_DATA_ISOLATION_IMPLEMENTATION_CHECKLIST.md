@@ -87,10 +87,10 @@ This checklist translates the current flow and known gaps into concrete implemen
 
 ### C1) Data minimization and storage isolation
 
-- [ ] Keep raw form PII out of extension long-term storage by default.
-- [ ] Store only minimal signed artifacts required for receipt/audit.
+- [x] Keep raw form PII out of extension long-term storage by default.
+- [x] Store only minimal signed artifacts required for receipt/audit.
 - [ ] Encrypt sensitive local state at rest (where platform APIs allow).
-- [ ] Add deterministic retention windows and secure deletion job.
+- [x] Add deterministic retention windows and secure deletion job.
 
 ### C2) Cryptographic and policy guarantees
 
@@ -113,7 +113,7 @@ This checklist translates the current flow and known gaps into concrete implemen
 
 ### D1) Automated tests
 
-- [ ] Unit tests: canonicalization, hashing, lifecycle transitions, expiry logic.
+- [x] Unit tests: canonicalization, hashing, lifecycle transitions, expiry logic.
 - [ ] Integration tests: dApp → extension → signed response happy path.
 - [ ] Integration tests: reject/timeout/cancel/error-code paths.
 - [ ] Regression tests: ensure backend submit is impossible without signed state.

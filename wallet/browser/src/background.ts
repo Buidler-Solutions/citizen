@@ -6,6 +6,12 @@ import {
   signingScopePayloadV2FromEnvelope,
   signingPreimageFromEnvelope,
 } from './dappSigningRequest';
+import {
+  pruneRetainedRequests,
+  sanitizeRequestForStorage,
+  type DappRequestState,
+  type PendingDappSigningRequest,
+} from './dappRequestIsolation';
 
 type WalletRequest = {
   method: string;
@@ -68,17 +74,6 @@ type ActivityEntry = {
   account: string;
 };
 
-type DappRequestState = 'pending' | 'approved' | 'rejected' | 'expired' | 'signed';
-
-type PendingDappSigningRequest = {
-  requestId: string;
-  envelope: DappSigningRequestEnvelope;
-  state: DappRequestState;
-  createdAt: string;
-  updatedAt: string;
-  decidedAt: string | null;
-};
-
 type DappRequestAuditEvent = {
   eventId: string;
   requestId: string;
@@ -106,6 +101,7 @@ const DAPP_REQUEST_AUDIT_KEY = 'citizen.browser.wallet.dapp_request_audit.v1';
 const DEFAULT_DERIVATION_PATH = "m/44'/930'/0'/0'/0'";
 const MAX_ACTIVITY = 100;
 const MAX_DAPP_AUDIT_EVENTS = 1_000;
+const DAPP_DECIDED_REQUEST_RETENTION_MS = 24 * 60 * 60 * 1000;
 const DAPP_REQUEST_CONCURRENCY_MODE = 'single_active';
 
 const pendingDappResolutions = new Map<string, PendingDappResolution>();
@@ -259,6 +255,17 @@ async function savePendingDappRequests(requests: PendingDappSigningRequest[]): P
   await chrome.storage.local.set({ [DAPP_PENDING_REQUESTS_KEY]: requests });
 }
 
+async function cleanupRetainedDappRequests(): Promise<void> {
+  const requests = await getPendingDappRequests();
+  if (requests.length === 0) {
+    return;
+  }
+  const next = pruneRetainedRequests(requests, Date.now(), DAPP_DECIDED_REQUEST_RETENTION_MS);
+  if (next.length !== requests.length) {
+    await savePendingDappRequests(next);
+  }
+}
+
 async function appendDappAuditEvent(event: Omit<DappRequestAuditEvent, 'eventId' | 'occurredAt'>): Promise<void> {
   const stored = await chrome.storage.local.get(DAPP_REQUEST_AUDIT_KEY);
   const existing = Array.isArray(stored[DAPP_REQUEST_AUDIT_KEY]) ? (stored[DAPP_REQUEST_AUDIT_KEY] as DappRequestAuditEvent[]) : [];
@@ -283,7 +290,7 @@ async function transitionDappRequestState(
     if (entry.requestId !== requestId) {
       return entry;
     }
-    return {
+    const transitioned = {
       ...entry,
       state: toState,
       updatedAt: now,
@@ -291,6 +298,7 @@ async function transitionDappRequestState(
         ? now
         : entry.decidedAt,
     };
+    return sanitizeRequestForStorage(transitioned, toState);
   });
   await savePendingDappRequests(next);
   const updated = next.find((entry) => entry.requestId === requestId) ?? null;
@@ -631,6 +639,7 @@ async function enqueueDappSigningRequest(
   request: WalletRequest,
   sender: chrome.runtime.MessageSender,
 ): Promise<WalletResponse> {
+  await cleanupRetainedDappRequests();
   await expireStaleDappRequests();
   const requests = await getPendingDappRequests();
   const activePending = requests.find((entry) => entry.state === 'pending');
@@ -680,6 +689,7 @@ async function enqueueDappSigningRequest(
 }
 
 async function serializePendingDappRequestsForUi() {
+  await cleanupRetainedDappRequests();
   await expireStaleDappRequests();
   const requests = await getPendingDappRequests();
   return requests.map((entry) => ({
@@ -701,6 +711,7 @@ async function serializePendingDappRequestsForUi() {
 }
 
 async function approvePendingDappRequest(requestId: string): Promise<WalletResponse> {
+  await cleanupRetainedDappRequests();
   await expireStaleDappRequests();
   const requests = await getPendingDappRequests();
   const entry = requests.find((candidate) => candidate.requestId === requestId);
@@ -727,6 +738,7 @@ async function approvePendingDappRequest(requestId: string): Promise<WalletRespo
 }
 
 async function rejectPendingDappRequest(requestId: string, reason: string): Promise<WalletResponse> {
+  await cleanupRetainedDappRequests();
   await expireStaleDappRequests();
   const requests = await getPendingDappRequests();
   const entry = requests.find((candidate) => candidate.requestId === requestId);

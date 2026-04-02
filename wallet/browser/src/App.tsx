@@ -252,6 +252,11 @@ export function App() {
     void refreshState();
   }, []);
 
+  const pendingRequests = useMemo(
+    () => pendingDappRequests.filter((entry) => entry.state === 'pending'),
+    [pendingDappRequests],
+  );
+
   const handlePasswordSubmit = async () => {
     setStatus('');
     if (!passwordInput) {
@@ -654,6 +659,86 @@ export function App() {
         <div className="wallet-scroll">
           {activeTab === 'activity' ? (
             <>
+              {pendingRequests.length > 0 ? (
+                <article className="request-card">
+                  <h2>Notifications</h2>
+                  <p className="meta-text">
+                    You have {pendingRequests.length} dApp signing request{pendingRequests.length === 1 ? '' : 's'} pending review.
+                  </p>
+                  {pendingRequests.map((entry) => (
+                    <div key={entry.requestId} className="pending-request">
+                      <p className="meta-text">🔒 Origin lock active. Verify the full URL before signing.</p>
+                      <dl>
+                        <div>
+                          <dt>Origin</dt>
+                          <dd>{entry.origin.origin}</dd>
+                        </div>
+                        <div>
+                          <dt>URL</dt>
+                          <dd>{showFullUrlByRequest[entry.requestId] ? (entry.origin.tabUrl ?? 'Unavailable') : mask(entry.origin.tabUrl ?? 'Unavailable')}</dd>
+                        </div>
+                        <div>
+                          <dt>Method</dt>
+                          <dd>{entry.method}</dd>
+                        </div>
+                        <div>
+                          <dt>Requested</dt>
+                          <dd>{new Date(entry.createdAt).toLocaleString()}</dd>
+                        </div>
+                        <div>
+                          <dt>Expires</dt>
+                          <dd>{new Date(entry.expiresAt).toLocaleString()}</dd>
+                        </div>
+                        <div>
+                          <dt>Payload hash</dt>
+                          <dd>{mask(entry.payload.hash)}</dd>
+                        </div>
+                        <div>
+                          <dt>Risk flags</dt>
+                          <dd>{entry.riskFlags.length > 0 ? entry.riskFlags.join(', ') : 'none'}</dd>
+                        </div>
+                      </dl>
+                      <p className="meta-text">
+                        What will be shared: only the canonical payload hash and signature are returned to this dApp.
+                      </p>
+                      <h3>Payload preview</h3>
+                      <dl>
+                        {renderPayloadSummary(entry.payload.canonicalJson).map((section) => (
+                          <div key={`${entry.requestId}-${section.label}`}>
+                            <dt>{section.label}</dt>
+                            <dd>{section.value}</dd>
+                          </div>
+                        ))}
+                      </dl>
+                      <div className="button-row">
+                        <button className="primary" onClick={() => handleApproveDappRequest(entry.requestId)}>
+                          Approve and sign
+                        </button>
+                        <button className="ghost" onClick={() => handleRejectDappRequest(entry.requestId)}>
+                          Reject
+                        </button>
+                        <button className="ghost" onClick={() => handleCancelDappRequest(entry.requestId)}>
+                          Cancel / close
+                        </button>
+                        <button
+                          className="ghost"
+                          onClick={() => setShowFullUrlByRequest((current) => ({ ...current, [entry.requestId]: !current[entry.requestId] }))}
+                        >
+                          {showFullUrlByRequest[entry.requestId] ? 'Hide full URL' : 'Reveal full URL'}
+                        </button>
+                        <button
+                          className="ghost"
+                          onClick={() => setShowRawPayloadByRequest((current) => ({ ...current, [entry.requestId]: !current[entry.requestId] }))}
+                        >
+                          {showRawPayloadByRequest[entry.requestId] ? 'Hide raw payload' : 'Show raw payload'}
+                        </button>
+                      </div>
+                      {showRawPayloadByRequest[entry.requestId] ? <pre className="raw-payload">{entry.payload.canonicalJson}</pre> : null}
+                    </div>
+                  ))}
+                </article>
+              ) : null}
+
               <article className="request-card">
                 <h2>Create transaction</h2>
                 <p className="meta-text">Quick CTA to start composing and signing a new transaction payload.</p>
@@ -836,85 +921,6 @@ export function App() {
                 </label>
                 <button className="primary" onClick={saveProfile}>Save profile</button>
               </div>
-            </article>
-          ) : null}
-
-          {pendingDappRequests.some((entry) => entry.state === 'pending') ? (
-            <article className="request-card">
-              <h2>Pending request</h2>
-              {pendingDappRequests
-                .filter((entry) => entry.state === 'pending')
-                .map((entry) => (
-                  <div key={entry.requestId} className="pending-request">
-                    <p className="meta-text">🔒 Origin lock active. Verify the full URL before signing.</p>
-                    <dl>
-                      <div>
-                        <dt>Origin</dt>
-                        <dd>{entry.origin.origin}</dd>
-                      </div>
-                      <div>
-                        <dt>URL</dt>
-                        <dd>{showFullUrlByRequest[entry.requestId] ? (entry.origin.tabUrl ?? 'Unavailable') : mask(entry.origin.tabUrl ?? 'Unavailable')}</dd>
-                      </div>
-                      <div>
-                        <dt>Method</dt>
-                        <dd>{entry.method}</dd>
-                      </div>
-                      <div>
-                        <dt>Requested</dt>
-                        <dd>{new Date(entry.createdAt).toLocaleString()}</dd>
-                      </div>
-                      <div>
-                        <dt>Expires</dt>
-                        <dd>{new Date(entry.expiresAt).toLocaleString()}</dd>
-                      </div>
-                      <div>
-                        <dt>Payload hash</dt>
-                        <dd>{mask(entry.payload.hash)}</dd>
-                      </div>
-                      <div>
-                        <dt>Risk flags</dt>
-                        <dd>{entry.riskFlags.length > 0 ? entry.riskFlags.join(', ') : 'none'}</dd>
-                      </div>
-                    </dl>
-                    <p className="meta-text">
-                      What will be shared: only the canonical payload hash and signature are returned to this dApp.
-                    </p>
-                    <h3>Payload preview</h3>
-                    <dl>
-                      {renderPayloadSummary(entry.payload.canonicalJson).map((section) => (
-                        <div key={`${entry.requestId}-${section.label}`}>
-                          <dt>{section.label}</dt>
-                          <dd>{section.value}</dd>
-                        </div>
-                      ))}
-                    </dl>
-                    <div className="button-row">
-                      <button className="primary" onClick={() => handleApproveDappRequest(entry.requestId)}>
-                        Approve and sign
-                      </button>
-                      <button className="ghost" onClick={() => handleRejectDappRequest(entry.requestId)}>
-                        Reject
-                      </button>
-                      <button className="ghost" onClick={() => handleCancelDappRequest(entry.requestId)}>
-                        Cancel / close
-                      </button>
-                      <button
-                        className="ghost"
-                        onClick={() => setShowFullUrlByRequest((current) => ({ ...current, [entry.requestId]: !current[entry.requestId] }))}
-                      >
-                        {showFullUrlByRequest[entry.requestId] ? 'Hide full URL' : 'Reveal full URL'}
-                      </button>
-                      <button
-                        className="ghost"
-                        onClick={() => setShowRawPayloadByRequest((current) => ({ ...current, [entry.requestId]: !current[entry.requestId] }))}
-                      >
-                        {showRawPayloadByRequest[entry.requestId] ? 'Hide raw payload' : 'Show raw payload'}
-                      </button>
-                    </div>
-                    {showRawPayloadByRequest[entry.requestId] ? <pre className="raw-payload">{entry.payload.canonicalJson}</pre> : null}
-                  </div>
-                ))}
             </article>
           ) : null}
 
