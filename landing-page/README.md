@@ -122,10 +122,15 @@ To relay signed-hash metadata into the Citizen network from backend:
 
 ```bash
 CITIZEN_SIGNED_SUBMISSION_RELAY_URL=http://127.0.0.1:8081/api/v1/your-relay-endpoint
+CITIZEN_SIGNED_SUBMISSION_RELAY_MAX_ATTEMPTS=3
+CITIZEN_SIGNED_SUBMISSION_RELAY_RETRY_BACKOFF_MS=250
 ```
 
 If `CITIZEN_SIGNED_SUBMISSION_RELAY_URL` is configured, onboarding writes fail when relay submission fails, so PostgreSQL and network relay remain synchronized per request.
 The relay URL is fail-closed validated on submit: it must be an absolute `http://` or `https://` URL (invalid values are rejected before persistence).
+
+Relay delivery uses deterministic deduplication keys derived from `(walletPayloadHash, email)` and sends the key in `deduplication_key` and `x-idempotency-key` so upstreams can safely collapse duplicates.
+Retry behavior is bounded and configurable: transient relay failures (`429`, `5xx`, or network errors) are retried up to `CITIZEN_SIGNED_SUBMISSION_RELAY_MAX_ATTEMPTS` with exponential backoff starting at `CITIZEN_SIGNED_SUBMISSION_RELAY_RETRY_BACKOFF_MS` milliseconds.
 
 Migration note: existing `interest_submissions` rows created before wallet-signing enforcement are preserved with nullable wallet metadata columns; new submissions are still enforced at request-validation/service level.
 
