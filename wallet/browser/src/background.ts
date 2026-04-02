@@ -1,5 +1,8 @@
 import { HDNodeWallet, Wallet } from 'ethers';
-import { canonicalJson, sha256DigestHex } from './canonical';
+import {
+  createDappSigningRequestEnvelope,
+  signingPreimageFromEnvelope,
+} from './dappSigningRequest';
 
 type WalletRequest = {
   method: string;
@@ -471,11 +474,19 @@ async function getOrCreateProtocolSigner(): Promise<StoredProtocolSigner> {
   return signer;
 }
 
-async function signCitizenPayload(rawPayload: unknown): Promise<WalletResponse> {
+async function signCitizenPayload(
+  rawPayload: unknown,
+  request: WalletRequest,
+  sender: chrome.runtime.MessageSender,
+): Promise<WalletResponse> {
   const signer = await getOrCreateProtocolSigner();
-  const canonicalPayload = typeof rawPayload === 'string' ? rawPayload : canonicalJson(rawPayload);
-  const payloadBytes = new TextEncoder().encode(canonicalPayload);
-  const payloadHash = await sha256DigestHex(payloadBytes);
+  const envelope = await createDappSigningRequestEnvelope({
+    origin: request.origin,
+    tabUrl: sender.url ?? sender.tab?.url ?? null,
+    payload: rawPayload,
+  });
+  const preimage = signingPreimageFromEnvelope(envelope);
+  const payloadBytes = new TextEncoder().encode(preimage);
   const privateKey = await crypto.subtle.importKey(
     'pkcs8',
     base64ToBytes(signer.pkcs8Base64),
@@ -495,10 +506,19 @@ async function signCitizenPayload(rawPayload: unknown): Promise<WalletResponse> 
       signer: signer.did,
       verifyingKey: signer.verifyingKeyHex,
       signature: toHex(signature),
-      signingPayload: canonicalPayload,
-      payloadHash,
-      payloadHashHex: payloadHash.replace('sha256:', ''),
+      requestId: envelope.requestId,
+      origin: envelope.origin,
+      tabUrl: envelope.tabUrl,
+      method: envelope.method,
+      signingPayload: envelope.canonicalPayload,
+      payloadHash: envelope.payloadHash,
+      payloadHashHex: envelope.payloadHash.replace('sha256:', ''),
+      preimage,
+      createdAt: envelope.createdAt,
+      expiresAt: envelope.expiresAt,
+      riskFlags: envelope.riskFlags,
       algorithm: 'ed25519',
+      signatureScope: 'payload_hash_v1',
     },
   };
 }
@@ -916,7 +936,7 @@ async function handleWalletRequest(
       if (payload === undefined || payload === null) {
         return { ok: false, error: 'ctzn_signCitizenTx requires a payload object or canonical JSON string.' };
       }
-      return signCitizenPayload(payload);
+      return signCitizenPayload(payload, request, sender);
     }
     default:
       return { ok: false, error: `Unsupported method: ${request.method}` };

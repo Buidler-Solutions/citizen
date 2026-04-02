@@ -14,15 +14,15 @@ This checklist translates the current flow and known gaps into concrete implemen
 
 ### A1) Define an explicit dApp signing request model
 
-- [ ] Add a typed request envelope for inbound dApp calls:
-  - [ ] `requestId` (stable UUID)
-  - [ ] `origin` (full origin + tab URL)
-  - [ ] `method` (e.g., `ctzn_signCitizenTx`)
-  - [ ] `payload` (canonicalized JSON + hash)
-  - [ ] `createdAt` / `expiresAt`
-  - [ ] `riskFlags` (unknown origin, stale request, large payload, unsupported fields)
-- [ ] Add schema validation + canonical serialization before any UI render.
-- [ ] Ensure signature preimage is derived from canonical payload hash only.
+- [x] Add a typed request envelope for inbound dApp calls:
+  - [x] `requestId` (stable UUID)
+  - [x] `origin` (full origin + tab URL)
+  - [x] `method` (e.g., `ctzn_signCitizenTx`)
+  - [x] `payload` (canonicalized JSON + hash)
+  - [x] `createdAt` / `expiresAt`
+  - [x] `riskFlags` (unknown origin, stale request, large payload, unsupported fields)
+- [x] Add schema validation + canonical serialization before any UI render.
+- [x] Ensure signature preimage is derived from canonical payload hash only.
 
 ### A2) Build a first-class approval screen in the extension
 
@@ -148,3 +148,20 @@ This checklist translates the current flow and known gaps into concrete implemen
 6. [ ] B2 or B3 implementation (based on B1).
 7. [ ] C1–C3 isolation controls.
 8. [ ] D1–D3 testing, staged rollout, and monitoring.
+
+## Cross-stack sync guardrails (wallet tech stack)
+
+When implementing any wallet data-isolation task, keep these surfaces synchronized:
+
+- [ ] wallet browser extension request/signing flow (`wallet/browser`)
+- [ ] landing-page onboarding dApp submission flow (`landing-page/frontend`)
+- [ ] wallet/backend verification + session/relay paths (`wallet/backend`)
+- [ ] landing-page backend validation + network relay (`landing-page/backend`)
+- [ ] builder SDK contracts (`sdk/nodejs`, `wallet/sdk/typescript-auth`)
+- [ ] wallet CLI operational guidance (`wallet/cli`)
+
+For every signed submission flow, explicitly document and enforce:
+
+- [ ] **on-chain commitment fields** (payload hash, signer DID, verifying key, signature, signature scope, algorithm)
+- [ ] **off-chain custody fields** (PII/business payload, storage location, retention policy, access policy)
+- [ ] a deterministic mapping from off-chain payload → on-chain commitment hash.

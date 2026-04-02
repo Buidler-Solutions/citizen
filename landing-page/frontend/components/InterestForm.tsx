@@ -84,6 +84,7 @@ type CitizenPayloadSignature = {
   payloadHash?: string;
   signingPayload?: string;
   algorithm?: string;
+  signatureScope?: 'payload_hash_v1' | 'canonical_payload_v1';
 };
 
 type SignedSubmissionEnvelope = {
@@ -101,6 +102,7 @@ type SignedSubmissionEnvelope = {
   walletPayloadHash: string;
   walletSigningPayload: string;
   walletAlgorithm: string;
+  walletSignatureScope: 'payload_hash_v1' | 'canonical_payload_v1';
 };
 
 const normalizeShortcodeToken = (token: string): string => token
@@ -578,6 +580,7 @@ export function InterestForm() {
         walletPayloadHash: signResult.payloadHash,
         walletSigningPayload: signResult.signingPayload,
         walletAlgorithm: signResult.algorithm ?? 'ed25519',
+        walletSignatureScope: signResult.signatureScope === 'canonical_payload_v1' ? 'canonical_payload_v1' : 'payload_hash_v1',
       });
       setStatus('Submission signed. Click "Submit signed form" to finalize.');
       return true;
@@ -624,6 +627,7 @@ export function InterestForm() {
           walletPayloadHash: signedSubmission.walletPayloadHash,
           walletSigningPayload: signedSubmission.walletSigningPayload,
           walletAlgorithm: signedSubmission.walletAlgorithm,
+          walletSignatureScope: signedSubmission.walletSignatureScope,
         }),
       });
       if (!response.ok) {

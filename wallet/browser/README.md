@@ -70,6 +70,7 @@ To keep user data custody in the wallet surface (instead of dApp/backend forms p
    - `payloadHash` (`sha256:<hex>` digest of canonical payload, runtime commitment format)
    - `payloadHashHex` (legacy plain-hex convenience mirror)
    - `signingPayload` (canonical JSON)
+   - `signatureScope` (`payload_hash_v1` default; signature is over `payloadHash`)
    - signer metadata (`signer`, `verifyingKey`, `algorithm`)
 4. Builder backend receives only the signed envelope, verifies signature/hash consistency, then stores according to app policy.
 5. Chain submission should anchor the commitment/receipt (`payloadHash` + signer/proof metadata), while sensitive fields remain off-chain.
@@ -77,7 +78,7 @@ To keep user data custody in the wallet surface (instead of dApp/backend forms p
 This pattern supports a governed data-plane model where commitments/proofs are chain-addressable and user data stays in wallet-controlled flows.
 
 For landing-page onboarding integrations, the signing response maps one-to-one with enforced backend fields:
-`walletSignerDid`, `walletVerifyingKey`, `walletSignature`, `walletPayloadHash`, `walletSigningPayload`, and `walletAlgorithm`.
+`walletSignerDid`, `walletVerifyingKey`, `walletSignature`, `walletPayloadHash`, `walletSigningPayload`, `walletAlgorithm`, and `walletSignatureScope`.
 
 ## Quality gates
 

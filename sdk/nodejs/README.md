@@ -79,6 +79,7 @@ The helper calls `ctzn_getCitizenSigner` + `ctzn_signCitizenTx` and returns runt
 - `payloadHash` in `sha256:<hex>` format
 - canonical `signingPayload`
 - signer metadata + signature for backend verification and chain anchoring
+- `signatureScope` indicating whether signature verification should use `payloadHash` (`payload_hash_v1`) or canonical payload (`canonical_payload_v1`)
 
 For landing-page onboarding backends that enforce wallet-first submission, map these fields directly:
 - `signer` -> `walletSignerDid`
@@ -86,6 +87,7 @@ For landing-page onboarding backends that enforce wallet-first submission, map t
 - `signature` -> `walletSignature`
 - `payloadHash` -> `walletPayloadHash`
 - `signingPayload` -> `walletSigningPayload`
+- `signatureScope` -> `walletSignatureScope`
 - `algorithm` -> `walletAlgorithm`
 
 ## Server-side signer flow (optional)
