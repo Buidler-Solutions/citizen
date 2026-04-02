@@ -87,6 +87,14 @@ type PendingDappResolution = {
   timeoutId: ReturnType<typeof setTimeout>;
 };
 
+type DappOriginPermission = 'prompt' | 'blocked';
+
+type DappOriginPermissionEntry = {
+  origin: string;
+  permission: DappOriginPermission;
+  updatedAt: string;
+};
+
 const STORAGE_KEY = 'citizen.browser.wallet.v1';
 const LAST_REQUEST_KEY = 'citizen.browser.wallet.last_request.v1';
 const ACTIVITY_KEY = 'citizen.browser.wallet.activity.v1';
@@ -98,6 +106,7 @@ const NETWORK_KEY = 'citizen.browser.wallet.network.v1';
 const PROTOCOL_SIGNER_KEY = 'citizen.browser.wallet.protocol_signer.v1';
 const DAPP_PENDING_REQUESTS_KEY = 'citizen.browser.wallet.dapp_pending_requests.v1';
 const DAPP_REQUEST_AUDIT_KEY = 'citizen.browser.wallet.dapp_request_audit.v1';
+const DAPP_ORIGIN_PERMISSIONS_KEY = 'citizen.browser.wallet.dapp_origin_permissions.v1';
 const DEFAULT_DERIVATION_PATH = "m/44'/930'/0'/0'/0'";
 const MAX_ACTIVITY = 100;
 const MAX_DAPP_AUDIT_EVENTS = 1_000;
@@ -264,6 +273,49 @@ async function cleanupRetainedDappRequests(): Promise<void> {
   if (next.length !== requests.length) {
     await savePendingDappRequests(next);
   }
+}
+
+async function getDappOriginPermissions(): Promise<DappOriginPermissionEntry[]> {
+  const stored = await chrome.storage.local.get(DAPP_ORIGIN_PERMISSIONS_KEY);
+  const list = stored[DAPP_ORIGIN_PERMISSIONS_KEY];
+  return Array.isArray(list) ? (list as DappOriginPermissionEntry[]) : [];
+}
+
+async function setDappOriginPermission(
+  origin: string,
+  permission: DappOriginPermission,
+): Promise<DappOriginPermissionEntry[]> {
+  const normalizedOrigin = origin.trim();
+  if (normalizedOrigin.length === 0) {
+    return getDappOriginPermissions();
+  }
+  const existing = await getDappOriginPermissions();
+  const nextEntry: DappOriginPermissionEntry = {
+    origin: normalizedOrigin,
+    permission,
+    updatedAt: new Date().toISOString(),
+  };
+  const filtered = existing.filter((entry) => entry.origin !== normalizedOrigin);
+  const next = [nextEntry, ...filtered].slice(0, 500);
+  await chrome.storage.local.set({ [DAPP_ORIGIN_PERMISSIONS_KEY]: next });
+  return next;
+}
+
+async function removeDappOriginPermission(origin: string): Promise<DappOriginPermissionEntry[]> {
+  const normalizedOrigin = origin.trim();
+  const existing = await getDappOriginPermissions();
+  const next = existing.filter((entry) => entry.origin !== normalizedOrigin);
+  await chrome.storage.local.set({ [DAPP_ORIGIN_PERMISSIONS_KEY]: next });
+  return next;
+}
+
+async function getOriginPermission(origin: string | undefined): Promise<DappOriginPermission> {
+  if (!origin) {
+    return 'prompt';
+  }
+  const existing = await getDappOriginPermissions();
+  const match = existing.find((entry) => entry.origin === origin);
+  return match?.permission ?? 'prompt';
 }
 
 async function appendDappAuditEvent(event: Omit<DappRequestAuditEvent, 'eventId' | 'occurredAt'>): Promise<void> {
@@ -595,8 +647,8 @@ async function getOrCreateProtocolSigner(): Promise<StoredProtocolSigner> {
 
 async function createSignedCitizenResult(envelope: DappSigningRequestEnvelope): Promise<WalletResponse> {
   const signer = await getOrCreateProtocolSigner();
-  const preimage = signingPreimageFromEnvelope(envelope);
-  const payloadBytes = new TextEncoder().encode(preimage);
+  const requestScopePreimage = signingPreimageFromEnvelope(envelope);
+  const payloadBytes = new TextEncoder().encode(envelope.payloadHash);
   const privateKey = await crypto.subtle.importKey(
     'pkcs8',
     base64ToBytes(signer.pkcs8Base64),
@@ -623,13 +675,13 @@ async function createSignedCitizenResult(envelope: DappSigningRequestEnvelope): 
       signingPayload: envelope.canonicalPayload,
       payloadHash: envelope.payloadHash,
       payloadHashHex: envelope.payloadHash.replace('sha256:', ''),
-      preimage,
-      signingScopePayload: signingScopePayloadV2FromEnvelope(envelope),
+      requestScopePreimage,
+      requestScopePayload: signingScopePayloadV2FromEnvelope(envelope),
       createdAt: envelope.createdAt,
       expiresAt: envelope.expiresAt,
       riskFlags: envelope.riskFlags,
       algorithm: 'ed25519',
-      signatureScope: 'request_scope_v2',
+      signatureScope: 'payload_hash_v1',
     },
   };
 }
@@ -928,6 +980,33 @@ async function handleWalletRequest(
     return { ok: true, result: await serializePendingDappRequestsForUi() };
   }
 
+  if (request.method === 'wallet_getOriginPermissions') {
+    if (!isUiRequest) {
+      return walletError('ERR_UNAUTHORIZED', 'Unauthorized wallet method.');
+    }
+    return { ok: true, result: await getDappOriginPermissions() };
+  }
+
+  if (request.method === 'wallet_setOriginPermission') {
+    if (!isUiRequest) {
+      return walletError('ERR_UNAUTHORIZED', 'Unauthorized wallet method.');
+    }
+    const [origin, permission] = request.params ?? [];
+    if (typeof origin !== 'string' || origin.trim().length === 0) {
+      return walletError('ERR_MALFORMED_REQUEST', 'wallet_setOriginPermission requires origin.');
+    }
+    if (permission === 'prompt') {
+      return { ok: true, result: await removeDappOriginPermission(origin) };
+    }
+    if (permission !== 'blocked') {
+      return walletError(
+        'ERR_MALFORMED_REQUEST',
+        'wallet_setOriginPermission requires prompt or blocked permission.',
+      );
+    }
+    return { ok: true, result: await setDappOriginPermission(origin, permission) };
+  }
+
   if (request.method === 'wallet_approveDappRequest') {
     if (!isUiRequest) {
       return walletError('ERR_UNAUTHORIZED', 'Unauthorized wallet method.');
@@ -1218,6 +1297,9 @@ async function handleWalletRequest(
       }
       if (request.method !== DAPP_SIGNING_METHOD) {
         return walletError('ERR_UNSUPPORTED_METHOD', `Unsupported signing method: ${request.method}`);
+      }
+      if (isDappRequest && (await getOriginPermission(request.origin)) === 'blocked') {
+        return walletError('ERR_ORIGIN_BLOCKED', 'This origin is blocked in wallet permissions.');
       }
       return enqueueDappSigningRequest(payload, request, sender);
     }
