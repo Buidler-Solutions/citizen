@@ -114,8 +114,8 @@ This checklist translates the current flow and known gaps into concrete implemen
 ### D1) Automated tests
 
 - [x] Unit tests: canonicalization, hashing, lifecycle transitions, expiry logic.
-- [ ] Integration tests: dApp → extension → signed response happy path.
-- [ ] Integration tests: reject/timeout/cancel/error-code paths.
+- [x] Integration tests: dApp → extension → signed response happy path.
+- [x] Integration tests: reject/timeout/cancel/error-code paths.
 - [ ] Regression tests: ensure backend submit is impossible without signed state.
 - [ ] Security tests: replay attempts, malformed payloads, concurrent request races.
 
