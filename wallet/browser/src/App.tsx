@@ -66,6 +66,18 @@ type OriginPermission = {
   updatedAt: string;
 };
 
+
+type ApprovalMetrics = {
+  totalRequests: number;
+  approvedCount: number;
+  rejectedCount: number;
+  timeoutCount: number;
+  approvalRate: number;
+  rejectionRate: number;
+  timeoutRate: number;
+  relayDirectSubmitFailureRate: number | null;
+};
+
 type ProfileDetails = {
   fullName: string;
   email: string;
@@ -163,6 +175,7 @@ export function App() {
   const [vaultWallets, setVaultWallets] = useState<VaultWallet[]>([]);
   const [pendingDappRequests, setPendingDappRequests] = useState<PendingDappRequest[]>([]);
   const [originPermissions, setOriginPermissions] = useState<OriginPermission[]>([]);
+  const [approvalMetrics, setApprovalMetrics] = useState<ApprovalMetrics | null>(null);
   const [showRawPayloadByRequest, setShowRawPayloadByRequest] = useState<Record<string, boolean>>({});
   const [showFullUrlByRequest, setShowFullUrlByRequest] = useState<Record<string, boolean>>({});
   const [profile, setProfile] = useState<ProfileDetails>({
@@ -260,6 +273,11 @@ export function App() {
       const permissionsResponse = await callWallet('wallet_getOriginPermissions');
       if (permissionsResponse.ok && Array.isArray(permissionsResponse.result)) {
         setOriginPermissions(permissionsResponse.result as OriginPermission[]);
+      }
+
+      const metricsResponse = await callWallet('wallet_getApprovalMetrics');
+      if (metricsResponse.ok && metricsResponse.result && typeof metricsResponse.result === 'object') {
+        setApprovalMetrics(metricsResponse.result as ApprovalMetrics);
       }
 
       if (!hasWallet || !isUnlocked) {
@@ -814,6 +832,25 @@ export function App() {
                   ))}
                 </article>
               ) : null}
+
+              <article className="request-card">
+                <h2>Approval rollout metrics</h2>
+                <p className="meta-text">Tracked from request audit events for this wallet profile and rollout stage.</p>
+                {approvalMetrics ? (
+                  <dl>
+                    <div><dt>Total decided requests</dt><dd>{approvalMetrics.totalRequests}</dd></div>
+                    <div><dt>Approval rate</dt><dd>{(approvalMetrics.approvalRate * 100).toFixed(1)}%</dd></div>
+                    <div><dt>Rejection rate</dt><dd>{(approvalMetrics.rejectionRate * 100).toFixed(1)}%</dd></div>
+                    <div><dt>Timeout rate</dt><dd>{(approvalMetrics.timeoutRate * 100).toFixed(1)}%</dd></div>
+                    <div>
+                      <dt>Relay/direct submit failure rate</dt>
+                      <dd>{approvalMetrics.relayDirectSubmitFailureRate === null ? 'n/a in wallet-only telemetry' : `${(approvalMetrics.relayDirectSubmitFailureRate * 100).toFixed(1)}%`}</dd>
+                    </div>
+                  </dl>
+                ) : (
+                  <p className="meta-text">No approval metrics captured yet.</p>
+                )}
+              </article>
 
               <article className="request-card">
                 <h2>Create transaction</h2>

@@ -130,13 +130,13 @@ This checklist translates the current flow and known gaps into concrete implemen
 ### D3) Release controls
 
 - [x] Feature flag dedicated approval UI.
-- [ ] Ship behind staged rollout (internal → beta → general).
+- [x] Ship behind staged rollout (internal → beta → general).
 - [ ] Monitor key metrics:
-  - [ ] approval rate
-  - [ ] rejection rate
-  - [ ] timeout rate
+  - [x] approval rate
+  - [x] rejection rate
+  - [x] timeout rate
   - [ ] relay/direct submit failure rate
-- [ ] Prepare rollback runbook.
+- [x] Prepare rollback runbook.
 
 ## Suggested implementation order
 
