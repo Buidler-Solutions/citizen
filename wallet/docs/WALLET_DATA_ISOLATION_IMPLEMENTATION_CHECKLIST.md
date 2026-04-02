@@ -66,7 +66,7 @@ This checklist translates the current flow and known gaps into concrete implemen
 
 ### B2) If staying on Model 1, harden backend relay path
 
-- [ ] Make relay behavior explicit in API contract and UI copy.
+- [x] Make relay behavior explicit in API contract and UI copy.
 - [x] Add signed metadata verification before relay.
 - [x] Validate/normalize `CITIZEN_SIGNED_SUBMISSION_RELAY_URL` and fail closed when invalid.
 - [x] Add relay observability:
@@ -107,7 +107,7 @@ This checklist translates the current flow and known gaps into concrete implemen
 
 - [ ] Add a “What will be shared” summary before approval.
 - [ ] Add per-origin permission controls and revocation.
-- [ ] Add explicit consent text for network relay/direct submit behaviors.
+- [x] Add explicit consent text for network relay/direct submit behaviors.
 
 ## Testing and rollout checklist
 

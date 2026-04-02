@@ -104,6 +104,31 @@ export class LeadService {
     return savedLead;
   }
 
+  getSignedSubmissionContract(): {
+    submitModel: 'frontend_signed_backend_relay';
+    relayMode: 'database_only' | 'database_plus_network_relay' | 'invalid_relay_configuration';
+    consent: {
+      backendPersistence: string;
+      networkRelay: string;
+    };
+  } {
+    const relayUrlRaw = process.env.CITIZEN_SIGNED_SUBMISSION_RELAY_URL?.trim();
+    const relayMode = this.resolveRelayMode(relayUrlRaw);
+
+    return {
+      submitModel: 'frontend_signed_backend_relay',
+      relayMode,
+      consent: {
+        backendPersistence: 'The onboarding payload and wallet signature metadata are persisted by the onboarding backend.',
+        networkRelay: relayMode === 'database_plus_network_relay'
+          ? 'Signed commitment metadata is relayed to the configured Citizen endpoint.'
+          : relayMode === 'invalid_relay_configuration'
+            ? 'Relay is currently blocked because CITIZEN_SIGNED_SUBMISSION_RELAY_URL is invalid; submissions fail closed until corrected.'
+            : 'No Citizen relay endpoint is configured; onboarding data remains in backend custody only.',
+      },
+    };
+  }
+
   private canonicalizeValue(value: unknown): unknown {
     if (Array.isArray(value)) {
       return value.map((item) => this.canonicalizeValue(item));
@@ -395,6 +420,22 @@ export class LeadService {
 
     relayUrl.hash = '';
     return relayUrl;
+  }
+
+  private resolveRelayMode(relayUrlRaw?: string): 'database_only' | 'database_plus_network_relay' | 'invalid_relay_configuration' {
+    if (!relayUrlRaw) {
+      return 'database_only';
+    }
+
+    try {
+      const relayUrl = new URL(relayUrlRaw);
+      if (!['http:', 'https:'].includes(relayUrl.protocol) || !relayUrl.hostname) {
+        return 'invalid_relay_configuration';
+      }
+      return 'database_plus_network_relay';
+    } catch {
+      return 'invalid_relay_configuration';
+    }
   }
 
   private normalizeRole(role: string, formSettings: FormSettings): string {

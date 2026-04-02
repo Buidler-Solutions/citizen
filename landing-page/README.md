@@ -118,6 +118,8 @@ At the final onboarding step, the action is intentionally two-phase:
 1) **Sign submission** (opens wallet and signs payload), then
 2) **Submit signed form** (persists to backend and optional relay).
 
+Relay behavior is exposed as an explicit API contract at `GET /interest/signed-submission-contract` so frontend copy and consent text can accurately state whether submissions are backend-only, backend+Citizen-relay, or blocked by invalid relay configuration.
+
 To relay signed-hash metadata into the Citizen network from backend:
 
 ```bash
