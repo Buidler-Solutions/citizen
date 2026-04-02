@@ -108,6 +108,18 @@ function mask(value: string) {
   return `${value.slice(0, 8)}…${value.slice(-6)}`;
 }
 
+function renderPayloadSummary(canonicalJson: string): Array<{ label: string; value: string }> {
+  try {
+    const parsed = JSON.parse(canonicalJson) as Record<string, unknown>;
+    return Object.entries(parsed).map(([key, value]) => ({
+      label: key,
+      value: typeof value === 'string' ? value : JSON.stringify(value),
+    }));
+  } catch {
+    return [{ label: 'payload', value: canonicalJson }];
+  }
+}
+
 async function callWallet(method: string, params?: unknown[]): Promise<WalletResponse> {
   return chrome.runtime.sendMessage({ method, params }) as Promise<WalletResponse>;
 }
@@ -121,6 +133,7 @@ export function App() {
   const [vaultWallets, setVaultWallets] = useState<VaultWallet[]>([]);
   const [pendingDappRequests, setPendingDappRequests] = useState<PendingDappRequest[]>([]);
   const [showRawPayloadByRequest, setShowRawPayloadByRequest] = useState<Record<string, boolean>>({});
+  const [showFullUrlByRequest, setShowFullUrlByRequest] = useState<Record<string, boolean>>({});
   const [profile, setProfile] = useState<ProfileDetails>({
     fullName: '',
     email: '',
@@ -466,6 +479,12 @@ export function App() {
   const handleRejectDappRequest = async (requestId: string) => {
     const response = await callWallet('wallet_rejectDappRequest', [requestId]);
     setStatus(response.ok ? 'Request rejected.' : response.error ?? 'Unable to reject request.');
+    await refreshState();
+  };
+
+  const handleCancelDappRequest = async (requestId: string) => {
+    const response = await callWallet('wallet_cancelDappRequest', [requestId]);
+    setStatus(response.ok ? 'Request cancelled and closed.' : response.error ?? 'Unable to cancel request.');
     await refreshState();
   };
 
@@ -827,6 +846,7 @@ export function App() {
                 .filter((entry) => entry.state === 'pending')
                 .map((entry) => (
                   <div key={entry.requestId} className="pending-request">
+                    <p className="meta-text">🔒 Origin lock active. Verify the full URL before signing.</p>
                     <dl>
                       <div>
                         <dt>Origin</dt>
@@ -834,7 +854,7 @@ export function App() {
                       </div>
                       <div>
                         <dt>URL</dt>
-                        <dd>{entry.origin.tabUrl ?? 'Unavailable'}</dd>
+                        <dd>{showFullUrlByRequest[entry.requestId] ? (entry.origin.tabUrl ?? 'Unavailable') : mask(entry.origin.tabUrl ?? 'Unavailable')}</dd>
                       </div>
                       <div>
                         <dt>Method</dt>
@@ -860,12 +880,30 @@ export function App() {
                     <p className="meta-text">
                       What will be shared: only the canonical payload hash and signature are returned to this dApp.
                     </p>
+                    <h3>Payload preview</h3>
+                    <dl>
+                      {renderPayloadSummary(entry.payload.canonicalJson).map((section) => (
+                        <div key={`${entry.requestId}-${section.label}`}>
+                          <dt>{section.label}</dt>
+                          <dd>{section.value}</dd>
+                        </div>
+                      ))}
+                    </dl>
                     <div className="button-row">
                       <button className="primary" onClick={() => handleApproveDappRequest(entry.requestId)}>
                         Approve and sign
                       </button>
                       <button className="ghost" onClick={() => handleRejectDappRequest(entry.requestId)}>
                         Reject
+                      </button>
+                      <button className="ghost" onClick={() => handleCancelDappRequest(entry.requestId)}>
+                        Cancel / close
+                      </button>
+                      <button
+                        className="ghost"
+                        onClick={() => setShowFullUrlByRequest((current) => ({ ...current, [entry.requestId]: !current[entry.requestId] }))}
+                      >
+                        {showFullUrlByRequest[entry.requestId] ? 'Hide full URL' : 'Reveal full URL'}
                       </button>
                       <button
                         className="ghost"
