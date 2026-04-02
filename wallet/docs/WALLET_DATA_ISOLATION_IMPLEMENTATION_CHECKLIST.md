@@ -68,7 +68,7 @@ This checklist translates the current flow and known gaps into concrete implemen
 
 - [ ] Make relay behavior explicit in API contract and UI copy.
 - [ ] Add signed metadata verification before relay.
-- [ ] Validate/normalize `CITIZEN_SIGNED_SUBMISSION_RELAY_URL` and fail closed when invalid.
+- [x] Validate/normalize `CITIZEN_SIGNED_SUBMISSION_RELAY_URL` and fail closed when invalid.
 - [ ] Add relay observability:
   - [ ] request trace ID
   - [ ] signed payload hash

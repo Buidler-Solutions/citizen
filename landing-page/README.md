@@ -125,6 +125,7 @@ CITIZEN_SIGNED_SUBMISSION_RELAY_URL=http://127.0.0.1:8081/api/v1/your-relay-endp
 ```
 
 If `CITIZEN_SIGNED_SUBMISSION_RELAY_URL` is configured, onboarding writes fail when relay submission fails, so PostgreSQL and network relay remain synchronized per request.
+The relay URL is fail-closed validated on submit: it must be an absolute `http://` or `https://` URL (invalid values are rejected before persistence).
 
 Migration note: existing `interest_submissions` rows created before wallet-signing enforcement are preserved with nullable wallet metadata columns; new submissions are still enforced at request-validation/service level.
 
