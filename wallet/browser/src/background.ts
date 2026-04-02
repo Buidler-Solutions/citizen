@@ -13,6 +13,7 @@ import {
   type PendingDappSigningRequest,
 } from './dappRequestIsolation';
 import { canAcceptDappSigningRequest } from './dappRequestQueue';
+import { buildApprovalMetricsSnapshot, type DappRequestAuditEvent } from './dappApprovalMetrics';
 import {
   decryptJsonValue,
   encryptJsonValue,
@@ -79,14 +80,6 @@ type ActivityEntry = {
   method: string;
   params: unknown[];
   account: string;
-};
-
-type DappRequestAuditEvent = {
-  eventId: string;
-  requestId: string;
-  state: DappRequestState;
-  reason: string;
-  occurredAt: string;
 };
 
 type PendingDappResolution = {
@@ -375,6 +368,11 @@ async function appendDappAuditEvent(event: Omit<DappRequestAuditEvent, 'eventId'
     DAPP_REQUEST_AUDIT_KEY,
     [next, ...existing].slice(0, MAX_DAPP_AUDIT_EVENTS),
   );
+}
+
+async function getDappApprovalMetricsSnapshot() {
+  const events = await getEncryptedArrayFromStorage<DappRequestAuditEvent>(DAPP_REQUEST_AUDIT_KEY);
+  return buildApprovalMetricsSnapshot(events);
 }
 
 async function transitionDappRequestState(
@@ -1032,6 +1030,13 @@ async function handleWalletRequest(
       return walletError('ERR_UNAUTHORIZED', 'Unauthorized wallet method.');
     }
     return { ok: true, result: await getDappOriginPermissions() };
+  }
+
+  if (request.method === 'wallet_getApprovalMetrics') {
+    if (!isUiRequest) {
+      return walletError('ERR_UNAUTHORIZED', 'Unauthorized wallet method.');
+    }
+    return { ok: true, result: await getDappApprovalMetricsSnapshot() };
   }
 
   if (request.method === 'wallet_setOriginPermission') {

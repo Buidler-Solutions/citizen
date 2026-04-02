@@ -92,6 +92,20 @@ The dedicated pending-request approval surface is now controlled by `VITE_WALLET
 
 Use `disabled` only for rollback/testing windows; pending dApp signing requests will stay queued until they expire when the dedicated approval surface is hidden.
 
+
+### Rollout monitoring metrics
+
+The side panel Activity tab now shows approval-rollout metrics derived from immutable request audit events:
+
+- approval rate
+- rejection rate
+- timeout rate
+- total decided requests
+
+The same snapshot is available over the extension UI channel via `wallet_getApprovalMetrics`.
+
+For promotion/rollback operations, use `wallet/docs/APPROVAL_UI_ROLLOUT_RUNBOOK.md`.
+
 ## Quality gates
 
 ```bash
