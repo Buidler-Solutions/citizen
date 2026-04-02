@@ -117,7 +117,7 @@ This checklist translates the current flow and known gaps into concrete implemen
 - [x] Integration tests: dApp → extension → signed response happy path.
 - [x] Integration tests: reject/timeout/cancel/error-code paths.
 - [ ] Regression tests: ensure backend submit is impossible without signed state.
-- [ ] Security tests: replay attempts, malformed payloads, concurrent request races.
+- [x] Security tests: replay attempts, malformed payloads, concurrent request races.
 
 ### D2) Manual QA scenarios
 

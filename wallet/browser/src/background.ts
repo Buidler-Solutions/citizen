@@ -12,6 +12,7 @@ import {
   type DappRequestState,
   type PendingDappSigningRequest,
 } from './dappRequestIsolation';
+import { canAcceptDappSigningRequest } from './dappRequestQueue';
 import {
   decryptJsonValue,
   encryptJsonValue,
@@ -740,7 +741,7 @@ async function enqueueDappSigningRequest(
   await expireStaleDappRequests();
   const requests = await getPendingDappRequests();
   const activePending = requests.find((entry) => entry.state === 'pending');
-  if (DAPP_REQUEST_CONCURRENCY_MODE === 'single_active' && activePending) {
+  if (!canAcceptDappSigningRequest(requests, DAPP_REQUEST_CONCURRENCY_MODE) && activePending) {
     await appendDappAuditEvent({
       requestId: activePending.requestId,
       state: activePending.state,
