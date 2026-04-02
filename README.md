@@ -67,6 +67,24 @@ The active direction emphasizes:
 5. **Non-speculative economics**
    - Builder fee credits and sponsored usage over speculative token-first design
 
+
+## Wallet System Tech-Stack (Cross-Monorepo)
+
+When we refer to the **wallet system tech-stack**, this includes all of the following coordinated surfaces:
+
+1. **Citizen protocol node runtime (`citizen-protocol/`)**
+   - Canonical envelope/receipt APIs and deterministic validation/finality behavior.
+2. **Landing-page app-builder surface (`landing-page/`)**
+   - Builder-facing application workflow where user forms and onboarding UX are defined.
+3. **Wallet SDK (`sdk/nodejs/`)**
+   - Builder integration layer for provider access, canonicalization, transaction submission, and wallet signing helpers.
+4. **Wallet browser extension (`wallet/browser/`)**
+   - User custody surface for account management, consented signing, and protocol payload commitment generation.
+5. **Wallet CLI (`citizen-protocol/crates/wallet`, `wallet/cli`)**
+   - Operator/developer wallet workflows and cryptographic parity reference for canonical signing behavior.
+
+Design changes touching user-data separation should be evaluated across this full stack, not as isolated extension-only behavior.
+
 ## Quick Start
 
 ### Protocol workspace

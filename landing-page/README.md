@@ -94,6 +94,40 @@ Notes:
 - There is no frontend env var to "connect" to the browser extension itself; the extension injects `window.citizen` / `window.ctzn` into the page when installed and enabled.
 - The backend must allow your frontend origin via `AUTH_ALLOWED_ORIGINS` in `wallet/backend/.env`.
 
+
+## Wallet-system tech-stack context for app-builder flows
+
+For onboarding/form workflows, the landing page is one part of the broader wallet system stack:
+
+- `landing-page` (builder app UX + backend integration)
+- `wallet/browser` (user-controlled signing + local custody surface)
+- `sdk/nodejs` (builder integration helpers)
+- `citizen-protocol` runtime APIs (canonical envelopes/receipts/finality)
+- wallet CLI/runtime crate (`citizen-protocol/crates/wallet`) for reference signing parity
+
+Recommended pattern for sensitive form data:
+1. collect form fields client-side,
+2. request `ctzn_signCitizenTx` from the extension,
+3. submit signed envelope/commitment (`payloadHash`) to backend,
+4. anchor commitments/receipts to chain via runtime APIs.
+
+This keeps raw user data out of direct unauthenticated builder-server form posts while preserving deterministic verification.
+
+The onboarding form now enforces this sequence: backend submission is accepted only with wallet signature metadata (`walletSignerDid`, `walletVerifyingKey`, `walletSignature`, `walletPayloadHash`, `walletSigningPayload`, `walletAlgorithm`). Direct unsigned form submissions are rejected, and backend cryptographically verifies Ed25519 signature validity plus DID/verifying-key consistency before writing to PostgreSQL.
+At the final onboarding step, the action is intentionally two-phase:
+1) **Sign submission** (opens wallet and signs payload), then
+2) **Submit signed form** (persists to backend and optional relay).
+
+To relay signed-hash metadata into the Citizen network from backend:
+
+```bash
+CITIZEN_SIGNED_SUBMISSION_RELAY_URL=http://127.0.0.1:8081/api/v1/your-relay-endpoint
+```
+
+If `CITIZEN_SIGNED_SUBMISSION_RELAY_URL` is configured, onboarding writes fail when relay submission fails, so PostgreSQL and network relay remain synchronized per request.
+
+Migration note: existing `interest_submissions` rows created before wallet-signing enforcement are preserved with nullable wallet metadata columns; new submissions are still enforced at request-validation/service level.
+
 ## Run with Docker Compose
 
 ### 1) Create Docker environment file

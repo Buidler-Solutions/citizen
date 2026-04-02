@@ -23,6 +23,24 @@ export class LeadInterest {
   @Column({ type: 'text' })
   missionNeed!: string;
 
+  @Column({ type: 'varchar', length: 120, nullable: true })
+  walletSignerDid!: string | null;
+
+  @Column({ type: 'varchar', length: 64, nullable: true })
+  walletVerifyingKey!: string | null;
+
+  @Column({ type: 'text', nullable: true })
+  walletSignature!: string | null;
+
+  @Column({ type: 'varchar', length: 71, nullable: true })
+  walletPayloadHash!: string | null;
+
+  @Column({ type: 'text', nullable: true })
+  walletSigningPayload!: string | null;
+
+  @Column({ type: 'varchar', length: 32, nullable: true, default: 'ed25519' })
+  walletAlgorithm!: string | null;
+
   @CreateDateColumn()
   createdAt!: Date;
 }

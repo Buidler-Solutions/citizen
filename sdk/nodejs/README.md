@@ -50,6 +50,44 @@ const receipt = await client.waitForReceipt(submission.receipt.receipt_id, {
 console.log(receipt);
 ```
 
+
+## Wallet-controlled form signing flow (builder app pattern)
+
+For app-builder forms where sensitive user fields should stay in wallet-controlled flows, use the Citizen extension protocol-signing methods via the SDK helper:
+
+```js
+import { signCitizenPayloadWithWallet } from "@citizen-protocol/nodejs-sdk";
+
+const signed = await signCitizenPayloadWithWallet({
+  payload: {
+    schema_version: "1.0.0",
+    namespace: "identity.citizen",
+    action: "SUBMIT_PROFILE",
+    form_payload: formJson
+  }
+});
+
+// Send signed envelope to builder backend
+await fetch("/api/forms/submit", {
+  method: "POST",
+  headers: { "content-type": "application/json" },
+  body: JSON.stringify(signed)
+});
+```
+
+The helper calls `ctzn_getCitizenSigner` + `ctzn_signCitizenTx` and returns runtime-aligned commitment fields:
+- `payloadHash` in `sha256:<hex>` format
+- canonical `signingPayload`
+- signer metadata + signature for backend verification and chain anchoring
+
+For landing-page onboarding backends that enforce wallet-first submission, map these fields directly:
+- `signer` -> `walletSignerDid`
+- `verifyingKey` -> `walletVerifyingKey`
+- `signature` -> `walletSignature`
+- `payloadHash` -> `walletPayloadHash`
+- `signingPayload` -> `walletSigningPayload`
+- `algorithm` -> `walletAlgorithm`
+
 ## Server-side signer flow (optional)
 
 ```js
@@ -113,6 +151,7 @@ Environment variables:
 - `createMultisigCreditGrant({ builderId, amount, multisigProofs })`
 - `createSponsorshipUsage({ builderId, amount, creditGrantId, sponsorshipId, sponsoredDid })`
 - `validateBuilderCreditsPayload({ action, payload })`
+- `signCitizenPayloadWithWallet({ payload, provider? })`
 
 Signer options:
 

@@ -58,6 +58,27 @@ Like backend-verified wallet sign-in integrations, production login should verif
 
 For full implementation/operations guidance, see `docs/DAPP_LOGIN_RUNBOOK.md`.
 
+
+## Privacy-preserving form submission pattern (builder apps)
+
+To keep user data custody in the wallet surface (instead of dApp/backend forms posting raw user data directly), builder apps should use this sequence:
+
+1. Builder UI captures form inputs and builds a deterministic JSON payload client-side.
+2. Builder UI sends that payload to the extension with `ctzn_signCitizenTx`.
+3. Extension canonicalizes JSON, signs it with the Citizen protocol signer, and returns:
+   - `signature`
+   - `payloadHash` (`sha256:<hex>` digest of canonical payload, runtime commitment format)
+   - `payloadHashHex` (legacy plain-hex convenience mirror)
+   - `signingPayload` (canonical JSON)
+   - signer metadata (`signer`, `verifyingKey`, `algorithm`)
+4. Builder backend receives only the signed envelope, verifies signature/hash consistency, then stores according to app policy.
+5. Chain submission should anchor the commitment/receipt (`payloadHash` + signer/proof metadata), while sensitive fields remain off-chain.
+
+This pattern supports a governed data-plane model where commitments/proofs are chain-addressable and user data stays in wallet-controlled flows.
+
+For landing-page onboarding integrations, the signing response maps one-to-one with enforced backend fields:
+`walletSignerDid`, `walletVerifyingKey`, `walletSignature`, `walletPayloadHash`, `walletSigningPayload`, and `walletAlgorithm`.
+
 ## Quality gates
 
 ```bash

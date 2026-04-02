@@ -68,6 +68,49 @@ function resolveWalletProvider(explicitProvider) {
   return provider;
 }
 
+
+export async function signCitizenPayloadWithWallet({ payload, provider } = {}) {
+  const walletProvider = resolveWalletProvider(provider);
+  if (payload === undefined || payload === null) {
+    throw new Error("payload is required");
+  }
+
+  const [signerProfile, signingResult] = await Promise.all([
+    walletProvider.request({ method: "ctzn_getCitizenSigner" }),
+    walletProvider.request({ method: "ctzn_signCitizenTx", params: [payload] })
+  ]);
+
+  const signerDid = signingResult?.signer ?? signerProfile?.did;
+  const verifyingKey = signingResult?.verifyingKey ?? signerProfile?.verifyingKey;
+  const payloadHash = signingResult?.payloadHash;
+
+  if (typeof signerDid !== "string" || !signerDid) {
+    throw new Error("Wallet did not return a valid Citizen signer DID");
+  }
+  if (typeof verifyingKey !== "string" || !verifyingKey) {
+    throw new Error("Wallet did not return a valid Citizen verifying key");
+  }
+  if (typeof signingResult?.signature !== "string" || !signingResult.signature) {
+    throw new Error("Wallet did not return a valid Citizen payload signature");
+  }
+  if (typeof signingResult?.signingPayload !== "string" || !signingResult.signingPayload) {
+    throw new Error("Wallet did not return canonical signing payload");
+  }
+  if (typeof payloadHash !== "string" || !payloadHash.startsWith("sha256:")) {
+    throw new Error("Wallet did not return a runtime-formatted payloadHash");
+  }
+
+  return {
+    signer: signerDid,
+    verifyingKey,
+    signature: signingResult.signature,
+    algorithm: signingResult.algorithm ?? "ed25519",
+    signingPayload: signingResult.signingPayload,
+    payloadHash,
+    payloadHashHex: signingResult.payloadHashHex ?? payloadHash.replace("sha256:", "")
+  };
+}
+
 function assertPositiveAmount(payload) {
   if (!payload || typeof payload.amount !== "number" || !Number.isFinite(payload.amount) || payload.amount <= 0) {
     throw new Error("builder.credits payload.amount must be a positive number");
