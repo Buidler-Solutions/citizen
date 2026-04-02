@@ -105,8 +105,8 @@ This checklist translates the current flow and known gaps into concrete implemen
 
 ### C3) UX controls for isolation assurance
 
-- [ ] Add a “What will be shared” summary before approval.
-- [ ] Add per-origin permission controls and revocation.
+- [x] Add a “What will be shared” summary before approval.
+- [x] Add per-origin permission controls and revocation.
 - [x] Add explicit consent text for network relay/direct submit behaviors.
 
 ## Testing and rollout checklist

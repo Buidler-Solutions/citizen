@@ -51,6 +51,12 @@ type PendingDappRequest = {
   state: 'pending' | 'approved' | 'rejected' | 'expired' | 'signed';
 };
 
+type OriginPermission = {
+  origin: string;
+  permission: 'prompt' | 'blocked';
+  updatedAt: string;
+};
+
 type ProfileDetails = {
   fullName: string;
   email: string;
@@ -132,6 +138,7 @@ export function App() {
   const [activity, setActivity] = useState<ActivityEntry[]>([]);
   const [vaultWallets, setVaultWallets] = useState<VaultWallet[]>([]);
   const [pendingDappRequests, setPendingDappRequests] = useState<PendingDappRequest[]>([]);
+  const [originPermissions, setOriginPermissions] = useState<OriginPermission[]>([]);
   const [showRawPayloadByRequest, setShowRawPayloadByRequest] = useState<Record<string, boolean>>({});
   const [showFullUrlByRequest, setShowFullUrlByRequest] = useState<Record<string, boolean>>({});
   const [profile, setProfile] = useState<ProfileDetails>({
@@ -225,6 +232,10 @@ export function App() {
       const pendingResponse = await callWallet('wallet_getPendingDappRequests');
       if (pendingResponse.ok && Array.isArray(pendingResponse.result)) {
         setPendingDappRequests(pendingResponse.result as PendingDappRequest[]);
+      }
+      const permissionsResponse = await callWallet('wallet_getOriginPermissions');
+      if (permissionsResponse.ok && Array.isArray(permissionsResponse.result)) {
+        setOriginPermissions(permissionsResponse.result as OriginPermission[]);
       }
 
       if (!hasWallet || !isUnlocked) {
@@ -493,6 +504,21 @@ export function App() {
     await refreshState();
   };
 
+  const handleSetOriginPermission = async (origin: string, permission: 'prompt' | 'blocked') => {
+    const response = await callWallet('wallet_setOriginPermission', [origin, permission]);
+    if (!response.ok) {
+      setStatus(response.error ?? 'Unable to update origin permission.');
+      return;
+    }
+    setStatus(permission === 'blocked' ? `Blocked ${origin}.` : `Restored ${origin} to prompt mode.`);
+    await refreshState();
+  };
+
+  const blockedOrigins = useMemo(
+    () => originPermissions.filter((entry) => entry.permission === 'blocked'),
+    [originPermissions],
+  );
+
   const handleCopyWalletAddress = async () => {
     if (!state.account || state.account === 'Unavailable') {
       setStatus('Wallet address is unavailable to copy.');
@@ -722,6 +748,12 @@ export function App() {
                         </button>
                         <button
                           className="ghost"
+                          onClick={() => void handleSetOriginPermission(entry.origin.origin, 'blocked')}
+                        >
+                          Block this origin
+                        </button>
+                        <button
+                          className="ghost"
                           onClick={() => setShowFullUrlByRequest((current) => ({ ...current, [entry.requestId]: !current[entry.requestId] }))}
                         >
                           {showFullUrlByRequest[entry.requestId] ? 'Hide full URL' : 'Reveal full URL'}
@@ -898,6 +930,31 @@ export function App() {
                   {mnemonicPhrase ? <button className="ghost" onClick={() => setMnemonicPhrase('')}>Hide seed phrase</button> : null}
                   {mnemonicPhrase ? <code className="secret-box">{mnemonicPhrase}</code> : <p className="meta-text">Hidden</p>}
                 </div>
+              </article>
+
+              <article className="request-card">
+                <h2>dApp origin permissions</h2>
+                <p className="meta-text">Blocked origins cannot submit new signing requests until you revoke the block.</p>
+                {blockedOrigins.length > 0 ? (
+                  <ul>
+                    {blockedOrigins.map((entry) => (
+                      <li key={entry.origin} className="activity-item">
+                        <div>
+                          <strong>{entry.origin}</strong>
+                          <p className="meta-text">Blocked on {new Date(entry.updatedAt).toLocaleString()}</p>
+                        </div>
+                        <button
+                          className="ghost"
+                          onClick={() => void handleSetOriginPermission(entry.origin, 'prompt')}
+                        >
+                          Revoke block
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="meta-text">No blocked origins.</p>
+                )}
               </article>
             </>
           ) : null}
