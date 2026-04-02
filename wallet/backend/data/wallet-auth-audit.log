@@ -129,3 +129,7 @@
 {"event":"auth_success","at":"2026-04-02T12:00:06.978Z","challengeId":"02849e0e-8395-431d-8926-9d05f2e2102b","sessionId":"496d1e94-e31a-47cb-873c-05e5a946e625","wallet":"0x17cf29e7a60751a2cf320544da5905ac07bef0df","ipAddress":"::1"}
 {"event":"challenge_created","at":"2026-04-02T12:04:23.325Z","challengeId":"3878761f-8d13-47b9-a8d7-921afcaae9d8","wallet":"0x17cf29e7a60751a2cf320544da5905ac07bef0df","network":"futurenet","ipAddress":"::1"}
 {"event":"auth_success","at":"2026-04-02T12:04:23.598Z","challengeId":"3878761f-8d13-47b9-a8d7-921afcaae9d8","sessionId":"bdc4aef0-cbfe-4131-907d-268bebe70cd9","wallet":"0x17cf29e7a60751a2cf320544da5905ac07bef0df","ipAddress":"::1"}
+{"event":"challenge_created","at":"2026-04-02T12:32:39.449Z","challengeId":"4729307e-bd75-4f53-96ff-d388fa16bfdd","wallet":"0xceb95bef8db7c97206f9d44f3f315762fd3b5a5b","network":"futurenet","ipAddress":"::1"}
+{"event":"auth_success","at":"2026-04-02T12:32:39.906Z","challengeId":"4729307e-bd75-4f53-96ff-d388fa16bfdd","sessionId":"63956fd0-be5b-408e-9f5c-0e0e125d556a","wallet":"0xceb95bef8db7c97206f9d44f3f315762fd3b5a5b","ipAddress":"::1"}
+{"event":"challenge_created","at":"2026-04-02T12:33:41.717Z","challengeId":"8f59ee4e-f842-487e-8c3b-bc087e48998b","wallet":"0xceb95bef8db7c97206f9d44f3f315762fd3b5a5b","network":"futurenet","ipAddress":"::1"}
+{"event":"auth_success","at":"2026-04-02T12:33:42.088Z","challengeId":"8f59ee4e-f842-487e-8c3b-bc087e48998b","sessionId":"8e5f4614-fb79-4280-9539-95772846732b","wallet":"0xceb95bef8db7c97206f9d44f3f315762fd3b5a5b","ipAddress":"::1"}

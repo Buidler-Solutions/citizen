@@ -40,6 +40,8 @@ The wallet extension now treats Citizen protocol transaction signing separately 
 
 `ctzn_signCitizenTx` mirrors the protocol wallet crate's canonical JSON strategy (sorted object keys, undefined object fields omitted) so dApps can submit stable signing payloads to Citizen node/API services. The signing result also includes `payloadHash` in runtime commitment format (`sha256:<hex>`) for direct anchoring/receipt workflows.
 
+Concurrency policy for `ctzn_signCitizenTx` requests is currently **single-active**: only one pending signing request may exist at a time. If another dApp request arrives before the pending request is approved/rejected/expired, the wallet returns deterministic error code `ERR_CONCURRENT_REQUEST`.
+
 ---
 
 ## Recommended Login Architecture
