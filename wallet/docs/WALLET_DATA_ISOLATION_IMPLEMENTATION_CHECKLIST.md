@@ -129,7 +129,7 @@ This checklist translates the current flow and known gaps into concrete implemen
 
 ### D3) Release controls
 
-- [ ] Feature flag dedicated approval UI.
+- [x] Feature flag dedicated approval UI.
 - [ ] Ship behind staged rollout (internal → beta → general).
 - [ ] Monitor key metrics:
   - [ ] approval rate

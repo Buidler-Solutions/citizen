@@ -4,6 +4,11 @@ import {
   createMultisigGrantDraft,
   createSponsorUsageDraft,
 } from './builderCreditDraft';
+import {
+  getApprovalUiRolloutStageFromEnv,
+  isApprovalUiEnabled,
+  type ApprovalUiRolloutStage,
+} from './rollout';
 
 type WalletState = {
   account: string;
@@ -97,6 +102,21 @@ type WalletResponse = {
 const STORAGE_KEY = 'citizen.browser.wallet.v1';
 const LAST_REQUEST_KEY = 'citizen.browser.wallet.last_request.v1';
 const PROFILE_KEY = 'citizen.browser.wallet.profile.v1';
+
+const APPROVAL_UI_ROLLOUT_STAGE = getApprovalUiRolloutStageFromEnv();
+
+function rolloutLabel(stage: ApprovalUiRolloutStage): string {
+  if (stage === 'general') {
+    return 'General';
+  }
+  if (stage === 'beta') {
+    return 'Beta';
+  }
+  if (stage === 'disabled') {
+    return 'Disabled';
+  }
+  return 'Internal';
+}
 
 const SPONSORSHIP_PRESETS = {
   article: {
@@ -271,6 +291,7 @@ export function App() {
     () => pendingDappRequests.filter((entry) => entry.state === 'pending'),
     [pendingDappRequests],
   );
+  const approvalUiEnabled = isApprovalUiEnabled(APPROVAL_UI_ROLLOUT_STAGE);
 
   const handlePasswordSubmit = async () => {
     setStatus('');
@@ -654,6 +675,7 @@ export function App() {
             </select>
           </div>
           <p className="network-pill">citizen-{state.network}</p>
+          <p className="network-pill">Approval UI rollout: {rolloutLabel(APPROVAL_UI_ROLLOUT_STAGE)}</p>
           <div className="top-address-row">
             <p className="top-address" title={state.account}>Wallet: {mask(state.account)}</p>
             <button
@@ -689,7 +711,17 @@ export function App() {
         <div className="wallet-scroll">
           {activeTab === 'activity' ? (
             <>
-              {pendingRequests.length > 0 ? (
+              {!approvalUiEnabled && pendingRequests.length > 0 ? (
+                <article className="request-card">
+                  <h2>Notifications</h2>
+                  <p className="meta-text">
+                    Dedicated dApp approval UI is currently disabled for this rollout stage ({rolloutLabel(APPROVAL_UI_ROLLOUT_STAGE)}).
+                    Pending requests will expire automatically unless this stage is enabled.
+                  </p>
+                </article>
+              ) : null}
+
+              {approvalUiEnabled && pendingRequests.length > 0 ? (
                 <article className="request-card">
                   <h2>Notifications</h2>
                   <p className="meta-text">
