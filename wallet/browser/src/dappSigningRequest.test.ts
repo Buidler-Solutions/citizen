@@ -26,6 +26,7 @@ describe('createDappSigningRequestEnvelope', () => {
     expect(envelope.canonicalPayload).toBe('{"metadata":{"app":"demo","version":1},"namespace":"citizen.kyc","operation":"submit"}');
     expect(envelope.payloadHash).toMatch(/^sha256:/);
     expect(envelope.riskFlags).toEqual([]);
+    expect(envelope.policyChecks).toEqual([]);
     expect(signingScopePayloadV2FromEnvelope(envelope)).toEqual({
       scope: 'citizen_dapp_signing_v2',
       requestId: envelope.requestId,
@@ -53,6 +54,31 @@ describe('createDappSigningRequestEnvelope', () => {
 
     expect(envelope.riskFlags).toContain('unknown_origin');
     expect(envelope.riskFlags).toContain('unsupported_fields');
+  });
+
+  it('adds policy violation risk when namespace/operation checks fail', async () => {
+    const envelope = await createDappSigningRequestEnvelope({
+      origin: 'https://demo.citizen.local',
+      payload: {
+        namespace: 'INVALID_NAMESPACE',
+      },
+    });
+
+    expect(envelope.riskFlags).toContain('policy_violation');
+    expect(envelope.policyChecks.map((check) => check.code)).toEqual([
+      'invalid_namespace',
+      'missing_operation',
+    ]);
+  });
+
+  it('runs policy checks when payload is provided as canonical JSON string', async () => {
+    const envelope = await createDappSigningRequestEnvelope({
+      origin: 'https://demo.citizen.local',
+      payload: '{"namespace":"builder.credits","operation":"grant"}',
+    });
+
+    expect(envelope.riskFlags).toContain('policy_violation');
+    expect(envelope.policyChecks.map((check) => check.code)).toContain('builder_credit_payload_missing');
   });
 
   it('produces identical canonical payload and hash for equivalent object key ordering', async () => {
