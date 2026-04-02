@@ -81,6 +81,17 @@ This pattern supports a governed data-plane model where commitments/proofs are c
 For landing-page onboarding integrations, the signing response maps one-to-one with enforced backend fields:
 `walletSignerDid`, `walletVerifyingKey`, `walletSignature`, `walletPayloadHash`, `walletSigningPayload`, `walletAlgorithm`, and `walletSignatureScope`.
 
+## Approval UI rollout flag
+
+The dedicated pending-request approval surface is now controlled by `VITE_WALLET_APPROVAL_UI_ROLLOUT` in the extension build environment:
+
+- `internal` (default)
+- `beta`
+- `general`
+- `disabled`
+
+Use `disabled` only for rollback/testing windows; pending dApp signing requests will stay queued until they expire when the dedicated approval surface is hidden.
+
 ## Quality gates
 
 ```bash
