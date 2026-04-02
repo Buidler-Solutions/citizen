@@ -614,7 +614,7 @@ export function InterestForm() {
       };
 
       setSignedSubmission(signedEnvelope);
-      setStatus('Submission signed. Continuing secure submit to backend relay...');
+      setStatus('Submission signed. Review and click "Submit signed form" to continue.');
       return signedEnvelope;
     } catch {
       setStatus('Wallet signing failed. Please retry and approve signature in extension.');
@@ -631,13 +631,10 @@ export function InterestForm() {
     }
 
     const latestPayload = buildPayload();
-    let envelopeToSubmit = signedSubmission;
+    const envelopeToSubmit = signedSubmission;
     if (!envelopeToSubmit) {
-      const newlySigned = await signSubmission();
-      if (!newlySigned) {
-        return;
-      }
-      envelopeToSubmit = newlySigned;
+      setStatus('Please sign the submission before sending it to the backend relay.');
+      return;
     }
 
     const payloadChangedSinceSign = JSON.stringify(latestPayload) !== JSON.stringify(envelopeToSubmit.payload);
@@ -704,7 +701,11 @@ export function InterestForm() {
     event.preventDefault();
     if (stepIndex < totalSteps - 1) return nextStep();
     if (!validateStep()) return;
-    await submit();
+    if (signedSubmission) {
+      await submit();
+      return;
+    }
+    await signSubmission();
   };
 
 
@@ -912,7 +913,7 @@ export function InterestForm() {
               {loading
                 ? 'Processing...'
                 : stepIndex === totalSteps - 1
-                  ? (signedSubmission ? 'Submit signed form' : 'Sign & submit')
+                  ? (signedSubmission ? 'Submit signed form' : 'Sign submission')
                   : 'Continue'}
             </button>
           </div>
