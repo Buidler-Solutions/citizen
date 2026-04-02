@@ -67,12 +67,12 @@ This checklist translates the current flow and known gaps into concrete implemen
 ### B2) If staying on Model 1, harden backend relay path
 
 - [ ] Make relay behavior explicit in API contract and UI copy.
-- [ ] Add signed metadata verification before relay.
+- [x] Add signed metadata verification before relay.
 - [x] Validate/normalize `CITIZEN_SIGNED_SUBMISSION_RELAY_URL` and fail closed when invalid.
-- [ ] Add relay observability:
-  - [ ] request trace ID
-  - [ ] signed payload hash
-  - [ ] upstream status code / latency
+- [x] Add relay observability:
+  - [x] request trace ID
+  - [x] signed payload hash
+  - [x] upstream status code / latency
 - [ ] Add retry policy + deduplication key strategy.
 
 ### B3) If adopting Model 2, implement wallet-side submit pipeline

@@ -1,6 +1,6 @@
-import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { unlink } from 'fs/promises';
-import { createHash, createPublicKey, verify } from 'crypto';
+import { createHash, createPublicKey, randomUUID, verify } from 'crypto';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { CreateLeadDto } from './dto/create-lead.dto';
@@ -57,6 +57,8 @@ const DEFAULT_ROLE_OPTIONS = [
 
 @Injectable()
 export class LeadService {
+  private readonly logger = new Logger(LeadService.name);
+
   constructor(
     @InjectRepository(LeadInterest)
     private readonly leadRepository: Repository<LeadInterest>,
@@ -213,15 +215,24 @@ export class LeadService {
     const signatureScope = payload.walletSignatureScope === 'canonical_payload_v1'
       ? 'canonical_payload_v1'
       : 'payload_hash_v1';
+    const relayTraceId = randomUUID();
+    const relayDeduplicationKey = createHash('sha256')
+      .update(`${payload.walletPayloadHash}:${payload.email.trim().toLowerCase()}`)
+      .digest('hex');
+
+    this.assertRelayMetadata(payload);
 
     const relayPayload = {
       namespace: 'onboarding.interest',
       action: 'SUBMIT_ONBOARDING_INTEREST',
       object_id: payload.email.trim().toLowerCase(),
+      trace_id: relayTraceId,
+      deduplication_key: relayDeduplicationKey,
       metadata: {
         role: normalizedRole,
         country: payload.country.trim(),
         submitted_at: new Date().toISOString(),
+        signed_payload_hash: payload.walletPayloadHash,
       },
       wallet_signature: {
         signer: payload.walletSignerDid,
@@ -247,14 +258,43 @@ export class LeadService {
       },
     };
 
+    const startedAt = Date.now();
     const response = await fetch(relayUrl.toString(), {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: {
+        'content-type': 'application/json',
+        'x-request-trace-id': relayTraceId,
+      },
       body: JSON.stringify(relayPayload),
     });
+    const latencyMs = Date.now() - startedAt;
 
     if (!response.ok) {
-      throw new BadRequestException('Citizen network relay rejected signed onboarding payload.');
+      this.logger.warn(
+        `Relay rejected signed onboarding payload trace_id=${relayTraceId} `
+        + `status=${response.status} latency_ms=${latencyMs} payload_hash=${payload.walletPayloadHash}`,
+      );
+      throw new BadRequestException(
+        `Citizen network relay rejected signed onboarding payload (trace_id=${relayTraceId}, status=${response.status}).`,
+      );
+    }
+
+    this.logger.log(
+      `Relay accepted signed onboarding payload trace_id=${relayTraceId} `
+      + `status=${response.status} latency_ms=${latencyMs} payload_hash=${payload.walletPayloadHash}`,
+    );
+  }
+
+  private assertRelayMetadata(payload: CreateLeadDto): void {
+    const computedPayloadHash = `sha256:${createHash('sha256').update(payload.walletSigningPayload).digest('hex')}`;
+
+    if (computedPayloadHash.toLowerCase() !== payload.walletPayloadHash.toLowerCase()) {
+      throw new BadRequestException('walletPayloadHash does not match walletSigningPayload for relay metadata.');
+    }
+
+    const expectedDid = `did:key:ed25519:${payload.walletVerifyingKey.toLowerCase()}`;
+    if (payload.walletSignerDid.toLowerCase() !== expectedDid) {
+      throw new BadRequestException('walletSignerDid does not match walletVerifyingKey for relay metadata.');
     }
   }
 
