@@ -70,7 +70,8 @@ To keep user data custody in the wallet surface (instead of dApp/backend forms p
    - `payloadHash` (`sha256:<hex>` digest of canonical payload, runtime commitment format)
    - `payloadHashHex` (legacy plain-hex convenience mirror)
    - `signingPayload` (canonical JSON)
-   - `signatureScope` (`payload_hash_v1` default; signature is over `payloadHash`)
+   - `signatureScope` (`request_scope_v2`; signature binds origin + method + payload hash + requestId + timestamps)
+   - `signingScopePayload` (canonical scope fields included in `preimage`)
    - signer metadata (`signer`, `verifyingKey`, `algorithm`)
 4. Builder backend receives only the signed envelope, verifies signature/hash consistency, then stores according to app policy.
 5. Chain submission should anchor the commitment/receipt (`payloadHash` + signer/proof metadata), while sensitive fields remain off-chain.

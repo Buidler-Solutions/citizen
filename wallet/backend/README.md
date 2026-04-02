@@ -119,4 +119,4 @@ For wallet-tech-stack integrations (extension + onboarding dApp + backend relay 
 - Treat `payloadHash` (`sha256:<hex>`) + signer metadata as the **on-chain commitment surface**.
 - Keep raw onboarding/user PII in controlled backend storage as **off-chain records**.
 - Relay only commitment metadata and policy-required fields to Citizen network endpoints; do not relay full PII payloads by default.
-- Preserve signature-preimage scope (`payload_hash_v1` vs `canonical_payload_v1`) through API contracts so verification is deterministic across wallet extension, SDK, and backend services.
+- Preserve signature-preimage scope (`request_scope_v2` preferred; legacy scopes may still appear during migration) through API contracts so verification is deterministic across wallet extension, SDK, and backend services.

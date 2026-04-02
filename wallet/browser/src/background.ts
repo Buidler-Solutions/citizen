@@ -3,6 +3,7 @@ import {
   DAPP_SIGNING_METHOD,
   type DappSigningRequestEnvelope,
   createDappSigningRequestEnvelope,
+  signingScopePayloadV2FromEnvelope,
   signingPreimageFromEnvelope,
 } from './dappSigningRequest';
 
@@ -615,11 +616,12 @@ async function createSignedCitizenResult(envelope: DappSigningRequestEnvelope): 
       payloadHash: envelope.payloadHash,
       payloadHashHex: envelope.payloadHash.replace('sha256:', ''),
       preimage,
+      signingScopePayload: signingScopePayloadV2FromEnvelope(envelope),
       createdAt: envelope.createdAt,
       expiresAt: envelope.expiresAt,
       riskFlags: envelope.riskFlags,
       algorithm: 'ed25519',
-      signatureScope: 'payload_hash_v1',
+      signatureScope: 'request_scope_v2',
     },
   };
 }
