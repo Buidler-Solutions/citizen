@@ -81,6 +81,16 @@ describe('createDappSigningRequestEnvelope', () => {
     expect(envelope.policyChecks.map((check) => check.code)).toContain('builder_credit_payload_missing');
   });
 
+  it('treats malformed JSON payload strings as policy violations', async () => {
+    const envelope = await createDappSigningRequestEnvelope({
+      origin: 'https://demo.citizen.local',
+      payload: '{"namespace":"citizen.kyc","operation"',
+    });
+
+    expect(envelope.riskFlags).toContain('policy_violation');
+    expect(envelope.policyChecks.map((check) => check.code)).toContain('payload_not_object');
+  });
+
   it('produces identical canonical payload and hash for equivalent object key ordering', async () => {
     const now = new Date('2026-01-02T03:04:05.000Z');
     const [a, b] = await Promise.all([
@@ -126,5 +136,22 @@ describe('createDappSigningRequestEnvelope', () => {
     expect(staleEnvelope.riskFlags).toContain('large_payload');
     expect(staleEnvelope.riskFlags).toContain('stale_request');
     expect(staleEnvelope.createdAt).toBe(staleEnvelope.expiresAt);
+  });
+
+  it('changes signing preimage when request scope fields change to prevent replay across requests', async () => {
+    const now = new Date('2026-01-02T03:04:05.000Z');
+    const payload = {
+      namespace: 'citizen.kyc',
+      operation: 'submit',
+      metadata: { applicantId: 'abc' },
+    };
+    const [a, b] = await Promise.all([
+      createDappSigningRequestEnvelope({ origin: 'https://demo.citizen.local', payload, now }),
+      createDappSigningRequestEnvelope({ origin: 'https://demo.citizen.local', payload, now: new Date(now.getTime() + 1_000) }),
+    ]);
+
+    expect(a.payloadHash).toBe(b.payloadHash);
+    expect(a.requestId).not.toBe(b.requestId);
+    expect(signingPreimageFromEnvelope(a)).not.toBe(signingPreimageFromEnvelope(b));
   });
 });
