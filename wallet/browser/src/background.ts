@@ -105,6 +105,7 @@ const DAPP_REQUEST_AUDIT_KEY = 'citizen.browser.wallet.dapp_request_audit.v1';
 const DEFAULT_DERIVATION_PATH = "m/44'/930'/0'/0'/0'";
 const MAX_ACTIVITY = 100;
 const MAX_DAPP_AUDIT_EVENTS = 1_000;
+const DAPP_REQUEST_CONCURRENCY_MODE = 'single_active';
 
 const pendingDappResolutions = new Map<string, PendingDappResolution>();
 
@@ -629,6 +630,20 @@ async function enqueueDappSigningRequest(
   sender: chrome.runtime.MessageSender,
 ): Promise<WalletResponse> {
   await expireStaleDappRequests();
+  const requests = await getPendingDappRequests();
+  const activePending = requests.find((entry) => entry.state === 'pending');
+  if (DAPP_REQUEST_CONCURRENCY_MODE === 'single_active' && activePending) {
+    await appendDappAuditEvent({
+      requestId: activePending.requestId,
+      state: activePending.state,
+      reason: 'concurrency_blocked_new_request',
+    });
+    return walletError(
+      'ERR_CONCURRENT_REQUEST',
+      'A signing request is already pending. Approve or reject it before submitting another.',
+    );
+  }
+
   const envelope = await createDappSigningRequestEnvelope({
     origin: request.origin,
     tabUrl: sender.url ?? sender.tab?.url ?? null,
@@ -643,7 +658,6 @@ async function enqueueDappSigningRequest(
     updatedAt: now,
     decidedAt: null,
   };
-  const requests = await getPendingDappRequests();
   await savePendingDappRequests([pendingEntry, ...requests]);
   await appendDappAuditEvent({
     requestId: envelope.requestId,

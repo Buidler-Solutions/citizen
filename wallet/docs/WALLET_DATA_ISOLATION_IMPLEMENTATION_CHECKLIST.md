@@ -53,7 +53,7 @@ This checklist translates the current flow and known gaps into concrete implemen
 - [x] Update content-script/background/popup contracts for request queueing.
 - [x] Return deterministic error codes to dApps (rejected, expired, malformed, unsupported).
 - [x] Ensure idempotent reply handling when popup closes/reopens.
-- [ ] Add concurrency policy (single active request vs queue) and enforce it consistently.
+- [x] Add concurrency policy (single active request vs queue) and enforce it consistently.
 
 ## Gap B: Wallet does not directly submit to Citizen runtime + builder backend
 
