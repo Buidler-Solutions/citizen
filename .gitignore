@@ -42,3 +42,5 @@ wallet/backend/node_modules/
 
 wallet/backend/.env
 wallet/backend/data/
+wallet/backend/data/wallet-auth-audit.log
+wallet/backend/data/wallet-auth-state.json
