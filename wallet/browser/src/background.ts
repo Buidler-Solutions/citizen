@@ -12,6 +12,12 @@ import {
   type DappRequestState,
   type PendingDappSigningRequest,
 } from './dappRequestIsolation';
+import {
+  decryptJsonValue,
+  encryptJsonValue,
+  importAesKey,
+  isEncryptedJsonEnvelope,
+} from './sensitiveStorage';
 
 type WalletRequest = {
   method: string;
@@ -107,6 +113,7 @@ const PROTOCOL_SIGNER_KEY = 'citizen.browser.wallet.protocol_signer.v1';
 const DAPP_PENDING_REQUESTS_KEY = 'citizen.browser.wallet.dapp_pending_requests.v1';
 const DAPP_REQUEST_AUDIT_KEY = 'citizen.browser.wallet.dapp_request_audit.v1';
 const DAPP_ORIGIN_PERMISSIONS_KEY = 'citizen.browser.wallet.dapp_origin_permissions.v1';
+const LOCAL_ENCRYPTION_KEY_KEY = 'citizen.browser.wallet.local_encryption_key.v1';
 const DEFAULT_DERIVATION_PATH = "m/44'/930'/0'/0'/0'";
 const MAX_ACTIVITY = 100;
 const MAX_DAPP_AUDIT_EVENTS = 1_000;
@@ -195,6 +202,46 @@ function isExtensionUiMessage(sender: chrome.runtime.MessageSender): boolean {
   return typeof sender.url === 'string' && sender.url.startsWith(expected);
 }
 
+
+async function getLocalEncryptionKey(): Promise<CryptoKey> {
+  const stored = await chrome.storage.local.get(LOCAL_ENCRYPTION_KEY_KEY);
+  const rawKeyBase64 = stored[LOCAL_ENCRYPTION_KEY_KEY];
+  if (typeof rawKeyBase64 === 'string' && rawKeyBase64.length > 0) {
+    try {
+      const bytes = base64ToBytes(rawKeyBase64);
+      if (bytes.length === 32) {
+        return importAesKey(bytes);
+      }
+    } catch {
+      // rotate malformed key material below
+    }
+  }
+
+  const generated = crypto.getRandomValues(new Uint8Array(32));
+  await chrome.storage.local.set({ [LOCAL_ENCRYPTION_KEY_KEY]: bytesToBase64(generated) });
+  return importAesKey(generated);
+}
+
+async function getEncryptedArrayFromStorage<T>(key: string): Promise<T[]> {
+  const stored = await chrome.storage.local.get(key);
+  const value = stored[key];
+  if (Array.isArray(value)) {
+    return value as T[];
+  }
+  if (!isEncryptedJsonEnvelope(value)) {
+    return [];
+  }
+  const encryptionKey = await getLocalEncryptionKey();
+  const decrypted = await decryptJsonValue<T[]>(value, encryptionKey);
+  return Array.isArray(decrypted) ? decrypted : [];
+}
+
+async function setEncryptedArrayInStorage<T>(key: string, value: T[]): Promise<void> {
+  const encryptionKey = await getLocalEncryptionKey();
+  const encrypted = await encryptJsonValue(value, encryptionKey);
+  await chrome.storage.local.set({ [key]: encrypted });
+}
+
 async function getPasswordHash(): Promise<string | null> {
   const stored = await chrome.storage.local.get(PASSWORD_HASH_KEY);
   const value = stored[PASSWORD_HASH_KEY];
@@ -255,13 +302,11 @@ async function lockWallet(): Promise<WalletResponse> {
 }
 
 async function getPendingDappRequests(): Promise<PendingDappSigningRequest[]> {
-  const stored = await chrome.storage.local.get(DAPP_PENDING_REQUESTS_KEY);
-  const list = stored[DAPP_PENDING_REQUESTS_KEY];
-  return Array.isArray(list) ? (list as PendingDappSigningRequest[]) : [];
+  return getEncryptedArrayFromStorage<PendingDappSigningRequest>(DAPP_PENDING_REQUESTS_KEY);
 }
 
 async function savePendingDappRequests(requests: PendingDappSigningRequest[]): Promise<void> {
-  await chrome.storage.local.set({ [DAPP_PENDING_REQUESTS_KEY]: requests });
+  await setEncryptedArrayInStorage(DAPP_PENDING_REQUESTS_KEY, requests);
 }
 
 async function cleanupRetainedDappRequests(): Promise<void> {
@@ -319,16 +364,16 @@ async function getOriginPermission(origin: string | undefined): Promise<DappOrig
 }
 
 async function appendDappAuditEvent(event: Omit<DappRequestAuditEvent, 'eventId' | 'occurredAt'>): Promise<void> {
-  const stored = await chrome.storage.local.get(DAPP_REQUEST_AUDIT_KEY);
-  const existing = Array.isArray(stored[DAPP_REQUEST_AUDIT_KEY]) ? (stored[DAPP_REQUEST_AUDIT_KEY] as DappRequestAuditEvent[]) : [];
+  const existing = await getEncryptedArrayFromStorage<DappRequestAuditEvent>(DAPP_REQUEST_AUDIT_KEY);
   const next: DappRequestAuditEvent = {
     ...event,
     eventId: crypto.randomUUID(),
     occurredAt: new Date().toISOString(),
   };
-  await chrome.storage.local.set({
-    [DAPP_REQUEST_AUDIT_KEY]: [next, ...existing].slice(0, MAX_DAPP_AUDIT_EVENTS),
-  });
+  await setEncryptedArrayInStorage(
+    DAPP_REQUEST_AUDIT_KEY,
+    [next, ...existing].slice(0, MAX_DAPP_AUDIT_EVENTS),
+  );
 }
 
 async function transitionDappRequestState(
