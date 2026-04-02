@@ -22,6 +22,12 @@ describe('browser wallet provider injection and signing smoke flow', () => {
     document.body.innerHTML = '';
   });
 
+  async function ensureInpageLoaded() {
+    if (!window.ctzn || !window.citizen) {
+      await import('./inpage');
+    }
+  }
+
   it('injects provider and resolves personal_sign/typed-data requests through content bridge', async () => {
     const captured: Array<{ method: string; params?: unknown[] }> = [];
 
@@ -52,7 +58,7 @@ describe('browser wallet provider injection and signing smoke flow', () => {
     };
 
     window.addEventListener('message', handler);
-    await import('./inpage');
+    await ensureInpageLoaded();
 
     expect(window.ctzn?.isCitizenWallet).toBe(true);
     expect(window.citizen?.isCitizenWallet).toBe(true);
@@ -74,6 +80,90 @@ describe('browser wallet provider injection and signing smoke flow', () => {
       params: ['0xabc', '{"domain":{},"types":{"EIP712Domain":[]},"message":{"nonce":"123"}}'],
     });
     expect(typedSig).toBe('0xtyped-signature');
+
+    window.removeEventListener('message', handler);
+  });
+
+
+
+  it('supports ctzn_signCitizenTx happy path responses through the injected provider bridge', async () => {
+    const handler = (event: MessageEvent) => {
+      if (event.data?.target !== 'citizen-wallet-content') {
+        return;
+      }
+
+      if (event.data.method !== 'ctzn_signCitizenTx') {
+        return;
+      }
+
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          data: {
+            target: 'citizen-wallet-inpage',
+            id: event.data.id,
+            ok: true,
+            result: {
+              requestId: 'req-integration-1',
+              origin: 'https://builder.example',
+              method: 'ctzn_signCitizenTx',
+              payloadHash: 'sha256:abc123',
+              algorithm: 'ed25519',
+            },
+          },
+          source: window,
+        }),
+      );
+    };
+
+    window.addEventListener('message', handler);
+    await ensureInpageLoaded();
+
+    const signed = await window.ctzn!.request({
+      method: 'ctzn_signCitizenTx',
+      params: [{ namespace: 'identity.citizen', operation: 'create' }],
+    });
+
+    expect(signed).toEqual({
+      requestId: 'req-integration-1',
+      origin: 'https://builder.example',
+      method: 'ctzn_signCitizenTx',
+      payloadHash: 'sha256:abc123',
+      algorithm: 'ed25519',
+    });
+
+    window.removeEventListener('message', handler);
+  });
+
+  it('propagates deterministic ctzn_signCitizenTx rejection error codes to dApps', async () => {
+    const handler = (event: MessageEvent) => {
+      if (event.data?.target !== 'citizen-wallet-content') {
+        return;
+      }
+
+      if (event.data.method !== 'ctzn_signCitizenTx') {
+        return;
+      }
+
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          data: {
+            target: 'citizen-wallet-inpage',
+            id: event.data.id,
+            ok: false,
+            error: 'ERR_USER_REJECTED: The user rejected the signing request.',
+          },
+          source: window,
+        }),
+      );
+    };
+
+    window.addEventListener('message', handler);
+    await ensureInpageLoaded();
+
+    await expect(window.ctzn!.request({
+      method: 'ctzn_signCitizenTx',
+      params: [{ namespace: 'identity.citizen', operation: 'create' }],
+    })).rejects.toThrow('ERR_USER_REJECTED');
 
     window.removeEventListener('message', handler);
   });
