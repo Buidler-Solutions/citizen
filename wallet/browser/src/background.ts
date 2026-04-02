@@ -69,6 +69,7 @@ const ACTIVE_WALLET_ID_KEY = 'citizen.browser.wallet.active_wallet_id.v1';
 const PASSWORD_HASH_KEY = 'citizen.browser.wallet.password_hash.v1';
 const SESSION_UNLOCKED_KEY = 'citizen.browser.wallet.unlocked.v1';
 const NETWORK_KEY = 'citizen.browser.wallet.network.v1';
+const PROTOCOL_SIGNER_KEY = 'citizen.browser.wallet.protocol_signer.v1';
 const DEFAULT_DERIVATION_PATH = "m/44'/930'/0'/0'/0'";
 const MAX_ACTIVITY = 100;
 
@@ -96,6 +97,15 @@ const NETWORKS = {
 } as const;
 
 type NetworkId = keyof typeof NETWORKS;
+
+type StoredProtocolSigner = {
+  keyId: string;
+  did: string;
+  verifyingKeyHex: string;
+  spkiBase64: string;
+  pkcs8Base64: string;
+  createdAt: string;
+};
 
 function isNetworkId(value: unknown): value is NetworkId {
   return typeof value === 'string' && value in NETWORKS;
@@ -300,6 +310,7 @@ function shouldPromptWalletUi(method: string): boolean {
     'wallet_login',
     'personal_sign',
     'ctzn_signTypedData_v4',
+    'ctzn_signCitizenTx',
   ].includes(method);
 }
 
@@ -395,6 +406,114 @@ function parseTypedDataPayload(input: unknown): TypedDataPayload | null {
   }
 
   return null;
+}
+
+function base64ToBytes(value: string): Uint8Array {
+  const raw = atob(value);
+  const out = new Uint8Array(raw.length);
+  for (let index = 0; index < raw.length; index += 1) {
+    out[index] = raw.charCodeAt(index);
+  }
+  return out;
+}
+
+function bytesToBase64(bytes: ArrayBuffer | Uint8Array): string {
+  const view = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+  let binary = '';
+  for (let index = 0; index < view.length; index += 1) {
+    binary += String.fromCharCode(view[index]);
+  }
+  return btoa(binary);
+}
+
+function toHex(bytes: ArrayBuffer | Uint8Array): string {
+  const view = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+  return Array.from(view)
+    .map((byte) => byte.toString(16).padStart(2, '0'))
+    .join('');
+}
+
+function normalizeJsonValue(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map((item) => normalizeJsonValue(item));
+  }
+  if (value && typeof value === 'object') {
+    const input = value as Record<string, unknown>;
+    const entries = Object.keys(input)
+      .sort((left, right) => left.localeCompare(right))
+      .map((key) => [key, normalizeJsonValue(input[key])] as const);
+    return Object.fromEntries(entries);
+  }
+  return value;
+}
+
+function canonicalJson(value: unknown): string {
+  return JSON.stringify(normalizeJsonValue(value));
+}
+
+async function getOrCreateProtocolSigner(): Promise<StoredProtocolSigner> {
+  const stored = await chrome.storage.local.get(PROTOCOL_SIGNER_KEY);
+  const existing = stored[PROTOCOL_SIGNER_KEY];
+  if (existing && typeof existing === 'object') {
+    const signer = existing as StoredProtocolSigner;
+    if (
+      typeof signer.pkcs8Base64 === 'string'
+      && typeof signer.spkiBase64 === 'string'
+      && typeof signer.verifyingKeyHex === 'string'
+      && typeof signer.did === 'string'
+    ) {
+      return signer;
+    }
+  }
+
+  const generated = await crypto.subtle.generateKey({ name: 'Ed25519' }, true, ['sign', 'verify']);
+  if (!('privateKey' in generated) || !('publicKey' in generated)) {
+    throw new Error('Unable to generate Citizen protocol signer keypair.');
+  }
+  const [pkcs8, spki] = await Promise.all([
+    crypto.subtle.exportKey('pkcs8', generated.privateKey),
+    crypto.subtle.exportKey('spki', generated.publicKey),
+  ]);
+
+  const verifyingKeyHex = toHex(new Uint8Array(spki).slice(-32));
+  const signer: StoredProtocolSigner = {
+    keyId: crypto.randomUUID(),
+    did: `did:key:ed25519:${verifyingKeyHex}`,
+    verifyingKeyHex,
+    spkiBase64: bytesToBase64(spki),
+    pkcs8Base64: bytesToBase64(pkcs8),
+    createdAt: new Date().toISOString(),
+  };
+  await chrome.storage.local.set({ [PROTOCOL_SIGNER_KEY]: signer });
+  return signer;
+}
+
+async function signCitizenPayload(rawPayload: unknown): Promise<WalletResponse> {
+  const signer = await getOrCreateProtocolSigner();
+  const canonicalPayload = typeof rawPayload === 'string' ? rawPayload : canonicalJson(rawPayload);
+  const privateKey = await crypto.subtle.importKey(
+    'pkcs8',
+    base64ToBytes(signer.pkcs8Base64),
+    { name: 'Ed25519' },
+    false,
+    ['sign'],
+  );
+  const signature = await crypto.subtle.sign(
+    { name: 'Ed25519' },
+    privateKey,
+    new TextEncoder().encode(canonicalPayload),
+  );
+
+  return {
+    ok: true,
+    result: {
+      signer: signer.did,
+      verifyingKey: signer.verifyingKeyHex,
+      signature: toHex(signature),
+      signingPayload: canonicalPayload,
+      algorithm: 'ed25519',
+    },
+  };
 }
 
 async function exportPrivateKey(password: string): Promise<WalletResponse> {
@@ -792,6 +911,25 @@ async function handleWalletRequest(
       const { EIP712Domain: _ignoredDomain, ...types } = typedData.types;
       const signature = await wallet.signTypedData(typedData.domain, types, typedData.message);
       return { ok: true, result: signature };
+    }
+    case 'ctzn_getCitizenSigner': {
+      const signer = await getOrCreateProtocolSigner();
+      return {
+        ok: true,
+        result: {
+          did: signer.did,
+          verifyingKey: signer.verifyingKeyHex,
+          algorithm: 'ed25519',
+          createdAt: signer.createdAt,
+        },
+      };
+    }
+    case 'ctzn_signCitizenTx': {
+      const [payload] = request.params ?? [];
+      if (payload === undefined || payload === null) {
+        return { ok: false, error: 'ctzn_signCitizenTx requires a payload object or canonical JSON string.' };
+      }
+      return signCitizenPayload(payload);
     }
     default:
       return { ok: false, error: `Unsupported method: ${request.method}` };

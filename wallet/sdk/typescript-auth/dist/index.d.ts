@@ -31,6 +31,12 @@ export interface WalletAuthChallengeResponse {
   challengeId: string;
   nonce: string;
   message: string;
+  typedData?: {
+    domain: Record<string, unknown>;
+    types: Record<string, Array<{ name: string; type: string }>>;
+    primaryType: string;
+    message: Record<string, unknown>;
+  };
   issuedAt: string;
   expiresAt: string;
 }
@@ -39,6 +45,7 @@ export interface WalletAuthVerifyRequest {
   challengeId: string;
   wallet: string;
   signature: string;
+  signatureMethod?: 'personal_sign' | 'ctzn_signTypedData_v4';
 }
 
 export interface WalletAuthVerifyResponse {
@@ -58,6 +65,24 @@ export interface WalletLoginResult {
   session?: WalletAuthVerifyResponse['session'];
 }
 
+export interface WalletAuthSessionVerifyResponse {
+  status: 'active';
+  session: {
+    sessionId: string;
+    wallet: string;
+    network: string;
+    issuedAt: string;
+    expiresAt: string;
+  };
+}
+
+export interface WalletAuthSessionRevokeResponse {
+  status: 'revoked';
+  sessionId: string;
+}
+
+export type WalletAuthSigningMethod = 'personal_sign' | 'ctzn_signTypedData_v4';
+
 export declare class WalletAuthClientError extends Error {
   constructor(message: string);
 }
@@ -68,9 +93,11 @@ export declare class WalletAuthClient {
   constructor(options?: WalletAuthClientOptions);
   requestChallenge(wallet: string): Promise<WalletAuthChallengeResponse>;
   verifySignature(payload: WalletAuthVerifyRequest): Promise<WalletAuthVerifyResponse>;
-  loginWithBrowserWallet(): Promise<WalletLoginResult>;
+  loginWithBrowserWallet(signingMethod?: WalletAuthSigningMethod): Promise<WalletLoginResult>;
   getStoredToken(): string | null;
   clearStoredToken(): void;
+  verifyStoredSession(token?: string): Promise<WalletAuthSessionVerifyResponse>;
+  revokeStoredSession(token?: string): Promise<WalletAuthSessionRevokeResponse>;
 }
 
 export declare const createWalletAuthClient: (options?: WalletAuthClientOptions) => WalletAuthClient;

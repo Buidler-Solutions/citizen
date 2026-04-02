@@ -7,8 +7,11 @@ Browser-first SDK for integrating Citizen wallet login (`ctzn_requestAccounts` +
 - Provider detection: `window.citizen` fallback to `window.ctzn`
 - Backend-first auth flow support:
   - `POST /auth/challenge`
-  - `personal_sign`
+  - `personal_sign` or `ctzn_signTypedData_v4`
   - `POST /auth/verify`
+- Session lifecycle helpers:
+  - `POST /auth/session/verify`
+  - `POST /auth/session/revoke`
 - Session token persistence helpers
 - Minimal API intended for TypeScript apps (Next.js, React, Vite)
 
@@ -24,16 +27,24 @@ const client = createWalletAuthClient({
   storageKey: 'citizen.wallet.auth.session',
 });
 
-const result = await client.loginWithBrowserWallet();
+const result = await client.loginWithBrowserWallet('personal_sign');
 console.log(result.wallet, result.token);
+
+const active = await client.verifyStoredSession();
+console.log(active.session.sessionId);
+
+await client.revokeStoredSession();
 ```
 
 ## API
 
 - `createWalletAuthClient(options)`
 - `WalletAuthClient#loginWithBrowserWallet()`
+- `WalletAuthClient#loginWithBrowserWallet(signingMethod)`
 - `WalletAuthClient#requestChallenge(wallet)`
 - `WalletAuthClient#verifySignature(payload)`
+- `WalletAuthClient#verifyStoredSession(token?)`
+- `WalletAuthClient#revokeStoredSession(token?)`
 - `WalletAuthClient#getStoredToken()`
 - `WalletAuthClient#clearStoredToken()`
 

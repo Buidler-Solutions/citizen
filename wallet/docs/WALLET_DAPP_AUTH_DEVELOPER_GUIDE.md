@@ -81,6 +81,7 @@ Response:
 - `challengeId`
 - `nonce`
 - `message`
+- `typedData` (EIP-712 payload for `ctzn_signTypedData_v4`)
 - `issuedAt`
 - `expiresAt`
 
@@ -92,7 +93,8 @@ Request:
 {
   "challengeId": "uuid",
   "wallet": "0x...",
-  "signature": "0x..."
+  "signature": "0x...",
+  "signatureMethod": "personal_sign | ctzn_signTypedData_v4"
 }
 ```
 
