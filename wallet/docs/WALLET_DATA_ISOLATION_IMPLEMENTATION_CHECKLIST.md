@@ -22,7 +22,7 @@ This checklist translates the current flow and known gaps into concrete implemen
   - [x] `createdAt` / `expiresAt`
   - [x] `riskFlags` (unknown origin, stale request, large payload, unsupported fields)
 - [x] Add schema validation + canonical serialization before any UI render.
-- [x] Ensure signature preimage is derived from canonical payload hash only.
+- [x] Ensure signature preimage is derived from deterministic request scope (origin + method + payload hash + requestId + timestamps).
 
 ### A2) Build a first-class approval screen in the extension
 
@@ -94,13 +94,13 @@ This checklist translates the current flow and known gaps into concrete implemen
 
 ### C2) Cryptographic and policy guarantees
 
-- [ ] Bind signature to:
-  - [ ] origin
-  - [ ] method
-  - [ ] canonical payload hash
-  - [ ] nonce/requestId
-  - [ ] timestamp/expiry
-- [ ] Prevent replay across origins/environments.
+- [x] Bind signature to:
+  - [x] origin
+  - [x] method
+  - [x] canonical payload hash
+  - [x] nonce/requestId
+  - [x] timestamp/expiry
+- [x] Prevent replay across origins/environments.
 - [ ] Add namespace/policy checks prior to signature prompt where feasible.
 
 ### C3) UX controls for isolation assurance

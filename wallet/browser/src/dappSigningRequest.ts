@@ -101,6 +101,32 @@ export async function createDappSigningRequestEnvelope(
   };
 }
 
+type SigningScopePayloadV2 = {
+  scope: 'citizen_dapp_signing_v2';
+  requestId: string;
+  origin: string;
+  tabUrl: string | null;
+  method: typeof DAPP_SIGNING_METHOD;
+  payloadHash: string;
+  createdAt: string;
+  expiresAt: string;
+};
+
+export function signingScopePayloadV2FromEnvelope(
+  envelope: DappSigningRequestEnvelope,
+): SigningScopePayloadV2 {
+  return {
+    scope: 'citizen_dapp_signing_v2',
+    requestId: envelope.requestId,
+    origin: envelope.origin,
+    tabUrl: envelope.tabUrl,
+    method: envelope.method,
+    payloadHash: envelope.payloadHash,
+    createdAt: envelope.createdAt,
+    expiresAt: envelope.expiresAt,
+  };
+}
+
 export function signingPreimageFromEnvelope(envelope: DappSigningRequestEnvelope): string {
-  return envelope.payloadHash;
+  return canonicalJson(signingScopePayloadV2FromEnvelope(envelope));
 }
