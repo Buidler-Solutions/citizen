@@ -1,5 +1,7 @@
 import { HDNodeWallet, Wallet } from 'ethers';
 import {
+  DAPP_SIGNING_METHOD,
+  type DappSigningRequestEnvelope,
   createDappSigningRequestEnvelope,
   signingPreimageFromEnvelope,
 } from './dappSigningRequest';
@@ -65,6 +67,30 @@ type ActivityEntry = {
   account: string;
 };
 
+type DappRequestState = 'pending' | 'approved' | 'rejected' | 'expired' | 'signed';
+
+type PendingDappSigningRequest = {
+  requestId: string;
+  envelope: DappSigningRequestEnvelope;
+  state: DappRequestState;
+  createdAt: string;
+  updatedAt: string;
+  decidedAt: string | null;
+};
+
+type DappRequestAuditEvent = {
+  eventId: string;
+  requestId: string;
+  state: DappRequestState;
+  reason: string;
+  occurredAt: string;
+};
+
+type PendingDappResolution = {
+  resolve: (response: WalletResponse) => void;
+  timeoutId: ReturnType<typeof setTimeout>;
+};
+
 const STORAGE_KEY = 'citizen.browser.wallet.v1';
 const LAST_REQUEST_KEY = 'citizen.browser.wallet.last_request.v1';
 const ACTIVITY_KEY = 'citizen.browser.wallet.activity.v1';
@@ -74,8 +100,13 @@ const PASSWORD_HASH_KEY = 'citizen.browser.wallet.password_hash.v1';
 const SESSION_UNLOCKED_KEY = 'citizen.browser.wallet.unlocked.v1';
 const NETWORK_KEY = 'citizen.browser.wallet.network.v1';
 const PROTOCOL_SIGNER_KEY = 'citizen.browser.wallet.protocol_signer.v1';
+const DAPP_PENDING_REQUESTS_KEY = 'citizen.browser.wallet.dapp_pending_requests.v1';
+const DAPP_REQUEST_AUDIT_KEY = 'citizen.browser.wallet.dapp_request_audit.v1';
 const DEFAULT_DERIVATION_PATH = "m/44'/930'/0'/0'/0'";
 const MAX_ACTIVITY = 100;
+const MAX_DAPP_AUDIT_EVENTS = 1_000;
+
+const pendingDappResolutions = new Map<string, PendingDappResolution>();
 
 const NETWORKS = {
   mainnet: {
@@ -148,6 +179,10 @@ async function sha256Hex(input: string): Promise<string> {
     .join('');
 }
 
+function walletError(code: string, message: string): WalletResponse {
+  return { ok: false, error: `${code}: ${message}` };
+}
+
 function isExtensionUiMessage(sender: chrome.runtime.MessageSender): boolean {
   const expected = chrome.runtime.getURL('');
   return typeof sender.url === 'string' && sender.url.startsWith(expected);
@@ -210,6 +245,80 @@ async function unlockWallet(password: string): Promise<WalletResponse> {
 async function lockWallet(): Promise<WalletResponse> {
   await markLocked();
   return { ok: true, result: true };
+}
+
+async function getPendingDappRequests(): Promise<PendingDappSigningRequest[]> {
+  const stored = await chrome.storage.local.get(DAPP_PENDING_REQUESTS_KEY);
+  const list = stored[DAPP_PENDING_REQUESTS_KEY];
+  return Array.isArray(list) ? (list as PendingDappSigningRequest[]) : [];
+}
+
+async function savePendingDappRequests(requests: PendingDappSigningRequest[]): Promise<void> {
+  await chrome.storage.local.set({ [DAPP_PENDING_REQUESTS_KEY]: requests });
+}
+
+async function appendDappAuditEvent(event: Omit<DappRequestAuditEvent, 'eventId' | 'occurredAt'>): Promise<void> {
+  const stored = await chrome.storage.local.get(DAPP_REQUEST_AUDIT_KEY);
+  const existing = Array.isArray(stored[DAPP_REQUEST_AUDIT_KEY]) ? (stored[DAPP_REQUEST_AUDIT_KEY] as DappRequestAuditEvent[]) : [];
+  const next: DappRequestAuditEvent = {
+    ...event,
+    eventId: crypto.randomUUID(),
+    occurredAt: new Date().toISOString(),
+  };
+  await chrome.storage.local.set({
+    [DAPP_REQUEST_AUDIT_KEY]: [next, ...existing].slice(0, MAX_DAPP_AUDIT_EVENTS),
+  });
+}
+
+async function transitionDappRequestState(
+  requestId: string,
+  toState: DappRequestState,
+  reason: string,
+): Promise<PendingDappSigningRequest | null> {
+  const requests = await getPendingDappRequests();
+  const now = new Date().toISOString();
+  const next = requests.map((entry) => {
+    if (entry.requestId !== requestId) {
+      return entry;
+    }
+    return {
+      ...entry,
+      state: toState,
+      updatedAt: now,
+      decidedAt: toState === 'approved' || toState === 'rejected' || toState === 'expired' || toState === 'signed'
+        ? now
+        : entry.decidedAt,
+    };
+  });
+  await savePendingDappRequests(next);
+  const updated = next.find((entry) => entry.requestId === requestId) ?? null;
+  if (updated) {
+    await appendDappAuditEvent({ requestId, state: toState, reason });
+  }
+  return updated;
+}
+
+async function expireStaleDappRequests(): Promise<void> {
+  const requests = await getPendingDappRequests();
+  if (requests.length === 0) {
+    return;
+  }
+  const now = Date.now();
+  const stale = requests.filter(
+    (entry) => entry.state === 'pending' && new Date(entry.envelope.expiresAt).getTime() <= now,
+  );
+  for (const entry of stale) {
+    const updated = await transitionDappRequestState(entry.requestId, 'expired', 'request_expired');
+    const resolution = pendingDappResolutions.get(entry.requestId);
+    if (resolution) {
+      clearTimeout(resolution.timeoutId);
+      pendingDappResolutions.delete(entry.requestId);
+      resolution.resolve(walletError('ERR_REQUEST_EXPIRED', 'The signing request expired before approval.'));
+    }
+    if (!updated) {
+      continue;
+    }
+  }
 }
 
 function createWalletId() {
@@ -474,17 +583,8 @@ async function getOrCreateProtocolSigner(): Promise<StoredProtocolSigner> {
   return signer;
 }
 
-async function signCitizenPayload(
-  rawPayload: unknown,
-  request: WalletRequest,
-  sender: chrome.runtime.MessageSender,
-): Promise<WalletResponse> {
+async function createSignedCitizenResult(envelope: DappSigningRequestEnvelope): Promise<WalletResponse> {
   const signer = await getOrCreateProtocolSigner();
-  const envelope = await createDappSigningRequestEnvelope({
-    origin: request.origin,
-    tabUrl: sender.url ?? sender.tab?.url ?? null,
-    payload: rawPayload,
-  });
   const preimage = signingPreimageFromEnvelope(envelope);
   const payloadBytes = new TextEncoder().encode(preimage);
   const privateKey = await crypto.subtle.importKey(
@@ -521,6 +621,113 @@ async function signCitizenPayload(
       signatureScope: 'payload_hash_v1',
     },
   };
+}
+
+async function enqueueDappSigningRequest(
+  rawPayload: unknown,
+  request: WalletRequest,
+  sender: chrome.runtime.MessageSender,
+): Promise<WalletResponse> {
+  await expireStaleDappRequests();
+  const envelope = await createDappSigningRequestEnvelope({
+    origin: request.origin,
+    tabUrl: sender.url ?? sender.tab?.url ?? null,
+    payload: rawPayload,
+  });
+  const now = new Date().toISOString();
+  const pendingEntry: PendingDappSigningRequest = {
+    requestId: envelope.requestId,
+    envelope,
+    state: 'pending',
+    createdAt: now,
+    updatedAt: now,
+    decidedAt: null,
+  };
+  const requests = await getPendingDappRequests();
+  await savePendingDappRequests([pendingEntry, ...requests]);
+  await appendDappAuditEvent({
+    requestId: envelope.requestId,
+    state: 'pending',
+    reason: 'request_queued',
+  });
+
+  return new Promise<WalletResponse>((resolve) => {
+    const timeoutMs = Math.max(0, new Date(envelope.expiresAt).getTime() - Date.now());
+    const timeoutId = setTimeout(() => {
+      void transitionDappRequestState(envelope.requestId, 'expired', 'request_expired_timeout').then(() => {
+        pendingDappResolutions.delete(envelope.requestId);
+        resolve(walletError('ERR_REQUEST_EXPIRED', 'The signing request expired before approval.'));
+      });
+    }, timeoutMs);
+    pendingDappResolutions.set(envelope.requestId, { resolve, timeoutId });
+  });
+}
+
+async function serializePendingDappRequestsForUi() {
+  await expireStaleDappRequests();
+  const requests = await getPendingDappRequests();
+  return requests.map((entry) => ({
+    requestId: entry.requestId,
+    origin: {
+      origin: entry.envelope.origin,
+      tabUrl: entry.envelope.tabUrl,
+    },
+    method: entry.envelope.method,
+    payload: {
+      canonicalJson: entry.envelope.canonicalPayload,
+      hash: entry.envelope.payloadHash,
+    },
+    createdAt: entry.envelope.createdAt,
+    expiresAt: entry.envelope.expiresAt,
+    riskFlags: entry.envelope.riskFlags,
+    state: entry.state,
+  }));
+}
+
+async function approvePendingDappRequest(requestId: string): Promise<WalletResponse> {
+  await expireStaleDappRequests();
+  const requests = await getPendingDappRequests();
+  const entry = requests.find((candidate) => candidate.requestId === requestId);
+  if (!entry) {
+    return walletError('ERR_REQUEST_NOT_FOUND', 'Signing request not found.');
+  }
+  if (entry.state !== 'pending') {
+    return walletError('ERR_REQUEST_ALREADY_DECIDED', `Signing request is already ${entry.state}.`);
+  }
+  if (new Date(entry.envelope.expiresAt).getTime() <= Date.now()) {
+    await transitionDappRequestState(requestId, 'expired', 'request_expired_on_approve');
+    return walletError('ERR_REQUEST_EXPIRED', 'The signing request is stale and cannot be approved.');
+  }
+  await transitionDappRequestState(requestId, 'approved', 'approved_by_user');
+  const signed = await createSignedCitizenResult(entry.envelope);
+  await transitionDappRequestState(requestId, 'signed', 'signature_emitted');
+  const resolution = pendingDappResolutions.get(requestId);
+  if (resolution) {
+    clearTimeout(resolution.timeoutId);
+    pendingDappResolutions.delete(requestId);
+    resolution.resolve(signed);
+  }
+  return { ok: true, result: true };
+}
+
+async function rejectPendingDappRequest(requestId: string, reason: string): Promise<WalletResponse> {
+  await expireStaleDappRequests();
+  const requests = await getPendingDappRequests();
+  const entry = requests.find((candidate) => candidate.requestId === requestId);
+  if (!entry) {
+    return walletError('ERR_REQUEST_NOT_FOUND', 'Signing request not found.');
+  }
+  if (entry.state !== 'pending') {
+    return walletError('ERR_REQUEST_ALREADY_DECIDED', `Signing request is already ${entry.state}.`);
+  }
+  await transitionDappRequestState(requestId, 'rejected', reason);
+  const resolution = pendingDappResolutions.get(requestId);
+  if (resolution) {
+    clearTimeout(resolution.timeoutId);
+    pendingDappResolutions.delete(requestId);
+    resolution.resolve(walletError('ERR_USER_REJECTED', 'The user rejected the signing request.'));
+  }
+  return { ok: true, result: true };
 }
 
 async function exportPrivateKey(password: string): Promise<WalletResponse> {
@@ -686,6 +893,46 @@ async function handleWalletRequest(
     };
   }
 
+  if (request.method === 'wallet_getPendingDappRequests') {
+    if (!isUiRequest) {
+      return walletError('ERR_UNAUTHORIZED', 'Unauthorized wallet method.');
+    }
+    return { ok: true, result: await serializePendingDappRequestsForUi() };
+  }
+
+  if (request.method === 'wallet_approveDappRequest') {
+    if (!isUiRequest) {
+      return walletError('ERR_UNAUTHORIZED', 'Unauthorized wallet method.');
+    }
+    const [requestId] = request.params ?? [];
+    if (typeof requestId !== 'string' || requestId.length === 0) {
+      return walletError('ERR_MALFORMED_REQUEST', 'wallet_approveDappRequest requires requestId.');
+    }
+    return approvePendingDappRequest(requestId);
+  }
+
+  if (request.method === 'wallet_rejectDappRequest') {
+    if (!isUiRequest) {
+      return walletError('ERR_UNAUTHORIZED', 'Unauthorized wallet method.');
+    }
+    const [requestId] = request.params ?? [];
+    if (typeof requestId !== 'string' || requestId.length === 0) {
+      return walletError('ERR_MALFORMED_REQUEST', 'wallet_rejectDappRequest requires requestId.');
+    }
+    return rejectPendingDappRequest(requestId, 'rejected_by_user');
+  }
+
+  if (request.method === 'wallet_cancelDappRequest') {
+    if (!isUiRequest) {
+      return walletError('ERR_UNAUTHORIZED', 'Unauthorized wallet method.');
+    }
+    const [requestId] = request.params ?? [];
+    if (typeof requestId !== 'string' || requestId.length === 0) {
+      return walletError('ERR_MALFORMED_REQUEST', 'wallet_cancelDappRequest requires requestId.');
+    }
+    return rejectPendingDappRequest(requestId, 'cancelled_in_wallet_ui');
+  }
+
   if (request.method === 'wallet_setActiveWallet') {
     if (!isUiRequest) {
       return { ok: false, error: 'Unauthorized wallet method.' };
@@ -800,7 +1047,7 @@ async function handleWalletRequest(
   }
 
   if (await isWalletLocked()) {
-    return { ok: false, error: 'Wallet is locked. Open the extension side panel to unlock.' };
+    return walletError('ERR_WALLET_LOCKED', 'Wallet is locked. Open the extension side panel to unlock.');
   }
 
   if (
@@ -809,8 +1056,10 @@ async function handleWalletRequest(
     && !(await hasStoredWallet())
   ) {
     return {
-      ok: false,
-      error: 'Wallet is not configured. Open the extension side panel to create or import a wallet first.',
+      ...walletError(
+        'ERR_WALLET_NOT_CONFIGURED',
+        'Wallet is not configured. Open the extension side panel to create or import a wallet first.',
+      ),
     };
   }
 
@@ -934,12 +1183,18 @@ async function handleWalletRequest(
     case 'ctzn_signCitizenTx': {
       const [payload] = request.params ?? [];
       if (payload === undefined || payload === null) {
-        return { ok: false, error: 'ctzn_signCitizenTx requires a payload object or canonical JSON string.' };
+        return walletError(
+          'ERR_MALFORMED_REQUEST',
+          'ctzn_signCitizenTx requires a payload object or canonical JSON string.',
+        );
       }
-      return signCitizenPayload(payload, request, sender);
+      if (request.method !== DAPP_SIGNING_METHOD) {
+        return walletError('ERR_UNSUPPORTED_METHOD', `Unsupported signing method: ${request.method}`);
+      }
+      return enqueueDappSigningRequest(payload, request, sender);
     }
     default:
-      return { ok: false, error: `Unsupported method: ${request.method}` };
+      return walletError('ERR_UNSUPPORTED_METHOD', `Unsupported method: ${request.method}`);
   }
 }
 

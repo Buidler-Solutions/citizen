@@ -26,33 +26,33 @@ This checklist translates the current flow and known gaps into concrete implemen
 
 ### A2) Build a first-class approval screen in the extension
 
-- [ ] Add a **Pending Request** view (not only “Last dApp request” metadata).
-- [ ] Render human-readable payload sections with explicit field labels.
-- [ ] Add a raw payload/code view toggle for advanced users.
-- [ ] Show clear trust context:
-  - [ ] requesting origin
-  - [ ] method
-  - [ ] request timestamp
-  - [ ] payload hash/fingerprint
-- [ ] Add explicit actions:
-  - [ ] **Approve and sign**
-  - [ ] **Reject**
-  - [ ] **Cancel/close**
-- [ ] Require user interaction for every request (no background signing path).
+- [x] Add a **Pending Request** view (not only “Last dApp request” metadata).
+- [x] Render human-readable payload sections with explicit field labels.
+- [x] Add a raw payload/code view toggle for advanced users.
+- [x] Show clear trust context:
+  - [x] requesting origin
+  - [x] method
+  - [x] request timestamp
+  - [x] payload hash/fingerprint
+- [x] Add explicit actions:
+  - [x] **Approve and sign**
+  - [x] **Reject**
+  - [x] **Cancel/close**
+- [x] Require user interaction for every request (no background signing path).
 
 ### A3) Approval-state handling and security hardening
 
-- [ ] Introduce request lifecycle states (`pending`, `approved`, `rejected`, `expired`, `signed`).
-- [ ] Enforce one-time signing per `requestId`.
-- [ ] Add timeout/expiry handling and stale-request UX.
-- [ ] Add anti-clickjacking/anti-spoofing UI indicators (origin lock icon, full URL reveal).
-- [ ] Log immutable audit events for each state transition.
+- [x] Introduce request lifecycle states (`pending`, `approved`, `rejected`, `expired`, `signed`).
+- [x] Enforce one-time signing per `requestId`.
+- [x] Add timeout/expiry handling and stale-request UX.
+- [x] Add anti-clickjacking/anti-spoofing UI indicators (origin lock icon, full URL reveal).
+- [x] Log immutable audit events for each state transition.
 
 ### A4) Extension messaging + dApp handshake updates
 
-- [ ] Update content-script/background/popup contracts for request queueing.
-- [ ] Return deterministic error codes to dApps (rejected, expired, malformed, unsupported).
-- [ ] Ensure idempotent reply handling when popup closes/reopens.
+- [x] Update content-script/background/popup contracts for request queueing.
+- [x] Return deterministic error codes to dApps (rejected, expired, malformed, unsupported).
+- [x] Ensure idempotent reply handling when popup closes/reopens.
 - [ ] Add concurrency policy (single active request vs queue) and enforce it consistently.
 
 ## Gap B: Wallet does not directly submit to Citizen runtime + builder backend
