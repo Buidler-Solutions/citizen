@@ -8,7 +8,18 @@ export type DappSigningRiskFlag =
   | 'unknown_origin'
   | 'stale_request'
   | 'large_payload'
-  | 'unsupported_fields';
+  | 'unsupported_fields'
+  | 'policy_violation';
+
+export type DappSigningPolicyCheck = {
+  code:
+    | 'payload_not_object'
+    | 'missing_namespace'
+    | 'invalid_namespace'
+    | 'missing_operation'
+    | 'builder_credit_payload_missing';
+  message: string;
+};
 
 export type DappSigningRequestEnvelope = {
   requestId: string;
@@ -21,6 +32,7 @@ export type DappSigningRequestEnvelope = {
   createdAt: string;
   expiresAt: string;
   riskFlags: DappSigningRiskFlag[];
+  policyChecks: DappSigningPolicyCheck[];
 };
 
 type DappSigningEnvelopeInput = {
@@ -65,6 +77,49 @@ function collectUnsupportedTopLevelFields(payload: unknown): boolean {
   return Object.keys(payload).some((key) => !allowed.has(key));
 }
 
+function collectPolicyChecks(payload: unknown): DappSigningPolicyCheck[] {
+  if (!isObjectRecord(payload)) {
+    return [
+      {
+        code: 'payload_not_object',
+        message: 'Payload must be a JSON object with namespace and operation fields.',
+      },
+    ];
+  }
+
+  const checks: DappSigningPolicyCheck[] = [];
+  const namespace = payload.namespace;
+  const operation = payload.operation;
+
+  if (typeof namespace !== 'string' || namespace.trim().length === 0) {
+    checks.push({
+      code: 'missing_namespace',
+      message: 'Payload namespace is required before signing.',
+    });
+  } else if (!/^[a-z0-9]+(?:[._-][a-z0-9]+)+$/u.test(namespace.trim())) {
+    checks.push({
+      code: 'invalid_namespace',
+      message: 'Payload namespace must use lowercase dot-delimited segments.',
+    });
+  }
+
+  if (typeof operation !== 'string' || operation.trim().length === 0) {
+    checks.push({
+      code: 'missing_operation',
+      message: 'Payload operation is required before signing.',
+    });
+  }
+
+  if (namespace === 'builder.credits' && !isObjectRecord(payload.builderCredit)) {
+    checks.push({
+      code: 'builder_credit_payload_missing',
+      message: 'builder.credits payloads should include builderCredit policy details.',
+    });
+  }
+
+  return checks;
+}
+
 export async function createDappSigningRequestEnvelope(
   input: DappSigningEnvelopeInput,
 ): Promise<DappSigningRequestEnvelope> {
@@ -76,14 +131,28 @@ export async function createDappSigningRequestEnvelope(
   const payloadHash = await sha256DigestHex(canonicalPayload);
 
   const riskFlags: DappSigningRiskFlag[] = [];
+  const parsedPayload =
+    typeof input.payload === 'string'
+      ? (() => {
+          try {
+            return JSON.parse(input.payload) as unknown;
+          } catch {
+            return input.payload;
+          }
+        })()
+      : input.payload;
+  const policyChecks = collectPolicyChecks(parsedPayload);
   if (!input.origin || !isValidHttpUrl(input.origin)) {
     riskFlags.push('unknown_origin');
   }
   if (canonicalPayload.length > MAX_PAYLOAD_CHARS) {
     riskFlags.push('large_payload');
   }
-  if (collectUnsupportedTopLevelFields(input.payload)) {
+  if (collectUnsupportedTopLevelFields(parsedPayload)) {
     riskFlags.push('unsupported_fields');
+  }
+  if (policyChecks.length > 0) {
+    riskFlags.push('policy_violation');
   }
   if (new Date(expiresAt).getTime() <= now.getTime()) {
     riskFlags.push('stale_request');
@@ -100,6 +169,7 @@ export async function createDappSigningRequestEnvelope(
     createdAt,
     expiresAt,
     riskFlags,
+    policyChecks,
   };
 }
 

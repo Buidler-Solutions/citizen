@@ -101,7 +101,7 @@ This checklist translates the current flow and known gaps into concrete implemen
   - [x] nonce/requestId
   - [x] timestamp/expiry
 - [x] Prevent replay across origins/environments.
-- [ ] Add namespace/policy checks prior to signature prompt where feasible.
+- [x] Add namespace/policy checks prior to signature prompt where feasible.
 
 ### C3) UX controls for isolation assurance
 

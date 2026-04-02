@@ -48,6 +48,10 @@ type PendingDappRequest = {
   createdAt: string;
   expiresAt: string;
   riskFlags: string[];
+  policyChecks: Array<{
+    code: string;
+    message: string;
+  }>;
   state: 'pending' | 'approved' | 'rejected' | 'expired' | 'signed';
 };
 
@@ -722,6 +726,14 @@ export function App() {
                         <div>
                           <dt>Risk flags</dt>
                           <dd>{entry.riskFlags.length > 0 ? entry.riskFlags.join(', ') : 'none'}</dd>
+                        </div>
+                        <div>
+                          <dt>Policy checks</dt>
+                          <dd>
+                            {entry.policyChecks.length > 0
+                              ? entry.policyChecks.map((check) => check.message).join(' | ')
+                              : 'pass'}
+                          </dd>
                         </div>
                       </dl>
                       <p className="meta-text">

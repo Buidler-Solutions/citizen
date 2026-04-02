@@ -758,6 +758,7 @@ async function serializePendingDappRequestsForUi() {
     createdAt: entry.envelope.createdAt,
     expiresAt: entry.envelope.expiresAt,
     riskFlags: entry.envelope.riskFlags,
+    policyChecks: entry.envelope.policyChecks,
     state: entry.state,
   }));
 }

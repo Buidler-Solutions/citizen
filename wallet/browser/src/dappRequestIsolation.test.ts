@@ -23,6 +23,7 @@ function fixtureEnvelope(): DappSigningRequestEnvelope {
     createdAt: '2026-02-01T10:00:00.000Z',
     expiresAt: '2026-02-01T10:05:00.000Z',
     riskFlags: [],
+    policyChecks: [],
   };
 }
 
