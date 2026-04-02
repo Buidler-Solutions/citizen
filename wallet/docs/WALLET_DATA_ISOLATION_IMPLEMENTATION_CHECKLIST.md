@@ -89,7 +89,7 @@ This checklist translates the current flow and known gaps into concrete implemen
 
 - [x] Keep raw form PII out of extension long-term storage by default.
 - [x] Store only minimal signed artifacts required for receipt/audit.
-- [ ] Encrypt sensitive local state at rest (where platform APIs allow).
+- [x] Encrypt sensitive local state at rest (where platform APIs allow).
 - [x] Add deterministic retention windows and secure deletion job.
 
 ### C2) Cryptographic and policy guarantees
