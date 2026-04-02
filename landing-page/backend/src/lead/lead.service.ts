@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
 import { unlink } from 'fs/promises';
 import { createHash, createPublicKey, randomUUID, verify } from 'crypto';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -30,6 +30,11 @@ const DEFAULT_CAMPAIGN_CARDS = [
     body: 'We reduce record fraud, strengthen governance transparency, and improve institutional trust across agencies.',
   },
 ];
+
+
+const DEFAULT_RELAY_MAX_ATTEMPTS = 3;
+const DEFAULT_RELAY_RETRY_BACKOFF_MS = 250;
+const MAX_RELAY_RETRY_BACKOFF_MS = 5000;
 
 const DEFAULT_ROLE_OPTIONS = [
   {
@@ -258,31 +263,100 @@ export class LeadService {
       },
     };
 
-    const startedAt = Date.now();
-    const response = await fetch(relayUrl.toString(), {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        'x-request-trace-id': relayTraceId,
-      },
-      body: JSON.stringify(relayPayload),
-    });
-    const latencyMs = Date.now() - startedAt;
+    const retryPolicy = this.getRelayRetryPolicy();
 
-    if (!response.ok) {
-      this.logger.warn(
-        `Relay rejected signed onboarding payload trace_id=${relayTraceId} `
-        + `status=${response.status} latency_ms=${latencyMs} payload_hash=${payload.walletPayloadHash}`,
+    for (let attempt = 1; attempt <= retryPolicy.maxAttempts; attempt += 1) {
+      const startedAt = Date.now();
+      try {
+        const response = await fetch(relayUrl.toString(), {
+          method: 'POST',
+          headers: {
+            'content-type': 'application/json',
+            'x-request-trace-id': relayTraceId,
+            'x-idempotency-key': relayDeduplicationKey,
+          },
+          body: JSON.stringify(relayPayload),
+        });
+        const latencyMs = Date.now() - startedAt;
+
+        if (response.ok) {
+          this.logger.log(
+            `Relay accepted signed onboarding payload trace_id=${relayTraceId} `
+            + `status=${response.status} latency_ms=${latencyMs} payload_hash=${payload.walletPayloadHash} `
+            + `attempt=${attempt} deduplication_key=${relayDeduplicationKey}`,
+          );
+          return;
+        }
+
+        const retryableStatus = response.status >= 500 || response.status === 429;
+        const finalAttempt = attempt >= retryPolicy.maxAttempts;
+
+        this.logger.warn(
+          `Relay rejected signed onboarding payload trace_id=${relayTraceId} `
+          + `status=${response.status} latency_ms=${latencyMs} payload_hash=${payload.walletPayloadHash} `
+          + `attempt=${attempt} retryable=${retryableStatus} deduplication_key=${relayDeduplicationKey}`,
+        );
+
+        if (!retryableStatus || finalAttempt) {
+          throw new BadRequestException(
+            `Citizen network relay rejected signed onboarding payload (trace_id=${relayTraceId}, status=${response.status}).`,
+          );
+        }
+      } catch (error) {
+        const latencyMs = Date.now() - startedAt;
+        const finalAttempt = attempt >= retryPolicy.maxAttempts;
+
+        if (error instanceof BadRequestException) {
+          throw error;
+        }
+
+        this.logger.warn(
+          `Relay request failed trace_id=${relayTraceId} payload_hash=${payload.walletPayloadHash} `
+          + `attempt=${attempt} latency_ms=${latencyMs} error=${this.toErrorMessage(error)} `
+          + `deduplication_key=${relayDeduplicationKey}`,
+        );
+
+        if (finalAttempt) {
+          throw new ServiceUnavailableException(
+            `Citizen network relay unavailable for signed onboarding payload (trace_id=${relayTraceId}).`,
+          );
+        }
+      }
+
+      const backoffMs = Math.min(
+        retryPolicy.retryBackoffMs * 2 ** (attempt - 1),
+        MAX_RELAY_RETRY_BACKOFF_MS,
       );
-      throw new BadRequestException(
-        `Citizen network relay rejected signed onboarding payload (trace_id=${relayTraceId}, status=${response.status}).`,
-      );
+      await this.delay(backoffMs);
     }
+  }
 
-    this.logger.log(
-      `Relay accepted signed onboarding payload trace_id=${relayTraceId} `
-      + `status=${response.status} latency_ms=${latencyMs} payload_hash=${payload.walletPayloadHash}`,
-    );
+  private getRelayRetryPolicy(): { maxAttempts: number; retryBackoffMs: number } {
+    const maxAttemptsRaw = process.env.CITIZEN_SIGNED_SUBMISSION_RELAY_MAX_ATTEMPTS;
+    const retryBackoffRaw = process.env.CITIZEN_SIGNED_SUBMISSION_RELAY_RETRY_BACKOFF_MS;
+
+    const maxAttempts = Number.parseInt(maxAttemptsRaw ?? `${DEFAULT_RELAY_MAX_ATTEMPTS}`, 10);
+    const retryBackoffMs = Number.parseInt(retryBackoffRaw ?? `${DEFAULT_RELAY_RETRY_BACKOFF_MS}`, 10);
+
+    return {
+      maxAttempts: Number.isFinite(maxAttempts) && maxAttempts > 0 ? maxAttempts : DEFAULT_RELAY_MAX_ATTEMPTS,
+      retryBackoffMs: Number.isFinite(retryBackoffMs) && retryBackoffMs >= 0
+        ? retryBackoffMs
+        : DEFAULT_RELAY_RETRY_BACKOFF_MS,
+    };
+  }
+
+  private toErrorMessage(error: unknown): string {
+    if (error instanceof Error) {
+      return error.message;
+    }
+    return String(error);
+  }
+
+  private async delay(ms: number): Promise<void> {
+    await new Promise((resolve) => {
+      setTimeout(resolve, ms);
+    });
   }
 
   private assertRelayMetadata(payload: CreateLeadDto): void {

@@ -73,7 +73,7 @@ This checklist translates the current flow and known gaps into concrete implemen
   - [x] request trace ID
   - [x] signed payload hash
   - [x] upstream status code / latency
-- [ ] Add retry policy + deduplication key strategy.
+- [x] Add retry policy + deduplication key strategy.
 
 ### B3) If adopting Model 2, implement wallet-side submit pipeline
 
