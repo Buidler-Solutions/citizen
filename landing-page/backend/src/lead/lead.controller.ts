@@ -33,6 +33,11 @@ export class LeadController {
     return this.leadService.getFormSettings();
   }
 
+  @Get('signed-submission-contract')
+  getSignedSubmissionContract() {
+    return this.leadService.getSignedSubmissionContract();
+  }
+
   @Get('asciinema-recordings/public')
   getAsciinemaPublicMap() {
     return this.leadService.getAsciinemaShortcodeMap();

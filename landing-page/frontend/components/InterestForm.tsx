@@ -37,6 +37,15 @@ interface PublicFormSettings {
   campaignCards: CampaignCard[];
 }
 
+interface SignedSubmissionContract {
+  submitModel: 'frontend_signed_backend_relay';
+  relayMode: 'database_only' | 'database_plus_network_relay' | 'invalid_relay_configuration';
+  consent: {
+    backendPersistence: string;
+    networkRelay: string;
+  };
+}
+
 const ISO_COUNTRY_CODES = [
   'AD', 'AE', 'AF', 'AG', 'AI', 'AL', 'AM', 'AO', 'AR', 'AS', 'AT', 'AU', 'AW', 'AX', 'AZ', 'BA', 'BB', 'BD',
   'BE', 'BF', 'BG', 'BH', 'BI', 'BJ', 'BL', 'BM', 'BN', 'BO', 'BQ', 'BR', 'BS', 'BT', 'BV', 'BW', 'BY', 'BZ',
@@ -310,6 +319,7 @@ export function InterestForm() {
   const [isAsciinemaOpen, setIsAsciinemaOpen] = useState(false);
   const [signedSubmission, setSignedSubmission] = useState<SignedSubmissionEnvelope | null>(null);
   const [shortcodeMap, setShortcodeMap] = useState<Record<string, string>>({});
+  const [signedSubmissionContract, setSignedSubmissionContract] = useState<SignedSubmissionContract | null>(null);
   const stageContainerRef = useRef<HTMLElement | null>(null);
   const stageContentRef = useRef<HTMLElement | null>(null);
   const setStageContainerRef = (node: HTMLElement | null) => {
@@ -384,6 +394,21 @@ export function InterestForm() {
     };
 
     void loadAsciinemaRecordings();
+  }, []);
+
+  useEffect(() => {
+    const loadSignedSubmissionContract = async () => {
+      try {
+        const response = await fetch(`${API_URL}/interest/signed-submission-contract`);
+        if (!response.ok) return;
+        const contract = (await response.json()) as SignedSubmissionContract;
+        setSignedSubmissionContract(contract);
+      } catch {
+        // Keep defaults if contract endpoint is unavailable
+      }
+    };
+
+    void loadSignedSubmissionContract();
   }, []);
 
   const introSlides = useMemo(() => settings.campaignCards
@@ -875,6 +900,19 @@ export function InterestForm() {
                   : 'Continue'}
             </button>
           </div>
+          {stepIndex === totalSteps - 1 ? (
+            <div data-stage-item className="rounded-xl border border-cyan-300/40 bg-cyan-500/10 p-4 text-sm text-cyan-100">
+              <p className="m-0 font-semibold">Submission consent</p>
+              <p className="mb-2 mt-1">
+                {signedSubmissionContract?.consent.backendPersistence
+                  ?? 'The onboarding payload and wallet signature metadata are persisted by the onboarding backend.'}
+              </p>
+              <p className="m-0">
+                {signedSubmissionContract?.consent.networkRelay
+                  ?? 'Citizen relay behavior is determined by backend configuration and enforced server-side.'}
+              </p>
+            </div>
+          ) : null}
         </>
       )}
 
