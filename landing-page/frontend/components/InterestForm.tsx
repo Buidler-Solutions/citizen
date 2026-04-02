@@ -114,6 +114,10 @@ type SignedSubmissionEnvelope = {
   walletSignatureScope: 'payload_hash_v1' | 'canonical_payload_v1';
 };
 
+type SubmissionCreateResponse = {
+  walletPayloadHash?: string;
+};
+
 const normalizeShortcodeToken = (token: string): string => token
   .trim()
   .toLowerCase()
@@ -318,6 +322,7 @@ export function InterestForm() {
   const [submittedRole, setSubmittedRole] = useState<string | null>(null);
   const [isAsciinemaOpen, setIsAsciinemaOpen] = useState(false);
   const [signedSubmission, setSignedSubmission] = useState<SignedSubmissionEnvelope | null>(null);
+  const [submissionReceiptHash, setSubmissionReceiptHash] = useState<string | null>(null);
   const [shortcodeMap, setShortcodeMap] = useState<Record<string, string>>({});
   const [signedSubmissionContract, setSignedSubmissionContract] = useState<SignedSubmissionContract | null>(null);
   const stageContainerRef = useRef<HTMLElement | null>(null);
@@ -552,10 +557,10 @@ export function InterestForm() {
     missionNeed: formValues.missionNeed.trim(),
   });
 
-  const signSubmission = async () => {
+  const signSubmission = async (): Promise<SignedSubmissionEnvelope | null> => {
     if (!roleId) {
       setStatus('Please choose a role to continue.');
-      return false;
+      return null;
     }
 
     const payload = buildPayload();
@@ -576,7 +581,7 @@ export function InterestForm() {
       const provider = providerCandidate.citizen ?? providerCandidate.ctzn;
       if (!provider || typeof provider.request !== 'function') {
         setStatus('Citizen wallet extension not detected. Install/unlock wallet to submit securely.');
-        return false;
+        return null;
       }
 
       const signResult = await provider.request({
@@ -594,10 +599,10 @@ export function InterestForm() {
         || !HASH_FORMAT.test(signResult.payloadHash)
       ) {
         setStatus('Wallet signing response was invalid. Please retry and approve the signature request.');
-        return false;
+        return null;
       }
 
-      setSignedSubmission({
+      const signedEnvelope: SignedSubmissionEnvelope = {
         payload,
         walletSignerDid: signResult.signer,
         walletVerifyingKey: signResult.verifyingKey,
@@ -606,12 +611,14 @@ export function InterestForm() {
         walletSigningPayload: signResult.signingPayload,
         walletAlgorithm: signResult.algorithm ?? 'ed25519',
         walletSignatureScope: signResult.signatureScope === 'canonical_payload_v1' ? 'canonical_payload_v1' : 'payload_hash_v1',
-      });
-      setStatus('Submission signed. Click "Submit signed form" to finalize.');
-      return true;
+      };
+
+      setSignedSubmission(signedEnvelope);
+      setStatus('Submission signed. Continuing secure submit to backend relay...');
+      return signedEnvelope;
     } catch {
       setStatus('Wallet signing failed. Please retry and approve signature in extension.');
-      return false;
+      return null;
     } finally {
       setLoading(false);
     }
@@ -624,15 +631,16 @@ export function InterestForm() {
     }
 
     const latestPayload = buildPayload();
-    if (!signedSubmission) {
-      const signed = await signSubmission();
-      if (!signed) {
+    let envelopeToSubmit = signedSubmission;
+    if (!envelopeToSubmit) {
+      const newlySigned = await signSubmission();
+      if (!newlySigned) {
         return;
       }
-      return;
+      envelopeToSubmit = newlySigned;
     }
 
-    const payloadChangedSinceSign = JSON.stringify(latestPayload) !== JSON.stringify(signedSubmission.payload);
+    const payloadChangedSinceSign = JSON.stringify(latestPayload) !== JSON.stringify(envelopeToSubmit.payload);
     if (payloadChangedSinceSign) {
       setSignedSubmission(null);
       setStatus('Form changed after signing. Please sign again before submitting.');
@@ -645,14 +653,14 @@ export function InterestForm() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          ...signedSubmission.payload,
-          walletSignerDid: signedSubmission.walletSignerDid,
-          walletVerifyingKey: signedSubmission.walletVerifyingKey,
-          walletSignature: signedSubmission.walletSignature,
-          walletPayloadHash: signedSubmission.walletPayloadHash,
-          walletSigningPayload: signedSubmission.walletSigningPayload,
-          walletAlgorithm: signedSubmission.walletAlgorithm,
-          walletSignatureScope: signedSubmission.walletSignatureScope,
+          ...envelopeToSubmit.payload,
+          walletSignerDid: envelopeToSubmit.walletSignerDid,
+          walletVerifyingKey: envelopeToSubmit.walletVerifyingKey,
+          walletSignature: envelopeToSubmit.walletSignature,
+          walletPayloadHash: envelopeToSubmit.walletPayloadHash,
+          walletSigningPayload: envelopeToSubmit.walletSigningPayload,
+          walletAlgorithm: envelopeToSubmit.walletAlgorithm,
+          walletSignatureScope: envelopeToSubmit.walletSignatureScope,
         }),
       });
       if (!response.ok) {
@@ -668,12 +676,15 @@ export function InterestForm() {
         }
         throw new Error('Submission failed');
       }
+      const submitted = await response.json().catch(() => null) as SubmissionCreateResponse | null;
+      const receiptHash = submitted?.walletPayloadHash ?? envelopeToSubmit.walletPayloadHash;
 
       const selectedRole = selectedRoleOption?.label ?? roleId;
       const thankYouMessage = selectedRoleOption?.thankYouNote ?? '';
 
       setSubmittedThankYouNote(thankYouMessage);
       setSubmittedRole(selectedRole);
+      setSubmissionReceiptHash(receiptHash);
       setStatus('');
       setRoleId(null);
       setSignedSubmission(null);
@@ -752,6 +763,11 @@ export function InterestForm() {
         <p className="m-0 text-cyan-300">Submission received</p>
         <h2 className="font-display m-0 text-[clamp(2rem,3.4vw,3.4rem)] leading-[1.15]">Thank you for interest on Testnet as {submittedRole ?? 'a participant'}.</h2>
         <p className="m-0 mx-auto text-[clamp(1.12rem,2.2vw,1.5rem)] leading-[1.7] text-blue-100">{submittedThankYouNote}</p>
+        {submissionReceiptHash ? (
+          <p className="m-0 text-sm text-cyan-200">
+            Commitment receipt hash: <code>{submissionReceiptHash}</code>
+          </p>
+        ) : null}
       </section>
     );
   }
@@ -896,7 +912,7 @@ export function InterestForm() {
               {loading
                 ? 'Processing...'
                 : stepIndex === totalSteps - 1
-                  ? (signedSubmission ? 'Submit signed form' : 'Sign submission')
+                  ? (signedSubmission ? 'Submit signed form' : 'Sign & submit')
                   : 'Continue'}
             </button>
           </div>
