@@ -54,4 +54,51 @@ describe('createDappSigningRequestEnvelope', () => {
     expect(envelope.riskFlags).toContain('unknown_origin');
     expect(envelope.riskFlags).toContain('unsupported_fields');
   });
+
+  it('produces identical canonical payload and hash for equivalent object key ordering', async () => {
+    const now = new Date('2026-01-02T03:04:05.000Z');
+    const [a, b] = await Promise.all([
+      createDappSigningRequestEnvelope({
+        origin: 'https://demo.citizen.local',
+        payload: {
+          operation: 'submit',
+          namespace: 'citizen.kyc',
+          metadata: { z: 2, a: 1 },
+        },
+        now,
+      }),
+      createDappSigningRequestEnvelope({
+        origin: 'https://demo.citizen.local',
+        payload: {
+          metadata: { a: 1, z: 2 },
+          namespace: 'citizen.kyc',
+          operation: 'submit',
+        },
+        now,
+      }),
+    ]);
+
+    expect(a.canonicalPayload).toBe(b.canonicalPayload);
+    expect(a.payloadHash).toBe(b.payloadHash);
+  });
+
+  it('flags large payloads and stale requests', async () => {
+    const largePayload = {
+      namespace: 'citizen.kyc',
+      operation: 'submit',
+      metadata: {
+        note: 'x'.repeat(70_000),
+      },
+    };
+    const staleEnvelope = await createDappSigningRequestEnvelope({
+      origin: 'https://demo.citizen.local',
+      payload: largePayload,
+      now: new Date('2026-01-02T03:04:05.000Z'),
+      ttlMs: 0,
+    });
+
+    expect(staleEnvelope.riskFlags).toContain('large_payload');
+    expect(staleEnvelope.riskFlags).toContain('stale_request');
+    expect(staleEnvelope.createdAt).toBe(staleEnvelope.expiresAt);
+  });
 });

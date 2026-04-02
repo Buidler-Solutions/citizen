@@ -28,6 +28,7 @@ type DappSigningEnvelopeInput = {
   tabUrl?: string | null;
   payload: unknown;
   now?: Date;
+  ttlMs?: number;
 };
 
 function isObjectRecord(value: unknown): value is Record<string, unknown> {
@@ -68,8 +69,9 @@ export async function createDappSigningRequestEnvelope(
   input: DappSigningEnvelopeInput,
 ): Promise<DappSigningRequestEnvelope> {
   const now = input.now ?? new Date();
+  const ttlMs = Number.isFinite(input.ttlMs) ? Math.max(0, Math.floor(input.ttlMs ?? DEFAULT_TTL_MS)) : DEFAULT_TTL_MS;
   const createdAt = now.toISOString();
-  const expiresAt = new Date(now.getTime() + DEFAULT_TTL_MS).toISOString();
+  const expiresAt = new Date(now.getTime() + ttlMs).toISOString();
   const canonicalPayload = typeof input.payload === 'string' ? input.payload : canonicalJson(input.payload);
   const payloadHash = await sha256DigestHex(canonicalPayload);
 

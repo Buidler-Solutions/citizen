@@ -59,10 +59,10 @@ This checklist translates the current flow and known gaps into concrete implemen
 
 ### B1) Choose target submission architecture
 
-- [ ] Decide and document one of two supported models:
-  - [ ] **Model 1 (current + hardened):** dApp frontend submits signed payload to backend; backend relays to network conditionally.
+- [x] Decide and document one of two supported models:
+  - [x] **Model 1 (current + hardened):** dApp frontend submits signed payload to backend; backend relays to network conditionally.
   - [ ] **Model 2 (wallet-mediated):** wallet extension submits signed payload directly to configured Citizen runtime and/or builder endpoint.
-- [ ] Document trust boundaries, custody boundaries, and failure domains for chosen model.
+- [x] Document trust boundaries, custody boundaries, and failure domains for chosen model.
 
 ### B2) If staying on Model 1, harden backend relay path
 
@@ -144,7 +144,7 @@ This checklist translates the current flow and known gaps into concrete implemen
 2. [ ] A2 approval UI + approve/reject actions.
 3. [ ] A3 lifecycle security controls.
 4. [ ] A4 handshake/error-code updates.
-5. [ ] B1 architecture decision record.
+5. [x] B1 architecture decision record.
 6. [ ] B2 or B3 implementation (based on B1).
 7. [ ] C1–C3 isolation controls.
 8. [ ] D1–D3 testing, staged rollout, and monitoring.
