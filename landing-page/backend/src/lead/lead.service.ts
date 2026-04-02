@@ -205,7 +205,7 @@ export class LeadService {
     payload: CreateLeadDto,
     normalizedRole: string,
   ): Promise<void> {
-    const relayUrl = process.env.CITIZEN_SIGNED_SUBMISSION_RELAY_URL?.trim();
+    const relayUrl = this.getValidatedRelayUrl();
     if (!relayUrl) {
       return;
     }
@@ -247,7 +247,7 @@ export class LeadService {
       },
     };
 
-    const response = await fetch(relayUrl, {
+    const response = await fetch(relayUrl.toString(), {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(relayPayload),
@@ -256,6 +256,31 @@ export class LeadService {
     if (!response.ok) {
       throw new BadRequestException('Citizen network relay rejected signed onboarding payload.');
     }
+  }
+
+  private getValidatedRelayUrl(): URL | null {
+    const relayUrlRaw = process.env.CITIZEN_SIGNED_SUBMISSION_RELAY_URL?.trim();
+    if (!relayUrlRaw) {
+      return null;
+    }
+
+    let relayUrl: URL;
+    try {
+      relayUrl = new URL(relayUrlRaw);
+    } catch {
+      throw new BadRequestException('CITIZEN_SIGNED_SUBMISSION_RELAY_URL must be a valid absolute URL.');
+    }
+
+    if (!['http:', 'https:'].includes(relayUrl.protocol)) {
+      throw new BadRequestException('CITIZEN_SIGNED_SUBMISSION_RELAY_URL must use http or https.');
+    }
+
+    if (!relayUrl.hostname) {
+      throw new BadRequestException('CITIZEN_SIGNED_SUBMISSION_RELAY_URL must include a hostname.');
+    }
+
+    relayUrl.hash = '';
+    return relayUrl;
   }
 
   private normalizeRole(role: string, formSettings: FormSettings): string {
