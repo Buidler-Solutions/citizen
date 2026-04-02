@@ -110,3 +110,13 @@ Production policy:
 - Do **not** use default secrets.
 - Use at least 32+ characters per signing secret.
 - Rotate keys by prepending a new `kid:secret` to `AUTH_SESSION_SECRETS` while retaining previous key(s) for verification grace period.
+
+## Wallet backend + on-chain/off-chain data handling
+
+For wallet-tech-stack integrations (extension + onboarding dApp + backend relay + Citizen runtime):
+
+- Verify wallet signatures server-side before any persistence or relay.
+- Treat `payloadHash` (`sha256:<hex>`) + signer metadata as the **on-chain commitment surface**.
+- Keep raw onboarding/user PII in controlled backend storage as **off-chain records**.
+- Relay only commitment metadata and policy-required fields to Citizen network endpoints; do not relay full PII payloads by default.
+- Preserve signature-preimage scope (`payload_hash_v1` vs `canonical_payload_v1`) through API contracts so verification is deterministic across wallet extension, SDK, and backend services.

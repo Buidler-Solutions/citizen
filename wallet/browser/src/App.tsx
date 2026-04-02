@@ -34,6 +34,23 @@ type VaultWallet = {
   isActive: boolean;
 };
 
+type PendingDappRequest = {
+  requestId: string;
+  origin: {
+    origin: string;
+    tabUrl: string | null;
+  };
+  method: 'ctzn_signCitizenTx';
+  payload: {
+    canonicalJson: string;
+    hash: string;
+  };
+  createdAt: string;
+  expiresAt: string;
+  riskFlags: string[];
+  state: 'pending' | 'approved' | 'rejected' | 'expired' | 'signed';
+};
+
 type ProfileDetails = {
   fullName: string;
   email: string;
@@ -102,6 +119,8 @@ export function App() {
   const [hasStoredWallet, setHasStoredWallet] = useState(false);
   const [activity, setActivity] = useState<ActivityEntry[]>([]);
   const [vaultWallets, setVaultWallets] = useState<VaultWallet[]>([]);
+  const [pendingDappRequests, setPendingDappRequests] = useState<PendingDappRequest[]>([]);
+  const [showRawPayloadByRequest, setShowRawPayloadByRequest] = useState<Record<string, boolean>>({});
   const [profile, setProfile] = useState<ProfileDetails>({
     fullName: '',
     email: '',
@@ -188,6 +207,11 @@ export function App() {
       const vaultResponse = await callWallet('wallet_listVault');
       if (vaultResponse.ok && Array.isArray(vaultResponse.result)) {
         setVaultWallets(vaultResponse.result as VaultWallet[]);
+      }
+
+      const pendingResponse = await callWallet('wallet_getPendingDappRequests');
+      if (pendingResponse.ok && Array.isArray(pendingResponse.result)) {
+        setPendingDappRequests(pendingResponse.result as PendingDappRequest[]);
       }
 
       if (!hasWallet || !isUnlocked) {
@@ -431,6 +455,18 @@ export function App() {
   const saveProfile = async () => {
     await chrome.storage.local.set({ [PROFILE_KEY]: profile });
     setStatus('Profile details saved locally by user choice.');
+  };
+
+  const handleApproveDappRequest = async (requestId: string) => {
+    const response = await callWallet('wallet_approveDappRequest', [requestId]);
+    setStatus(response.ok ? 'Request approved and ready for signing.' : response.error ?? 'Unable to approve request.');
+    await refreshState();
+  };
+
+  const handleRejectDappRequest = async (requestId: string) => {
+    const response = await callWallet('wallet_rejectDappRequest', [requestId]);
+    setStatus(response.ok ? 'Request rejected.' : response.error ?? 'Unable to reject request.');
+    await refreshState();
   };
 
   const handleCopyWalletAddress = async () => {
@@ -781,6 +817,66 @@ export function App() {
                 </label>
                 <button className="primary" onClick={saveProfile}>Save profile</button>
               </div>
+            </article>
+          ) : null}
+
+          {pendingDappRequests.some((entry) => entry.state === 'pending') ? (
+            <article className="request-card">
+              <h2>Pending request</h2>
+              {pendingDappRequests
+                .filter((entry) => entry.state === 'pending')
+                .map((entry) => (
+                  <div key={entry.requestId} className="pending-request">
+                    <dl>
+                      <div>
+                        <dt>Origin</dt>
+                        <dd>{entry.origin.origin}</dd>
+                      </div>
+                      <div>
+                        <dt>URL</dt>
+                        <dd>{entry.origin.tabUrl ?? 'Unavailable'}</dd>
+                      </div>
+                      <div>
+                        <dt>Method</dt>
+                        <dd>{entry.method}</dd>
+                      </div>
+                      <div>
+                        <dt>Requested</dt>
+                        <dd>{new Date(entry.createdAt).toLocaleString()}</dd>
+                      </div>
+                      <div>
+                        <dt>Expires</dt>
+                        <dd>{new Date(entry.expiresAt).toLocaleString()}</dd>
+                      </div>
+                      <div>
+                        <dt>Payload hash</dt>
+                        <dd>{mask(entry.payload.hash)}</dd>
+                      </div>
+                      <div>
+                        <dt>Risk flags</dt>
+                        <dd>{entry.riskFlags.length > 0 ? entry.riskFlags.join(', ') : 'none'}</dd>
+                      </div>
+                    </dl>
+                    <p className="meta-text">
+                      What will be shared: only the canonical payload hash and signature are returned to this dApp.
+                    </p>
+                    <div className="button-row">
+                      <button className="primary" onClick={() => handleApproveDappRequest(entry.requestId)}>
+                        Approve and sign
+                      </button>
+                      <button className="ghost" onClick={() => handleRejectDappRequest(entry.requestId)}>
+                        Reject
+                      </button>
+                      <button
+                        className="ghost"
+                        onClick={() => setShowRawPayloadByRequest((current) => ({ ...current, [entry.requestId]: !current[entry.requestId] }))}
+                      >
+                        {showRawPayloadByRequest[entry.requestId] ? 'Hide raw payload' : 'Show raw payload'}
+                      </button>
+                    </div>
+                    {showRawPayloadByRequest[entry.requestId] ? <pre className="raw-payload">{entry.payload.canonicalJson}</pre> : null}
+                  </div>
+                ))}
             </article>
           ) : null}
 

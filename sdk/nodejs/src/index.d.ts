@@ -47,6 +47,7 @@ export type CitizenPayloadSignature = {
   signingPayload: string;
   payloadHash: string;
   payloadHashHex: string;
+  signatureScope: 'payload_hash_v1' | 'canonical_payload_v1';
 };
 
 export type BuilderCreditMultisigProof = {

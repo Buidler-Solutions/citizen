@@ -107,7 +107,8 @@ export async function signCitizenPayloadWithWallet({ payload, provider } = {}) {
     algorithm: signingResult.algorithm ?? "ed25519",
     signingPayload: signingResult.signingPayload,
     payloadHash,
-    payloadHashHex: signingResult.payloadHashHex ?? payloadHash.replace("sha256:", "")
+    payloadHashHex: signingResult.payloadHashHex ?? payloadHash.replace("sha256:", ""),
+    signatureScope: signingResult.signatureScope === "canonical_payload_v1" ? "canonical_payload_v1" : "payload_hash_v1"
   };
 }
 

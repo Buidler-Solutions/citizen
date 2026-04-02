@@ -162,8 +162,15 @@ export class LeadService {
       throw new BadRequestException('walletSignerDid does not match walletVerifyingKey.');
     }
 
-    if (!this.verifyWalletSignature(payload.walletVerifyingKey, payload.walletSigningPayload, payload.walletSignature)) {
-      throw new BadRequestException('walletSignature verification failed for walletSigningPayload.');
+    const signatureScope = payload.walletSignatureScope === 'canonical_payload_v1'
+      ? 'canonical_payload_v1'
+      : 'payload_hash_v1';
+    const signatureMessage = signatureScope === 'canonical_payload_v1'
+      ? payload.walletSigningPayload
+      : payload.walletPayloadHash;
+
+    if (!this.verifyWalletSignature(payload.walletVerifyingKey, signatureMessage, payload.walletSignature)) {
+      throw new BadRequestException(`walletSignature verification failed for ${signatureScope}.`);
     }
   }
 
@@ -203,6 +210,10 @@ export class LeadService {
       return;
     }
 
+    const signatureScope = payload.walletSignatureScope === 'canonical_payload_v1'
+      ? 'canonical_payload_v1'
+      : 'payload_hash_v1';
+
     const relayPayload = {
       namespace: 'onboarding.interest',
       action: 'SUBMIT_ONBOARDING_INTEREST',
@@ -218,6 +229,21 @@ export class LeadService {
         signature: payload.walletSignature,
         payload_hash: payload.walletPayloadHash,
         algorithm: payload.walletAlgorithm.toLowerCase(),
+        signature_scope: signatureScope,
+      },
+      data_custody: {
+        on_chain_commitment: {
+          payload_hash: payload.walletPayloadHash,
+          signer: payload.walletSignerDid,
+          verifying_key: payload.walletVerifyingKey,
+          signature_scope: signatureScope,
+        },
+        off_chain_record: {
+          system: 'landing-page-backend',
+          table: 'interest_submissions',
+          contains_pii: true,
+          fields: ['fullName', 'institution', 'email', 'country', 'role', 'missionNeed'],
+        },
       },
     };
 

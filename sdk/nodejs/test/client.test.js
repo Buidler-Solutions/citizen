@@ -60,7 +60,8 @@ test("signCitizenPayloadWithWallet uses Citizen extension methods and returns ru
         return {
           did: "did:key:ed25519:abcd",
           verifyingKey: "abcd",
-          algorithm: "ed25519"
+          algorithm: "ed25519",
+          signatureScope: "payload_hash_v1"
         };
       }
 
@@ -72,7 +73,8 @@ test("signCitizenPayloadWithWallet uses Citizen extension methods and returns ru
           signingPayload: '{"a":1}',
           payloadHash: "sha256:1234",
           payloadHashHex: "1234",
-          algorithm: "ed25519"
+          algorithm: "ed25519",
+          signatureScope: "payload_hash_v1"
         };
       }
 
@@ -88,6 +90,7 @@ test("signCitizenPayloadWithWallet uses Citizen extension methods and returns ru
   assert.equal(result.signer, "did:key:ed25519:abcd");
   assert.equal(result.payloadHash, "sha256:1234");
   assert.equal(result.signature, "deadbeef");
+  assert.equal(result.signatureScope, "payload_hash_v1");
   assert.equal(providerCalls[0].method, "ctzn_getCitizenSigner");
   assert.equal(providerCalls[1].method, "ctzn_signCitizenTx");
 });

@@ -1,4 +1,4 @@
-import { IsEmail, IsNotEmpty, IsString, Matches, MaxLength, MinLength } from 'class-validator';
+import { IsEmail, IsIn, IsNotEmpty, IsOptional, IsString, Matches, MaxLength, MinLength } from 'class-validator';
 
 export class CreateLeadDto {
   @IsString()
@@ -54,4 +54,8 @@ export class CreateLeadDto {
   @IsString()
   @Matches(/^ed25519$/i)
   walletAlgorithm!: string;
+  @IsOptional()
+  @IsIn(['payload_hash_v1', 'canonical_payload_v1'])
+  walletSignatureScope?: 'payload_hash_v1' | 'canonical_payload_v1';
 }
+
