@@ -11,7 +11,8 @@ import {
   CitizenNodeClient,
   canonicalizeJson,
   createMultisigCreditGrant,
-  createSponsorshipUsage
+  createSponsorshipUsage,
+  signCitizenPayloadWithWallet
 } from "../src/index.js";
 
 class StubSigner {
@@ -48,6 +49,48 @@ test("canonicalizeJson sorts keys recursively", () => {
   assert.equal(output, '{"a":{"c":1,"d":2},"z":1}');
 });
 
+
+
+test("signCitizenPayloadWithWallet uses Citizen extension methods and returns runtime commitment envelope", async () => {
+  const providerCalls = [];
+  const provider = {
+    async request({ method, params }) {
+      providerCalls.push({ method, params });
+      if (method === "ctzn_getCitizenSigner") {
+        return {
+          did: "did:key:ed25519:abcd",
+          verifyingKey: "abcd",
+          algorithm: "ed25519"
+        };
+      }
+
+      if (method === "ctzn_signCitizenTx") {
+        return {
+          signer: "did:key:ed25519:abcd",
+          verifyingKey: "abcd",
+          signature: "deadbeef",
+          signingPayload: '{"a":1}',
+          payloadHash: "sha256:1234",
+          payloadHashHex: "1234",
+          algorithm: "ed25519"
+        };
+      }
+
+      throw new Error(`unexpected method ${method}`);
+    }
+  };
+
+  const result = await signCitizenPayloadWithWallet({
+    payload: { a: 1 },
+    provider
+  });
+
+  assert.equal(result.signer, "did:key:ed25519:abcd");
+  assert.equal(result.payloadHash, "sha256:1234");
+  assert.equal(result.signature, "deadbeef");
+  assert.equal(providerCalls[0].method, "ctzn_getCitizenSigner");
+  assert.equal(providerCalls[1].method, "ctzn_signCitizenTx");
+});
 test("submitTransaction builds signed envelope and posts to runtime", async () => {
   let capturedRequest;
   const fetchImpl = async (url, init) => {

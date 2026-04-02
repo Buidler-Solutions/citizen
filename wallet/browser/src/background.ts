@@ -1,4 +1,5 @@
 import { HDNodeWallet, Wallet } from 'ethers';
+import { canonicalJson, sha256DigestHex } from './canonical';
 
 type WalletRequest = {
   method: string;
@@ -433,24 +434,6 @@ function toHex(bytes: ArrayBuffer | Uint8Array): string {
     .join('');
 }
 
-function normalizeJsonValue(value: unknown): unknown {
-  if (Array.isArray(value)) {
-    return value.map((item) => normalizeJsonValue(item));
-  }
-  if (value && typeof value === 'object') {
-    const input = value as Record<string, unknown>;
-    const entries = Object.keys(input)
-      .sort((left, right) => left.localeCompare(right))
-      .map((key) => [key, normalizeJsonValue(input[key])] as const);
-    return Object.fromEntries(entries);
-  }
-  return value;
-}
-
-function canonicalJson(value: unknown): string {
-  return JSON.stringify(normalizeJsonValue(value));
-}
-
 async function getOrCreateProtocolSigner(): Promise<StoredProtocolSigner> {
   const stored = await chrome.storage.local.get(PROTOCOL_SIGNER_KEY);
   const existing = stored[PROTOCOL_SIGNER_KEY];
@@ -491,6 +474,8 @@ async function getOrCreateProtocolSigner(): Promise<StoredProtocolSigner> {
 async function signCitizenPayload(rawPayload: unknown): Promise<WalletResponse> {
   const signer = await getOrCreateProtocolSigner();
   const canonicalPayload = typeof rawPayload === 'string' ? rawPayload : canonicalJson(rawPayload);
+  const payloadBytes = new TextEncoder().encode(canonicalPayload);
+  const payloadHash = await sha256DigestHex(payloadBytes);
   const privateKey = await crypto.subtle.importKey(
     'pkcs8',
     base64ToBytes(signer.pkcs8Base64),
@@ -501,7 +486,7 @@ async function signCitizenPayload(rawPayload: unknown): Promise<WalletResponse> 
   const signature = await crypto.subtle.sign(
     { name: 'Ed25519' },
     privateKey,
-    new TextEncoder().encode(canonicalPayload),
+    payloadBytes,
   );
 
   return {
@@ -511,6 +496,8 @@ async function signCitizenPayload(rawPayload: unknown): Promise<WalletResponse> 
       verifyingKey: signer.verifyingKeyHex,
       signature: toHex(signature),
       signingPayload: canonicalPayload,
+      payloadHash,
+      payloadHashHex: payloadHash.replace('sha256:', ''),
       algorithm: 'ed25519',
     },
   };

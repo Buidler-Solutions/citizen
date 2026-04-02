@@ -38,6 +38,17 @@ export type ReceiptEnvelope = {
   [key: string]: unknown;
 };
 
+
+export type CitizenPayloadSignature = {
+  signer: string;
+  verifyingKey: string;
+  signature: string;
+  algorithm: string;
+  signingPayload: string;
+  payloadHash: string;
+  payloadHashHex: string;
+};
+
 export type BuilderCreditMultisigProof = {
   approver: string;
   public_key: string;
@@ -67,6 +78,7 @@ export type BuilderCreditsOperation = {
 
 export function canonicalizeJson(value: unknown): string;
 export function sha256DigestHex(input: string | Uint8Array): Promise<string>;
+export function signCitizenPayloadWithWallet(args: { payload: unknown; provider?: WalletProvider }): Promise<CitizenPayloadSignature>;
 export function createMultisigCreditGrant(args: CreateMultisigCreditGrantRequest): BuilderCreditsOperation;
 export function createSponsorshipUsage(args: CreateSponsorshipUsageRequest): BuilderCreditsOperation;
 export function validateBuilderCreditsPayload(args: {

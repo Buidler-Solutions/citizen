@@ -71,6 +71,37 @@ const isValidEmail = (email: string) => {
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
 const ASCIINEMA_SHORTCODE_PATTERN = /\[asciinema:([a-zA-Z0-9_-]+)(?:\|([^\]]+))?\]/g;
+const HASH_FORMAT = /^sha256:[a-f0-9]{64}$/i;
+
+type WalletProvider = {
+  request: (args: { method: string; params?: unknown[] }) => Promise<unknown>;
+};
+
+type CitizenPayloadSignature = {
+  signer?: string;
+  verifyingKey?: string;
+  signature?: string;
+  payloadHash?: string;
+  signingPayload?: string;
+  algorithm?: string;
+};
+
+type SignedSubmissionEnvelope = {
+  payload: {
+    fullName: string;
+    institution: string;
+    email: string;
+    country: string;
+    role: string;
+    missionNeed: string;
+  };
+  walletSignerDid: string;
+  walletVerifyingKey: string;
+  walletSignature: string;
+  walletPayloadHash: string;
+  walletSigningPayload: string;
+  walletAlgorithm: string;
+};
 
 const normalizeShortcodeToken = (token: string): string => token
   .trim()
@@ -275,6 +306,7 @@ export function InterestForm() {
   const [submittedThankYouNote, setSubmittedThankYouNote] = useState('');
   const [submittedRole, setSubmittedRole] = useState<string | null>(null);
   const [isAsciinemaOpen, setIsAsciinemaOpen] = useState(false);
+  const [signedSubmission, setSignedSubmission] = useState<SignedSubmissionEnvelope | null>(null);
   const [shortcodeMap, setShortcodeMap] = useState<Record<string, string>>({});
   const stageContainerRef = useRef<HTMLElement | null>(null);
   const stageContentRef = useRef<HTMLElement | null>(null);
@@ -484,29 +516,125 @@ export function InterestForm() {
     setStepIndex((prev) => Math.max(prev - 1, 0));
   };
 
+  const buildPayload = () => ({
+    fullName: formValues.fullName.trim(),
+    institution: formValues.institution.trim(),
+    email: formValues.email.trim(),
+    country: formValues.country.trim(),
+    role: roleId ?? '',
+    missionNeed: formValues.missionNeed.trim(),
+  });
+
+  const signSubmission = async () => {
+    if (!roleId) {
+      setStatus('Please choose a role to continue.');
+      return false;
+    }
+
+    const payload = buildPayload();
+
+    const protocolSigningPayload = {
+      schema_version: '1.0.0',
+      namespace: 'onboarding.interest',
+      action: 'SUBMIT_ONBOARDING_INTEREST',
+      object_id: payload.email.toLowerCase(),
+      payload,
+      submitted_at: new Date().toISOString(),
+    };
+
+    try {
+      setLoading(true);
+      setStatus('Waiting for wallet signature approval...');
+      const providerCandidate = window as typeof window & { citizen?: WalletProvider; ctzn?: WalletProvider };
+      const provider = providerCandidate.citizen ?? providerCandidate.ctzn;
+      if (!provider || typeof provider.request !== 'function') {
+        setStatus('Citizen wallet extension not detected. Install/unlock wallet to submit securely.');
+        return false;
+      }
+
+      const signResult = await provider.request({
+        method: 'ctzn_signCitizenTx',
+        params: [protocolSigningPayload],
+      }) as CitizenPayloadSignature;
+
+      if (
+        !signResult
+        || typeof signResult.signer !== 'string'
+        || typeof signResult.verifyingKey !== 'string'
+        || typeof signResult.signature !== 'string'
+        || typeof signResult.signingPayload !== 'string'
+        || typeof signResult.payloadHash !== 'string'
+        || !HASH_FORMAT.test(signResult.payloadHash)
+      ) {
+        setStatus('Wallet signing response was invalid. Please retry and approve the signature request.');
+        return false;
+      }
+
+      setSignedSubmission({
+        payload,
+        walletSignerDid: signResult.signer,
+        walletVerifyingKey: signResult.verifyingKey,
+        walletSignature: signResult.signature,
+        walletPayloadHash: signResult.payloadHash,
+        walletSigningPayload: signResult.signingPayload,
+        walletAlgorithm: signResult.algorithm ?? 'ed25519',
+      });
+      setStatus('Submission signed. Click "Submit signed form" to finalize.');
+      return true;
+    } catch {
+      setStatus('Wallet signing failed. Please retry and approve signature in extension.');
+      return false;
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const submit = async () => {
     if (!roleId) {
       setStatus('Please choose a role to continue.');
       return;
     }
 
-    const payload = {
-      fullName: formValues.fullName.trim(),
-      institution: formValues.institution.trim(),
-      email: formValues.email.trim(),
-      country: formValues.country.trim(),
-      role: roleId,
-      missionNeed: formValues.missionNeed.trim(),
-    };
+    const latestPayload = buildPayload();
+    if (!signedSubmission) {
+      const signed = await signSubmission();
+      if (!signed) {
+        return;
+      }
+      return;
+    }
+
+    const payloadChangedSinceSign = JSON.stringify(latestPayload) !== JSON.stringify(signedSubmission.payload);
+    if (payloadChangedSinceSign) {
+      setSignedSubmission(null);
+      setStatus('Form changed after signing. Please sign again before submitting.');
+      return;
+    }
 
     try {
       setLoading(true);
       const response = await fetch(`${API_URL}/interest`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...signedSubmission.payload,
+          walletSignerDid: signedSubmission.walletSignerDid,
+          walletVerifyingKey: signedSubmission.walletVerifyingKey,
+          walletSignature: signedSubmission.walletSignature,
+          walletPayloadHash: signedSubmission.walletPayloadHash,
+          walletSigningPayload: signedSubmission.walletSigningPayload,
+          walletAlgorithm: signedSubmission.walletAlgorithm,
+        }),
       });
       if (!response.ok) {
         if (response.status === 409) {
           setStatus('This email already submitted the form. Please use a different email.');
+          return;
+        }
+        if (response.status === 400) {
+          const details = await response.json().catch(() => null) as { message?: string | string[] } | null;
+          const message = Array.isArray(details?.message) ? details?.message.join(', ') : details?.message;
+          setStatus(message || 'Submission rejected due to invalid signed payload.');
           return;
         }
         throw new Error('Submission failed');
@@ -519,6 +647,7 @@ export function InterestForm() {
       setSubmittedRole(selectedRole);
       setStatus('');
       setRoleId(null);
+      setSignedSubmission(null);
       setStepIndex(0);
       setMotionDirection('forward');
       setFormValues({ fullName: '', institution: '', email: '', country: '', missionNeed: '' });
@@ -701,6 +830,7 @@ export function InterestForm() {
                       className={`font-display w-full rounded-xl border bg-blue-950/90 p-4 text-left text-[1.05rem] ${roleId === option.id ? 'border-cyan-300 shadow-[0_0_0_1px_rgba(85,214,255,0.35)]' : 'border-blue-200/30'}`}
                       onClick={() => {
                         setRoleId(option.id);
+                        setSignedSubmission(null);
                         setStatus('');
                       }}
                     >
@@ -720,6 +850,7 @@ export function InterestForm() {
                   placeholder={currentStep.placeholder}
                   onChange={(event) => {
                     setFormValues((prev) => ({ ...prev, [currentStep.name]: event.target.value }));
+                    setSignedSubmission(null);
                     setStatus('');
                   }}
                   required
@@ -733,7 +864,11 @@ export function InterestForm() {
           <div data-stage-item className="grid gap-3 [grid-template-columns:1fr_1fr] max-[680px]:grid-cols-1">
             <button className={primaryButtonClass} type="button" onClick={previousStep} disabled={stepIndex === 0 || loading}>Back</button>
             <button className={primaryButtonClass} type="submit" disabled={loading}>
-              {loading ? 'Submitting...' : stepIndex === totalSteps - 1 ? 'Submit' : 'Continue'}
+              {loading
+                ? 'Processing...'
+                : stepIndex === totalSteps - 1
+                  ? (signedSubmission ? 'Submit signed form' : 'Sign submission')
+                  : 'Continue'}
             </button>
           </div>
         </>

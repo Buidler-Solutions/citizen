@@ -1,5 +1,6 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { unlink } from 'fs/promises';
+import { createHash, createPublicKey, verify } from 'crypto';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { CreateLeadDto } from './dto/create-lead.dto';
@@ -79,16 +80,156 @@ export class LeadService {
 
     const formSettings = await this.getFormSettings();
     const normalizedRole = this.normalizeRole(payload.role, formSettings);
+    this.assertWalletSignedPayload(payload, normalizedRole);
+
+    await this.relaySignedSubmissionToCitizenNetwork(payload, normalizedRole);
+
     const lead = this.leadRepository.create({
       ...payload,
       email: normalizedEmail,
       role: normalizedRole,
       missionNeed: payload.missionNeed.trim(),
+      walletAlgorithm: payload.walletAlgorithm.toLowerCase(),
     });
 
     const savedLead = await this.leadRepository.save(lead);
     await this.onboardingNotificationService.sendLeadSubmissionNotifications(savedLead, formSettings);
     return savedLead;
+  }
+
+  private canonicalizeValue(value: unknown): unknown {
+    if (Array.isArray(value)) {
+      return value.map((item) => this.canonicalizeValue(item));
+    }
+    if (value && typeof value === 'object') {
+      const orderedEntries = Object.entries(value as Record<string, unknown>)
+        .filter(([, entryValue]) => entryValue !== undefined)
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([key, entryValue]) => [key, this.canonicalizeValue(entryValue)] as const);
+      return Object.fromEntries(orderedEntries);
+    }
+    return value;
+  }
+
+  private canonicalJson(value: unknown): string {
+    return JSON.stringify(this.canonicalizeValue(value));
+  }
+
+  private assertWalletSignedPayload(payload: CreateLeadDto, normalizedRole: string): void {
+    const expectedPayload = {
+      schema_version: '1.0.0',
+      namespace: 'onboarding.interest',
+      action: 'SUBMIT_ONBOARDING_INTEREST',
+      object_id: payload.email.trim().toLowerCase(),
+      payload: {
+        fullName: payload.fullName.trim(),
+        institution: payload.institution.trim(),
+        email: payload.email.trim(),
+        country: payload.country.trim(),
+        role: normalizedRole,
+        missionNeed: payload.missionNeed.trim(),
+      },
+      submitted_at: undefined,
+    };
+
+    let parsed: Record<string, unknown>;
+    try {
+      parsed = JSON.parse(payload.walletSigningPayload) as Record<string, unknown>;
+    } catch {
+      throw new BadRequestException('walletSigningPayload must be valid JSON.');
+    }
+
+    if (typeof parsed.submitted_at !== 'string' || parsed.submitted_at.trim().length < 10) {
+      throw new BadRequestException('walletSigningPayload must include submitted_at timestamp.');
+    }
+
+    const canonical = this.canonicalJson({
+      ...expectedPayload,
+      submitted_at: parsed.submitted_at,
+    });
+
+    if (canonical !== payload.walletSigningPayload) {
+      throw new BadRequestException('walletSigningPayload does not match expected canonical onboarding payload.');
+    }
+
+    const computedHash = `sha256:${createHash('sha256').update(payload.walletSigningPayload).digest('hex')}`;
+    if (computedHash.toLowerCase() !== payload.walletPayloadHash.toLowerCase()) {
+      throw new BadRequestException('walletPayloadHash does not match walletSigningPayload.');
+    }
+
+    const expectedDid = `did:key:ed25519:${payload.walletVerifyingKey.toLowerCase()}`;
+    if (payload.walletSignerDid.toLowerCase() !== expectedDid) {
+      throw new BadRequestException('walletSignerDid does not match walletVerifyingKey.');
+    }
+
+    if (!this.verifyWalletSignature(payload.walletVerifyingKey, payload.walletSigningPayload, payload.walletSignature)) {
+      throw new BadRequestException('walletSignature verification failed for walletSigningPayload.');
+    }
+  }
+
+  private verifyWalletSignature(verifyingKeyHex: string, signingPayload: string, signatureHex: string): boolean {
+    try {
+      const publicKeyRaw = Buffer.from(verifyingKeyHex, 'hex');
+      if (publicKeyRaw.length !== 32) {
+        return false;
+      }
+      const signature = Buffer.from(signatureHex, 'hex');
+      if (signature.length !== 64) {
+        return false;
+      }
+
+      // RFC8410 Ed25519 SubjectPublicKeyInfo prefix for 32-byte raw key.
+      const spkiPrefix = Buffer.from('302a300506032b6570032100', 'hex');
+      const publicKeyDer = Buffer.concat([spkiPrefix, publicKeyRaw]);
+      const keyObject = createPublicKey({ key: publicKeyDer, format: 'der', type: 'spki' });
+
+      return verify(
+        null,
+        Buffer.from(signingPayload, 'utf8'),
+        keyObject,
+        signature,
+      );
+    } catch {
+      return false;
+    }
+  }
+
+  private async relaySignedSubmissionToCitizenNetwork(
+    payload: CreateLeadDto,
+    normalizedRole: string,
+  ): Promise<void> {
+    const relayUrl = process.env.CITIZEN_SIGNED_SUBMISSION_RELAY_URL?.trim();
+    if (!relayUrl) {
+      return;
+    }
+
+    const relayPayload = {
+      namespace: 'onboarding.interest',
+      action: 'SUBMIT_ONBOARDING_INTEREST',
+      object_id: payload.email.trim().toLowerCase(),
+      metadata: {
+        role: normalizedRole,
+        country: payload.country.trim(),
+        submitted_at: new Date().toISOString(),
+      },
+      wallet_signature: {
+        signer: payload.walletSignerDid,
+        verifying_key: payload.walletVerifyingKey,
+        signature: payload.walletSignature,
+        payload_hash: payload.walletPayloadHash,
+        algorithm: payload.walletAlgorithm.toLowerCase(),
+      },
+    };
+
+    const response = await fetch(relayUrl, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(relayPayload),
+    });
+
+    if (!response.ok) {
+      throw new BadRequestException('Citizen network relay rejected signed onboarding payload.');
+    }
   }
 
   private normalizeRole(role: string, formSettings: FormSettings): string {

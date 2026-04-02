@@ -38,7 +38,7 @@ The wallet extension now treats Citizen protocol transaction signing separately 
 - Login/auth: `personal_sign` / `ctzn_signTypedData_v4` for backend challenge verification.
 - Protocol signing: `ctzn_signCitizenTx` signs canonical JSON payloads with a dedicated Ed25519 keypair.
 
-`ctzn_signCitizenTx` mirrors the protocol wallet crate's canonical JSON strategy (sorted object keys) so dApps can submit stable signing payloads to Citizen node/API services.
+`ctzn_signCitizenTx` mirrors the protocol wallet crate's canonical JSON strategy (sorted object keys, undefined object fields omitted) so dApps can submit stable signing payloads to Citizen node/API services. The signing result also includes `payloadHash` in runtime commitment format (`sha256:<hex>`) for direct anchoring/receipt workflows.
 
 ---
 
