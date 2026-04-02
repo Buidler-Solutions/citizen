@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import http from "node:http";
 import { URL } from "node:url";
-import { verifyMessage } from "ethers";
+import { verifyMessage, verifyTypedData } from "ethers";
 
 const PORT = Number(process.env.PORT ?? 4499);
 const CHALLENGE_TTL_MS = Number(process.env.AUTH_CHALLENGE_TTL_MS ?? 5 * 60 * 1000);
@@ -200,6 +200,39 @@ function createAuthMessage(challenge) {
     `Issued At: ${new Date(challenge.createdAt).toISOString()}`,
     `Expires At: ${new Date(challenge.expiresAt).toISOString()}`
   ].join("\n");
+}
+
+function createAuthTypedData(challenge) {
+  return {
+    domain: {
+      name: "Citizen Wallet Login",
+      version: "1",
+      chainId: 1
+    },
+    types: {
+      CitizenLogin: [
+        { name: "challengeId", type: "string" },
+        { name: "wallet", type: "address" },
+        { name: "network", type: "string" },
+        { name: "domain", type: "string" },
+        { name: "uri", type: "string" },
+        { name: "nonce", type: "string" },
+        { name: "issuedAt", type: "string" },
+        { name: "expiresAt", type: "string" }
+      ]
+    },
+    primaryType: "CitizenLogin",
+    message: {
+      challengeId: challenge.id,
+      wallet: challenge.wallet,
+      network: challenge.network,
+      domain: challenge.domain,
+      uri: challenge.uri,
+      nonce: challenge.nonce,
+      issuedAt: new Date(challenge.createdAt).toISOString(),
+      expiresAt: new Date(challenge.expiresAt).toISOString()
+    }
+  };
 }
 
 function createSessionToken(session) {
@@ -417,6 +450,7 @@ const server = http.createServer(async (req, res) => {
         network: challenge.network,
         nonce: challenge.nonce,
         message: challenge.message,
+        typedData: createAuthTypedData(challenge),
         issuedAt: new Date(challenge.createdAt).toISOString(),
         expiresAt: new Date(challenge.expiresAt).toISOString()
       },
@@ -434,6 +468,9 @@ const server = http.createServer(async (req, res) => {
 
     const challengeId = typeof body.challengeId === "string" ? body.challengeId : "";
     const signature = typeof body.signature === "string" ? body.signature : "";
+    const signatureMethod = typeof body.signatureMethod === "string"
+      ? body.signatureMethod
+      : "personal_sign";
     const wallet = normalizeWallet(body.wallet);
 
     if (!challengeId || !signature || !wallet) {
@@ -468,7 +505,13 @@ const server = http.createServer(async (req, res) => {
 
     let recovered;
     try {
-      recovered = verifyMessage(challenge.message, signature).toLowerCase();
+      if (signatureMethod === "ctzn_signTypedData_v4") {
+        const typedData = createAuthTypedData(challenge);
+        const { domain, types, message } = typedData;
+        recovered = verifyTypedData(domain, types, message, signature).toLowerCase();
+      } else {
+        recovered = verifyMessage(challenge.message, signature).toLowerCase();
+      }
     } catch {
       challenge.verifyAttempts += 1;
       persistState();

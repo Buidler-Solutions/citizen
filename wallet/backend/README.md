@@ -36,6 +36,7 @@ Request:
 ```
 
 Response includes `challengeId`, `nonce`, canonical `message`, and expiry timestamps.
+It also includes deterministic `typedData` for optional `ctzn_signTypedData_v4` signing.
 
 ### `POST /auth/verify`
 
@@ -45,7 +46,8 @@ Request:
 {
   "challengeId": "uuid",
   "wallet": "0xabc123...",
-  "signature": "0x..."
+  "signature": "0x...",
+  "signatureMethod": "personal_sign | ctzn_signTypedData_v4"
 }
 ```
 

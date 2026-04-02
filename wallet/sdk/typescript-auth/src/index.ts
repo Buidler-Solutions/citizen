@@ -31,6 +31,12 @@ export interface WalletAuthChallengeResponse {
   challengeId: string;
   nonce: string;
   message: string;
+  typedData?: {
+    domain: Record<string, unknown>;
+    types: Record<string, Array<{ name: string; type: string }>>;
+    primaryType: string;
+    message: Record<string, unknown>;
+  };
   issuedAt: string;
   expiresAt: string;
 }
@@ -39,6 +45,7 @@ export interface WalletAuthVerifyRequest {
   challengeId: string;
   wallet: string;
   signature: string;
+  signatureMethod?: 'personal_sign' | 'ctzn_signTypedData_v4';
 }
 
 export interface WalletAuthVerifyResponse {
@@ -57,6 +64,24 @@ export interface WalletLoginResult {
   token: string;
   session?: WalletAuthVerifyResponse['session'];
 }
+
+export interface WalletAuthSessionVerifyResponse {
+  status: 'active';
+  session: {
+    sessionId: string;
+    wallet: string;
+    network: string;
+    issuedAt: string;
+    expiresAt: string;
+  };
+}
+
+export interface WalletAuthSessionRevokeResponse {
+  status: 'revoked';
+  sessionId: string;
+}
+
+export type WalletAuthSigningMethod = 'personal_sign' | 'ctzn_signTypedData_v4';
 
 export class WalletAuthClientError extends Error {
   constructor(message: string) {
@@ -144,7 +169,7 @@ export class WalletAuthClient {
     return (await response.json()) as WalletAuthVerifyResponse;
   }
 
-  async loginWithBrowserWallet(): Promise<WalletLoginResult> {
+  async loginWithBrowserWallet(signingMethod: WalletAuthSigningMethod = 'personal_sign'): Promise<WalletLoginResult> {
     const windowObject = this.getWindowObject();
     const provider = detectWalletProvider(windowObject);
 
@@ -165,13 +190,23 @@ export class WalletAuthClient {
     }
 
     const challenge = await this.requestChallenge(selectedWallet);
+    if (signingMethod === 'ctzn_signTypedData_v4' && !challenge.typedData) {
+      throw new WalletAuthClientError(
+        'Auth challenge response is missing typedData required for ctzn_signTypedData_v4.',
+      );
+    }
 
     const signatureResult = await this.requestWithTimeout(
       provider,
-      {
-        method: 'personal_sign',
-        params: [challenge.message, selectedWallet],
-      },
+      signingMethod === 'ctzn_signTypedData_v4'
+        ? {
+            method: 'ctzn_signTypedData_v4',
+            params: [selectedWallet, JSON.stringify(challenge.typedData)],
+          }
+        : {
+            method: 'personal_sign',
+            params: [challenge.message, selectedWallet],
+          },
       'Timed out while waiting for signature confirmation. Open the wallet extension and approve the signing request.',
     );
 
@@ -183,6 +218,7 @@ export class WalletAuthClient {
       challengeId: challenge.challengeId,
       wallet: selectedWallet,
       signature: signatureResult,
+      signatureMethod: signingMethod,
     });
 
     const token = verified.token?.trim();
@@ -207,6 +243,45 @@ export class WalletAuthClient {
   clearStoredToken(): void {
     const windowObject = this.getWindowObject();
     windowObject.localStorage?.removeItem(this.storageKey);
+  }
+
+  async verifyStoredSession(token?: string): Promise<WalletAuthSessionVerifyResponse> {
+    const candidateToken = token ?? this.getStoredToken();
+    if (!candidateToken) {
+      throw new WalletAuthClientError('No session token available for verification.');
+    }
+
+    const response = await fetch(`${this.authApiUrl}/auth/session/verify`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ token: candidateToken }),
+    });
+
+    if (!response.ok) {
+      throw new WalletAuthClientError(`Session verify failed with status ${response.status}.`);
+    }
+
+    return (await response.json()) as WalletAuthSessionVerifyResponse;
+  }
+
+  async revokeStoredSession(token?: string): Promise<WalletAuthSessionRevokeResponse> {
+    const candidateToken = token ?? this.getStoredToken();
+    if (!candidateToken) {
+      throw new WalletAuthClientError('No session token available for revocation.');
+    }
+
+    const response = await fetch(`${this.authApiUrl}/auth/session/revoke`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ token: candidateToken }),
+    });
+
+    if (!response.ok) {
+      throw new WalletAuthClientError(`Session revoke failed with status ${response.status}.`);
+    }
+
+    this.clearStoredToken();
+    return (await response.json()) as WalletAuthSessionRevokeResponse;
   }
 
   private async requestWithTimeout(
