@@ -4,6 +4,23 @@ This checklist is implementation-driven and intended for exercising the **real `
 
 Use this as an operator worksheet: mark each item complete before moving to the next phase.
 
+## Implementation status (started)
+
+The first implementation pass now includes an executable preflight helper:
+
+- `citizen-protocol/scripts/wallet_runtime_node_preflight.sh`
+
+Use it to automate the environment + localnet config readiness gates (sections 1 and 2) before starting manual runtime and wallet flow checks.
+
+Quick start:
+
+```bash
+cd citizen-protocol
+scripts/wallet_runtime_node_preflight.sh
+```
+
+---
+
 ## 0) What this checklist validates
 
 - The Rust node runtime boots with admission preflight and namespace bootstrap.
@@ -16,6 +33,8 @@ Use this as an operator worksheet: mark each item complete before moving to the 
 
 ## 1) Environment + dependency gate
 
+- [ ] Run automated preflight gate:
+  - [ ] `cd citizen-protocol && scripts/wallet_runtime_node_preflight.sh`
 - [ ] Confirm toolchain availability:
   - [ ] `cargo --version`
   - [ ] `node --version`
@@ -32,6 +51,7 @@ Use this as an operator worksheet: mark each item complete before moving to the 
 
 ## 2) Node runtime config readiness gate
 
+- [ ] (Recommended) Use automated checks first from section 1 preflight script output.
 - [ ] Validate that localnet validator configs exist:
   - [ ] `config/localnet/validator-alpha.toml`
   - [ ] `config/localnet/validator-beta.toml`
