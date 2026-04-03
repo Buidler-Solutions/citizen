@@ -14,6 +14,8 @@ The checklist now has three executable helpers:
 
 Use the preflight helper to automate environment + localnet config readiness gates (sections 1 and 2), the wallet CLI helper to automate the baseline signed-submit flow (section 4), then use the stack smoke helper after the full multi-surface stack is running (section 6).
 
+For operators who want to run the full worksheet with repeatable artifacts, the checklist now also includes a deterministic run ledger template (section 9), an evidence packaging routine (section 10), and a shutdown/reset routine (section 11).
+
 Quick start:
 
 ```bash
@@ -192,3 +194,94 @@ Mark the exercise complete only when all are true:
 - [ ] Landing-page onboarding app (signed-submit), demo blog, and explorer all reflect runtime-backed data changes.
 - [ ] Smoke checks pass end-to-end.
 - [ ] Logs and run evidence are archived for reproducibility.
+
+---
+
+## 9) Deterministic run ledger (operator notes template)
+
+Use this template in your run notes so every wallet-runtime exercise can be replayed and audited.
+
+- [ ] Create a run ledger file before starting:
+  - [ ] `mkdir -p citizen-protocol/.tmp-wallet-e2e`
+  - [ ] `cat > citizen-protocol/.tmp-wallet-e2e/run-ledger.md <<'EOF'`
+
+```md
+# Wallet Runtime Exercise Run Ledger
+
+- Date (UTC):
+- Operator:
+- Repo SHA (`git rev-parse HEAD`):
+- Runtime config files:
+  - config/localnet/validator-alpha.toml
+  - config/localnet/validator-beta.toml
+  - config/localnet/validator-gamma.toml
+- API auth mode: open_local | auth_required
+- Node URLs exercised:
+  - Primary:
+  - Secondary (optional):
+
+## Section status
+- Section 1 (env/deps): pass | fail
+- Section 2 (config readiness): pass | fail
+- Section 3 (runtime start): pass | fail
+- Section 4 (wallet CLI path): pass | fail
+- Section 5 (multi-surface integration): pass | fail
+- Section 6 (smoke + evidence): pass | fail
+- Section 7 (triage used?): yes | no
+- Section 8 (exit criteria): pass | fail
+
+## Receipts + IDs
+- Wallet path:
+- Receipt file:
+- Submitted entry IDs:
+
+## Notes
+-
+```
+
+- [ ] Close the heredoc:
+  - [ ] `EOF`
+- [ ] Record commit SHA in run ledger:
+  - [ ] `cd citizen-protocol && git rev-parse HEAD`
+
+---
+
+## 10) Evidence packaging + artifact manifest
+
+Package logs and deterministic run metadata into a single timestamped bundle after section 6 passes.
+
+- [ ] Create evidence directory and timestamp:
+  - [ ] `cd citizen-protocol && TS=$(date -u +%Y%m%dT%H%M%SZ) && EVIDENCE_DIR=.tmp-wallet-e2e/evidence-$TS && mkdir -p "$EVIDENCE_DIR"`
+- [ ] Capture runtime state snapshots:
+  - [ ] `curl -s http://127.0.0.1:8081/health > "$EVIDENCE_DIR/health.json"`
+  - [ ] `curl -s http://127.0.0.1:8081/namespaces > "$EVIDENCE_DIR/namespaces.json"`
+  - [ ] `curl -s http://127.0.0.1:8081/entries/content.article > "$EVIDENCE_DIR/content-article.json"`
+- [ ] Copy log artifacts:
+  - [ ] `cp data/validator-alpha.log "$EVIDENCE_DIR/"`
+  - [ ] `cp data/validator-beta.log "$EVIDENCE_DIR/"`
+  - [ ] `cp data/validator-gamma.log "$EVIDENCE_DIR/"`
+- [ ] Copy wallet flow artifacts if present:
+  - [ ] `test -f .tmp-wallet-e2e/receipts.json && cp .tmp-wallet-e2e/receipts.json "$EVIDENCE_DIR/" || true`
+  - [ ] `test -f .tmp-wallet-e2e/run-ledger.md && cp .tmp-wallet-e2e/run-ledger.md "$EVIDENCE_DIR/" || true`
+- [ ] Generate lightweight manifest:
+  - [ ] `find "$EVIDENCE_DIR" -maxdepth 1 -type f -print | sort > "$EVIDENCE_DIR/manifest.txt"`
+- [ ] Archive evidence bundle:
+  - [ ] `tar -czf ".tmp-wallet-e2e/${TS}-wallet-runtime-evidence.tgz" -C .tmp-wallet-e2e "evidence-$TS"`
+
+---
+
+## 11) Controlled shutdown + reset routine
+
+When the exercise ends, perform a clean teardown to prevent stale state from contaminating the next run.
+
+- [ ] Stop localnet nodes:
+  - [ ] `cd citizen-protocol && scripts/stop_localnet.sh`
+- [ ] Confirm node API ports are no longer active:
+  - [ ] `curl -sf http://127.0.0.1:8081/health && echo "still running" || echo "stopped"`
+  - [ ] `curl -sf http://127.0.0.1:8082/health && echo "still running" || echo "stopped"`
+  - [ ] `curl -sf http://127.0.0.1:8083/health && echo "still running" || echo "stopped"`
+- [ ] Stop JS surfaces started for section 5 (landing-page, demo, explorer frontend/backend, wallet browser watch).
+- [ ] Optional clean-state reset before next run:
+  - [ ] `cd citizen-protocol && rm -rf data/alpha data/beta data/gamma`
+  - [ ] `cd citizen-protocol && rm -f data/validator-alpha.log data/validator-beta.log data/validator-gamma.log`
+  - [ ] `cd citizen-protocol && rm -rf .tmp-wallet-e2e/wallet.json .tmp-wallet-e2e/receipts.json`
