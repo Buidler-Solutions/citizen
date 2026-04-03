@@ -125,7 +125,7 @@ This checklist translates the current flow and known gaps into concrete implemen
 - [ ] Payload mismatch between preview and signed bytes.
 - [ ] Popup close/reopen mid-request.
 - [ ] Network outage during submission/relay.
-- [ ] Duplicate submit attempt with same signature.
+- [x] Duplicate submit attempt with same signature.
 
 ### D3) Release controls
 

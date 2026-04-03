@@ -47,6 +47,7 @@ export type CitizenNetworkSubmitRequest = {
 
 export type DirectSubmitResponse = {
   traceId: string;
+  idempotencyKey: string;
   status: number;
   latencyMs: number;
   receiptId: string | null;
@@ -149,6 +150,28 @@ export function createDirectSubmitBody(
   };
 }
 
+async function deriveIdempotencyKey(signedArtifact: SignedSubmissionArtifact): Promise<string> {
+  const requestId = signedArtifact.requestId ?? 'missing_request_id';
+  const material =
+    `citizen_wallet_direct_submit_v1|${requestId}|${signedArtifact.payloadHash}|${signedArtifact.signature}`;
+  const encoded = new TextEncoder().encode(material);
+  const digest = await crypto.subtle.digest('SHA-256', encoded);
+  const hex = Array.from(new Uint8Array(digest))
+    .map((value) => value.toString(16).padStart(2, '0'))
+    .join('');
+  return `sha256:${hex}`;
+}
+
+async function deriveNetworkSubmitIdempotencyKey(envelope: SignedEnvelope): Promise<string> {
+  const material = `citizen_wallet_network_submit_v1|${envelope.envelope_id}|${envelope.signature}|${envelope.payload.signature}`;
+  const encoded = new TextEncoder().encode(material);
+  const digest = await crypto.subtle.digest('SHA-256', encoded);
+  const hex = Array.from(new Uint8Array(digest))
+    .map((value) => value.toString(16).padStart(2, '0'))
+    .join('');
+  return `network:${hex}`;
+}
+
 export async function submitSignedArtifact(
   request: DirectSubmitRequest,
 ): Promise<DirectSubmitResponse> {
@@ -158,6 +181,7 @@ export async function submitSignedArtifact(
 
   const fetchImpl = request.fetchImpl ?? fetch;
   const traceId = crypto.randomUUID();
+  const idempotencyKey = await deriveIdempotencyKey(request.signedArtifact);
   const startedAt = Date.now();
 
   const response = await fetchImpl(request.destinationUrl, {
@@ -165,6 +189,7 @@ export async function submitSignedArtifact(
     headers: {
       'content-type': 'application/json',
       'x-citizen-wallet-trace-id': traceId,
+      'x-idempotency-key': idempotencyKey,
     },
     body: JSON.stringify(
       createDirectSubmitBody(request.signedArtifact, request.consentToShareSigningPayload ?? false),
@@ -189,6 +214,7 @@ export async function submitSignedArtifact(
 
   return {
     traceId,
+    idempotencyKey,
     status: response.status,
     latencyMs,
     receiptId,
@@ -209,12 +235,14 @@ export async function submitEnvelopeToCitizenNetwork(
   const url = buildApiUrl(request.apiBaseUrl, CITIZEN_SUBMIT_ENVELOPE_PATH);
   const fetchImpl = request.fetchImpl ?? fetch;
   const traceId = crypto.randomUUID();
+  const idempotencyKey = await deriveNetworkSubmitIdempotencyKey(request.envelope);
   const startedAt = Date.now();
   const response = await fetchImpl(url, {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
       'x-citizen-wallet-trace-id': traceId,
+      'x-idempotency-key': idempotencyKey,
       ...(request.apiKey ? { 'x-api-key': request.apiKey } : {}),
     },
     body: JSON.stringify(request.envelope),
@@ -232,6 +260,7 @@ export async function submitEnvelopeToCitizenNetwork(
 
   return {
     traceId,
+    idempotencyKey,
     status: response.status,
     latencyMs,
     receiptId,
