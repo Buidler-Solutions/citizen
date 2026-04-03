@@ -66,6 +66,22 @@ type OriginPermission = {
   updatedAt: string;
 };
 
+type DirectSubmitConfig = {
+  defaultDestination: string;
+  allowlistedDestinations: readonly string[];
+};
+
+type DirectSubmitReceipt = {
+  requestId: string;
+  destinationUrl: string;
+  traceId: string;
+  status: number;
+  latencyMs: number;
+  receiptId: string | null;
+  receiptHash: string | null;
+  submittedAt: string;
+};
+
 
 type ApprovalMetrics = {
   totalRequests: number;
@@ -178,6 +194,10 @@ export function App() {
   const [approvalMetrics, setApprovalMetrics] = useState<ApprovalMetrics | null>(null);
   const [showRawPayloadByRequest, setShowRawPayloadByRequest] = useState<Record<string, boolean>>({});
   const [showFullUrlByRequest, setShowFullUrlByRequest] = useState<Record<string, boolean>>({});
+  const [directSubmitConfig, setDirectSubmitConfig] = useState<DirectSubmitConfig | null>(null);
+  const [directSubmitDestination, setDirectSubmitDestination] = useState('');
+  const [confirmDirectSubmitDestination, setConfirmDirectSubmitDestination] = useState(false);
+  const [directSubmitReceipts, setDirectSubmitReceipts] = useState<DirectSubmitReceipt[]>([]);
   const [profile, setProfile] = useState<ProfileDetails>({
     fullName: '',
     email: '',
@@ -278,6 +298,18 @@ export function App() {
       const metricsResponse = await callWallet('wallet_getApprovalMetrics');
       if (metricsResponse.ok && metricsResponse.result && typeof metricsResponse.result === 'object') {
         setApprovalMetrics(metricsResponse.result as ApprovalMetrics);
+      }
+
+      const directSubmitConfigResponse = await callWallet('wallet_getDirectSubmitConfig');
+      if (directSubmitConfigResponse.ok && directSubmitConfigResponse.result && typeof directSubmitConfigResponse.result === 'object') {
+        const config = directSubmitConfigResponse.result as DirectSubmitConfig;
+        setDirectSubmitConfig(config);
+        setDirectSubmitDestination(config.defaultDestination);
+      }
+
+      const directSubmitReceiptsResponse = await callWallet('wallet_getDirectSubmitReceipts');
+      if (directSubmitReceiptsResponse.ok && Array.isArray(directSubmitReceiptsResponse.result)) {
+        setDirectSubmitReceipts(directSubmitReceiptsResponse.result as DirectSubmitReceipt[]);
       }
 
       if (!hasWallet || !isUnlocked) {
@@ -561,6 +593,31 @@ export function App() {
     () => originPermissions.filter((entry) => entry.permission === 'blocked'),
     [originPermissions],
   );
+
+  const handleDirectSubmitLatestSigned = async () => {
+    if (!confirmDirectSubmitDestination) {
+      setStatus('Confirm the destination endpoint before direct submit.');
+      return;
+    }
+    const response = await callWallet('wallet_directSubmitLatestSignedArtifact', [directSubmitDestination]);
+    if (!response.ok) {
+      setStatus(response.error ?? 'Direct submit failed.');
+      return;
+    }
+    setStatus('Direct submit accepted. Receipt metadata persisted locally.');
+    setConfirmDirectSubmitDestination(false);
+    await refreshState();
+  };
+
+  const handleSetDefaultDirectSubmitDestination = async () => {
+    const response = await callWallet('wallet_setDirectSubmitDefaultDestination', [directSubmitDestination]);
+    if (!response.ok) {
+      setStatus(response.error ?? 'Unable to update direct submit destination.');
+      return;
+    }
+    setStatus('Default direct submit destination updated.');
+    await refreshState();
+  };
 
   const handleCopyWalletAddress = async () => {
     if (!state.account || state.account === 'Unavailable') {
@@ -856,6 +913,60 @@ export function App() {
                 <h2>Create transaction</h2>
                 <p className="meta-text">Quick CTA to start composing and signing a new transaction payload.</p>
                 <button className="primary" onClick={() => setActiveTab('compose')}>Open Compose tab</button>
+              </article>
+
+              <article className="request-card">
+                <h2>Wallet direct submit (Model 2 preview)</h2>
+                <p className="meta-text">
+                  Direct submit sends signed metadata from the latest approved dApp request to a wallet-allowlisted endpoint.
+                </p>
+                <div className="form-grid">
+                  <label htmlFor="direct-submit-destination">Destination endpoint</label>
+                  <select
+                    id="direct-submit-destination"
+                    value={directSubmitDestination}
+                    onChange={(event) => setDirectSubmitDestination(event.target.value)}
+                  >
+                    {(directSubmitConfig?.allowlistedDestinations ?? []).map((destination) => (
+                      <option key={destination} value={destination}>{destination}</option>
+                    ))}
+                  </select>
+                  <label className="checkbox-row">
+                    <input
+                      type="checkbox"
+                      checked={confirmDirectSubmitDestination}
+                      onChange={(event) => setConfirmDirectSubmitDestination(event.target.checked)}
+                    />
+                    <span>I confirm this destination endpoint for this submit.</span>
+                  </label>
+                  <div className="button-row">
+                    <button className="primary" onClick={handleDirectSubmitLatestSigned}>
+                      Submit latest signed artifact
+                    </button>
+                    <button className="ghost" onClick={handleSetDefaultDirectSubmitDestination}>
+                      Save as default
+                    </button>
+                  </div>
+                </div>
+                {directSubmitReceipts.length > 0 ? (
+                  <>
+                    <h3>Stored direct submit receipts</h3>
+                    <ul>
+                      {directSubmitReceipts.map((receipt) => (
+                        <li key={`${receipt.traceId}-${receipt.submittedAt}`} className="activity-item">
+                          <div>
+                            <strong>{receipt.receiptId ?? 'pending receipt id'}</strong>
+                            <p className="meta-text">{receipt.destinationUrl}</p>
+                            <p className="meta-text">trace {receipt.traceId}</p>
+                          </div>
+                          <span>{new Date(receipt.submittedAt).toLocaleString()}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </>
+                ) : (
+                  <p className="meta-text">No direct submit receipts stored yet.</p>
+                )}
               </article>
 
               <article className="request-card">

@@ -20,6 +20,11 @@ import {
   importAesKey,
   isEncryptedJsonEnvelope,
 } from './sensitiveStorage';
+import {
+  submitSignedArtifact,
+  type DirectSubmitResponse,
+  type SignedSubmissionArtifact,
+} from './directSubmitClient';
 
 type WalletRequest = {
   method: string;
@@ -108,11 +113,28 @@ const DAPP_PENDING_REQUESTS_KEY = 'citizen.browser.wallet.dapp_pending_requests.
 const DAPP_REQUEST_AUDIT_KEY = 'citizen.browser.wallet.dapp_request_audit.v1';
 const DAPP_ORIGIN_PERMISSIONS_KEY = 'citizen.browser.wallet.dapp_origin_permissions.v1';
 const LOCAL_ENCRYPTION_KEY_KEY = 'citizen.browser.wallet.local_encryption_key.v1';
+const DIRECT_SUBMIT_RECEIPTS_KEY = 'citizen.browser.wallet.direct_submit_receipts.v1';
+const DIRECT_SUBMIT_DEFAULT_DESTINATION_KEY = 'citizen.browser.wallet.direct_submit_default_destination.v1';
 const DEFAULT_DERIVATION_PATH = "m/44'/930'/0'/0'/0'";
 const MAX_ACTIVITY = 100;
 const MAX_DAPP_AUDIT_EVENTS = 1_000;
 const DAPP_DECIDED_REQUEST_RETENTION_MS = 24 * 60 * 60 * 1000;
 const DAPP_REQUEST_CONCURRENCY_MODE = 'single_active';
+const MAX_DIRECT_SUBMIT_RECEIPTS = 100;
+const DIRECT_SUBMIT_ALLOWLIST: readonly string[] = [
+  'http://127.0.0.1:8081/api/v1/direct-submit',
+];
+
+type DirectSubmitReceipt = {
+  requestId: string;
+  destinationUrl: string;
+  traceId: string;
+  status: number;
+  latencyMs: number;
+  receiptId: string | null;
+  receiptHash: string | null;
+  submittedAt: string;
+};
 
 const pendingDappResolutions = new Map<string, PendingDappResolution>();
 
@@ -234,6 +256,31 @@ async function setEncryptedArrayInStorage<T>(key: string, value: T[]): Promise<v
   const encryptionKey = await getLocalEncryptionKey();
   const encrypted = await encryptJsonValue(value, encryptionKey);
   await chrome.storage.local.set({ [key]: encrypted });
+}
+
+async function getDirectSubmitReceipts(): Promise<DirectSubmitReceipt[]> {
+  return getEncryptedArrayFromStorage<DirectSubmitReceipt>(DIRECT_SUBMIT_RECEIPTS_KEY);
+}
+
+async function appendDirectSubmitReceipt(receipt: DirectSubmitReceipt): Promise<void> {
+  const existing = await getDirectSubmitReceipts();
+  await setEncryptedArrayInStorage(
+    DIRECT_SUBMIT_RECEIPTS_KEY,
+    [receipt, ...existing].slice(0, MAX_DIRECT_SUBMIT_RECEIPTS),
+  );
+}
+
+async function getDirectSubmitDefaultDestination(): Promise<string> {
+  const stored = await chrome.storage.local.get(DIRECT_SUBMIT_DEFAULT_DESTINATION_KEY);
+  const value = stored[DIRECT_SUBMIT_DEFAULT_DESTINATION_KEY];
+  if (typeof value === 'string' && value.trim().length > 0) {
+    return value;
+  }
+  return DIRECT_SUBMIT_ALLOWLIST[0];
+}
+
+async function setDirectSubmitDefaultDestination(destinationUrl: string): Promise<void> {
+  await chrome.storage.local.set({ [DIRECT_SUBMIT_DEFAULT_DESTINATION_KEY]: destinationUrl });
 }
 
 async function getPasswordHash(): Promise<string | null> {
@@ -730,6 +777,89 @@ async function createSignedCitizenResult(envelope: DappSigningRequestEnvelope): 
   };
 }
 
+function asSignedSubmissionArtifact(value: unknown): SignedSubmissionArtifact | null {
+  if (!value || typeof value !== 'object') {
+    return null;
+  }
+  const candidate = value as Record<string, unknown>;
+  const signerDid = candidate.signer;
+  const verifyingKey = candidate.verifyingKey;
+  const signature = candidate.signature;
+  const payloadHash = candidate.payloadHash;
+  const signingPayload = candidate.signingPayload;
+  const signatureScope = candidate.signatureScope;
+  const algorithm = candidate.algorithm;
+  const requestId = candidate.requestId;
+
+  if (
+    typeof signerDid !== 'string'
+    || typeof verifyingKey !== 'string'
+    || typeof signature !== 'string'
+    || typeof payloadHash !== 'string'
+    || typeof signingPayload !== 'string'
+    || typeof signatureScope !== 'string'
+    || typeof algorithm !== 'string'
+  ) {
+    return null;
+  }
+
+  return {
+    signerDid,
+    verifyingKey,
+    signature,
+    payloadHash,
+    signingPayload,
+    signatureScope,
+    algorithm,
+    requestId: typeof requestId === 'string' ? requestId : undefined,
+  };
+}
+
+async function getLatestSignedCitizenArtifact(): Promise<SignedSubmissionArtifact | null> {
+  const requests = await getPendingDappRequests();
+  const signed = requests.find((entry) => entry.state === 'signed');
+  if (!signed) {
+    return null;
+  }
+  const result = await createSignedCitizenResult(signed.envelope);
+  if (!result.ok) {
+    return null;
+  }
+  return asSignedSubmissionArtifact(result.result ?? null);
+}
+
+async function directSubmitLatestSignedArtifact(destinationUrl: string): Promise<WalletResponse> {
+  const signedArtifact = await getLatestSignedCitizenArtifact();
+  if (!signedArtifact) {
+    return walletError('ERR_NO_SIGNED_ARTIFACT', 'No signed request artifact is available for direct submit.');
+  }
+
+  try {
+    const response: DirectSubmitResponse = await submitSignedArtifact({
+      destinationUrl,
+      allowlistedDestinations: DIRECT_SUBMIT_ALLOWLIST,
+      signedArtifact,
+    });
+    await appendDirectSubmitReceipt({
+      requestId: signedArtifact.requestId ?? 'unknown',
+      destinationUrl,
+      traceId: response.traceId,
+      status: response.status,
+      latencyMs: response.latencyMs,
+      receiptId: response.receiptId,
+      receiptHash: response.receiptHash,
+      submittedAt: new Date().toISOString(),
+    });
+    return { ok: true, result: response };
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : 'Unknown direct submit error.';
+    return walletError(
+      'ERR_DIRECT_SUBMIT_UNAVAILABLE',
+      `${reason} Fallback: submit the signed payload through your backend relay.`,
+    );
+  }
+}
+
 async function enqueueDappSigningRequest(
   rawPayload: unknown,
   request: WalletRequest,
@@ -1037,6 +1167,58 @@ async function handleWalletRequest(
       return walletError('ERR_UNAUTHORIZED', 'Unauthorized wallet method.');
     }
     return { ok: true, result: await getDappApprovalMetricsSnapshot() };
+  }
+
+  if (request.method === 'wallet_getDirectSubmitConfig') {
+    if (!isUiRequest) {
+      return walletError('ERR_UNAUTHORIZED', 'Unauthorized wallet method.');
+    }
+    return {
+      ok: true,
+      result: {
+        defaultDestination: await getDirectSubmitDefaultDestination(),
+        allowlistedDestinations: DIRECT_SUBMIT_ALLOWLIST,
+      },
+    };
+  }
+
+  if (request.method === 'wallet_setDirectSubmitDefaultDestination') {
+    if (!isUiRequest) {
+      return walletError('ERR_UNAUTHORIZED', 'Unauthorized wallet method.');
+    }
+    const [destinationUrl] = request.params ?? [];
+    if (typeof destinationUrl !== 'string' || destinationUrl.trim().length === 0) {
+      return walletError(
+        'ERR_MALFORMED_REQUEST',
+        'wallet_setDirectSubmitDefaultDestination requires destination URL.',
+      );
+    }
+    if (!DIRECT_SUBMIT_ALLOWLIST.includes(destinationUrl)) {
+      return walletError('ERR_DESTINATION_NOT_ALLOWLISTED', 'Destination URL is not allowlisted.');
+    }
+    await setDirectSubmitDefaultDestination(destinationUrl);
+    return { ok: true, result: destinationUrl };
+  }
+
+  if (request.method === 'wallet_getDirectSubmitReceipts') {
+    if (!isUiRequest) {
+      return walletError('ERR_UNAUTHORIZED', 'Unauthorized wallet method.');
+    }
+    return { ok: true, result: await getDirectSubmitReceipts() };
+  }
+
+  if (request.method === 'wallet_directSubmitLatestSignedArtifact') {
+    if (!isUiRequest) {
+      return walletError('ERR_UNAUTHORIZED', 'Unauthorized wallet method.');
+    }
+    const [destinationUrl] = request.params ?? [];
+    if (typeof destinationUrl !== 'string' || destinationUrl.trim().length === 0) {
+      return walletError(
+        'ERR_MALFORMED_REQUEST',
+        'wallet_directSubmitLatestSignedArtifact requires destination URL.',
+      );
+    }
+    return directSubmitLatestSignedArtifact(destinationUrl);
   }
 
   if (request.method === 'wallet_setOriginPermission') {
