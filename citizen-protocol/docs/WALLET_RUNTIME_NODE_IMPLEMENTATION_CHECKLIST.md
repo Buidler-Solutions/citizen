@@ -1,16 +1,17 @@
 # Wallet Tech Stack Exercise: Citizen Node Runtime Implementation Checklist
 
-This checklist is implementation-driven and intended for exercising the **real `citizen-node` runtime** with the wallet stack (CLI wallet + browser wallet + landing-page onboarding app + explorer), not a mock chain.
+This checklist is implementation-driven and intended for exercising the **real `citizen-node` runtime** with the wallet stack (CLI wallet + browser wallet + landing-page onboarding app + explorer + demo blog), not a mock chain.
 
 Use this as an operator worksheet: mark each item complete before moving to the next phase.
 
-## Implementation status (started)
+## Implementation status (continued)
 
-The first implementation pass now includes an executable preflight helper:
+The checklist now has two executable helpers:
 
 - `citizen-protocol/scripts/wallet_runtime_node_preflight.sh`
+- `citizen-protocol/scripts/stack_runtime_smoke_test.sh`
 
-Use it to automate the environment + localnet config readiness gates (sections 1 and 2) before starting manual runtime and wallet flow checks.
+Use the preflight helper to automate environment + localnet config readiness gates (sections 1 and 2), then use the smoke helper after the full multi-surface stack is running (section 6).
 
 Quick start:
 
@@ -26,7 +27,7 @@ scripts/wallet_runtime_node_preflight.sh
 - The Rust node runtime boots with admission preflight and namespace bootstrap.
 - A local validator set is reachable on QUIC + HTTP APIs.
 - Wallet flows submit signed envelopes to the runtime API.
-- Landing-page onboarding app and explorer surfaces read/write against the same runtime endpoints.
+- Landing-page onboarding app, demo blog, and explorer surfaces read/write against runtime-backed endpoints.
 - Runtime/data/log artifacts are captured for debugging and repeatability.
 
 ---
@@ -39,12 +40,15 @@ scripts/wallet_runtime_node_preflight.sh
   - [ ] `cargo --version`
   - [ ] `node --version`
   - [ ] `npm --version`
+  - [ ] `pnpm --version`
   - [ ] `curl --version`
-- [ ] From `citizen-protocol/`, install JS dependencies used by wallet/landing-page onboarding/explorer:
+  - [ ] `python3 --version`
+- [ ] From `citizen-protocol/`, install JS dependencies used by wallet/landing-page onboarding/explorer/demo:
   - [ ] `pnpm --dir ../landing-page install`
-  - [ ] `npm --prefix wallet/browser install`
-  - [ ] `npm --prefix explorer/backend install`
-  - [ ] `npm --prefix explorer/frontend install`
+  - [ ] `npm --prefix ../demo install`
+  - [ ] `npm --prefix ../wallet/browser install`
+  - [ ] `npm --prefix ../explorer/backend install`
+  - [ ] `npm --prefix ../explorer/frontend install`
 - [ ] Confirm localnet launcher prerequisites are satisfied (`cargo` in `PATH`).
 
 ---
@@ -59,7 +63,7 @@ scripts/wallet_runtime_node_preflight.sh
 - [ ] Verify API ports and peer ports are unique and consistent:
   - [ ] HTTP APIs: `8081`, `8082`, `8083`
   - [ ] QUIC peers: `9100`, `9101`, `9102`
-- [ ] Verify `content.article` namespace is present in localnet config (required by landing-page onboarding/explorer wallet flow).
+- [ ] Verify `content.article` namespace is present in localnet config (required by demo + explorer runtime flow checks).
 - [ ] Verify each validator has:
   - [ ] `validator_id`
   - [ ] `signing_key_hex`
@@ -104,25 +108,32 @@ scripts/wallet_runtime_node_preflight.sh
 
 ---
 
-## 5) Browser wallet + landing-page onboarding app + explorer runtime integration gate
+## 5) Browser wallet + landing-page onboarding app + explorer + demo runtime integration gate
 
-Use the five-terminal topology for realistic wallet-stack exercise.
+Use the six-terminal topology for a realistic wallet-stack exercise and to satisfy smoke-test prerequisites.
 
 - [ ] Terminal A: node runtime
   - [ ] `cd citizen-protocol && scripts/run_localnet.sh`
-- [ ] Terminal B: landing-page onboarding app wired to runtime relay
-  - [ ] `cd landing-page && CITIZEN_SIGNED_SUBMISSION_RELAY_URL=http://127.0.0.1:8081/api/v1/your-relay-endpoint pnpm run dev`
+- [ ] Terminal B: landing-page backend/frontend
+  - [ ] `cd landing-page && pnpm run dev`
 - [ ] Terminal C: wallet browser extension watch build
   - [ ] `cd wallet/browser && npm run build -- --watch`
-- [ ] Terminal D: explorer backend wired to runtime
+- [ ] Terminal D: demo blog runtime-backed mode
+  - [ ] `cd demo && CITIZEN_NODE_URL=http://127.0.0.1:8081 CITIZEN_CONTENT_NAMESPACE=content.article npm run start`
+- [ ] Terminal E: explorer backend wired to runtime
   - [ ] `cd explorer/backend && PORT=4010 CITIZEN_NODE_URL=http://127.0.0.1:8081 npm run start:dev`
-- [ ] Terminal E: explorer frontend wired to explorer backend
+- [ ] Terminal F: explorer frontend wired to explorer backend
   - [ ] `cd explorer/frontend && NEXT_PUBLIC_API_BASE_URL=http://127.0.0.1:4010 npm run dev -- --port 4020`
+- [ ] Optional landing-page relay-mode check (backend-relayed signed onboarding path):
+  - [ ] `curl http://127.0.0.1:3001/interest/signed-submission-contract`
+  - [ ] If `relayMode=database_plus_network_relay`, ensure `CITIZEN_SIGNED_SUBMISSION_RELAY_URL` points to a **compatible relay adapter endpoint** that accepts onboarding signed metadata and translates it for runtime submission.
+  - [ ] If no relay adapter is running, leave `CITIZEN_SIGNED_SUBMISSION_RELAY_URL` unset and confirm `relayMode=database_only` for this exercise.
 - [ ] Load unpacked extension from `wallet/browser/dist` and create/unlock wallet.
 - [ ] Submit onboarding interest from landing-page UI and approve signature in extension.
+- [ ] Submit demo article flow and approve signature in extension.
 - [ ] Confirm runtime read models update:
-  - [ ] `curl http://127.0.0.1:3001/interest/signed-submission-contract`
   - [ ] `curl http://127.0.0.1:8081/entries/content.article`
+  - [ ] `curl http://localhost:4300/api/articles`
   - [ ] `curl http://127.0.0.1:4010/entries/content.article`
 
 ---
@@ -133,7 +144,9 @@ Use the five-terminal topology for realistic wallet-stack exercise.
   - [ ] `cd citizen-protocol && scripts/stack_runtime_smoke_test.sh`
 - [ ] Collect logs for run evidence:
   - [ ] Node logs (`data/validator-*.log`)
-  - [ ] Landing-page onboarding/explorer logs (if launched with consolidated script, from `data/*-stack.log`)
+  - [ ] Landing-page/backend/frontend logs
+  - [ ] Demo log output
+  - [ ] Explorer backend/frontend logs
 - [ ] Record deterministic test metadata in your test notes:
   - [ ] Git commit SHA
   - [ ] Runtime config set used
@@ -146,7 +159,10 @@ Use the five-terminal topology for realistic wallet-stack exercise.
 
 - [ ] `node_runtime_unavailable` in landing-page onboarding app:
   - [ ] Node process running?
-  - [ ] `CITIZEN_SIGNED_SUBMISSION_RELAY_URL` points to your live node relay endpoint?
+  - [ ] If relay mode enabled, `CITIZEN_SIGNED_SUBMISSION_RELAY_URL` points to a live compatible adapter endpoint?
+- [ ] Demo checks fail in smoke script:
+  - [ ] Demo process running on `localhost:4300`?
+  - [ ] `CITIZEN_NODE_URL=http://127.0.0.1:8081` configured for demo process?
 - [ ] Explorer empty/stale:
   - [ ] Explorer backend running on `4010`?
   - [ ] `NEXT_PUBLIC_API_BASE_URL` points to `http://127.0.0.1:4010`?
@@ -166,6 +182,6 @@ Mark the exercise complete only when all are true:
 
 - [ ] Local three-validator runtime is healthy.
 - [ ] Wallet-signed submission reaches runtime and yields receipts.
-- [ ] Landing-page onboarding app and explorer both reflect runtime-backed data changes.
+- [ ] Landing-page onboarding app (signed-submit), demo blog, and explorer all reflect runtime-backed data changes.
 - [ ] Smoke checks pass end-to-end.
 - [ ] Logs and run evidence are archived for reproducibility.
