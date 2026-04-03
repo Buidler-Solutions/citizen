@@ -6,18 +6,21 @@ Use this as an operator worksheet: mark each item complete before moving to the 
 
 ## Implementation status (continued)
 
-The checklist now has two executable helpers:
+The checklist now has three executable helpers:
 
 - `citizen-protocol/scripts/wallet_runtime_node_preflight.sh`
+- `citizen-protocol/scripts/run_wallet_cli_e2e.sh`
 - `citizen-protocol/scripts/stack_runtime_smoke_test.sh`
 
-Use the preflight helper to automate environment + localnet config readiness gates (sections 1 and 2), then use the smoke helper after the full multi-surface stack is running (section 6).
+Use the preflight helper to automate environment + localnet config readiness gates (sections 1 and 2), the wallet CLI helper to automate the baseline signed-submit flow (section 4), then use the stack smoke helper after the full multi-surface stack is running (section 6).
 
 Quick start:
 
 ```bash
 cd citizen-protocol
 scripts/wallet_runtime_node_preflight.sh
+# run this after localnet is up
+scripts/run_wallet_cli_e2e.sh
 ```
 
 ---
@@ -93,6 +96,10 @@ scripts/wallet_runtime_node_preflight.sh
 
 ## 4) Wallet-runtime API path validation (CLI first)
 
+- [ ] Run automated wallet CLI E2E first (after section 3 runtime launch):
+  - [ ] `cd citizen-protocol && scripts/run_wallet_cli_e2e.sh`
+  - [ ] Optional custom node URL (if your runtime primary is not `8081`):
+    - [ ] `cd citizen-protocol && NODE_URL=http://127.0.0.1:8082 scripts/run_wallet_cli_e2e.sh`
 - [ ] Initialize wallet material (isolated test path):
   - [ ] `cargo run -p citizen-wallet-cli -- init --path .tmp-wallet-e2e/wallet.json`
   - [ ] `cargo run -p citizen-wallet-cli -- keygen --path .tmp-wallet-e2e/wallet.json --label e2e --password test-pass`
