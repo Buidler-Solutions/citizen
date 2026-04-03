@@ -197,6 +197,7 @@ export function App() {
   const [directSubmitConfig, setDirectSubmitConfig] = useState<DirectSubmitConfig | null>(null);
   const [directSubmitDestination, setDirectSubmitDestination] = useState('');
   const [confirmDirectSubmitDestination, setConfirmDirectSubmitDestination] = useState(false);
+  const [consentShareSigningPayload, setConsentShareSigningPayload] = useState(false);
   const [directSubmitReceipts, setDirectSubmitReceipts] = useState<DirectSubmitReceipt[]>([]);
   const [profile, setProfile] = useState<ProfileDetails>({
     fullName: '',
@@ -599,13 +600,17 @@ export function App() {
       setStatus('Confirm the destination endpoint before direct submit.');
       return;
     }
-    const response = await callWallet('wallet_directSubmitLatestSignedArtifact', [directSubmitDestination]);
+    const response = await callWallet('wallet_directSubmitLatestSignedArtifact', [
+      directSubmitDestination,
+      consentShareSigningPayload,
+    ]);
     if (!response.ok) {
       setStatus(response.error ?? 'Direct submit failed.');
       return;
     }
     setStatus('Direct submit accepted. Receipt metadata persisted locally.');
     setConfirmDirectSubmitDestination(false);
+    setConsentShareSigningPayload(false);
     await refreshState();
   };
 
@@ -918,7 +923,8 @@ export function App() {
               <article className="request-card">
                 <h2>Wallet direct submit (Model 2 preview)</h2>
                 <p className="meta-text">
-                  Direct submit sends signed metadata from the latest approved dApp request to a wallet-allowlisted endpoint.
+                  Direct submit sends signed metadata by default. Canonical payload bytes are only shared when you
+                  explicitly opt in for this submit.
                 </p>
                 <div className="form-grid">
                   <label htmlFor="direct-submit-destination">Destination endpoint</label>
@@ -938,6 +944,14 @@ export function App() {
                       onChange={(event) => setConfirmDirectSubmitDestination(event.target.checked)}
                     />
                     <span>I confirm this destination endpoint for this submit.</span>
+                  </label>
+                  <label className="checkbox-row">
+                    <input
+                      type="checkbox"
+                      checked={consentShareSigningPayload}
+                      onChange={(event) => setConsentShareSigningPayload(event.target.checked)}
+                    />
+                    <span>I consent to share canonical signing payload text with this endpoint.</span>
                   </label>
                   <div className="button-row">
                     <button className="primary" onClick={handleDirectSubmitLatestSigned}>

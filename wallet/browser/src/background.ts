@@ -828,7 +828,10 @@ async function getLatestSignedCitizenArtifact(): Promise<SignedSubmissionArtifac
   return asSignedSubmissionArtifact(result.result ?? null);
 }
 
-async function directSubmitLatestSignedArtifact(destinationUrl: string): Promise<WalletResponse> {
+async function directSubmitLatestSignedArtifact(
+  destinationUrl: string,
+  consentToShareSigningPayload: boolean,
+): Promise<WalletResponse> {
   const signedArtifact = await getLatestSignedCitizenArtifact();
   if (!signedArtifact) {
     return walletError('ERR_NO_SIGNED_ARTIFACT', 'No signed request artifact is available for direct submit.');
@@ -839,6 +842,7 @@ async function directSubmitLatestSignedArtifact(destinationUrl: string): Promise
       destinationUrl,
       allowlistedDestinations: DIRECT_SUBMIT_ALLOWLIST,
       signedArtifact,
+      consentToShareSigningPayload,
     });
     await appendDirectSubmitReceipt({
       requestId: signedArtifact.requestId ?? 'unknown',
@@ -1211,14 +1215,14 @@ async function handleWalletRequest(
     if (!isUiRequest) {
       return walletError('ERR_UNAUTHORIZED', 'Unauthorized wallet method.');
     }
-    const [destinationUrl] = request.params ?? [];
+    const [destinationUrl, consentToShareSigningPayload] = request.params ?? [];
     if (typeof destinationUrl !== 'string' || destinationUrl.trim().length === 0) {
       return walletError(
         'ERR_MALFORMED_REQUEST',
         'wallet_directSubmitLatestSignedArtifact requires destination URL.',
       );
     }
-    return directSubmitLatestSignedArtifact(destinationUrl);
+    return directSubmitLatestSignedArtifact(destinationUrl, consentToShareSigningPayload === true);
   }
 
   if (request.method === 'wallet_setOriginPermission') {

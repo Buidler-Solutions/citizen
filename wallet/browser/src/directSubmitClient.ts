@@ -32,6 +32,7 @@ export type DirectSubmitRequest = {
   destinationUrl: string;
   allowlistedDestinations: readonly string[];
   signedArtifact: SignedSubmissionArtifact;
+  consentToShareSigningPayload?: boolean;
   fetchImpl?: typeof fetch;
 };
 
@@ -132,13 +133,16 @@ export function isAllowlistedApiBaseUrl(
   });
 }
 
-export function createDirectSubmitBody(signedArtifact: SignedSubmissionArtifact): Record<string, unknown> {
+export function createDirectSubmitBody(
+  signedArtifact: SignedSubmissionArtifact,
+  consentToShareSigningPayload = false,
+): Record<string, unknown> {
   return {
     signerDid: signedArtifact.signerDid,
     verifyingKey: signedArtifact.verifyingKey,
     signature: signedArtifact.signature,
     payloadHash: signedArtifact.payloadHash,
-    signingPayload: signedArtifact.signingPayload,
+    signingPayload: consentToShareSigningPayload ? signedArtifact.signingPayload : null,
     signatureScope: signedArtifact.signatureScope,
     algorithm: signedArtifact.algorithm,
     requestId: signedArtifact.requestId ?? null,
@@ -162,7 +166,9 @@ export async function submitSignedArtifact(
       'content-type': 'application/json',
       'x-citizen-wallet-trace-id': traceId,
     },
-    body: JSON.stringify(createDirectSubmitBody(request.signedArtifact)),
+    body: JSON.stringify(
+      createDirectSubmitBody(request.signedArtifact, request.consentToShareSigningPayload ?? false),
+    ),
   });
 
   const latencyMs = Date.now() - startedAt;

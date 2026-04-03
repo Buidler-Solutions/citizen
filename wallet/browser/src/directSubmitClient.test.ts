@@ -70,7 +70,7 @@ describe('directSubmitClient', () => {
       verifyingKey: artifact.verifyingKey,
       signature: artifact.signature,
       payloadHash: artifact.payloadHash,
-      signingPayload: artifact.signingPayload,
+      signingPayload: null,
       signatureScope: artifact.signatureScope,
       algorithm: artifact.algorithm,
       requestId: artifact.requestId,
@@ -79,6 +79,13 @@ describe('directSubmitClient', () => {
     expect(body).not.toHaveProperty('formPayload');
     expect(body).not.toHaveProperty('fullName');
     expect(body).not.toHaveProperty('email');
+  });
+
+  it('includes signing payload only when user consent is provided', () => {
+    const body = createDirectSubmitBody(artifact, true);
+    expect(body).toMatchObject({
+      signingPayload: artifact.signingPayload,
+    });
   });
 
   it('submits signed artifacts with deterministic trace id header', async () => {
@@ -109,6 +116,9 @@ describe('directSubmitClient', () => {
     expect(url).toBe('https://node.citizen.local/v1/submit');
     expect(init.method).toBe('POST');
     expect((init.headers as Record<string, string>)['x-citizen-wallet-trace-id']).toBeTypeOf('string');
+    expect(JSON.parse(String(init.body))).toMatchObject({
+      signingPayload: null,
+    });
   });
 
   it('rejects unallowlisted endpoints before any network call', async () => {

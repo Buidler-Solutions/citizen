@@ -81,7 +81,7 @@ This checklist translates the current flow and known gaps into concrete implemen
 - [x] Add user-visible confirmation for destination endpoint per submit.
 - [x] Support signed submission receipt retrieval and local persistence.
 - [x] Add safe fallback when runtime endpoint is unavailable.
-- [ ] Maintain privacy defaults (only signed metadata leaves extension unless user consents).
+- [x] Maintain privacy defaults (only signed metadata leaves extension unless user consents).
 
 ## User data isolation controls (required regardless of model)
 
