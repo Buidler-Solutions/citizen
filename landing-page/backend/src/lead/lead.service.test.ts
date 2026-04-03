@@ -11,6 +11,7 @@ type MockLeadRepository = {
   };
   create: (payload: Record<string, unknown>) => Record<string, unknown>;
   save: (payload: Record<string, unknown>) => Promise<Record<string, unknown>>;
+  count: () => Promise<number>;
 };
 
 type MockFormSettingsRepository = {
@@ -49,6 +50,7 @@ function createService() {
     }),
     create: (payload) => payload,
     save: async (payload) => ({ id: 'lead-1', ...payload }),
+    count: async () => 1,
   };
 
   const formSettingsRepository: MockFormSettingsRepository = {
@@ -98,6 +100,7 @@ function buildSignedPayload(overrides: Partial<CreateLeadDto> = {}): CreateLeadD
     country: 'United States',
     role: 'builder',
     missionNeed: 'Deterministic approvals and replay-safe signatures.',
+    ...overrides,
   };
 
   const protocolPayload = {
@@ -117,7 +120,12 @@ function buildSignedPayload(overrides: Partial<CreateLeadDto> = {}): CreateLeadD
   const walletSignature = sign(null, Buffer.from(canonicalSigningPayload, 'utf8'), privateKey).toString('hex');
 
   return {
-    ...basePayload,
+    fullName: basePayload.fullName,
+    institution: basePayload.institution,
+    email: basePayload.email,
+    country: basePayload.country,
+    role: basePayload.role,
+    missionNeed: basePayload.missionNeed,
     walletSignerDid: `did:key:ed25519:${walletVerifyingKey}`,
     walletVerifyingKey,
     walletSignature,
@@ -147,4 +155,56 @@ test('create accepts canonical signed onboarding payloads', async () => {
 
   assert.equal(created.email, signedPayload.email.toLowerCase());
   assert.equal(created.walletPayloadHash, signedPayload.walletPayloadHash);
+});
+
+test('stats report relay direct-submit failure rate from relay outcomes', async () => {
+  const relayUrl = 'https://citizen-relay.example.test/api/v1/submit';
+  const originalRelayUrl = process.env.CITIZEN_SIGNED_SUBMISSION_RELAY_URL;
+  const originalFetch = globalThis.fetch;
+
+  process.env.CITIZEN_SIGNED_SUBMISSION_RELAY_URL = relayUrl;
+
+  let fetchCalls = 0;
+  const mockedFetch = (async () => {
+    fetchCalls += 1;
+    if (fetchCalls === 1) {
+      return {
+        ok: true,
+        status: 200,
+      } as Response;
+    }
+    return {
+      ok: false,
+      status: 400,
+    } as Response;
+  }) as unknown as typeof fetch;
+  globalThis.fetch = mockedFetch;
+
+  try {
+    const service = createService();
+    await service.create(buildSignedPayload({ email: 'relay-success@example.com' }));
+    await assert.rejects(
+      service.create(buildSignedPayload({ email: 'relay-failure@example.com' })),
+      (error: unknown) => error instanceof BadRequestException,
+    );
+
+    const stats = await service.stats() as {
+      totalInterestSubmissions: number;
+      relaySubmissionTelemetry: {
+        totalRelaySubmissions: number;
+        failedRelaySubmissions: number;
+        relayDirectSubmitFailureRate: number | null;
+      };
+    };
+
+    assert.equal(stats.totalInterestSubmissions, 1);
+    assert.deepEqual(stats.relaySubmissionTelemetry, {
+      totalRelaySubmissions: 2,
+      failedRelaySubmissions: 1,
+      relayDirectSubmitFailureRate: 0.5,
+    });
+  } finally {
+    process.env.CITIZEN_SIGNED_SUBMISSION_RELAY_URL = originalRelayUrl;
+    globalThis.fetch = originalFetch;
+  }
 });
