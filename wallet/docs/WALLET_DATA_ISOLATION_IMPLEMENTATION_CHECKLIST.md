@@ -77,7 +77,7 @@ This checklist translates the current flow and known gaps into concrete implemen
 
 ### B3) If adopting Model 2, implement wallet-side submit pipeline
 
-- [ ] Add wallet network client with allowlisted endpoints.
+- [x] Add wallet network client with allowlisted endpoints.
 - [ ] Add user-visible confirmation for destination endpoint per submit.
 - [ ] Support signed submission receipt retrieval and local persistence.
 - [ ] Add safe fallback when runtime endpoint is unavailable.
