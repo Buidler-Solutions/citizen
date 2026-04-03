@@ -133,6 +133,7 @@ The relay URL is fail-closed validated on submit: it must be an absolute `http:/
 
 Relay delivery uses deterministic deduplication keys derived from `(walletPayloadHash, email)` and sends the key in `deduplication_key` and `x-idempotency-key` so upstreams can safely collapse duplicates.
 Retry behavior is bounded and configurable: transient relay failures (`429`, `5xx`, or network errors) are retried up to `CITIZEN_SIGNED_SUBMISSION_RELAY_MAX_ATTEMPTS` with exponential backoff starting at `CITIZEN_SIGNED_SUBMISSION_RELAY_RETRY_BACKOFF_MS` milliseconds.
+Protected stats responses from `GET /interest/stats` now include `relaySubmissionTelemetry.relayDirectSubmitFailureRate`, computed from terminal relay outcomes (`failedRelaySubmissions / totalRelaySubmissions`) when relay mode is enabled.
 
 Migration note: existing `interest_submissions` rows created before wallet-signing enforcement are preserved with nullable wallet metadata columns; new submissions are still enforced at request-validation/service level.
 

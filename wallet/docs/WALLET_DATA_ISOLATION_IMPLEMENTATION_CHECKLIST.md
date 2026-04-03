@@ -135,7 +135,7 @@ This checklist translates the current flow and known gaps into concrete implemen
   - [x] approval rate
   - [x] rejection rate
   - [x] timeout rate
-  - [ ] relay/direct submit failure rate
+  - [x] relay/direct submit failure rate
 - [x] Prepare rollback runbook.
 
 ## Suggested implementation order

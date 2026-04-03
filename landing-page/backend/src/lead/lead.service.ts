@@ -63,6 +63,10 @@ const DEFAULT_ROLE_OPTIONS = [
 @Injectable()
 export class LeadService {
   private readonly logger = new Logger(LeadService.name);
+  private relaySubmissionTelemetry = {
+    totalRelaySubmissions: 0,
+    failedRelaySubmissions: 0,
+  };
 
   constructor(
     @InjectRepository(LeadInterest)
@@ -305,6 +309,7 @@ export class LeadService {
         const latencyMs = Date.now() - startedAt;
 
         if (response.ok) {
+          this.recordRelaySubmissionOutcome('success');
           this.logger.log(
             `Relay accepted signed onboarding payload trace_id=${relayTraceId} `
             + `status=${response.status} latency_ms=${latencyMs} payload_hash=${payload.walletPayloadHash} `
@@ -323,6 +328,7 @@ export class LeadService {
         );
 
         if (!retryableStatus || finalAttempt) {
+          this.recordRelaySubmissionOutcome('failure');
           throw new BadRequestException(
             `Citizen network relay rejected signed onboarding payload (trace_id=${relayTraceId}, status=${response.status}).`,
           );
@@ -342,6 +348,7 @@ export class LeadService {
         );
 
         if (finalAttempt) {
+          this.recordRelaySubmissionOutcome('failure');
           throw new ServiceUnavailableException(
             `Citizen network relay unavailable for signed onboarding payload (trace_id=${relayTraceId}).`,
           );
@@ -451,7 +458,34 @@ export class LeadService {
 
   async stats() {
     const total = await this.leadRepository.count();
-    return { totalInterestSubmissions: total };
+    const relay = this.getRelaySubmissionTelemetrySnapshot();
+    return {
+      totalInterestSubmissions: total,
+      relaySubmissionTelemetry: relay,
+    };
+  }
+
+  private getRelaySubmissionTelemetrySnapshot(): {
+    totalRelaySubmissions: number;
+    failedRelaySubmissions: number;
+    relayDirectSubmitFailureRate: number | null;
+  } {
+    const { totalRelaySubmissions, failedRelaySubmissions } = this.relaySubmissionTelemetry;
+    const relayDirectSubmitFailureRate = totalRelaySubmissions > 0
+      ? Number((failedRelaySubmissions / totalRelaySubmissions).toFixed(4))
+      : null;
+    return {
+      totalRelaySubmissions,
+      failedRelaySubmissions,
+      relayDirectSubmitFailureRate,
+    };
+  }
+
+  private recordRelaySubmissionOutcome(outcome: 'success' | 'failure'): void {
+    this.relaySubmissionTelemetry.totalRelaySubmissions += 1;
+    if (outcome === 'failure') {
+      this.relaySubmissionTelemetry.failedRelaySubmissions += 1;
+    }
   }
 
   async submissions(): Promise<LeadInterest[]> {
