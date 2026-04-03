@@ -110,15 +110,43 @@ describe('directSubmitClient', () => {
     expect(response.status).toBe(202);
     expect(response.receiptId).toBe('receipt-1');
     expect(response.receiptHash).toBe('sha256:abcd');
+    expect(response.idempotencyKey.startsWith('sha256:')).toBe(true);
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(url).toBe('https://node.citizen.local/v1/submit');
     expect(init.method).toBe('POST');
     expect((init.headers as Record<string, string>)['x-citizen-wallet-trace-id']).toBeTypeOf('string');
+    expect((init.headers as Record<string, string>)['x-idempotency-key']).toBe(response.idempotencyKey);
     expect(JSON.parse(String(init.body))).toMatchObject({
       signingPayload: null,
     });
+  });
+
+  it('reuses the same idempotency key for duplicate direct-submit attempts with identical signed bytes', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 202,
+      json: async () => ({ receipt: { receipt_id: 'receipt-1' } }),
+    } as Response);
+
+    const first = await submitSignedArtifact({
+      destinationUrl: 'https://node.citizen.local/v1/submit',
+      allowlistedDestinations: ['https://node.citizen.local/v1/submit'],
+      signedArtifact: artifact,
+      fetchImpl: fetchMock,
+    });
+    const second = await submitSignedArtifact({
+      destinationUrl: 'https://node.citizen.local/v1/submit',
+      allowlistedDestinations: ['https://node.citizen.local/v1/submit'],
+      signedArtifact: artifact,
+      fetchImpl: fetchMock,
+    });
+
+    expect(first.idempotencyKey).toBe(second.idempotencyKey);
+    const firstHeaders = fetchMock.mock.calls[0]?.[1]?.headers as Record<string, string>;
+    const secondHeaders = fetchMock.mock.calls[1]?.[1]?.headers as Record<string, string>;
+    expect(firstHeaders['x-idempotency-key']).toBe(secondHeaders['x-idempotency-key']);
   });
 
   it('rejects unallowlisted endpoints before any network call', async () => {
@@ -163,11 +191,13 @@ describe('directSubmitClient', () => {
     expect(response.status).toBe(202);
     expect(response.receiptId).toBe('receipt-7');
     expect(response.receiptHash).toBe('block-hash-77');
+    expect(response.idempotencyKey.startsWith('network:')).toBe(true);
 
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(url).toBe('http://127.0.0.1:8081/api/v1/envelopes/submit');
     expect(init.method).toBe('POST');
     expect((init.headers as Record<string, string>)['x-api-key']).toBe('builder-ingest-key');
+    expect((init.headers as Record<string, string>)['x-idempotency-key']).toBe(response.idempotencyKey);
   });
 
   it('blocks full envelope submit without explicit consent', async () => {
