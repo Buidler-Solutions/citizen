@@ -1,4 +1,61 @@
 {
   "challenges": [],
-  "sessions": []
+  "sessions": [
+    {
+      "sessionId": "36b3690a-e269-4c24-b5e5-f96834087e8f",
+      "wallet": "0x17cf29e7a60751a2cf320544da5905ac07bef0df",
+      "network": "futurenet",
+      "issuedAt": 1775190282931,
+      "expiresAt": 1775192082931,
+      "revoked": false
+    },
+    {
+      "sessionId": "794299ba-0007-4ded-b874-cf63fe2e7c4a",
+      "wallet": "0x17cf29e7a60751a2cf320544da5905ac07bef0df",
+      "network": "futurenet",
+      "issuedAt": 1775190382707,
+      "expiresAt": 1775192182707,
+      "revoked": false
+    },
+    {
+      "sessionId": "67ad98f8-07d6-44ec-a3b0-982ee53c31b9",
+      "wallet": "0x17cf29e7a60751a2cf320544da5905ac07bef0df",
+      "network": "futurenet",
+      "issuedAt": 1775190403559,
+      "expiresAt": 1775192203559,
+      "revoked": false
+    },
+    {
+      "sessionId": "194ef3fb-3410-4896-9156-bda5617e28dd",
+      "wallet": "0x17cf29e7a60751a2cf320544da5905ac07bef0df",
+      "network": "futurenet",
+      "issuedAt": 1775190835902,
+      "expiresAt": 1775192635902,
+      "revoked": false
+    },
+    {
+      "sessionId": "160c2700-dc7b-43ee-a77c-4d5c7abd4318",
+      "wallet": "0x17cf29e7a60751a2cf320544da5905ac07bef0df",
+      "network": "futurenet",
+      "issuedAt": 1775191041807,
+      "expiresAt": 1775192841807,
+      "revoked": false
+    },
+    {
+      "sessionId": "33e89803-ad8b-486f-9ba8-1fe5558d282d",
+      "wallet": "0x17cf29e7a60751a2cf320544da5905ac07bef0df",
+      "network": "futurenet",
+      "issuedAt": 1775191052240,
+      "expiresAt": 1775192852240,
+      "revoked": false
+    },
+    {
+      "sessionId": "449dd323-5722-41ec-a4c1-1c3523d00a82",
+      "wallet": "0x17cf29e7a60751a2cf320544da5905ac07bef0df",
+      "network": "futurenet",
+      "issuedAt": 1775191064859,
+      "expiresAt": 1775192864859,
+      "revoked": false
+    }
+  ]
 }
