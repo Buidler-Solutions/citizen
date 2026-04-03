@@ -121,17 +121,17 @@ This checklist translates the current flow and known gaps into concrete implemen
 
 ### D2) Manual QA scenarios
 
-- [ ] Unknown origin request.
-- [ ] Payload mismatch between preview and signed bytes.
-- [ ] Popup close/reopen mid-request.
-- [ ] Network outage during submission/relay.
+- [x] Unknown origin request.
+- [x] Payload mismatch between preview and signed bytes.
+- [x] Popup close/reopen mid-request.
+- [x] Network outage during submission/relay.
 - [x] Duplicate submit attempt with same signature.
 
 ### D3) Release controls
 
 - [x] Feature flag dedicated approval UI.
 - [x] Ship behind staged rollout (internal → beta → general).
-- [ ] Monitor key metrics:
+- [x] Monitor key metrics:
   - [x] approval rate
   - [x] rejection rate
   - [x] timeout rate
@@ -140,28 +140,33 @@ This checklist translates the current flow and known gaps into concrete implemen
 
 ## Suggested implementation order
 
-1. [ ] A1 request model + schema/canonicalization.
-2. [ ] A2 approval UI + approve/reject actions.
-3. [ ] A3 lifecycle security controls.
-4. [ ] A4 handshake/error-code updates.
+1. [x] A1 request model + schema/canonicalization.
+2. [x] A2 approval UI + approve/reject actions.
+3. [x] A3 lifecycle security controls.
+4. [x] A4 handshake/error-code updates.
 5. [x] B1 architecture decision record.
-6. [ ] B2 or B3 implementation (based on B1).
-7. [ ] C1–C3 isolation controls.
-8. [ ] D1–D3 testing, staged rollout, and monitoring.
+6. [x] B2 or B3 implementation (based on B1).
+7. [x] C1–C3 isolation controls.
+8. [x] D1–D3 testing, staged rollout, and monitoring.
 
 ## Cross-stack sync guardrails (wallet tech stack)
 
 When implementing any wallet data-isolation task, keep these surfaces synchronized:
 
-- [ ] wallet browser extension request/signing flow (`wallet/browser`)
-- [ ] landing-page onboarding dApp submission flow (`landing-page/frontend`)
-- [ ] wallet/backend verification + session/relay paths (`wallet/backend`)
-- [ ] landing-page backend validation + network relay (`landing-page/backend`)
-- [ ] builder SDK contracts (`sdk/nodejs`, `wallet/sdk/typescript-auth`)
-- [ ] wallet CLI operational guidance (`wallet/cli`)
+- [x] wallet browser extension request/signing flow (`wallet/browser`)
+- [x] landing-page onboarding dApp submission flow (`landing-page/frontend`)
+- [x] wallet/backend verification + session/relay paths (`wallet/backend`)
+- [x] landing-page backend validation + network relay (`landing-page/backend`)
+- [x] builder SDK contracts (`sdk/nodejs`, `wallet/sdk/typescript-auth`)
+- [x] wallet CLI operational guidance (`wallet/cli`)
 
 For every signed submission flow, explicitly document and enforce:
 
-- [ ] **on-chain commitment fields** (payload hash, signer DID, verifying key, signature, signature scope, algorithm)
-- [ ] **off-chain custody fields** (PII/business payload, storage location, retention policy, access policy)
-- [ ] a deterministic mapping from off-chain payload → on-chain commitment hash.
+- [x] **on-chain commitment fields** (payload hash, signer DID, verifying key, signature, signature scope, algorithm)
+- [x] **off-chain custody fields** (PII/business payload, storage location, retention policy, access policy)
+- [x] a deterministic mapping from off-chain payload → on-chain commitment hash.
+
+References:
+- Manual QA scenarios: `wallet/docs/WALLET_DATA_ISOLATION_MANUAL_QA_RUNBOOK.md`
+- Cross-stack sync and commitment/custody mapping: `wallet/docs/WALLET_DATA_ISOLATION_CROSS_STACK_SYNC.md`
+- Rollout metrics + staged controls: `wallet/docs/APPROVAL_UI_ROLLOUT_RUNBOOK.md`
