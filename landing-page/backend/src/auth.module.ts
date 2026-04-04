@@ -24,6 +24,8 @@ import { WalletAuthService } from './wallet-auth.service';
         secret: config.get<string>('JWT_SECRET', 'change-me-in-production'),
         signOptions: {
           expiresIn: config.get<string>('JWT_EXPIRES_IN', '1d'),
+          issuer: config.get<string>('AUTH_JWT_ISSUER', 'citizen-landing-backend'),
+          audience: config.get<string>('AUTH_JWT_AUDIENCE', 'citizen-landing-frontend'),
         },
       }),
     }),

@@ -1,7 +1,6 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AuthModule } from '../auth.module';
-import { JwtAuthGuard } from '../jwt-auth.guard';
 import { LeadController } from './lead.controller';
 import { LeadInterest } from './lead.entity';
 import { LeadService } from './lead.service';
@@ -11,7 +10,7 @@ import { MailModule } from '../mail/mail.module';
 
 @Module({
   imports: [TypeOrmModule.forFeature([LeadInterest, FormSettings, AsciinemaRecording]), AuthModule, MailModule],
-  providers: [LeadService, JwtAuthGuard],
+  providers: [LeadService],
   controllers: [LeadController],
 })
 export class LeadModule {}
