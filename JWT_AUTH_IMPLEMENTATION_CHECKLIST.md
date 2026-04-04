@@ -185,7 +185,8 @@ Use this file as the **single source of implementation tracking** for wallet-sig
   - 2026-04-04: verify now emits structured backend audit logs with success/failure reasons and request metadata.
 
 ### 4.3 JWT issuance and key management
-- [ ] JWT includes `sub`, `wallet`, `sessionId`, `iat`, `exp`, `iss`, `aud` (optional scope/role).
+- [x] JWT includes `sub`, `wallet`, `sessionId`, `iat`, `exp`, `iss`, `aud` (optional scope/role).
+  - 2026-04-04: access JWT issuance signs with subject + issuer/audience/expires and embeds wallet/session claims.
 - [ ] Access TTL set to 5–15 minutes.
 - [ ] Session/refresh TTL set by risk policy (7–30 days).
 - [ ] Use RS256 or EdDSA preferred (HS256 only with strict constraints).
@@ -235,7 +236,8 @@ Use this file as the **single source of implementation tracking** for wallet-sig
 ### 6.2 Refresh token lifecycle
 - [x] Generate >=256-bit random refresh token.
   - 2026-04-04: refresh token generation uses `randomBytes(32)` (256-bit entropy) and base64url encoding.
-- [ ] Set cookie with `HttpOnly`, `Secure`, `SameSite`, restricted `path`.
+- [x] Set cookie with `HttpOnly`, `Secure`, `SameSite`, restricted `path`.
+  - 2026-04-04: verify/refresh/logout use `ctzn_refresh_token` with `HttpOnly + Secure + SameSite=Strict + path=/auth`.
 - [ ] Rotate on every refresh.
 - [ ] Revoke on logout, compromise signals, or anomalies.
 
@@ -262,7 +264,8 @@ Use this file as the **single source of implementation tracking** for wallet-sig
 - [ ] JWT issuer/audience validation enforced everywhere.
 - [x] Session revocation checks active on protected routes.
   - 2026-04-04: JWT guard validates session revocation/expiry when `sessionId` claim is present.
-- [ ] Audit trail covers challenge, verify, refresh, logout.
+- [x] Audit trail covers challenge, verify, refresh, logout.
+  - 2026-04-04: structured audit logs now emit for challenge issuance, verify success/failure, refresh rotation, and logout revocation.
 
 ### 7.3 CSRF/XSS hardening
 - [ ] Refresh/logout CSRF protection validated.
