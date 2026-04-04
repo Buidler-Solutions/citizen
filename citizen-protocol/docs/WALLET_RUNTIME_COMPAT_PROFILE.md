@@ -2,6 +2,13 @@
 
 Status: Draft v2 (implementation-aligned)
 
+Implementation progress note (2026-04-04):
+
+- Rust wallet crate now exposes `WrcpTxV1SigningPayload`,
+  `build_wrcp_tx_v1_signing_payload`, and `wrcp_tx_v1_canonical_json` so wallet
+  surfaces can construct and inspect canonical WRCP-TX-V1 preimages using the
+  same serialization path as runtime signature verification.
+
 ## 1) Purpose
 
 This profile defines the minimum wallet behavior required to interoperate with the Citizen Rust runtime as currently implemented.
@@ -17,7 +24,7 @@ Golden rule:
 Wallet teams must implement against these runtime code paths:
 
 1. Entry signing preimage and signature generation:
-   - `citizen-protocol/crates/wallet/src/lib.rs` (`EntrySigningPayload`, `sign_entry`, `verify_entry_signature`).
+   - `citizen-protocol/crates/wallet/src/lib.rs` (`WrcpTxV1SigningPayload`, `build_wrcp_tx_v1_signing_payload`, `wrcp_tx_v1_canonical_json`, `sign_entry`, `verify_entry_signature`).
 2. Namespace and policy enforcement:
    - `citizen-protocol/crates/ledger/src/lib.rs` (`validate_entry`, `require_signature`, `consent_policy`, `privacy_policy`, `builder_credit_policy`).
 3. Entry schema and privacy fields:
@@ -247,7 +254,7 @@ A release candidate is blocked unless:
 
 ## 16) Immediate implementation checklist
 
-- [ ] Implement wallet-side `WRCP-TX-V1` preimage generator.
+- [x] Implement wallet-side `WRCP-TX-V1` preimage generator.
 - [ ] Add wallet-side verifier fixtures from Rust canonical test vectors.
 - [ ] Implement `WRCP-MSIG-V1` proof builder + local dry-run checks.
 - [ ] Add privacy mode generation flows that satisfy runtime-required fields.
