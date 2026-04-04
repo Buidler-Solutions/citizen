@@ -558,3 +558,135 @@ Before moving profile status from “Draft v2” to “Draft v2.2”, confirm:
 3. Failure reason-code parity is asserted in automated tests.
 4. This document’s Sections 16 and 19 are updated with real completion status
    (no stale `[x]` markers).
+
+## 24) WRCP canonical data contracts (v2.2 draft targets)
+
+This section provides concrete JSON contracts so implementation PRs can converge
+without re-debating field names.
+
+### 24.1 `WrcpMsigV1Proof` JSON shape
+
+`payload.multisig_proofs[]` SHOULD serialize as:
+
+```json
+{
+  "approver": "did:citizen:approver-1",
+  "public_key": "02ab...ef",
+  "signature": "4f2c...91"
+}
+```
+
+Contract requirements:
+
+1. `approver` MUST be a non-empty DID string.
+2. `public_key` MUST be lowercase-hex encoded compressed secp256k1 bytes.
+3. `signature` MUST be lowercase-hex ECDSA signature bytes produced from the
+   runtime-compatible multisig signing payload.
+
+### 24.2 `WrcpMsigV1DryRunReport` JSON shape
+
+Wallet/CLI/SDK dry-run output SHOULD use this stable structure:
+
+```json
+{
+  "ok": false,
+  "required_approvals": 2,
+  "unique_approvals": 1,
+  "errors": [
+    {
+      "reason_code": "MSIG_APPROVALS_BELOW_THRESHOLD",
+      "message": "Unique authorized approvals 1/2."
+    }
+  ],
+  "warnings": []
+}
+```
+
+Implementation notes:
+
+- `errors` MUST be deterministic in order (input-proof order, then threshold
+  summary checks).
+- `warnings` are non-blocking but MUST NOT hide errors.
+- `ok=true` iff `errors` is empty.
+
+### 24.3 Reason-code extension policy
+
+To preserve backward compatibility for automation:
+
+1. Existing canonical reason codes in Section 21.3 are immutable once released.
+2. New reason codes MAY be added, but only as additive change.
+3. Any addition MUST update:
+   - wallet dry-run tests,
+   - ledger parity tests,
+   - vector fixtures,
+   - CLI docs/examples in same PR.
+
+## 25) Test-vector schema draft (for `docs/test-vectors/`)
+
+Use the following minimal schema so vectors remain portable across crates.
+
+### 25.1 `wrcp_tx_v1/canonical_payloads.json`
+
+Each case SHOULD include:
+
+- `case_id` (string, stable)
+- `entry` (full `LedgerEntry` JSON)
+- `expected_canonical_json` (string)
+- `expected_sha256_hex` (string)
+
+### 25.2 `wrcp_tx_v1/signature_cases.json`
+
+Each case SHOULD include:
+
+- `case_id`
+- `entry`
+- `author_public_key_hex`
+- `signature_hex`
+- `expect_accept`
+- `expected_reason_code` (required when `expect_accept=false`)
+
+### 25.3 `wrcp_msig_v1/proof_matrix.json`
+
+Each case SHOULD include:
+
+- `case_id`
+- `namespace_policy`
+- `entry`
+- `expect_accept`
+- `expected_reason_code` (required for failures)
+- `notes` (optional human context)
+
+Vector hygiene rules:
+
+1. `case_id` values MUST never be reused with changed semantics.
+2. `entry_id` in fixtures SHOULD be deterministic UUIDs to avoid noisy diffs.
+3. Vector files SHOULD stay sorted by `case_id`.
+
+## 26) Operator-facing rollout notes (when enabling strict mode)
+
+For namespaces adopting WRCP strict compatibility in production-like
+environments:
+
+1. Enable dry-run in wallet/SDK by default before submit.
+2. Track rejection ratios by `reason_code` for at least one full release cycle.
+3. Only enforce hard fail on unknown wallet profile versions after observing
+   compatibility telemetry and publishing migration guidance.
+
+Recommended staged rollout:
+
+- **Phase 0 (observe):** emit metrics only, no policy hardening changes.
+- **Phase 1 (warn):** return warning metadata for likely future failures.
+- **Phase 2 (enforce):** reject incompatible submissions according to WRCP
+  conformance gate.
+
+## 27) Maintainer update protocol for this document
+
+When a WRCP implementation PR lands, update this file in the same PR:
+
+1. Refresh Section 16 and Section 19 checklist markers.
+2. Add/adjust implementation progress note date at the top.
+3. Link new commands or fixtures in relevant sections.
+4. If behavior changed, add a short migration note under Section 15.
+
+This keeps the profile implementation-aligned and prevents stale “paper spec”
+drift.
