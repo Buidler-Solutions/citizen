@@ -883,3 +883,147 @@ Before starting the next WRCP PR, perform this quick handoff sequence:
 
 This protocol keeps WRCP changes incremental, reviewable, and implementation
 aligned across wallet, ledger, and CI surfaces.
+
+## 31) Implementation-ready specs for the next PRs
+
+This section turns the v2.2 backlog into implementation-ready artifacts so
+wallet, ledger, CLI, and SDK work can land with minimal interpretation drift.
+
+### 31.1 Canonical dry-run report schema (`WrcpMsigV1DryRunReport`)
+
+Use this JSON shape for CLI and SDK output parity:
+
+```json
+{
+  "ok": false,
+  "required_approvals": 2,
+  "unique_approvals": 1,
+  "errors": [
+    {
+      "reason_code": "MSIG_APPROVALS_BELOW_THRESHOLD",
+      "message": "unique approvals below required threshold",
+      "path": "payload.multisig_proofs"
+    }
+  ],
+  "warnings": [
+    {
+      "reason_code": "MSIG_DUPLICATE_APPROVER",
+      "message": "duplicate approver proof ignored for threshold counting",
+      "path": "payload.multisig_proofs[1].approver"
+    }
+  ]
+}
+```
+
+Field contract:
+
+- `ok`: `true` only when no blocking errors are present.
+- `required_approvals`: value from namespace policy snapshot.
+- `unique_approvals`: count after duplicate-approver de-duplication.
+- `errors[]`: fatal issues that should produce non-zero CLI exit.
+- `warnings[]`: advisory issues; MAY coexist with `ok=true`.
+
+### 31.2 Reason-code governance rules
+
+To avoid compatibility drift across surfaces:
+
+1. Canonical reason codes listed in §21.3 are a versioned contract.
+2. New reason codes require:
+   - WRCP profile update,
+   - wallet + ledger test additions,
+   - changelog note in the same PR.
+3. Existing codes MUST NOT change semantics across WRCP minor versions.
+
+### 31.3 Shared vector file schemas (minimum required keys)
+
+#### `docs/test-vectors/wrcp_tx_v1/canonical_payloads.json`
+
+```json
+{
+  "version": "WRCP-TX-V1",
+  "cases": [
+    {
+      "case_id": "tx_none_privacy_minimal",
+      "entry": {},
+      "expected_canonical_json": "{...}",
+      "expected_payload_sha256": "hex"
+    }
+  ]
+}
+```
+
+#### `docs/test-vectors/wrcp_tx_v1/signature_cases.json`
+
+```json
+{
+  "version": "WRCP-TX-V1",
+  "cases": [
+    {
+      "case_id": "sig_valid_ed25519_case_01",
+      "entry": {},
+      "public_key_hex": "hex",
+      "signature_hex": "hex",
+      "expect_accept": true,
+      "reason_code": null
+    }
+  ]
+}
+```
+
+#### `docs/test-vectors/wrcp_msig_v1/proof_matrix.json`
+
+```json
+{
+  "version": "WRCP-MSIG-V1",
+  "cases": [
+    {
+      "case_id": "msig_threshold_fail_case_01",
+      "entry": {},
+      "namespace_policy": {},
+      "expect_accept": false,
+      "reason_code": "MSIG_APPROVALS_BELOW_THRESHOLD"
+    }
+  ]
+}
+```
+
+Vector constraints:
+
+- `case_id` MUST be globally unique within each file.
+- `expect_accept=false` cases MUST include `reason_code`.
+- Canonical JSON strings MUST preserve exact byte representation used for
+  signing/parity checks.
+
+### 31.4 CI `wrcp-conformance` stage (authoritative command contract)
+
+Run from `citizen-protocol/` workspace root:
+
+```bash
+cargo test -p citizen-wallet wrcp_
+cargo test -p citizen-ledger wrcp_
+cargo test -p citizen-simulation multisig_credit_grant
+```
+
+Stage policy:
+
+- Required on protected branches and release tags.
+- No allow-failure mode.
+- Upload artifacts for any failing case:
+  - vector file + `case_id`,
+  - observed `reason_code`,
+  - expected vs actual canonical payload hash (when applicable).
+
+### 31.5 Merge sequencing (to keep trunk green)
+
+1. **PR A (fixtures only)**
+   - Add vector skeleton files + parser tests in wallet crate.
+2. **PR B (ledger parity)**
+   - Wire ledger tests to same vectors + reason-code assertions.
+3. **PR C (CLI UX)**
+   - Expose `build-builder-credit-proof` and `dry-run-builder-credit-grant`
+     stable JSON output.
+4. **PR D (CI gate)**
+   - Add required `wrcp-conformance` workflow + failure artifacts.
+
+Each PR should update §19 checklist status in this document to keep rollout
+state discoverable.
