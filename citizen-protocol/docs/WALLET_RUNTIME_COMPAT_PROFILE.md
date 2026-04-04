@@ -329,7 +329,7 @@ Status legend:
 - `[~]` partially implemented
 - `[ ]` not started
 
-Last checklist refresh: **2026-04-04 (post wallet proof-builder + dry-run API landing)**.
+Last checklist refresh: **2026-04-04 (post WRCP vector skeleton landing)**.
 
 ### 19.1 Wallet multisig builder API (`build_wrcp_msig_v1_proof`)
 
@@ -363,10 +363,10 @@ Last checklist refresh: **2026-04-04 (post wallet proof-builder + dry-run API la
 
 ### 19.3 Shared WRCP test vectors
 
-- [ ] Add `docs/test-vectors/wrcp_tx_v1/canonical_payloads.json`.
-- [ ] Add `docs/test-vectors/wrcp_tx_v1/signature_cases.json`.
-- [ ] Add `docs/test-vectors/wrcp_msig_v1/proof_matrix.json`.
-- [ ] Include pass/fail matrix for:
+- [x] Add `docs/test-vectors/wrcp_tx_v1/canonical_payloads.json` (skeleton v1).
+- [x] Add `docs/test-vectors/wrcp_tx_v1/signature_cases.json` (skeleton v1).
+- [x] Add `docs/test-vectors/wrcp_msig_v1/proof_matrix.json` (skeleton v1).
+- [~] Include pass/fail matrix for:
   - unauthorized approver
   - duplicate approver counted once
   - invalid public key

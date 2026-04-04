@@ -1,0 +1,59 @@
+{
+  "profile": "WRCP-MSIG-V1",
+  "schema_version": 1,
+  "generated_at": "2026-04-04",
+  "cases": [
+    {
+      "case_id": "msig.valid.threshold_met.accept",
+      "description": "Unique authorized approvers meet required threshold.",
+      "required_grant_approvals": 2,
+      "grant_approvers": [
+        {
+          "did": "did:citizen:approver:one",
+          "public_key": ""
+        },
+        {
+          "did": "did:citizen:approver:two",
+          "public_key": ""
+        }
+      ],
+      "multisig_proofs": [
+        {
+          "approver": "did:citizen:approver:one",
+          "public_key": "",
+          "signature": ""
+        },
+        {
+          "approver": "did:citizen:approver:two",
+          "public_key": "",
+          "signature": ""
+        }
+      ],
+      "expected": {
+        "expect_accept": true
+      }
+    },
+    {
+      "case_id": "msig.unauthorized_approver.reject",
+      "description": "Approver outside grant_approvers list must be rejected.",
+      "required_grant_approvals": 1,
+      "grant_approvers": [
+        {
+          "did": "did:citizen:approver:one",
+          "public_key": ""
+        }
+      ],
+      "multisig_proofs": [
+        {
+          "approver": "did:citizen:approver:rogue",
+          "public_key": "",
+          "signature": ""
+        }
+      ],
+      "expected": {
+        "expect_accept": false,
+        "reason_code": "MSIG_APPROVER_NOT_AUTHORIZED"
+      }
+    }
+  ]
+}
