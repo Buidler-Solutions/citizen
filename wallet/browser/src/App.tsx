@@ -35,6 +35,7 @@ type VaultWallet = {
   name: string;
   address: string;
   hasMnemonic: boolean;
+  mnemonicWordCount?: MnemonicWordCount | null;
   createdAt: string;
   isActive: boolean;
 };
@@ -105,6 +106,15 @@ type ProfileDetails = {
 type TabId = 'activity' | 'compose' | 'vault' | 'security' | 'profile';
 
 type NetworkId = 'mainnet' | 'futurenet' | 'testnet' | 'localnode';
+type MnemonicWordCount = 12 | 24;
+
+function detectMnemonicWordCount(phrase: string): MnemonicWordCount | null {
+  const words = phrase.trim().split(/\s+/).filter(Boolean).length;
+  if (words === 12 || words === 24) {
+    return words;
+  }
+  return null;
+}
 
 const NETWORK_OPTIONS: { id: NetworkId; label: string }[] = [
   { id: 'mainnet', label: 'Mainnet' },
@@ -224,6 +234,7 @@ export function App() {
   const [mnemonicPhrase, setMnemonicPhrase] = useState('');
   const [importMnemonicPhrase, setImportMnemonicPhrase] = useState('');
   const [derivationPath, setDerivationPath] = useState("m/44'/930'/0'/0'/0'");
+  const [mnemonicWordCount, setMnemonicWordCount] = useState<MnemonicWordCount>(12);
   const [grantId, setGrantId] = useState('grant:builder:alpha');
   const [sponsorDid, setSponsorDid] = useState('did:ledger:builder:alpha');
   const [sponsoredDid, setSponsoredDid] = useState('did:ledger:app:citizen-blog');
@@ -285,7 +296,12 @@ export function App() {
 
       const vaultResponse = await callWallet('wallet_listVault');
       if (vaultResponse.ok && Array.isArray(vaultResponse.result)) {
-        setVaultWallets(vaultResponse.result as VaultWallet[]);
+        const wallets = vaultResponse.result as VaultWallet[];
+        setVaultWallets(wallets);
+        const activeMnemonicType = wallets.find((wallet) => wallet.isActive)?.mnemonicWordCount;
+        if (activeMnemonicType === 12 || activeMnemonicType === 24) {
+          setMnemonicWordCount(activeMnemonicType);
+        }
       }
 
       const pendingResponse = await callWallet('wallet_getPendingDappRequests');
@@ -453,6 +469,10 @@ export function App() {
       return;
     }
     setMnemonicPhrase(value.mnemonicPhrase);
+    const detectedWordCount = detectMnemonicWordCount(value.mnemonicPhrase);
+    if (detectedWordCount) {
+      setMnemonicWordCount(detectedWordCount);
+    }
     if (value.derivationPath) {
       setDerivationPath(value.derivationPath);
     }
@@ -478,6 +498,10 @@ export function App() {
 
     setMnemonicPhrase('');
     setImportMnemonicPhrase('');
+    const importedWordCount = detectMnemonicWordCount(importMnemonicPhrase);
+    if (importedWordCount) {
+      setMnemonicWordCount(importedWordCount);
+    }
     setStatus('Seed phrase imported. Wallet account updated.');
     await refreshState();
   };
@@ -487,7 +511,7 @@ export function App() {
     if (!(await ensurePasswordSetupIfNeeded())) {
       return;
     }
-    const result = await callWallet('wallet_generateMnemonicWallet', [derivationPath]);
+    const result = await callWallet('wallet_generateMnemonicWallet', [derivationPath, mnemonicWordCount]);
     if (!result.ok || typeof result.result !== 'object' || result.result === null) {
       setStatus(result.error ?? 'Failed to generate wallet.');
       return;
@@ -698,6 +722,13 @@ export function App() {
                 value={importMnemonicPhrase}
                 onChange={(event) => setImportMnemonicPhrase(event.target.value)}
               />
+              <select
+                value={mnemonicWordCount}
+                onChange={(event) => setMnemonicWordCount(Number(event.target.value) as MnemonicWordCount)}
+              >
+                <option value={12}>12-word seed</option>
+                <option value={24}>24-word seed</option>
+              </select>
               <button className="ghost" onClick={handleImportMnemonic}>Import existing wallet</button>
               <button className="primary" onClick={handleGenerateMnemonicWallet}>Create new wallet</button>
               {status ? <p>{status}</p> : null}
@@ -1087,6 +1118,13 @@ export function App() {
                   value={importMnemonicPhrase}
                   onChange={(event) => setImportMnemonicPhrase(event.target.value)}
                 />
+                <select
+                  value={mnemonicWordCount}
+                  onChange={(event) => setMnemonicWordCount(Number(event.target.value) as MnemonicWordCount)}
+                >
+                  <option value={12}>12-word seed</option>
+                  <option value={24}>24-word seed</option>
+                </select>
                 <button className="ghost" onClick={handleImportMnemonic}>Add wallet from seed phrase</button>
                 <button className="primary" onClick={handleGenerateMnemonicWallet}>Generate new wallet + seed</button>
                 {vaultWallets.map((wallet) => (
@@ -1094,6 +1132,9 @@ export function App() {
                     <div>
                       <strong>{wallet.name}</strong>
                       <p className="meta-text">{mask(wallet.address)}</p>
+                      {wallet.mnemonicWordCount ? (
+                        <p className="meta-text">Seed: {wallet.mnemonicWordCount} words</p>
+                      ) : null}
                     </div>
                     <button
                       className={wallet.isActive ? 'primary' : 'ghost'}

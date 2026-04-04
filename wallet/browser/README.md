@@ -6,7 +6,7 @@ Dedicated browser-wallet UX project for transaction/event signing flows.
 
 Current status is **aligned for mnemonic UX defaults**:
 
-- Browser extension signer now persists mnemonic metadata and supports seed phrase generation/reveal/import in the side panel.
+- Browser extension signer now persists mnemonic metadata and supports 12-word or 24-word seed phrase generation/reveal/import in the side panel.
 - Extension default derivation path is `m/44'/930'/0'/0'/0'`, matching the CLI default.
 - `citizen-wallet` CLI in `citizen-protocol/crates/wallet/src/cli.rs` supports mnemonic-based keygen/import with hardened-path validation.
 

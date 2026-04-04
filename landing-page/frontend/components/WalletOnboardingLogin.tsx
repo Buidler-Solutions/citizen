@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
 type WalletProvider = {
   request: (args: { method: string; params?: unknown[] }) => Promise<unknown>;
@@ -29,6 +29,42 @@ export function WalletOnboardingLogin() {
     () => process.env.NEXT_PUBLIC_WALLET_AUTH_API_URL ?? 'http://127.0.0.1:4499',
     [],
   );
+
+  const syncWalletHandshakeState = useCallback(async () => {
+    const provider = detectProvider();
+    if (!provider) {
+      setWallet(null);
+      setStatus('Citizen wallet extension not detected. Install and unlock to continue.');
+      return;
+    }
+
+    const token = window.localStorage.getItem('citizen.wallet.auth.session');
+    if (!token) {
+      setWallet(null);
+      setStatus('Connect your wallet to continue onboarding.');
+      return;
+    }
+
+    try {
+      const accountsResult = await provider.request({ method: 'citizen_accounts' });
+      const accounts = Array.isArray(accountsResult) ? accountsResult : [];
+      const selectedWallet = typeof accounts[0] === 'string' ? accounts[0].toLowerCase() : null;
+      if (!selectedWallet) {
+        setWallet(null);
+        setStatus('Wallet session found, but no connected account. Reconnect your wallet.');
+        return;
+      }
+      setWallet(selectedWallet);
+      setStatus('Wallet login successful. Your onboarding session is active.');
+    } catch {
+      setWallet(null);
+      setStatus('Wallet handshake check failed. Reconnect your wallet to continue.');
+    }
+  }, []);
+
+  useEffect(() => {
+    void syncWalletHandshakeState();
+  }, [syncWalletHandshakeState]);
 
   const connectAndLogin = async () => {
     setBusy(true);
@@ -89,8 +125,7 @@ export function WalletOnboardingLogin() {
       }
       window.localStorage.setItem('citizen.wallet.auth.session', token);
 
-      setWallet(selectedWallet.toLowerCase());
-      setStatus('Wallet login successful. Your onboarding session is active.');
+      await syncWalletHandshakeState();
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown wallet login error.';
       setStatus(`Wallet login failed: ${message}`);
@@ -109,7 +144,7 @@ export function WalletOnboardingLogin() {
         }}
         disabled={busy}
       >
-        {busy ? 'Connecting…' : wallet ? `Wallet · ${wallet.slice(0, 6)}…${wallet.slice(-4)}` : 'Login · Wallet'}
+        {busy ? 'Connecting…' : wallet ? `Wallet · ${wallet.slice(0, 6)}…${wallet.slice(-4)}` : 'Connect Wallet'}
       </button>
       <p className="max-w-[20rem] text-right text-[0.65rem] leading-relaxed tracking-[0.04em] text-slate-300/80">{status}</p>
     </div>
