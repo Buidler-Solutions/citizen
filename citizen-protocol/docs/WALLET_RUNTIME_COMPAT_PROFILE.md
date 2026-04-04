@@ -1027,3 +1027,50 @@ Stage policy:
 
 Each PR should update §19 checklist status in this document to keep rollout
 state discoverable.
+
+
+## 32) Implementation workstream (started 2026-04-04)
+
+This section tracks concrete WRCP implementation increments so wallet/runtime teams can execute against a shared backlog.
+
+### 32.1 Phase status
+
+| Phase | Goal | Status | Evidence |
+| --- | --- | --- | --- |
+| P0 | Canonical WRCP-TX-V1 payload types + serializer exported from Rust wallet crate | Complete | `crates/wallet/src/lib.rs` exports `WrcpTxV1SigningPayload`, builder, and canonical JSON helper |
+| P1 | CLI multisig proof authoring + dry-run validation for builder-credit grants | Complete | `citizen-wallet-cli` commands `sign-builder-credit-proof`, `dry-run-builder-credit-grant`, and `sign-builder-credit-grant --multisig-proofs-json` |
+| P2 | Shared deterministic test vectors used by wallet test suites | Complete | `docs/test-vectors/wrcp_tx_v1/canonical_payloads.json` and `docs/test-vectors/wrcp_msig_v1/proof_matrix.json` |
+| P3 | Browser/mobile signer WRCP parity (same canonical payload + verifier precheck) | In progress | Tracked by tasks below |
+| P4 | Policy-aware multisig grant UX/API (derive approvers + threshold from namespace policy) | In progress | Tracked by tasks below |
+
+### 32.2 Next tasks (active backlog)
+
+1. **Browser signer parity path**
+   - Add a wallet/browser signing utility that constructs WRCP-TX-V1 preimages identical to Rust wallet crate canonicalization.
+   - Add fixture-driven tests that consume `docs/test-vectors/wrcp_tx_v1/canonical_payloads.json`.
+   - Exit gate: identical canonical JSON bytes + local signature verification pass against vector set.
+2. **Runtime policy introspection for multisig grant UX**
+   - Add a wallet-facing read helper that fetches namespace policy and resolves `required_grant_approvals` + `grant_approvers` for `builder.credits`.
+   - Add a CLI/browser dry-run report that blocks submit when proof set is incomplete or duplicate.
+   - Exit gate: pre-submit report matches runtime rejection/acceptance outcomes for matrix cases.
+3. **Conformance CI lane**
+   - Add a deterministic conformance job that runs WRCP payload/multisig fixture tests plus wallet crate signature verify round-trips.
+   - Exit gate: CI must fail on canonicalization drift, missing fields, or signature mismatch.
+
+### 32.3 Definition of done for strict WRCP compatibility claim
+
+A wallet surface can claim strict WRCP compatibility only when all are true:
+
+- Uses WRCP-TX-V1 canonical preimage generation with deterministic serialization.
+- Performs local verify-before-submit using the same preimage bytes.
+- Supports multisig builder-credit grant proofs with threshold/approver validation.
+- Passes shared WRCP fixtures and conformance CI checks.
+- Keeps auth-lane and protocol-lane signing flows visibly separated in UX.
+
+### 32.4 Change-control requirement
+
+Any runtime change to ledger signature payload composition, privacy metadata rules, or builder-credit multisig verifier logic MUST include:
+
+1. Update to this profile.
+2. Updated test vectors under `docs/test-vectors/`.
+3. Wallet crate and wallet-surface conformance test updates in the same PR (or linked blocking PR).
