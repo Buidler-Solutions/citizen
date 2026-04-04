@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Injectable,
   Logger,
+  TooManyRequestsException,
   UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -36,6 +37,7 @@ interface ParsedChallengeMessage {
 @Injectable()
 export class WalletAuthService {
   private readonly logger = new Logger(WalletAuthService.name);
+  private readonly challengeRateLimitBuckets = new Map<string, { count: number; resetsAt: number }>();
 
   constructor(
     @InjectRepository(AuthUser)
@@ -75,6 +77,22 @@ export class WalletAuthService {
     return Number.isFinite(raw) && raw > 30 ? Math.trunc(raw) : 300;
   }
 
+  private getChallengeRateLimitWindowMs(): number {
+    const raw = Number(this.configService.get<string>('AUTH_CHALLENGE_RATE_LIMIT_WINDOW_SECONDS', '60'));
+    const seconds = Number.isFinite(raw) && raw >= 10 ? Math.trunc(raw) : 60;
+    return seconds * 1000;
+  }
+
+  private getChallengeRateLimitMaxPerIp(): number {
+    const raw = Number(this.configService.get<string>('AUTH_CHALLENGE_RATE_LIMIT_MAX_PER_IP', '30'));
+    return Number.isFinite(raw) && raw >= 1 ? Math.trunc(raw) : 30;
+  }
+
+  private getChallengeRateLimitMaxPerWallet(): number {
+    const raw = Number(this.configService.get<string>('AUTH_CHALLENGE_RATE_LIMIT_MAX_PER_WALLET', '10'));
+    return Number.isFinite(raw) && raw >= 1 ? Math.trunc(raw) : 10;
+  }
+
   private getAccessTokenTtlSeconds(): number {
     const raw = Number(this.configService.get<string>('AUTH_ACCESS_TOKEN_TTL_SECONDS', '900'));
     return Number.isFinite(raw) && raw > 60 ? Math.trunc(raw) : 900;
@@ -91,6 +109,22 @@ export class WalletAuthService {
 
   private createRefreshToken(): string {
     return randomBytes(32).toString('base64url');
+  }
+
+  private consumeChallengeRateLimit(key: string, max: number): boolean {
+    const now = Date.now();
+    const windowMs = this.getChallengeRateLimitWindowMs();
+    const existing = this.challengeRateLimitBuckets.get(key);
+    if (!existing || now >= existing.resetsAt) {
+      this.challengeRateLimitBuckets.set(key, {
+        count: 1,
+        resetsAt: now + windowMs,
+      });
+      return false;
+    }
+
+    existing.count += 1;
+    return existing.count > max;
   }
 
   private isValidRefreshTokenFormat(token: string): boolean {
@@ -247,14 +281,36 @@ export class WalletAuthService {
     );
   }
 
-  async createChallenge(address: string, domain: string, uri: string, chainId: number): Promise<{ challengeId: string; message: string; expiresAt: string }> {
+  async createChallenge(
+    address: string,
+    domain: string,
+    uri: string,
+    chainId: number,
+    ipAddress?: string,
+  ): Promise<{ challengeId: string; message: string; expiresAt: string }> {
     await this.cleanupExpiredAuthArtifacts();
 
     const walletAddress = this.normalizeWalletAddress(address);
     const normalizedDomain = this.normalizeDomain(domain);
+    const normalizedIpAddress = (ipAddress ?? '').trim().toLowerCase() || 'unknown';
 
     if (!/^0x[a-f0-9]{40}$/.test(walletAddress)) {
       throw new BadRequestException('Invalid wallet address format.');
+    }
+
+    if (this.consumeChallengeRateLimit(`challenge:ip:${normalizedIpAddress}`, this.getChallengeRateLimitMaxPerIp())) {
+      this.writeAuthAuditLog('wallet_auth_challenge', 'failure', 'rate-limited-ip', {
+        walletAddress,
+        ipAddress: normalizedIpAddress,
+      });
+      throw new TooManyRequestsException('Challenge rate limit exceeded for IP.');
+    }
+    if (this.consumeChallengeRateLimit(`challenge:wallet:${walletAddress}`, this.getChallengeRateLimitMaxPerWallet())) {
+      this.writeAuthAuditLog('wallet_auth_challenge', 'failure', 'rate-limited-wallet', {
+        walletAddress,
+        ipAddress: normalizedIpAddress,
+      });
+      throw new TooManyRequestsException('Challenge rate limit exceeded for wallet.');
     }
 
     const allowedDomains = this.getAllowedAuthDomains();
@@ -304,6 +360,7 @@ export class WalletAuthService {
       walletAddress,
       domain: normalizedDomain,
       chainId,
+      ipAddress: normalizedIpAddress,
     });
 
     return {

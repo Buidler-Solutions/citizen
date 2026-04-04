@@ -130,7 +130,8 @@ Use this file as the **single source of implementation tracking** for wallet-sig
 #### A) `POST /auth/challenge`
 - [x] Validate address format, domain allowlist, chainId allowlist.
   - 2026-04-04: backend now enforces wallet regex, optional domain allowlist, and optional `AUTH_ALLOWED_CHAIN_IDS`.
-- [ ] Apply per-IP and per-wallet rate limits.
+- [x] Apply per-IP and per-wallet rate limits.
+  - 2026-04-04: challenge endpoint now enforces configurable in-memory limits keyed by IP (`AUTH_CHALLENGE_RATE_LIMIT_MAX_PER_IP`) and wallet (`AUTH_CHALLENGE_RATE_LIMIT_MAX_PER_WALLET`) within a shared challenge window.
 - [x] Generate secure nonce (>=128 bits) and challenge payload.
   - 2026-04-04: challenge nonce uses `randomBytes(16)` and SIWE-like challenge content.
 - [x] Persist challenge with TTL and unused status.
@@ -187,8 +188,10 @@ Use this file as the **single source of implementation tracking** for wallet-sig
 ### 4.3 JWT issuance and key management
 - [x] JWT includes `sub`, `wallet`, `sessionId`, `iat`, `exp`, `iss`, `aud` (optional scope/role).
   - 2026-04-04: access JWT issuance signs with subject + issuer/audience/expires and embeds wallet/session claims.
-- [ ] Access TTL set to 5–15 minutes.
-- [ ] Session/refresh TTL set by risk policy (7–30 days).
+- [x] Access TTL set to 5–15 minutes.
+  - 2026-04-04: access token TTL is configured via `AUTH_ACCESS_TOKEN_TTL_SECONDS` with a default of 900 seconds (15 minutes).
+- [x] Session/refresh TTL set by risk policy (7–30 days).
+  - 2026-04-04: refresh/session expiry is configured via `AUTH_REFRESH_TOKEN_TTL_SECONDS` with a default of 14 days.
 - [ ] Use RS256 or EdDSA preferred (HS256 only with strict constraints).
 - [ ] Include `kid` and support key rotation + rollover window.
 
@@ -231,14 +234,16 @@ Use this file as the **single source of implementation tracking** for wallet-sig
 - [ ] Mint on verify and refresh.
 - [x] Validate signature + claims (`exp`, `iss`, `aud`, `sessionId`) on protected routes.
   - 2026-04-04: guard now verifies issuer/audience and enforces non-revoked active session for JWTs carrying `sessionId`.
-- [ ] Return machine-readable `401` error codes for invalid/expired tokens.
+- [x] Return machine-readable `401` error codes for invalid/expired tokens.
+  - 2026-04-04: `JwtAuthGuard` now returns structured `UnauthorizedException` payloads with `TOKEN_MISSING`, `TOKEN_EXPIRED`, `TOKEN_INVALID`, and `SESSION_REVOKED` codes.
 
 ### 6.2 Refresh token lifecycle
 - [x] Generate >=256-bit random refresh token.
   - 2026-04-04: refresh token generation uses `randomBytes(32)` (256-bit entropy) and base64url encoding.
 - [x] Set cookie with `HttpOnly`, `Secure`, `SameSite`, restricted `path`.
   - 2026-04-04: verify/refresh/logout use `ctzn_refresh_token` with `HttpOnly + Secure + SameSite=Strict + path=/auth`.
-- [ ] Rotate on every refresh.
+- [x] Rotate on every refresh.
+  - 2026-04-04: refresh flow replaces the persisted refresh-token hash inside a pessimistic-write transaction and sets a newly minted refresh cookie on each successful refresh.
 - [ ] Revoke on logout, compromise signals, or anomalies.
 
 ### 6.3 Storage strategy

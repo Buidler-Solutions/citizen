@@ -59,8 +59,22 @@ export class AuthController {
   }
 
   @Post('challenge')
-  async challenge(@Body() payload: AuthChallengeDto) {
-    return this.walletAuthService.createChallenge(payload.address, payload.domain, payload.uri, payload.chainId);
+  async challenge(
+    @Body() payload: AuthChallengeDto,
+    @Req() request: { ip?: string; headers: Record<string, string | string[] | undefined> },
+  ) {
+    const forwarded = request.headers['x-forwarded-for'];
+    const firstForwardedIp = Array.isArray(forwarded)
+      ? String(forwarded[0] ?? '')
+      : String(forwarded ?? '').split(',')[0]?.trim();
+    const ipAddress = firstForwardedIp || request.ip || '';
+    return this.walletAuthService.createChallenge(
+      payload.address,
+      payload.domain,
+      payload.uri,
+      payload.chainId,
+      ipAddress,
+    );
   }
 
   @Post('verify')
