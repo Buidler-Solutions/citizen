@@ -209,6 +209,28 @@ impl ActionPolicy {
     }
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct WrcpMsigV1Proof {
+    pub approver: String,
+    pub public_key: String,
+    pub signature: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct WrcpMsigV1Issue {
+    pub reason_code: String,
+    pub message: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct WrcpMsigV1DryRunReport {
+    pub ok: bool,
+    pub required_approvals: usize,
+    pub unique_approvals: usize,
+    pub errors: Vec<WrcpMsigV1Issue>,
+    pub warnings: Vec<WrcpMsigV1Issue>,
+}
+
 impl WalletKeypair {
     pub fn generate() -> Self {
         let mut rng = OsRng;
@@ -411,9 +433,13 @@ pub fn build_wrcp_tx_v1_signing_payload(entry: &LedgerEntry) -> WrcpTxV1SigningP
 }
 
 pub fn wrcp_tx_v1_canonical_json(payload: &WrcpTxV1SigningPayload) -> Result<String> {
-    Ok(canonical_json(&serde_json::to_value(payload).map_err(|err| {
-        ProtocolError::crypto(format!("failed to serialize WRCP-TX-V1 signing payload: {err}"))
-    })?))
+    Ok(canonical_json(&serde_json::to_value(payload).map_err(
+        |err| {
+            ProtocolError::crypto(format!(
+                "failed to serialize WRCP-TX-V1 signing payload: {err}"
+            ))
+        },
+    )?))
 }
 
 pub fn sign_entry(draft: EntryDraft, keypair: &WalletKeypair) -> Result<LedgerEntry> {
@@ -1236,6 +1262,340 @@ pub fn verify_entry_signature(entry: &LedgerEntry, verifying_key: &VerifyingKey)
         .map_err(|err| ProtocolError::crypto(format!("signature verification failed: {err}")))
 }
 
+fn wrcp_msig_v1_allowed_approvers(
+    namespace_policy: &Value,
+) -> Result<(usize, BTreeMap<String, String>)> {
+    let required_approvals = namespace_policy
+        .get("required_grant_approvals")
+        .and_then(Value::as_u64)
+        .ok_or_else(|| {
+            ProtocolError::ValidationFailed(
+                "builder credit policy requires required_grant_approvals".into(),
+            )
+        })? as usize;
+    let grant_approvers = namespace_policy
+        .get("grant_approvers")
+        .and_then(Value::as_array)
+        .ok_or_else(|| {
+            ProtocolError::ValidationFailed(
+                "builder credit policy requires grant_approvers for credit grant actions".into(),
+            )
+        })?;
+    if grant_approvers.is_empty() {
+        return Err(ProtocolError::ValidationFailed(
+            "builder credit policy grant_approvers cannot be empty".into(),
+        ));
+    }
+    let mut allowed_approvers = BTreeMap::new();
+    for approver in grant_approvers {
+        let obj = approver.as_object().ok_or_else(|| {
+            ProtocolError::ValidationFailed(
+                "grant_approvers entries must be objects containing id and public_key".into(),
+            )
+        })?;
+        let approver_id = obj
+            .get("id")
+            .and_then(Value::as_str)
+            .ok_or_else(|| {
+                ProtocolError::ValidationFailed("grant_approvers entries require string id".into())
+            })?
+            .to_string();
+        let public_key = obj
+            .get("public_key")
+            .and_then(Value::as_str)
+            .ok_or_else(|| {
+                ProtocolError::ValidationFailed(
+                    "grant_approvers entries require string public_key".into(),
+                )
+            })?
+            .to_string();
+        parse_verifying_key(&public_key).map_err(|err| {
+            ProtocolError::ValidationFailed(format!(
+                "invalid grant_approvers public_key for {approver_id}: {err}"
+            ))
+        })?;
+        if allowed_approvers.insert(approver_id, public_key).is_some() {
+            return Err(ProtocolError::ValidationFailed(
+                "grant_approvers entries must be unique by id".into(),
+            ));
+        }
+    }
+    if required_approvals == 0 || required_approvals > allowed_approvers.len() {
+        return Err(ProtocolError::ValidationFailed(
+            "required_grant_approvals must be between 1 and grant_approvers length".into(),
+        ));
+    }
+    Ok((required_approvals, allowed_approvers))
+}
+
+pub fn build_wrcp_msig_v1_signing_payload(
+    entry: &LedgerEntry,
+    amount: u64,
+    approver: &str,
+) -> Result<String> {
+    serde_json::to_string(&serde_json::json!({
+        "entry_id": entry.entry_id,
+        "namespace": entry.namespace,
+        "action": entry.action,
+        "object_id": entry.object_id,
+        "author": entry.author,
+        "amount": amount,
+        "timestamp": entry.timestamp,
+        "approver": approver
+    }))
+    .map_err(|err| {
+        ProtocolError::ValidationFailed(format!(
+            "failed to serialize MULTISIG_CREDIT_GRANT signing payload: {err}"
+        ))
+    })
+}
+
+pub fn build_wrcp_msig_v1_proof(
+    entry: &LedgerEntry,
+    approver: &str,
+    approver_keypair: &WalletKeypair,
+    namespace_policy: &Value,
+) -> Result<WrcpMsigV1Proof> {
+    if entry.namespace != "builder.credits" || entry.action != "MULTISIG_CREDIT_GRANT" {
+        return Err(ProtocolError::ValidationFailed(
+            "MULTISIG_CREDIT_GRANT proof builder requires builder.credits/MULTISIG_CREDIT_GRANT entry".into(),
+        ));
+    }
+    let (_, allowed_approvers) = wrcp_msig_v1_allowed_approvers(namespace_policy)?;
+    let configured_public_key = allowed_approvers.get(approver).ok_or_else(|| {
+        ProtocolError::ValidationFailed(
+            "MULTISIG_CREDIT_GRANT includes approver outside grant_approvers".into(),
+        )
+    })?;
+    let derived_public_key = approver_keypair.verifying_key_hex();
+    if &derived_public_key != configured_public_key {
+        return Err(ProtocolError::ValidationFailed(format!(
+            "MULTISIG_CREDIT_GRANT public_key does not match configured key for approver {approver}"
+        )));
+    }
+    let amount = entry
+        .payload
+        .get("amount")
+        .and_then(Value::as_u64)
+        .ok_or_else(|| {
+            ProtocolError::ValidationFailed(
+                "entry payload.amount must be a positive integer".to_string(),
+            )
+        })?;
+    let signing_payload = build_wrcp_msig_v1_signing_payload(entry, amount, approver)?;
+    let signature = approver_keypair.sign_bytes(signing_payload.as_bytes());
+    Ok(WrcpMsigV1Proof {
+        approver: approver.to_string(),
+        public_key: derived_public_key,
+        signature: hex::encode(signature.to_bytes()),
+    })
+}
+
+pub fn dry_run_wrcp_msig_v1(
+    entry: &LedgerEntry,
+    namespace_policy: &Value,
+) -> WrcpMsigV1DryRunReport {
+    let mut errors = Vec::new();
+    let mut warnings = Vec::new();
+    let (required_approvals, allowed_approvers) =
+        match wrcp_msig_v1_allowed_approvers(namespace_policy) {
+            Ok(data) => data,
+            Err(err) => {
+                errors.push(WrcpMsigV1Issue {
+                    reason_code: "MSIG_POLICY_INVALID".to_string(),
+                    message: err.to_string(),
+                });
+                return WrcpMsigV1DryRunReport {
+                    ok: false,
+                    required_approvals: 0,
+                    unique_approvals: 0,
+                    errors,
+                    warnings,
+                };
+            }
+        };
+
+    if entry.namespace != "builder.credits" || entry.action != "MULTISIG_CREDIT_GRANT" {
+        errors.push(WrcpMsigV1Issue {
+            reason_code: "MSIG_NOT_BUILDER_CREDITS_GRANT".to_string(),
+            message: "Entry is not a builder credit multisig grant action.".to_string(),
+        });
+        return WrcpMsigV1DryRunReport {
+            ok: false,
+            required_approvals,
+            unique_approvals: 0,
+            errors,
+            warnings,
+        };
+    }
+
+    let amount = match entry.payload.get("amount").and_then(Value::as_u64) {
+        Some(amount) => amount,
+        None => {
+            errors.push(WrcpMsigV1Issue {
+                reason_code: "MSIG_SIGNATURE_INVALID".to_string(),
+                message: "entry payload.amount must be a positive integer".to_string(),
+            });
+            return WrcpMsigV1DryRunReport {
+                ok: false,
+                required_approvals,
+                unique_approvals: 0,
+                errors,
+                warnings,
+            };
+        }
+    };
+
+    let proofs = match entry
+        .payload
+        .get("multisig_proofs")
+        .and_then(Value::as_array)
+    {
+        Some(proofs) if !proofs.is_empty() => proofs,
+        _ => {
+            errors.push(WrcpMsigV1Issue {
+                reason_code: "MSIG_PROOFS_MISSING".to_string(),
+                message: "payload.multisig_proofs is missing or empty.".to_string(),
+            });
+            return WrcpMsigV1DryRunReport {
+                ok: false,
+                required_approvals,
+                unique_approvals: 0,
+                errors,
+                warnings,
+            };
+        }
+    };
+
+    let mut valid_unique_approvals = BTreeSet::new();
+    let mut seen_approvers = BTreeSet::new();
+    for proof in proofs {
+        let approver = match proof.get("approver").and_then(Value::as_str) {
+            Some(value) if !value.is_empty() => value,
+            _ => {
+                errors.push(WrcpMsigV1Issue {
+                    reason_code: "MSIG_APPROVER_NOT_AUTHORIZED".to_string(),
+                    message: "proof requires non-empty approver".to_string(),
+                });
+                continue;
+            }
+        };
+        if !seen_approvers.insert(approver.to_string()) {
+            warnings.push(WrcpMsigV1Issue {
+                reason_code: "MSIG_DUPLICATE_APPROVER".to_string(),
+                message: "Duplicate approver proof detected; counted once.".to_string(),
+            });
+        }
+        let configured_public_key = match allowed_approvers.get(approver) {
+            Some(value) => value,
+            None => {
+                errors.push(WrcpMsigV1Issue {
+                    reason_code: "MSIG_APPROVER_NOT_AUTHORIZED".to_string(),
+                    message: "Approver is not in namespace grant approvers list.".to_string(),
+                });
+                continue;
+            }
+        };
+        let provided_public_key = match proof.get("public_key").and_then(Value::as_str) {
+            Some(value) => value,
+            None => {
+                errors.push(WrcpMsigV1Issue {
+                    reason_code: "MSIG_PUBLIC_KEY_MISMATCH".to_string(),
+                    message: "proof requires public_key".to_string(),
+                });
+                continue;
+            }
+        };
+        if configured_public_key != provided_public_key {
+            errors.push(WrcpMsigV1Issue {
+                reason_code: "MSIG_PUBLIC_KEY_MISMATCH".to_string(),
+                message: "Proof public key does not match approver key material.".to_string(),
+            });
+            continue;
+        }
+        let verifying_key = match parse_verifying_key(provided_public_key) {
+            Ok(value) => value,
+            Err(err) => {
+                errors.push(WrcpMsigV1Issue {
+                    reason_code: "MSIG_PUBLIC_KEY_MISMATCH".to_string(),
+                    message: format!("invalid proof public_key: {err}"),
+                });
+                continue;
+            }
+        };
+        let signature = match proof.get("signature").and_then(Value::as_str) {
+            Some(value) => value,
+            None => {
+                errors.push(WrcpMsigV1Issue {
+                    reason_code: "MSIG_SIGNATURE_INVALID".to_string(),
+                    message: "proof requires signature".to_string(),
+                });
+                continue;
+            }
+        };
+        let signature_bytes = match hex::decode(signature) {
+            Ok(value) => value,
+            Err(err) => {
+                errors.push(WrcpMsigV1Issue {
+                    reason_code: "MSIG_SIGNATURE_INVALID".to_string(),
+                    message: format!("invalid signature hex: {err}"),
+                });
+                continue;
+            }
+        };
+        let signature = match Signature::from_slice(&signature_bytes) {
+            Ok(value) => value,
+            Err(err) => {
+                errors.push(WrcpMsigV1Issue {
+                    reason_code: "MSIG_SIGNATURE_INVALID".to_string(),
+                    message: format!("invalid signature bytes: {err}"),
+                });
+                continue;
+            }
+        };
+        let signing_payload = match build_wrcp_msig_v1_signing_payload(entry, amount, approver) {
+            Ok(value) => value,
+            Err(err) => {
+                errors.push(WrcpMsigV1Issue {
+                    reason_code: "MSIG_SIGNATURE_INVALID".to_string(),
+                    message: err.to_string(),
+                });
+                continue;
+            }
+        };
+        if verifying_key
+            .verify_strict(signing_payload.as_bytes(), &signature)
+            .is_err()
+        {
+            errors.push(WrcpMsigV1Issue {
+                reason_code: "MSIG_SIGNATURE_INVALID".to_string(),
+                message: "Proof signature failed runtime-compatible verification.".to_string(),
+            });
+            continue;
+        }
+        valid_unique_approvals.insert(approver.to_string());
+    }
+
+    if valid_unique_approvals.len() < required_approvals {
+        errors.push(WrcpMsigV1Issue {
+            reason_code: "MSIG_APPROVALS_BELOW_THRESHOLD".to_string(),
+            message: format!(
+                "Unique authorized approvals {}/{}.",
+                valid_unique_approvals.len(),
+                required_approvals
+            ),
+        });
+    }
+
+    WrcpMsigV1DryRunReport {
+        ok: errors.is_empty(),
+        required_approvals,
+        unique_approvals: valid_unique_approvals.len(),
+        errors,
+        warnings,
+    }
+}
+
 fn parse_x25519_public_key(encoded: &str) -> Result<X25519PublicKey> {
     let bytes = hex::decode(encoded)
         .map_err(|err| ProtocolError::crypto(format!("invalid x25519 public key hex: {err}")))?;
@@ -1614,6 +1974,98 @@ mod tests {
         assert!(canonical.contains("\"action\":\"REGISTER_IDENTITY\""));
         assert!(canonical.contains("\"author\":\"did:ledger:wrcp\""));
         verify_entry_signature(&entry, keypair.verifying_key()).expect("verify signature");
+    }
+
+    #[test]
+    fn builds_wrcp_multisig_proof_with_policy_validation() {
+        let approver = WalletKeypair::generate();
+        let entry = LedgerEntry {
+            entry_id: Uuid::new_v4(),
+            namespace: "builder.credits".into(),
+            action: "MULTISIG_CREDIT_GRANT".into(),
+            object_id: "builder:alpha".into(),
+            payload: json!({"amount": 100}),
+            privacy_flag: false,
+            payload_commitment: None,
+            ciphertext_hex: None,
+            nonce_hex: None,
+            salt_hex: None,
+            kdf_params: None,
+            signature: String::new(),
+            consent_receipt: None,
+            privacy_mode: PrivacyMode::None,
+            authorized_readers: vec![],
+            custodian_policy_id: None,
+            key_wrapped_secrets: vec![],
+            revocation_events: vec![],
+            field_reader_acls: Default::default(),
+            author: "did:ledger:author".into(),
+            timestamp: 1_736_500_201,
+        };
+        let policy = json!({
+            "required_grant_approvals": 1,
+            "grant_approvers": [
+                {"id":"did:ledger:approver-1","public_key":approver.verifying_key_hex()}
+            ]
+        });
+
+        let proof = build_wrcp_msig_v1_proof(&entry, "did:ledger:approver-1", &approver, &policy)
+            .expect("build proof");
+        assert_eq!(proof.approver, "did:ledger:approver-1");
+        assert_eq!(proof.public_key, approver.verifying_key_hex());
+        assert!(!proof.signature.is_empty());
+    }
+
+    #[test]
+    fn dry_run_wrcp_multisig_reports_threshold_failure() {
+        let approver = WalletKeypair::generate();
+        let other = WalletKeypair::generate();
+        let mut entry = LedgerEntry {
+            entry_id: Uuid::new_v4(),
+            namespace: "builder.credits".into(),
+            action: "MULTISIG_CREDIT_GRANT".into(),
+            object_id: "builder:alpha".into(),
+            payload: json!({"amount": 250}),
+            privacy_flag: false,
+            payload_commitment: None,
+            ciphertext_hex: None,
+            nonce_hex: None,
+            salt_hex: None,
+            kdf_params: None,
+            signature: String::new(),
+            consent_receipt: None,
+            privacy_mode: PrivacyMode::None,
+            authorized_readers: vec![],
+            custodian_policy_id: None,
+            key_wrapped_secrets: vec![],
+            revocation_events: vec![],
+            field_reader_acls: Default::default(),
+            author: "did:ledger:author".into(),
+            timestamp: 1_736_500_211,
+        };
+        let policy = json!({
+            "required_grant_approvals": 2,
+            "grant_approvers": [
+                {"id":"did:ledger:approver-1","public_key":approver.verifying_key_hex()},
+                {"id":"did:ledger:approver-2","public_key":other.verifying_key_hex()}
+            ]
+        });
+        let proof = build_wrcp_msig_v1_proof(&entry, "did:ledger:approver-1", &approver, &policy)
+            .expect("build proof");
+        entry.payload["multisig_proofs"] = json!([{
+            "approver": proof.approver,
+            "public_key": proof.public_key,
+            "signature": proof.signature
+        }]);
+
+        let report = dry_run_wrcp_msig_v1(&entry, &policy);
+        assert!(!report.ok);
+        assert_eq!(report.required_approvals, 2);
+        assert_eq!(report.unique_approvals, 1);
+        assert!(report
+            .errors
+            .iter()
+            .any(|issue| issue.reason_code == "MSIG_APPROVALS_BELOW_THRESHOLD"));
     }
 
     #[test]
