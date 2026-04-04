@@ -48,7 +48,7 @@ Use this file as the **single source of implementation tracking** for wallet-sig
   - 2026-04-04: `auth_challenges` entity + TTL-based expiration persisted.
 - [ ] Wallet signs challenge after explicit user approval.
 - [x] Frontend verifies signature (`POST /auth/verify`).
-  - 2026-04-04: endpoint implemented; full secp256k1 signature recovery is still pending.
+  - 2026-04-04: endpoint implemented with canonical SIWE-like message parsing/validation; full secp256k1 signature recovery is still pending.
 - [x] Backend issues access token + refresh cookie + session row.
   - 2026-04-04: access JWT, `ctzn_refresh_token` cookie, and `auth_sessions` row created during verify.
 - [ ] Protected APIs enforce Bearer access token.
@@ -174,11 +174,15 @@ Use this file as the **single source of implementation tracking** for wallet-sig
   - 2026-04-04: logout response returns `{ ok: true }`.
 
 ### 4.2 Signature verification rules
-- [ ] Parse SIWE-like message and reject malformed payloads.
-- [ ] Reconstruct canonical message bytes exactly.
+- [x] Parse SIWE-like message and reject malformed payloads.
+  - 2026-04-04: verify now rejects malformed SIWE-like payload lines and unsupported version fields.
+- [x] Reconstruct canonical message bytes exactly.
+  - 2026-04-04: verify now rebuilds canonical challenge content and rejects mismatches.
 - [ ] Verify secp256k1-compatible signature recovery.
-- [ ] Enforce nonce single-use, time window, domain/URI/audience, chainId.
-- [ ] Write audit event for every verify attempt (success/failure reason).
+- [x] Enforce nonce single-use, time window, domain/URI/audience, chainId.
+  - 2026-04-04: verify now enforces challenge time-window parity, domain/URI/chain binding, and one-time nonce consumption via lock.
+- [x] Write audit event for every verify attempt (success/failure reason).
+  - 2026-04-04: verify now emits structured backend audit logs with success/failure reasons and request metadata.
 
 ### 4.3 JWT issuance and key management
 - [ ] JWT includes `sub`, `wallet`, `sessionId`, `iat`, `exp`, `iss`, `aud` (optional scope/role).
