@@ -11,6 +11,7 @@ Implementation progress note (2026-04-04):
 - Wallet CLI now supports:
   - `sign-builder-credit-proof` for runtime-shaped `multisig_proofs` elements
     (approver/public_key/signature + exact signing payload string), and
+  - `dry-run-builder-credit-grant` for pre-submit multisig validation reports,
   - `sign-builder-credit-grant` with `--multisig-proofs-json` injection for
     `builder.credits/MULTISIG_CREDIT_GRANT` submissions.
 - Wallet tests now consume shared vector fixtures under
@@ -267,7 +268,7 @@ A release candidate is blocked unless:
 
 - [x] Implement wallet-side `WRCP-TX-V1` preimage generator.
 - [x] Add wallet-side verifier fixtures from shared test vectors (`docs/test-vectors/*` for commitment determinism coverage).
-- [~] Implement `WRCP-MSIG-V1` proof builder + local dry-run checks (CLI proof signing exists; policy-driven builder API and dry-run helper remain open).
+- [~] Implement `WRCP-MSIG-V1` proof builder + local dry-run checks (wallet lib now exposes proof builder + dry-run primitives; full policy-driven end-to-end wiring and parity vectors remain open).
 - [x] Add privacy mode generation flows that satisfy runtime-required fields (`none` / `passphrase` / `hybrid` in wallet signing path).
 - [ ] Enforce UX lane separation for JWT vs protocol signing.
 - [ ] Add CI gate job for WRCP conformance before release publish.
@@ -328,36 +329,36 @@ Status legend:
 - `[~]` partially implemented
 - `[ ]` not started
 
-Last checklist refresh: **2026-04-04**.
+Last checklist refresh: **2026-04-04 (post wallet proof-builder + dry-run API landing)**.
 
 ### 19.1 Wallet multisig builder API (`build_wrcp_msig_v1_proof`)
 
-- [ ] Add API to `crates/wallet` with explicit input contract:
+- [x] Add API to `crates/wallet` with explicit input contract:
   - `entry: &LedgerEntry`
   - `approver_did: &str`
   - `approver_private_key_hex: &str`
   - `namespace_policy: &NamespaceConfig`
-- [ ] Return runtime-compatible proof object containing:
+- [x] Return runtime-compatible proof object containing:
   - `approver`
   - `public_key`
   - `signature`
-- [ ] Reject non-`builder.credits` / non-`MULTISIG_CREDIT_GRANT` entries.
-- [ ] Reject approvers not present in `grant_approvers`.
-- [ ] Guarantee signing payload parity with ledger verifier composition.
-- [ ] Emit lowercase-hex signatures.
-- [ ] Add wallet crate unit tests for pass + fail cases.
+- [x] Reject non-`builder.credits` / non-`MULTISIG_CREDIT_GRANT` entries.
+- [x] Reject approvers not present in `grant_approvers`.
+- [x] Guarantee signing payload parity with ledger verifier composition.
+- [x] Emit lowercase-hex signatures.
+- [~] Add wallet crate unit tests for pass + fail cases.
 
 ### 19.2 Wallet local dry-run helper (`dry_run_wrcp_msig_v1`)
 
-- [ ] Add API to `crates/wallet` with input:
+- [x] Add API to `crates/wallet` with input:
   - `entry: &LedgerEntry`
   - `namespace_policy: &NamespaceConfig`
-- [ ] Return typed report (`ok`, `required_approvals`, `unique_approvals`,
+- [x] Return typed report (`ok`, `required_approvals`, `unique_approvals`,
   `errors`, `warnings`).
-- [ ] Validate proof schema for every `payload.multisig_proofs` element.
-- [ ] Validate approver membership and public-key binding.
-- [ ] Validate unique-approval threshold.
-- [ ] Emit machine-parseable failure reasons shared by CLI + SDK surfaces.
+- [x] Validate proof schema for every `payload.multisig_proofs` element.
+- [x] Validate approver membership and public-key binding.
+- [x] Validate unique-approval threshold.
+- [~] Emit machine-parseable failure reasons shared by CLI + SDK surfaces.
 - [ ] Add dry-run parity tests against ledger negative vectors.
 
 ### 19.3 Shared WRCP test vectors
@@ -690,3 +691,195 @@ When a WRCP implementation PR lands, update this file in the same PR:
 
 This keeps the profile implementation-aligned and prevents stale “paper spec”
 drift.
+
+## 28) v2.2 implementation wave (detailed execution slices)
+
+This wave expands Section 21 backlog items into merge-ready tasks with explicit
+inputs, outputs, and acceptance checks.
+
+### 28.1 PR-A1: wallet proof type + serializer contract
+
+Goal:
+
+- Introduce `WrcpMsigV1Proof` and ensure deterministic JSON field ordering for
+  any payload that is signed or snapshot-tested.
+
+Changes:
+
+1. Add `WrcpMsigV1Proof` Rust type in `crates/wallet/src/lib.rs`.
+2. Add serde tests proving serialized key order:
+   - `approver`
+   - `public_key`
+   - `signature`
+3. Add lower-hex normalization helper used by builder + CLI outputs.
+
+Acceptance:
+
+- `cargo test -p citizen-wallet wrcp_msig_v1_proof_serialization`.
+
+### 28.2 PR-A2: proof builder core logic
+
+Goal:
+
+- Implement `build_wrcp_msig_v1_proof(...)` with runtime-compatible message
+  composition and policy membership checks.
+
+Required behavior:
+
+1. Reject entries not matching `builder.credits` + `MULTISIG_CREDIT_GRANT`.
+2. Verify approver membership in namespace `grant_approvers`.
+3. Derive approver public key from provided private key and enforce
+   public-key consistency.
+4. Emit `WrcpMsigV1Proof` with lowercase-hex signature.
+
+Acceptance:
+
+- Wallet tests cover:
+  - success case,
+  - unauthorized approver,
+  - invalid key material,
+  - non-builder-credit action.
+
+### 28.3 PR-B1: dry-run report and canonical reason codes
+
+Goal:
+
+- Implement `dry_run_wrcp_msig_v1(...)` with deterministic report output and
+  canonical reason-code mapping.
+
+Required behavior:
+
+1. Report shape matches Section 24.2.
+2. `ok` derives from `errors.is_empty()`.
+3. `unique_approvals` counts unique authorized approvers only.
+4. Duplicate approvers produce warning and (if policy requires) threshold error.
+
+Acceptance:
+
+- Tests assert exact reason codes from Section 21.3.
+- Tests assert deterministic error ordering.
+
+### 28.4 PR-B2: ledger parity matrix tests
+
+Goal:
+
+- Ensure wallet dry-run verdicts and ledger verifier outcomes agree on known
+  fail classes.
+
+Required behavior:
+
+1. Shared fail matrix drives both wallet and ledger tests.
+2. Each failing case asserts `expected_reason_code`.
+3. CI fails when a new fail class is added without parity coverage.
+
+Acceptance:
+
+- `cargo test -p citizen-wallet wrcp_msig_v1_parity`.
+- `cargo test -p citizen-ledger wrcp_msig_v1_parity`.
+
+### 28.5 PR-C1: test-vector files + schema guard
+
+Goal:
+
+- Land initial vector corpus and enforce schema stability.
+
+Required behavior:
+
+1. Create vector files from Section 25.
+2. Add parser validation test in both wallet + ledger crates.
+3. Add schema guard script/test ensuring:
+   - unique `case_id`,
+   - sorted by `case_id`,
+   - failure cases include `expected_reason_code`.
+
+Acceptance:
+
+- `cargo test -p citizen-wallet wrcp_vector_schema`.
+- `cargo test -p citizen-ledger wrcp_vector_schema`.
+
+### 28.6 PR-D1: CLI command implementation
+
+Goal:
+
+- Add ergonomic command path that removes manual JSON proof editing.
+
+Commands:
+
+1. `build-builder-credit-proof`
+2. `dry-run-builder-credit-grant`
+
+Required behavior:
+
+1. Respect `--json` deterministic output.
+2. Use non-zero exit code when `dry-run` returns `ok=false`.
+3. Preserve no-mutation default unless `--in-place` is provided.
+
+Acceptance:
+
+- CLI golden tests for both success and failure output.
+- One integration test proving `build ... --in-place` appends a proof and
+  dry-run passes threshold for a valid fixture.
+
+### 28.7 PR-E1: CI release gate wiring
+
+Goal:
+
+- Make WRCP conformance a required release blocker.
+
+Required behavior:
+
+1. Add `wrcp-conformance` workflow stage running:
+   - wallet WRCP tests,
+   - ledger WRCP tests,
+   - simulation multisig smoke.
+2. Upload on failure:
+   - case ID,
+   - reason code,
+   - canonical payload diff report.
+3. Mark stage required for protected branches and release tags.
+
+Acceptance:
+
+- Branch protection documentation updated in same PR.
+- Dry-run of workflow validates artifact upload paths.
+
+## 29) Canonical reason-code message registry (draft)
+
+To keep CLI/SDK/operator UX consistent, map canonical codes to stable default
+messages. These are defaults only; clients may add context suffixes.
+
+| Reason code | Default message |
+| --- | --- |
+| `MSIG_NOT_BUILDER_CREDITS_GRANT` | Entry is not a builder credit multisig grant action. |
+| `MSIG_PROOFS_MISSING` | `payload.multisig_proofs` is missing or empty. |
+| `MSIG_APPROVER_NOT_AUTHORIZED` | Approver is not in namespace grant approvers list. |
+| `MSIG_PUBLIC_KEY_MISMATCH` | Proof public key does not match approver key material. |
+| `MSIG_SIGNATURE_INVALID` | Proof signature failed runtime-compatible verification. |
+| `MSIG_APPROVALS_BELOW_THRESHOLD` | Unique authorized approvals are below required threshold. |
+| `MSIG_DUPLICATE_APPROVER` | Duplicate approver proof detected; counted once. |
+
+Registry rules:
+
+1. Message text may be clarified, but reason-code identifiers are immutable once
+   shipped.
+2. Any registry addition requires:
+   - vector additions,
+   - wallet + ledger parity tests,
+   - CLI docs update.
+
+## 30) Maintainer handoff checklist for the next contributor
+
+Before starting the next WRCP PR, perform this quick handoff sequence:
+
+1. Read Sections 16, 19, 28, and 29 to confirm current open items.
+2. Pick exactly one slice (`PR-A1`, `PR-A2`, `PR-B1`, etc.) as primary scope.
+3. Add/refresh test vectors first if the slice introduces new fail classes.
+4. Ensure the same PR updates checklist status markers and progress notes.
+5. If a reason code changes, update:
+   - this profile,
+   - wallet tests,
+   - ledger tests,
+   - CLI help/examples.
+
+This protocol keeps WRCP changes incremental, reviewable, and implementation
+aligned across wallet, ledger, and CI surfaces.
