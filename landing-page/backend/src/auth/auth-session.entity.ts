@@ -30,7 +30,7 @@ export class AuthSession {
   @Column({ name: 'revoked_at', type: 'timestamptz', nullable: true })
   revokedAt!: Date | null;
 
-  @Column({ name: 'revoked_reason', length: 120, nullable: true })
+  @Column({ name: 'revoked_reason', type: 'varchar', length: 120, nullable: true })
   revokedReason!: string | null;
 
   @Column({ name: 'last_used_at', type: 'timestamptz', nullable: true })
