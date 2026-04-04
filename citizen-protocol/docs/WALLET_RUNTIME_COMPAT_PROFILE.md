@@ -8,6 +8,14 @@ Implementation progress note (2026-04-04):
   `build_wrcp_tx_v1_signing_payload`, and `wrcp_tx_v1_canonical_json` so wallet
   surfaces can construct and inspect canonical WRCP-TX-V1 preimages using the
   same serialization path as runtime signature verification.
+- Wallet CLI now supports:
+  - `sign-builder-credit-proof` for runtime-shaped `multisig_proofs` elements
+    (approver/public_key/signature + exact signing payload string), and
+  - `sign-builder-credit-grant` with `--multisig-proofs-json` injection for
+    `builder.credits/MULTISIG_CREDIT_GRANT` submissions.
+- Wallet tests now consume shared vector fixtures under
+  `docs/test-vectors/` for file-manifest commitments and payload-field
+  commitments, improving cross-surface determinism checks.
 
 ## 1) Purpose
 
@@ -173,7 +181,10 @@ For `builder.credits` + `MULTISIG_CREDIT_GRANT`:
 These are known risks until closed:
 
 1. Some wallet surfaces return envelope/hash artifacts that are not yet 1:1 replacements for runtime `LedgerEntry` signing flows.
-2. Multisig proof authoring UX may exist without complete runtime-equivalent proof generation and validation.
+2. Multisig proof authoring currently relies on CLI/manual composition patterns;
+   there is not yet a high-level wallet API that derives grant proofs directly
+   from namespace policy (`required_grant_approvals`, `grant_approvers`) and
+   performs full pre-submit dry-run validation.
 3. Local key custody hardening may lag behind runtime wallet crate expectations.
 
 Gaps in this section are release blockers for strict runtime compatibility claims.
@@ -255,9 +266,53 @@ A release candidate is blocked unless:
 ## 16) Immediate implementation checklist
 
 - [x] Implement wallet-side `WRCP-TX-V1` preimage generator.
-- [ ] Add wallet-side verifier fixtures from Rust canonical test vectors.
-- [ ] Implement `WRCP-MSIG-V1` proof builder + local dry-run checks.
-- [ ] Add privacy mode generation flows that satisfy runtime-required fields.
+- [x] Add wallet-side verifier fixtures from shared test vectors (`docs/test-vectors/*` for commitment determinism coverage).
+- [~] Implement `WRCP-MSIG-V1` proof builder + local dry-run checks (CLI proof signing exists; policy-driven builder API and dry-run helper remain open).
+- [x] Add privacy mode generation flows that satisfy runtime-required fields (`none` / `passphrase` / `hybrid` in wallet signing path).
 - [ ] Enforce UX lane separation for JWT vs protocol signing.
 - [ ] Add CI gate job for WRCP conformance before release publish.
 - [ ] Add runtime-rejection telemetry dashboard to detect drift post-release.
+
+## 17) Next implementation slice (v2.1 execution plan)
+
+To continue implementation from the current baseline, prioritize the following
+work items in order:
+
+1. **Wallet library multisig builder API**
+   - Add a first-class helper in `crates/wallet` that accepts:
+     - a candidate `LedgerEntry` (`builder.credits` + `MULTISIG_CREDIT_GRANT`),
+     - `approver` key material,
+     - namespace policy snapshot (`required_grant_approvals`, `grant_approvers`).
+   - Return a runtime-compatible proof object and append/merge it into
+     `payload.multisig_proofs`.
+   - Reuse the same signing payload composition expected by ledger verifier logic.
+
+2. **Local dry-run compatibility check**
+   - Add wallet-side dry-run helper that validates:
+     - proof shape,
+     - approver membership,
+     - public-key binding,
+     - unique approvals threshold.
+   - This should fail fast before API submit and mirror ledger rejection reasons.
+
+3. **Cross-crate WRCP conformance fixtures**
+   - Introduce dedicated WRCP fixtures for:
+     - canonical TX signing payload bytes,
+     - signature pass/fail cases,
+     - multisig proof pass/fail matrix.
+   - Reuse fixtures in both wallet and ledger tests to detect drift.
+
+4. **CI release gate wiring**
+   - Add a CI job that runs WRCP-focused tests as a release blocker, including
+     privacy and multisig negative cases.
+
+## 18) Definition of done for “WRCP strict compatibility”
+
+Strict compatibility should only be claimed when all are true:
+
+1. Wallet surfaces can produce WRCP-TX-V1 canonical payloads and signatures that
+   verify with runtime verifier.
+2. Wallet surfaces can produce WRCP-MSIG-V1 proofs without manual JSON editing.
+3. Pre-submit wallet dry-run catches the same structural failures as ledger
+   runtime tests for supported negative vectors.
+4. CI enforces WRCP conformance on every release candidate.
