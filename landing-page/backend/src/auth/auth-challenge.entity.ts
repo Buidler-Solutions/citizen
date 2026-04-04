@@ -5,8 +5,14 @@ export class AuthChallenge {
   @PrimaryGeneratedColumn('uuid')
   id!: string;
 
-  @Column({ name: 'wallet_address', length: 42 })
+  @Column({ name: 'wallet_address', length: 180 })
   walletAddress!: string;
+
+  @Column({ name: 'signature_scheme', length: 40, default: 'evm_eip191' })
+  signatureScheme!: string;
+
+  @Column({ name: 'public_key', length: 128, nullable: true })
+  publicKey!: string | null;
 
   @Column({ length: 160 })
   domain!: string;

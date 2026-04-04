@@ -1,8 +1,8 @@
-import { IsInt, IsString, Matches, MaxLength, Min } from 'class-validator';
+import { IsInt, IsOptional, IsString, MaxLength, Min } from 'class-validator';
 
 export class AuthChallengeDto {
   @IsString()
-  @Matches(/^0x[a-fA-F0-9]{40}$/)
+  @MaxLength(180)
   address!: string;
 
   @IsString()
@@ -16,4 +16,14 @@ export class AuthChallengeDto {
   @IsInt()
   @Min(1)
   chainId!: number;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(40)
+  scheme?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(128)
+  publicKey?: string;
 }
