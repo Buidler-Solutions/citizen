@@ -419,3 +419,142 @@ Do not claim “wallet runtime compatibility complete” until all are checked:
 - [ ] WRCP-MSIG-V1 flow works without manual JSON editing.
 - [ ] Wallet dry-run and ledger runtime agree on supported negative vectors.
 - [ ] CI enforces WRCP conformance on every release candidate.
+
+## 21) Next implementation sprint backlog (v2.1 → v2.2)
+
+The following backlog continues implementation with merge-ready slices that can
+land independently while preserving runtime compatibility.
+
+### 21.1 Wallet crate API surface additions
+
+Add these public exports in `crates/wallet/src/lib.rs`:
+
+- `WrcpMsigV1Proof` (typed representation of `payload.multisig_proofs[]`).
+- `WrcpMsigV1DryRunReport` + `WrcpMsigV1Issue` (typed dry-run output for CLI/SDK).
+- `build_wrcp_msig_v1_proof(...) -> Result<WrcpMsigV1Proof, WalletError>`.
+- `dry_run_wrcp_msig_v1(...) -> WrcpMsigV1DryRunReport`.
+
+Design constraints:
+
+1. Keep deterministic serialization for any signed bytes (same canonical JSON
+   path used by runtime compatibility helpers).
+2. Return machine-parseable error codes (not only display text).
+3. Keep APIs data-model-first so Node SDK and CLI can consume the same report
+   schema without adapter glue.
+
+### 21.2 Wallet CLI command additions
+
+Extend `wallet/cli` with two commands:
+
+1. `build-builder-credit-proof`
+   - Inputs:
+     - `--entry-json <path>`
+     - `--approver-did <did>`
+     - key source flags consistent with existing signing commands
+     - `--namespace-policy-json <path>`
+   - Output:
+     - proof JSON object (`approver`, `public_key`, `signature`)
+     - optional `--in-place` mode to append into `payload.multisig_proofs`.
+
+2. `dry-run-builder-credit-grant`
+   - Inputs:
+     - `--entry-json <path>`
+     - `--namespace-policy-json <path>`
+   - Output:
+     - structured report JSON
+     - non-zero exit when `ok=false`.
+
+CLI behavior requirements:
+
+- `--json` output must be stable for test snapshotting.
+- failure output must include both `reason_code` and human-readable explanation.
+- no command should mutate input files unless explicitly requested.
+
+### 21.3 Ledger-aligned reason-code contract
+
+To keep dry-run parity observable and testable, standardize the following
+reason codes across wallet dry-run output and ledger tests:
+
+- `MSIG_NOT_BUILDER_CREDITS_GRANT`
+- `MSIG_PROOFS_MISSING`
+- `MSIG_APPROVER_NOT_AUTHORIZED`
+- `MSIG_PUBLIC_KEY_MISMATCH`
+- `MSIG_SIGNATURE_INVALID`
+- `MSIG_APPROVALS_BELOW_THRESHOLD`
+- `MSIG_DUPLICATE_APPROVER`
+
+Implementation rule:
+
+- Wallet dry-run may emit advisory warnings in addition to these errors, but
+  must not rename or overload these canonical error codes.
+
+### 21.4 Shared vector rollout order
+
+Implement vectors in this sequence to reduce merge conflicts:
+
+1. Add skeleton files under:
+   - `docs/test-vectors/wrcp_tx_v1/canonical_payloads.json`
+   - `docs/test-vectors/wrcp_tx_v1/signature_cases.json`
+   - `docs/test-vectors/wrcp_msig_v1/proof_matrix.json`
+2. Wire wallet tests to parse and assert vectors.
+3. Wire ledger tests to consume the same files.
+4. Add CI guard ensuring both crates exercised vector IDs changed in a PR.
+
+Vector schema guidance:
+
+- each case MUST have stable `case_id`.
+- pass/fail expectations MUST be explicit (`expect_accept: true|false`).
+- failing cases MUST include expected canonical `reason_code`.
+
+### 21.5 CI/pipeline acceptance bar
+
+Add a required pipeline stage: `wrcp-conformance`.
+
+Minimum command matrix (workspace-root examples):
+
+```bash
+cargo test -p citizen-wallet wrcp_
+cargo test -p citizen-ledger wrcp_
+cargo test -p citizen-simulation multisig_credit_grant
+```
+
+Pipeline requirements:
+
+1. Stage is required for protected branches and release tags.
+2. Fixture drift check fails if wallet/ledger tests do not both reference newly
+   added vector IDs.
+3. Artifacts uploaded on failure:
+   - dry-run report JSON
+   - failing `case_id`
+   - canonical-payload diff (when applicable).
+
+## 22) PR slicing template for maintainers
+
+Use this slicing template so WRCP work can ship incrementally:
+
+1. **PR-A (wallet types + builder helper)**
+   - Introduce `WrcpMsigV1Proof` and proof-builder function.
+   - Add focused unit tests.
+2. **PR-B (dry-run + reason codes)**
+   - Introduce dry-run report types and canonical reason-code mapping.
+   - Add fail-matrix unit tests.
+3. **PR-C (shared vectors)**
+   - Add WRCP vector files and hook both wallet + ledger tests.
+4. **PR-D (CLI integration)**
+   - Add `build-builder-credit-proof` and `dry-run-builder-credit-grant`.
+   - Add CLI golden-output tests.
+5. **PR-E (CI gate)**
+   - Add required `wrcp-conformance` workflow and artifact upload.
+
+Each PR should update Section 19 checklist statuses in the same change.
+
+## 23) Exit criteria for v2.2 checklist refresh
+
+Before moving profile status from “Draft v2” to “Draft v2.2”, confirm:
+
+1. At least one non-test wallet surface (CLI or SDK flow) can build and dry-run
+   multisig grants without manual JSON edits.
+2. Shared WRCP vectors are consumed by both wallet and ledger tests in CI.
+3. Failure reason-code parity is asserted in automated tests.
+4. This document’s Sections 16 and 19 are updated with real completion status
+   (no stale `[x]` markers).
