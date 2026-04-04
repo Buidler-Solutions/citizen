@@ -316,3 +316,106 @@ Strict compatibility should only be claimed when all are true:
 3. Pre-submit wallet dry-run catches the same structural failures as ledger
    runtime tests for supported negative vectors.
 4. CI enforces WRCP conformance on every release candidate.
+
+## 19) WRCP implementation checklist guide (track done vs not done)
+
+Use this checklist as the canonical progress tracker for WRCP strict
+compatibility work.
+
+Status legend:
+
+- `[x]` complete and merged to default branch
+- `[~]` partially implemented
+- `[ ]` not started
+
+Last checklist refresh: **2026-04-04**.
+
+### 19.1 Wallet multisig builder API (`build_wrcp_msig_v1_proof`)
+
+- [ ] Add API to `crates/wallet` with explicit input contract:
+  - `entry: &LedgerEntry`
+  - `approver_did: &str`
+  - `approver_private_key_hex: &str`
+  - `namespace_policy: &NamespaceConfig`
+- [ ] Return runtime-compatible proof object containing:
+  - `approver`
+  - `public_key`
+  - `signature`
+- [ ] Reject non-`builder.credits` / non-`MULTISIG_CREDIT_GRANT` entries.
+- [ ] Reject approvers not present in `grant_approvers`.
+- [ ] Guarantee signing payload parity with ledger verifier composition.
+- [ ] Emit lowercase-hex signatures.
+- [ ] Add wallet crate unit tests for pass + fail cases.
+
+### 19.2 Wallet local dry-run helper (`dry_run_wrcp_msig_v1`)
+
+- [ ] Add API to `crates/wallet` with input:
+  - `entry: &LedgerEntry`
+  - `namespace_policy: &NamespaceConfig`
+- [ ] Return typed report (`ok`, `required_approvals`, `unique_approvals`,
+  `errors`, `warnings`).
+- [ ] Validate proof schema for every `payload.multisig_proofs` element.
+- [ ] Validate approver membership and public-key binding.
+- [ ] Validate unique-approval threshold.
+- [ ] Emit machine-parseable failure reasons shared by CLI + SDK surfaces.
+- [ ] Add dry-run parity tests against ledger negative vectors.
+
+### 19.3 Shared WRCP test vectors
+
+- [ ] Add `docs/test-vectors/wrcp_tx_v1/canonical_payloads.json`.
+- [ ] Add `docs/test-vectors/wrcp_tx_v1/signature_cases.json`.
+- [ ] Add `docs/test-vectors/wrcp_msig_v1/proof_matrix.json`.
+- [ ] Include pass/fail matrix for:
+  - unauthorized approver
+  - duplicate approver counted once
+  - invalid public key
+  - malformed signature
+  - below-threshold approvals
+- [ ] Ensure wallet tests consume these vectors.
+- [ ] Ensure ledger tests consume the same vectors.
+- [ ] Fail CI when fixture changes are not validated in both crates.
+
+### 19.4 CI release gate wiring (`wrcp-conformance`)
+
+- [ ] Add CI job running wallet WRCP unit tests.
+- [ ] Add CI job running ledger WRCP policy tests.
+- [ ] Add shared-fixture consistency check.
+- [ ] Add simulation smoke test for multisig grant submit path.
+- [ ] Mark job as required for protected branch + release tags.
+- [ ] Disallow allow-failure/optional mode.
+- [ ] Upload failure artifacts:
+  - canonical payload diff
+  - failing vector ID
+  - dry-run report JSON
+
+### 19.5 Runtime-rejection telemetry
+
+- [ ] Emit rejection metrics with labels:
+  - `reason_code`
+  - `namespace`
+  - `action`
+  - `wallet_profile_version` (if supplied)
+  - `node_mode`
+- [ ] Emit counters/gauges:
+  - `wrcp_rejections_total{reason_code,...}`
+  - `wrcp_accepts_total{namespace,action}`
+  - `wrcp_rejection_ratio_5m`
+- [ ] Add alert: `wrcp_rejection_ratio_5m > 0.001` for 15 minutes in WRCP
+  production namespaces.
+
+### 19.6 Documentation sync requirements (same PR as implementation)
+
+- [ ] Update `citizen-protocol/README.md` WRCP compatibility line.
+- [ ] Update
+  `citizen-protocol/docs/DEEP_RESEARCH_ARCHITECTURE_BASELINE.md` WRCP status.
+- [ ] Update wallet CLI docs/examples for multisig builder and dry-run outputs.
+- [ ] Update this WRCP profile checklist statuses.
+
+## 20) Release sign-off checklist (strict compatibility claim)
+
+Do not claim “wallet runtime compatibility complete” until all are checked:
+
+- [ ] WRCP-TX-V1 payload/signature conformance passes against runtime verifier.
+- [ ] WRCP-MSIG-V1 flow works without manual JSON editing.
+- [ ] Wallet dry-run and ledger runtime agree on supported negative vectors.
+- [ ] CI enforces WRCP conformance on every release candidate.
