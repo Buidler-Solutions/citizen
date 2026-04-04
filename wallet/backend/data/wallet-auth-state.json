@@ -1,45 +1,4 @@
 {
   "challenges": [],
-  "sessions": [
-    {
-      "sessionId": "7bff610d-f462-4db7-9355-92f2ba882379",
-      "wallet": "0x1bbfada2314d28ce9515722a35aa2682a20a297f",
-      "network": "futurenet",
-      "issuedAt": 1775301894576,
-      "expiresAt": 1775303694576,
-      "revoked": false
-    },
-    {
-      "sessionId": "c3510208-2d09-4412-980d-3e579bf1c4ee",
-      "wallet": "0x1bbfada2314d28ce9515722a35aa2682a20a297f",
-      "network": "futurenet",
-      "issuedAt": 1775301910028,
-      "expiresAt": 1775303710028,
-      "revoked": false
-    },
-    {
-      "sessionId": "b24bfc27-6628-4ff4-9c36-c666dd575233",
-      "wallet": "0x1bbfada2314d28ce9515722a35aa2682a20a297f",
-      "network": "futurenet",
-      "issuedAt": 1775301924415,
-      "expiresAt": 1775303724415,
-      "revoked": false
-    },
-    {
-      "sessionId": "71f3ccc0-4f1c-4636-9647-4612c4f78ac8",
-      "wallet": "0x1bbfada2314d28ce9515722a35aa2682a20a297f",
-      "network": "futurenet",
-      "issuedAt": 1775301932882,
-      "expiresAt": 1775303732882,
-      "revoked": false
-    },
-    {
-      "sessionId": "406aac85-6d51-4a3f-aece-dff59e3dfc63",
-      "wallet": "0x1bbfada2314d28ce9515722a35aa2682a20a297f",
-      "network": "futurenet",
-      "issuedAt": 1775302040019,
-      "expiresAt": 1775303840019,
-      "revoked": false
-    }
-  ]
+  "sessions": []
 }
