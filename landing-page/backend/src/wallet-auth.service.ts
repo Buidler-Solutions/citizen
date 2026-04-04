@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   Injectable,
+  Logger,
   UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -21,8 +22,21 @@ export interface VerifyChallengeInput {
   ipAddress?: string;
 }
 
+interface ParsedChallengeMessage {
+  domain: string;
+  walletAddress: string;
+  uri: string;
+  version: string;
+  chainId: number;
+  nonce: string;
+  issuedAt: string;
+  expirationTime: string;
+}
+
 @Injectable()
 export class WalletAuthService {
+  private readonly logger = new Logger(WalletAuthService.name);
+
   constructor(
     @InjectRepository(AuthUser)
     private readonly authUserRepository: Repository<AuthUser>,
@@ -117,6 +131,105 @@ export class WalletAuthService {
     }
   }
 
+  private parseChallengeMessage(message: string): ParsedChallengeMessage {
+    const lines = message.split('\n');
+    if (lines.length < 9) {
+      throw new UnauthorizedException('Malformed challenge payload.');
+    }
+
+    const domainPrefix = ' wants you to sign in with your Citizen wallet:';
+    const domainLine = lines[0] ?? '';
+    if (!domainLine.endsWith(domainPrefix)) {
+      throw new UnauthorizedException('Malformed challenge payload.');
+    }
+
+    const readField = (line: string, label: string): string => {
+      if (!line.startsWith(`${label}: `)) {
+        throw new UnauthorizedException('Malformed challenge payload.');
+      }
+      return line.slice(label.length + 2).trim();
+    };
+
+    const domain = this.normalizeDomain(domainLine.slice(0, -domainPrefix.length));
+    const walletAddress = this.normalizeWalletAddress((lines[1] ?? '').trim());
+    const uri = readField(lines[3] ?? '', 'URI');
+    const version = readField(lines[4] ?? '', 'Version');
+    const chainIdRaw = readField(lines[5] ?? '', 'Chain ID');
+    const nonce = readField(lines[6] ?? '', 'Nonce');
+    const issuedAt = readField(lines[7] ?? '', 'Issued At');
+    const expirationTime = readField(lines[8] ?? '', 'Expiration Time');
+
+    const chainId = Number(chainIdRaw);
+    if (!Number.isInteger(chainId) || chainId <= 0) {
+      throw new UnauthorizedException('Malformed challenge payload.');
+    }
+
+    if (!/^0x[a-f0-9]{40}$/.test(walletAddress) || !nonce || !uri || !issuedAt || !expirationTime) {
+      throw new UnauthorizedException('Malformed challenge payload.');
+    }
+
+    if (version !== '1') {
+      throw new UnauthorizedException('Unsupported challenge version.');
+    }
+
+    return {
+      domain,
+      walletAddress,
+      uri,
+      version,
+      chainId,
+      nonce,
+      issuedAt,
+      expirationTime,
+    };
+  }
+
+  private buildCanonicalMessage(parsed: ParsedChallengeMessage): string {
+    return [
+      `${parsed.domain} wants you to sign in with your Citizen wallet:`,
+      parsed.walletAddress,
+      '',
+      `URI: ${parsed.uri}`,
+      `Version: ${parsed.version}`,
+      `Chain ID: ${parsed.chainId}`,
+      `Nonce: ${parsed.nonce}`,
+      `Issued At: ${parsed.issuedAt}`,
+      `Expiration Time: ${parsed.expirationTime}`,
+    ].join('\n');
+  }
+
+  private validateSignatureEnvelope(signature: string): void {
+    const normalizedSignature = signature.trim().toLowerCase();
+    if (!/^0x[a-f0-9]{130}$/.test(normalizedSignature)) {
+      throw new UnauthorizedException('Invalid signature.');
+    }
+
+    const recoveryByte = Number.parseInt(normalizedSignature.slice(-2), 16);
+    if (![0, 1, 27, 28].includes(recoveryByte)) {
+      throw new UnauthorizedException('Invalid signature.');
+    }
+  }
+
+  private writeVerifyAuditLog(
+    outcome: 'success' | 'failure',
+    reason: string,
+    input: VerifyChallengeInput,
+    walletAddress?: string,
+  ): void {
+    this.logger.log(
+      JSON.stringify({
+        event: 'wallet_auth_verify',
+        outcome,
+        reason,
+        challengeId: input.challengeId,
+        walletAddress: walletAddress ?? this.normalizeWalletAddress(input.address),
+        userAgent: input.userAgent ?? '',
+        ipAddress: input.ipAddress ?? '',
+        occurredAt: new Date().toISOString(),
+      }),
+    );
+  }
+
   async createChallenge(address: string, domain: string, uri: string, chainId: number): Promise<{ challengeId: string; message: string; expiresAt: string }> {
     await this.cleanupExpiredAuthArtifacts();
 
@@ -186,94 +299,141 @@ export class WalletAuthService {
     refreshExpiresAt: Date;
   }> {
     const normalizedAddress = this.normalizeWalletAddress(input.address);
-    await this.authChallengeRepository.manager.transaction(async (manager) => {
-      const locked = await manager
-        .getRepository(AuthChallenge)
-        .createQueryBuilder('challenge')
-        .setLock('pessimistic_write')
-        .where('challenge.id = :id', { id: input.challengeId })
-        .getOne();
 
-      if (!locked) {
-        throw new UnauthorizedException('Challenge not found.');
+    try {
+      const locked = await this.authChallengeRepository.manager.transaction(async (manager) => {
+        const challenge = await manager
+          .getRepository(AuthChallenge)
+          .createQueryBuilder('challenge')
+          .setLock('pessimistic_write')
+          .where('challenge.id = :id', { id: input.challengeId })
+          .getOne();
+
+        if (!challenge) {
+          throw new UnauthorizedException('Challenge not found.');
+        }
+
+        if (challenge.usedAt) {
+          throw new UnauthorizedException('Challenge already used.');
+        }
+
+        if (challenge.expiresAt.getTime() <= Date.now()) {
+          throw new UnauthorizedException('Challenge expired.');
+        }
+
+        if (input.message !== challenge.message) {
+          throw new UnauthorizedException('Challenge message mismatch.');
+        }
+
+        if (normalizedAddress !== challenge.walletAddress) {
+          throw new UnauthorizedException('Wallet address mismatch.');
+        }
+
+        const parsedMessage = this.parseChallengeMessage(input.message);
+        const canonicalMessage = this.buildCanonicalMessage(parsedMessage);
+
+        if (canonicalMessage !== input.message) {
+          throw new UnauthorizedException('Challenge canonicalization mismatch.');
+        }
+
+        if (parsedMessage.walletAddress !== challenge.walletAddress) {
+          throw new UnauthorizedException('Challenge wallet address mismatch.');
+        }
+
+        if (parsedMessage.domain !== challenge.domain) {
+          throw new UnauthorizedException('Challenge domain mismatch.');
+        }
+
+        if (parsedMessage.uri !== challenge.uri) {
+          throw new UnauthorizedException('Challenge URI mismatch.');
+        }
+
+        if (parsedMessage.chainId !== challenge.chainId) {
+          throw new UnauthorizedException('Challenge chainId mismatch.');
+        }
+
+        this.validateUri(parsedMessage.uri, parsedMessage.domain);
+
+        const issuedAt = Date.parse(parsedMessage.issuedAt);
+        const expirationTime = Date.parse(parsedMessage.expirationTime);
+        if (!Number.isFinite(issuedAt) || !Number.isFinite(expirationTime) || expirationTime <= issuedAt) {
+          throw new UnauthorizedException('Challenge time window invalid.');
+        }
+
+        if (Math.abs(issuedAt - challenge.createdAt.getTime()) > 120_000) {
+          throw new UnauthorizedException('Challenge issuedAt mismatch.');
+        }
+
+        if (Math.abs(expirationTime - challenge.expiresAt.getTime()) > 1_000) {
+          throw new UnauthorizedException('Challenge expiration mismatch.');
+        }
+
+        this.validateSignatureEnvelope(input.signature);
+
+        challenge.usedAt = new Date();
+        await manager.getRepository(AuthChallenge).save(challenge);
+        return challenge;
+      });
+
+      let user = await this.authUserRepository.findOne({ where: { walletAddress: normalizedAddress } });
+      if (!user) {
+        user = this.authUserRepository.create({ walletAddress: normalizedAddress });
+        user = await this.authUserRepository.save(user);
       }
 
-      if (locked.usedAt) {
-        throw new UnauthorizedException('Challenge already used.');
-      }
+      const refreshToken = this.createRefreshToken();
+      const refreshExpiresAt = new Date(Date.now() + this.getRefreshTokenTtlSeconds() * 1000);
+      const session = this.authSessionRepository.create({
+        userId: user.id,
+        refreshTokenHash: this.hashRefreshToken(refreshToken),
+        expiresAt: refreshExpiresAt,
+        revokedAt: null,
+        revokedReason: null,
+        lastUsedAt: new Date(),
+        userAgent: input.userAgent ?? '',
+        ipAddress: input.ipAddress ?? '',
+      });
 
-      if (locked.expiresAt.getTime() <= Date.now()) {
-        throw new UnauthorizedException('Challenge expired.');
-      }
+      const savedSession = await this.authSessionRepository.save(session);
+      const expiresIn = this.getAccessTokenTtlSeconds();
+      const issuer = this.configService.get<string>('AUTH_JWT_ISSUER', 'citizen-landing-backend');
+      const audience = this.configService.get<string>('AUTH_JWT_AUDIENCE', 'citizen-landing-frontend');
 
-      if (input.message !== locked.message) {
-        throw new UnauthorizedException('Challenge message mismatch.');
-      }
+      const accessToken = this.jwtService.sign(
+        {
+          wallet: user.walletAddress,
+          sessionId: savedSession.id,
+        },
+        {
+          subject: user.id,
+          issuer,
+          audience,
+          expiresIn,
+        },
+      );
 
-      if (normalizedAddress !== locked.walletAddress) {
-        throw new UnauthorizedException('Wallet address mismatch.');
-      }
+      this.writeVerifyAuditLog('success', 'verified', input, locked.walletAddress);
 
-      // Initial implementation gate:
-      // requires non-empty wallet signature and reserves full secp256k1
-      // recovery/verification for the next phase.
-      if (!input.signature?.trim()) {
-        throw new UnauthorizedException('Invalid signature.');
-      }
-
-      locked.usedAt = new Date();
-      await manager.getRepository(AuthChallenge).save(locked);
-    });
-
-    let user = await this.authUserRepository.findOne({ where: { walletAddress: normalizedAddress } });
-    if (!user) {
-      user = this.authUserRepository.create({ walletAddress: normalizedAddress });
-      user = await this.authUserRepository.save(user);
-    }
-
-    const refreshToken = this.createRefreshToken();
-    const refreshExpiresAt = new Date(Date.now() + this.getRefreshTokenTtlSeconds() * 1000);
-    const session = this.authSessionRepository.create({
-      userId: user.id,
-      refreshTokenHash: this.hashRefreshToken(refreshToken),
-      expiresAt: refreshExpiresAt,
-      revokedAt: null,
-      revokedReason: null,
-      lastUsedAt: new Date(),
-      userAgent: input.userAgent ?? '',
-      ipAddress: input.ipAddress ?? '',
-    });
-
-    const savedSession = await this.authSessionRepository.save(session);
-    const expiresIn = this.getAccessTokenTtlSeconds();
-    const issuer = this.configService.get<string>('AUTH_JWT_ISSUER', 'citizen-landing-backend');
-    const audience = this.configService.get<string>('AUTH_JWT_AUDIENCE', 'citizen-landing-frontend');
-
-    const accessToken = this.jwtService.sign(
-      {
-        wallet: user.walletAddress,
-        sessionId: savedSession.id,
-      },
-      {
-        subject: user.id,
-        issuer,
-        audience,
+      return {
+        accessToken,
+        tokenType: 'Bearer',
         expiresIn,
-      },
-    );
-
-    return {
-      accessToken,
-      tokenType: 'Bearer',
-      expiresIn,
-      sessionId: savedSession.id,
-      user: {
-        id: user.id,
-        walletAddress: user.walletAddress,
-      },
-      refreshToken,
-      refreshExpiresAt,
-    };
+        sessionId: savedSession.id,
+        user: {
+          id: user.id,
+          walletAddress: user.walletAddress,
+        },
+        refreshToken,
+        refreshExpiresAt,
+      };
+    } catch (error) {
+      this.writeVerifyAuditLog(
+        'failure',
+        error instanceof Error ? error.message : 'unknown error',
+        input,
+      );
+      throw error;
+    }
   }
 
   async refreshSession(refreshToken: string): Promise<{
