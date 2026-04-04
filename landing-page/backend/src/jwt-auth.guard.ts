@@ -23,13 +23,13 @@ export class JwtAuthGuard implements CanActivate {
     const header = request.headers.authorization as string | undefined;
 
     if (!header || !header.startsWith('Bearer ')) {
-      throw new UnauthorizedException('Missing bearer token');
+      throw new UnauthorizedException({ code: 'TOKEN_MISSING', message: 'Missing bearer token' });
     }
 
     const token = header.slice('Bearer '.length).trim();
 
     if (!token) {
-      throw new UnauthorizedException('Missing bearer token');
+      throw new UnauthorizedException({ code: 'TOKEN_MISSING', message: 'Missing bearer token' });
     }
 
     try {
@@ -49,14 +49,26 @@ export class JwtAuthGuard implements CanActivate {
         });
 
         if (!session || session.expiresAt.getTime() <= Date.now()) {
-          throw new UnauthorizedException('Session revoked or expired');
+          throw new UnauthorizedException({ code: 'SESSION_REVOKED', message: 'Session revoked or expired' });
         }
       }
 
       request.user = claims;
       return true;
-    } catch {
-      throw new UnauthorizedException('Invalid or expired token');
+    } catch (error) {
+      if (error instanceof UnauthorizedException) {
+        throw error;
+      }
+
+      const tokenExpired = typeof error === 'object'
+        && error !== null
+        && 'name' in error
+        && error.name === 'TokenExpiredError';
+
+      if (tokenExpired) {
+        throw new UnauthorizedException({ code: 'TOKEN_EXPIRED', message: 'Invalid or expired token' });
+      }
+      throw new UnauthorizedException({ code: 'TOKEN_INVALID', message: 'Invalid or expired token' });
     }
   }
 }

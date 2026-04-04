@@ -2,35 +2,11 @@
   "challenges": [],
   "sessions": [
     {
-      "sessionId": "b91f22d7-e941-4521-9fe7-db088edca01f",
+      "sessionId": "a4cf6ef0-a04f-4b9d-992f-e647db2de4b4",
       "wallet": "0x1bbfada2314d28ce9515722a35aa2682a20a297f",
       "network": "futurenet",
-      "issuedAt": 1775314701725,
-      "expiresAt": 1775316501725,
-      "revoked": false
-    },
-    {
-      "sessionId": "5b1e6e13-c91e-494b-8033-8e3b857e8015",
-      "wallet": "0x1bbfada2314d28ce9515722a35aa2682a20a297f",
-      "network": "futurenet",
-      "issuedAt": 1775314794115,
-      "expiresAt": 1775316594115,
-      "revoked": false
-    },
-    {
-      "sessionId": "a8f21eef-8386-4362-b610-39052f4214b1",
-      "wallet": "0x1bbfada2314d28ce9515722a35aa2682a20a297f",
-      "network": "futurenet",
-      "issuedAt": 1775314798252,
-      "expiresAt": 1775316598252,
-      "revoked": false
-    },
-    {
-      "sessionId": "7ee9ca47-0712-416b-866f-6ca267ac388b",
-      "wallet": "0x1bbfada2314d28ce9515722a35aa2682a20a297f",
-      "network": "futurenet",
-      "issuedAt": 1775314804619,
-      "expiresAt": 1775316604619,
+      "issuedAt": 1775318504031,
+      "expiresAt": 1775320304031,
       "revoked": false
     }
   ]
