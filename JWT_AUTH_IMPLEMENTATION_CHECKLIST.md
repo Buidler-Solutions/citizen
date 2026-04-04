@@ -144,7 +144,8 @@ Use this file as the **single source of implementation tracking** for wallet-sig
   - 2026-04-04: verify path performs DB-backed checks before issuing sessions.
 - [x] Validate exact message match with issued challenge.
   - 2026-04-04: verify rejects message mismatch against stored challenge payload.
-- [ ] Recover signer address and compare against expected address.
+- [-] Recover signer address and compare against expected address for EVM mode; verify derived address from provided public key for Citizen mode.
+  - 2026-04-04: `citizen_ed25519` now verifies public-key-derived `ctzn:` address + Ed25519 signature; EVM mode keeps strict envelope checks unless recovery library is explicitly enabled.
 - [x] Atomically consume nonce/challenge.
   - 2026-04-04: challenge consumption now runs inside a pessimistic-write transaction.
 - [x] Upsert user, create session, hash refresh token, issue access JWT.
@@ -175,11 +176,14 @@ Use this file as the **single source of implementation tracking** for wallet-sig
   - 2026-04-04: logout response returns `{ ok: true }`.
 
 ### 4.2 Signature verification rules
-- [x] Parse SIWE-like message and reject malformed payloads.
-  - 2026-04-04: verify now rejects malformed SIWE-like payload lines and unsupported version fields.
+- [x] Parse challenge payloads and reject malformed payloads for the active scheme.
+  - 2026-04-04: verify now parses a scheme-tagged canonical message for `evm_eip191` and `citizen_ed25519` with strict field validation.
+- [x] Support explicit opt-in signature schemes (`evm_eip191`, `citizen_ed25519`) and allowlist via config.
+  - 2026-04-04: `AUTH_ENABLED_SIGNATURE_SCHEMES` + per-request `scheme` selector added; unsupported schemes are rejected.
 - [x] Reconstruct canonical message bytes exactly.
   - 2026-04-04: verify now rebuilds canonical challenge content and rejects mismatches.
-- [ ] Verify secp256k1-compatible signature recovery.
+- [-] Verify secp256k1-compatible signature recovery when `evm_eip191` is selected.
+  - 2026-04-04: backend now gates full EVM recovery behind explicit opt-in (`AUTH_EVM_SIGNATURE_RECOVERY_ENABLED=true`) and dependency availability; default path remains envelope validation.
 - [x] Enforce nonce single-use, time window, domain/URI/audience, chainId.
   - 2026-04-04: verify now enforces challenge time-window parity, domain/URI/chain binding, and one-time nonce consumption via lock.
 - [x] Write audit event for every verify attempt (success/failure reason).

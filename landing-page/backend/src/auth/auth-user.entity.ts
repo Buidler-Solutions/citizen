@@ -6,7 +6,7 @@ export class AuthUser {
   id!: string;
 
   @Index({ unique: true })
-  @Column({ name: 'wallet_address', length: 42 })
+  @Column({ name: 'wallet_address', length: 180 })
   walletAddress!: string;
 
   @CreateDateColumn()

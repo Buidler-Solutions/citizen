@@ -1,4 +1,4 @@
-import { IsString, Matches, MaxLength } from 'class-validator';
+import { IsOptional, IsString, MaxLength } from 'class-validator';
 
 export class AuthVerifyDto {
   @IsString()
@@ -12,6 +12,16 @@ export class AuthVerifyDto {
   signature!: string;
 
   @IsString()
-  @Matches(/^0x[a-fA-F0-9]{40}$/)
+  @MaxLength(180)
   address!: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(40)
+  scheme?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(128)
+  publicKey?: string;
 }

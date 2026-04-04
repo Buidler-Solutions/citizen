@@ -73,6 +73,8 @@ export class AuthController {
       payload.domain,
       payload.uri,
       payload.chainId,
+      payload.scheme as "evm_eip191" | "citizen_ed25519" | undefined,
+      payload.publicKey,
       ipAddress,
     );
   }
@@ -88,6 +90,8 @@ export class AuthController {
       message: payload.message,
       signature: payload.signature,
       address: payload.address,
+      scheme: payload.scheme as "evm_eip191" | "citizen_ed25519" | undefined,
+      publicKey: payload.publicKey,
       userAgent: String(request.headers['user-agent'] ?? ''),
       ipAddress: request.ip ?? '',
     });
