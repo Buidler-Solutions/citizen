@@ -230,6 +230,23 @@ export class WalletAuthService {
     );
   }
 
+  private writeAuthAuditLog(
+    event: 'wallet_auth_challenge' | 'wallet_auth_refresh' | 'wallet_auth_logout',
+    outcome: 'success' | 'failure',
+    reason: string,
+    metadata: Record<string, unknown>,
+  ): void {
+    this.logger.log(
+      JSON.stringify({
+        event,
+        outcome,
+        reason,
+        occurredAt: new Date().toISOString(),
+        ...metadata,
+      }),
+    );
+  }
+
   async createChallenge(address: string, domain: string, uri: string, chainId: number): Promise<{ challengeId: string; message: string; expiresAt: string }> {
     await this.cleanupExpiredAuthArtifacts();
 
@@ -282,6 +299,13 @@ export class WalletAuthService {
     });
 
     const saved = await this.authChallengeRepository.save(challenge);
+    this.writeAuthAuditLog('wallet_auth_challenge', 'success', 'challenge-issued', {
+      challengeId: saved.id,
+      walletAddress,
+      domain: normalizedDomain,
+      chainId,
+    });
+
     return {
       challengeId: saved.id,
       message: saved.message,
@@ -369,7 +393,6 @@ export class WalletAuthService {
         }
 
         this.validateSignatureEnvelope(input.signature);
-
         challenge.usedAt = new Date();
         await manager.getRepository(AuthChallenge).save(challenge);
         return challenge;
@@ -453,30 +476,32 @@ export class WalletAuthService {
     await this.cleanupExpiredAuthArtifacts();
 
     const tokenHash = this.hashRefreshToken(refreshToken);
-    const { session, nextRefreshToken } = await this.authSessionRepository.manager.transaction(async (manager) => {
-      const lockedSession = await manager
-        .getRepository(AuthSession)
-        .createQueryBuilder('session')
-        .setLock('pessimistic_write')
-        .leftJoinAndSelect('session.user', 'user')
-        .where('session.refresh_token_hash = :tokenHash', { tokenHash })
-        .andWhere('session.revoked_at IS NULL')
-        .getOne();
+    const { session, nextRefreshToken } = await this.authSessionRepository.manager.transaction(
+      async (manager) => {
+        const lockedSession = await manager
+          .getRepository(AuthSession)
+          .createQueryBuilder('session')
+          .setLock('pessimistic_write')
+          .leftJoinAndSelect('session.user', 'user')
+          .where('session.refresh_token_hash = :tokenHash', { tokenHash })
+          .andWhere('session.revoked_at IS NULL')
+          .getOne();
 
-      if (!lockedSession || !lockedSession.user || lockedSession.expiresAt.getTime() <= Date.now()) {
-        throw new UnauthorizedException('Invalid refresh token.');
-      }
+        if (!lockedSession || !lockedSession.user || lockedSession.expiresAt.getTime() <= Date.now()) {
+          throw new UnauthorizedException('Invalid refresh token.');
+        }
 
-      const rotatedRefreshToken = this.createRefreshToken();
-      lockedSession.refreshTokenHash = this.hashRefreshToken(rotatedRefreshToken);
-      lockedSession.lastUsedAt = new Date();
-      await manager.getRepository(AuthSession).save(lockedSession);
+        const rotatedRefreshToken = this.createRefreshToken();
+        lockedSession.refreshTokenHash = this.hashRefreshToken(rotatedRefreshToken);
+        lockedSession.lastUsedAt = new Date();
+        await manager.getRepository(AuthSession).save(lockedSession);
 
-      return {
-        session: lockedSession,
-        nextRefreshToken: rotatedRefreshToken,
-      };
-    });
+        return {
+          session: lockedSession,
+          nextRefreshToken: rotatedRefreshToken,
+        };
+      },
+    );
 
     const issuer = this.configService.get<string>('AUTH_JWT_ISSUER', 'citizen-landing-backend');
     const audience = this.configService.get<string>('AUTH_JWT_AUDIENCE', 'citizen-landing-frontend');
@@ -495,13 +520,19 @@ export class WalletAuthService {
       },
     );
 
-    return {
+    const response = {
       accessToken,
       tokenType: 'Bearer',
       expiresIn,
       refreshToken: nextRefreshToken,
       refreshExpiresAt: session.expiresAt,
     };
+    this.writeAuthAuditLog('wallet_auth_refresh', 'success', 'refresh-rotated', {
+      sessionId: session.id,
+      userId: session.user.id,
+    });
+
+    return response;
   }
 
   async revokeSession(refreshToken: string): Promise<void> {
@@ -529,6 +560,10 @@ export class WalletAuthService {
       session.revokedAt = new Date();
       session.revokedReason = 'logout';
       await manager.getRepository(AuthSession).save(session);
+      this.writeAuthAuditLog('wallet_auth_logout', 'success', 'session-revoked', {
+        sessionId: session.id,
+        userId: session.userId,
+      });
     });
   }
 }
