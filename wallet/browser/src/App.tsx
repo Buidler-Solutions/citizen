@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   buildStrictBuilderCreditChecklist,
   createMultisigGrantDraft,
@@ -130,6 +130,7 @@ type WalletResponse = {
 const STORAGE_KEY = 'citizen.browser.wallet.v1';
 const LAST_REQUEST_KEY = 'citizen.browser.wallet.last_request.v1';
 const PROFILE_KEY = 'citizen.browser.wallet.profile.v1';
+const DAPP_PENDING_REQUESTS_KEY = 'citizen.browser.wallet.dapp_pending_requests.v1';
 
 const APPROVAL_UI_ROLLOUT_STAGE = getApprovalUiRolloutStageFromEnv();
 
@@ -250,7 +251,7 @@ export function App() {
     [grantAmount, grantId, grantScope, multisigThreshold, sponsorDid, sponsorUsageAmount, sponsoredDid, sponsorshipId, state.account],
   );
 
-  const refreshState = async () => {
+  const refreshState = useCallback(async () => {
     setIsLoading(true);
     try {
       const stored = await chrome.storage.local.get([STORAGE_KEY, LAST_REQUEST_KEY, PROFILE_KEY]);
@@ -332,11 +333,28 @@ export function App() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     void refreshState();
-  }, []);
+  }, [refreshState]);
+
+  useEffect(() => {
+    const handleStorageChange: Parameters<typeof chrome.storage.onChanged.addListener>[0] = (changes, areaName) => {
+      if (areaName !== 'local') {
+        return;
+      }
+      if (!changes[DAPP_PENDING_REQUESTS_KEY]) {
+        return;
+      }
+      void refreshState();
+    };
+
+    chrome.storage.onChanged.addListener(handleStorageChange);
+    return () => {
+      chrome.storage.onChanged.removeListener(handleStorageChange);
+    };
+  }, [refreshState]);
 
   const pendingRequests = useMemo(
     () => pendingDappRequests.filter((entry) => entry.state === 'pending'),
