@@ -39,7 +39,7 @@ enum Commands {
         password: Option<String>,
         #[arg(long)]
         with_mnemonic: bool,
-        #[arg(long, default_value_t = 12)]
+        #[arg(long, default_value_t = 12, value_parser = parse_mnemonic_word_count)]
         mnemonic_words: u8,
         #[arg(long)]
         mnemonic_passphrase: Option<String>,
@@ -1121,12 +1121,37 @@ fn load_password(explicit: Option<String>) -> anyhow::Result<String> {
 }
 
 fn load_mnemonic_phrase(explicit: Option<String>) -> anyhow::Result<String> {
-    if let Some(mnemonic) = explicit {
-        return Ok(mnemonic);
+    let mnemonic = if let Some(mnemonic) = explicit {
+        mnemonic
+    } else {
+        std::env::var("CITIZEN_WALLET_MNEMONIC").map_err(|_| {
+            anyhow::anyhow!("mnemonic required (pass --mnemonic or set CITIZEN_WALLET_MNEMONIC)")
+        })?
+    };
+    validate_supported_mnemonic_phrase(&mnemonic)?;
+    Ok(mnemonic)
+}
+
+fn parse_mnemonic_word_count(raw: &str) -> anyhow::Result<u8> {
+    let value: u8 = raw
+        .parse()
+        .map_err(|_| anyhow::anyhow!("mnemonic words must be a number"))?;
+    match value {
+        12 | 24 => Ok(value),
+        _ => Err(anyhow::anyhow!(
+            "mnemonic word count must be 12 or 24 for wallet/browser extension compatibility"
+        )),
     }
-    std::env::var("CITIZEN_WALLET_MNEMONIC").map_err(|_| {
-        anyhow::anyhow!("mnemonic required (pass --mnemonic or set CITIZEN_WALLET_MNEMONIC)")
-    })
+}
+
+fn validate_supported_mnemonic_phrase(mnemonic: &str) -> anyhow::Result<()> {
+    let words = mnemonic.split_whitespace().count();
+    match words {
+        12 | 24 => Ok(()),
+        _ => Err(anyhow::anyhow!(
+            "mnemonic phrase must contain exactly 12 or 24 words"
+        )),
+    }
 }
 
 fn load_secret_key_bytes(record: &KeyRecord, password: Option<String>) -> anyhow::Result<Vec<u8>> {
@@ -1370,5 +1395,24 @@ mod tests {
         );
         enforce_encryption_opt_in(true, true).expect("explicit opt-in should pass");
         enforce_encryption_opt_in(false, false).expect("no encrypt should not require opt-in");
+    }
+
+    #[test]
+    fn parses_supported_mnemonic_word_counts() {
+        assert_eq!(parse_mnemonic_word_count("12").expect("12 words"), 12);
+        assert_eq!(parse_mnemonic_word_count("24").expect("24 words"), 24);
+        assert!(parse_mnemonic_word_count("15").is_err());
+    }
+
+    #[test]
+    fn validates_mnemonic_phrase_word_count() {
+        let twelve = "abandon ".repeat(11) + "about";
+        validate_supported_mnemonic_phrase(&twelve).expect("12-word mnemonic");
+
+        let twenty_four = format!("{}{}", "abandon ".repeat(23), "art");
+        validate_supported_mnemonic_phrase(&twenty_four).expect("24-word mnemonic");
+
+        let fifteen = format!("{}{}", "abandon ".repeat(14), "about");
+        assert!(validate_supported_mnemonic_phrase(&fifteen).is_err());
     }
 }

@@ -37,6 +37,11 @@ citizen-wallet-cli --help
 - Submission + receipts: `submit`, `list-receipts`
 - Governance policy controls: `sign-governance-vote --required-approvals --policy-approver --approval`
 
+## Mnemonic compatibility mode (wallet extension + node runtime CLI)
+
+- `keygen --with-mnemonic` now accepts `--mnemonic-words 12` or `--mnemonic-words 24` only.
+- `import-mnemonic` enforces 12-word or 24-word phrases so extension-imported wallets and CLI-created wallets stay aligned.
+
 ## Localnet example flow
 
 1. Initialize a keystore and create a key:

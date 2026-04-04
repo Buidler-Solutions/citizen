@@ -1,4 +1,4 @@
-import { HDNodeWallet, Wallet } from 'ethers';
+import { HDNodeWallet, Mnemonic, Wallet } from 'ethers';
 import {
   DAPP_SIGNING_METHOD,
   type DappSigningRequestEnvelope,
@@ -116,6 +116,18 @@ const LOCAL_ENCRYPTION_KEY_KEY = 'citizen.browser.wallet.local_encryption_key.v1
 const DIRECT_SUBMIT_RECEIPTS_KEY = 'citizen.browser.wallet.direct_submit_receipts.v1';
 const DIRECT_SUBMIT_DEFAULT_DESTINATION_KEY = 'citizen.browser.wallet.direct_submit_default_destination.v1';
 const DEFAULT_DERIVATION_PATH = "m/44'/930'/0'/0'/0'";
+const SUPPORTED_MNEMONIC_WORD_COUNTS = [12, 24] as const;
+type SupportedMnemonicWordCount = (typeof SUPPORTED_MNEMONIC_WORD_COUNTS)[number];
+
+function getMnemonicWordCount(mnemonicPhrase?: string): SupportedMnemonicWordCount | null {
+  if (!mnemonicPhrase) {
+    return null;
+  }
+  const words = mnemonicPhrase.trim().split(/\s+/).filter(Boolean).length;
+  return SUPPORTED_MNEMONIC_WORD_COUNTS.includes(words as SupportedMnemonicWordCount)
+    ? (words as SupportedMnemonicWordCount)
+    : null;
+}
 const MAX_ACTIVITY = 100;
 const MAX_DAPP_AUDIT_EVENTS = 1_000;
 const DAPP_DECIDED_REQUEST_RETENTION_MS = 24 * 60 * 60 * 1000;
@@ -1048,6 +1060,11 @@ async function importMnemonic(
     return { ok: false, error: 'Mnemonic phrase is required.' };
   }
 
+  const mnemonicWordCount = normalizedPhrase.split(/\s+/).filter(Boolean).length;
+  if (!SUPPORTED_MNEMONIC_WORD_COUNTS.includes(mnemonicWordCount as SupportedMnemonicWordCount)) {
+    return { ok: false, error: 'Mnemonic phrase must contain exactly 12 or 24 words.' };
+  }
+
   let derived: HDNodeWallet;
   try {
     derived = HDNodeWallet.fromPhrase(normalizedPhrase, undefined, derivationPath);
@@ -1080,13 +1097,15 @@ async function importMnemonic(
 
 async function generateMnemonicWallet(
   derivationPath = DEFAULT_DERIVATION_PATH,
+  mnemonicWords: SupportedMnemonicWordCount = 12,
 ): Promise<WalletResponse> {
-  const created = Wallet.createRandom();
-  const mnemonicPhrase = created.mnemonic?.phrase;
-  if (!mnemonicPhrase) {
-    return { ok: false, error: 'Unable to generate mnemonic phrase for new wallet.' };
+  if (!SUPPORTED_MNEMONIC_WORD_COUNTS.includes(mnemonicWords)) {
+    return { ok: false, error: 'Mnemonic word count must be 12 or 24.' };
   }
 
+  const entropyLengthBytes = mnemonicWords === 24 ? 32 : 16;
+  const entropy = crypto.getRandomValues(new Uint8Array(entropyLengthBytes));
+  const mnemonicPhrase = Mnemonic.fromEntropy(entropy).phrase;
   const derived = HDNodeWallet.fromPhrase(mnemonicPhrase, undefined, derivationPath);
   const vault = await ensureVaultInitialized();
   const nextWallet: StoredWallet = {
@@ -1146,6 +1165,7 @@ async function handleWalletRequest(
         name: wallet.name,
         address: new Wallet(wallet.privateKey).address,
         hasMnemonic: Boolean(wallet.mnemonicPhrase),
+        mnemonicWordCount: getMnemonicWordCount(wallet.mnemonicPhrase),
         createdAt: wallet.createdAt,
         isActive: wallet.id === activeWallet?.id,
       })),
@@ -1368,11 +1388,21 @@ async function handleWalletRequest(
     if (!isUiRequest) {
       return { ok: false, error: 'Unauthorized wallet method.' };
     }
-    const [derivationPath] = request.params ?? [];
+    const [derivationPath, mnemonicWords] = request.params ?? [];
     if (derivationPath !== undefined && typeof derivationPath !== 'string') {
       return { ok: false, error: 'wallet_generateMnemonicWallet derivation path must be a string.' };
     }
-    return generateMnemonicWallet(derivationPath ?? DEFAULT_DERIVATION_PATH);
+    if (
+      mnemonicWords !== undefined
+      && (typeof mnemonicWords !== 'number'
+        || !SUPPORTED_MNEMONIC_WORD_COUNTS.includes(mnemonicWords as SupportedMnemonicWordCount))
+    ) {
+      return { ok: false, error: 'wallet_generateMnemonicWallet mnemonic words must be 12 or 24.' };
+    }
+    return generateMnemonicWallet(
+      derivationPath ?? DEFAULT_DERIVATION_PATH,
+      (mnemonicWords as SupportedMnemonicWordCount | undefined) ?? 12,
+    );
   }
 
   if (request.method === 'wallet_getNetwork') {
