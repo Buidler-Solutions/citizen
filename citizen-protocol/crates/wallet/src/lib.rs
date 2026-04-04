@@ -362,27 +362,58 @@ fn parse_hardened_derivation_path(path: &str) -> Result<Vec<u32>> {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-struct EntrySigningPayload {
-    entry_id: Uuid,
-    namespace: String,
-    action: String,
-    object_id: String,
-    payload: Value,
-    privacy_flag: bool,
-    payload_commitment: Option<String>,
-    ciphertext_hex: Option<String>,
-    nonce_hex: Option<String>,
-    salt_hex: Option<String>,
-    kdf_params: Option<KdfParams>,
-    consent_receipt: Option<ConsentReceipt>,
-    privacy_mode: PrivacyMode,
-    authorized_readers: Vec<String>,
-    custodian_policy_id: Option<String>,
-    key_wrapped_secrets: Vec<KeyWrap>,
-    revocation_events: Vec<RevocationEvent>,
-    field_reader_acls: BTreeMap<String, Vec<String>>,
-    author: String,
-    timestamp: UnixTimestamp,
+pub struct WrcpTxV1SigningPayload {
+    pub entry_id: Uuid,
+    pub namespace: String,
+    pub action: String,
+    pub object_id: String,
+    pub payload: Value,
+    pub privacy_flag: bool,
+    pub payload_commitment: Option<String>,
+    pub ciphertext_hex: Option<String>,
+    pub nonce_hex: Option<String>,
+    pub salt_hex: Option<String>,
+    pub kdf_params: Option<KdfParams>,
+    pub consent_receipt: Option<ConsentReceipt>,
+    pub privacy_mode: PrivacyMode,
+    pub authorized_readers: Vec<String>,
+    pub custodian_policy_id: Option<String>,
+    pub key_wrapped_secrets: Vec<KeyWrap>,
+    pub revocation_events: Vec<RevocationEvent>,
+    pub field_reader_acls: BTreeMap<String, Vec<String>>,
+    pub author: String,
+    pub timestamp: UnixTimestamp,
+}
+
+pub fn build_wrcp_tx_v1_signing_payload(entry: &LedgerEntry) -> WrcpTxV1SigningPayload {
+    WrcpTxV1SigningPayload {
+        entry_id: entry.entry_id,
+        namespace: entry.namespace.clone(),
+        action: entry.action.clone(),
+        object_id: entry.object_id.clone(),
+        payload: entry.payload.clone(),
+        privacy_flag: entry.privacy_flag,
+        payload_commitment: entry.payload_commitment.clone(),
+        ciphertext_hex: entry.ciphertext_hex.clone(),
+        nonce_hex: entry.nonce_hex.clone(),
+        salt_hex: entry.salt_hex.clone(),
+        kdf_params: entry.kdf_params.clone(),
+        consent_receipt: entry.consent_receipt.clone(),
+        privacy_mode: entry.privacy_mode.clone(),
+        authorized_readers: entry.authorized_readers.clone(),
+        custodian_policy_id: entry.custodian_policy_id.clone(),
+        key_wrapped_secrets: entry.key_wrapped_secrets.clone(),
+        revocation_events: entry.revocation_events.clone(),
+        field_reader_acls: entry.field_reader_acls.clone(),
+        author: entry.author.clone(),
+        timestamp: entry.timestamp,
+    }
+}
+
+pub fn wrcp_tx_v1_canonical_json(payload: &WrcpTxV1SigningPayload) -> Result<String> {
+    Ok(canonical_json(&serde_json::to_value(payload).map_err(|err| {
+        ProtocolError::crypto(format!("failed to serialize WRCP-TX-V1 signing payload: {err}"))
+    })?))
 }
 
 pub fn sign_entry(draft: EntryDraft, keypair: &WalletKeypair) -> Result<LedgerEntry> {
@@ -513,7 +544,7 @@ pub fn sign_entry(draft: EntryDraft, keypair: &WalletKeypair) -> Result<LedgerEn
             BTreeMap::new(),
         ),
     };
-    let signing_payload = EntrySigningPayload {
+    let signing_payload = WrcpTxV1SigningPayload {
         entry_id,
         namespace: draft.namespace.clone(),
         action: draft.action.clone(),
@@ -535,10 +566,7 @@ pub fn sign_entry(draft: EntryDraft, keypair: &WalletKeypair) -> Result<LedgerEn
         author: draft.author.clone(),
         timestamp: draft.timestamp,
     };
-    let canonical_payload =
-        canonical_json(&serde_json::to_value(signing_payload).map_err(|err| {
-            ProtocolError::crypto(format!("failed to serialize signing payload: {err}"))
-        })?);
+    let canonical_payload = wrcp_tx_v1_canonical_json(&signing_payload)?;
     let signature = keypair.sign_bytes(canonical_payload.as_bytes());
     Ok(LedgerEntry {
         entry_id,
@@ -1197,32 +1225,8 @@ pub fn decrypt_secret_key(
 }
 
 pub fn verify_entry_signature(entry: &LedgerEntry, verifying_key: &VerifyingKey) -> Result<()> {
-    let signing_payload = EntrySigningPayload {
-        entry_id: entry.entry_id,
-        namespace: entry.namespace.clone(),
-        action: entry.action.clone(),
-        object_id: entry.object_id.clone(),
-        payload: entry.payload.clone(),
-        privacy_flag: entry.privacy_flag,
-        payload_commitment: entry.payload_commitment.clone(),
-        ciphertext_hex: entry.ciphertext_hex.clone(),
-        nonce_hex: entry.nonce_hex.clone(),
-        salt_hex: entry.salt_hex.clone(),
-        kdf_params: entry.kdf_params.clone(),
-        consent_receipt: entry.consent_receipt.clone(),
-        privacy_mode: entry.privacy_mode.clone(),
-        authorized_readers: entry.authorized_readers.clone(),
-        custodian_policy_id: entry.custodian_policy_id.clone(),
-        key_wrapped_secrets: entry.key_wrapped_secrets.clone(),
-        revocation_events: entry.revocation_events.clone(),
-        field_reader_acls: entry.field_reader_acls.clone(),
-        author: entry.author.clone(),
-        timestamp: entry.timestamp,
-    };
-    let canonical_payload =
-        canonical_json(&serde_json::to_value(signing_payload).map_err(|err| {
-            ProtocolError::crypto(format!("failed to serialize signing payload: {err}"))
-        })?);
+    let signing_payload = build_wrcp_tx_v1_signing_payload(entry);
+    let canonical_payload = wrcp_tx_v1_canonical_json(&signing_payload)?;
     let signature_bytes = hex::decode(&entry.signature)
         .map_err(|err| ProtocolError::crypto(format!("invalid signature hex: {err}")))?;
     let signature = Signature::from_slice(&signature_bytes)
@@ -1579,6 +1583,37 @@ mod tests {
             "SAMPLE_PUBLIC_ENTRY={}\n",
             serde_json::to_string_pretty(&entry).expect("serialize public entry sample")
         );
+    }
+
+    #[test]
+    fn wrcp_tx_v1_payload_builder_matches_signed_entry() {
+        let keypair = WalletKeypair::generate();
+        let draft = EntryDraft {
+            namespace: "identity.citizen".to_string(),
+            action: "REGISTER_IDENTITY".to_string(),
+            object_id: "did:ledger:wrcp".to_string(),
+            payload: json!({ "claims_hash": "wrpc-abc123", "country": "US" }),
+            privacy_flag: false,
+            privacy_mode: PrivacyMode::None,
+            encryption_passphrase: None,
+            authorized_readers: vec![],
+            custodian_policy_id: None,
+            key_wrapped_secrets: vec![],
+            revocation_events: vec![],
+            field_reader_acls: Default::default(),
+            reader_public_keys: BTreeMap::new(),
+            author: "did:ledger:wrcp".to_string(),
+            timestamp: 1_736_500_010,
+        };
+        let entry = sign_entry(draft, &keypair).expect("sign entry");
+
+        let payload = build_wrcp_tx_v1_signing_payload(&entry);
+        let canonical = wrcp_tx_v1_canonical_json(&payload).expect("canonical WRCP payload");
+
+        assert!(canonical.contains("\"namespace\":\"identity.citizen\""));
+        assert!(canonical.contains("\"action\":\"REGISTER_IDENTITY\""));
+        assert!(canonical.contains("\"author\":\"did:ledger:wrcp\""));
+        verify_entry_signature(&entry, keypair.verifying_key()).expect("verify signature");
     }
 
     #[test]
