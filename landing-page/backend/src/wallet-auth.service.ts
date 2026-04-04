@@ -7,7 +7,7 @@ import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
 import { createHash, randomBytes } from 'crypto';
-import { IsNull, Repository } from 'typeorm';
+import { Repository } from 'typeorm';
 import { AuthChallenge } from './auth/auth-challenge.entity';
 import { AuthSession } from './auth/auth-session.entity';
 import { AuthUser } from './auth/auth-user.entity';
@@ -79,6 +79,24 @@ export class WalletAuthService {
     return randomBytes(32).toString('base64url');
   }
 
+  private isValidRefreshTokenFormat(token: string): boolean {
+    return /^[A-Za-z0-9_-]{40,200}$/.test(token.trim());
+  }
+
+  private async cleanupExpiredAuthArtifacts(): Promise<void> {
+    await this.authChallengeRepository
+      .createQueryBuilder()
+      .delete()
+      .where('expires_at <= NOW()')
+      .execute();
+
+    await this.authSessionRepository
+      .createQueryBuilder()
+      .delete()
+      .where('expires_at <= NOW()')
+      .execute();
+  }
+
   private validateUri(uri: string, normalizedDomain: string): void {
     let parsed: URL;
 
@@ -100,6 +118,8 @@ export class WalletAuthService {
   }
 
   async createChallenge(address: string, domain: string, uri: string, chainId: number): Promise<{ challengeId: string; message: string; expiresAt: string }> {
+    await this.cleanupExpiredAuthArtifacts();
+
     const walletAddress = this.normalizeWalletAddress(address);
     const normalizedDomain = this.normalizeDomain(domain);
 
@@ -266,6 +286,11 @@ export class WalletAuthService {
     if (!refreshToken?.trim()) {
       throw new UnauthorizedException('Missing refresh token.');
     }
+    if (!this.isValidRefreshTokenFormat(refreshToken)) {
+      throw new UnauthorizedException('Invalid refresh token.');
+    }
+
+    await this.cleanupExpiredAuthArtifacts();
 
     const tokenHash = this.hashRefreshToken(refreshToken);
     const { session, nextRefreshToken } = await this.authSessionRepository.manager.transaction(async (manager) => {
@@ -323,16 +348,27 @@ export class WalletAuthService {
     if (!refreshToken?.trim()) {
       return;
     }
-
-    const tokenHash = this.hashRefreshToken(refreshToken);
-    const session = await this.authSessionRepository.findOne({ where: { refreshTokenHash: tokenHash, revokedAt: IsNull() } });
-
-    if (!session) {
+    if (!this.isValidRefreshTokenFormat(refreshToken)) {
       return;
     }
 
-    session.revokedAt = new Date();
-    session.revokedReason = 'logout';
-    await this.authSessionRepository.save(session);
+    const tokenHash = this.hashRefreshToken(refreshToken);
+    await this.authSessionRepository.manager.transaction(async (manager) => {
+      const session = await manager
+        .getRepository(AuthSession)
+        .createQueryBuilder('session')
+        .setLock('pessimistic_write')
+        .where('session.refresh_token_hash = :tokenHash', { tokenHash })
+        .andWhere('session.revoked_at IS NULL')
+        .getOne();
+
+      if (!session) {
+        return;
+      }
+
+      session.revokedAt = new Date();
+      session.revokedReason = 'logout';
+      await manager.getRepository(AuthSession).save(session);
+    });
   }
 }

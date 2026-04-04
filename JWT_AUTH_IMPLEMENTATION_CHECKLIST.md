@@ -166,9 +166,12 @@ Use this file as the **single source of implementation tracking** for wallet-sig
   - 2026-04-04: refresh response keeps access-token-only payload while setting new refresh cookie.
 
 #### D) `POST /auth/logout`
-- [ ] Revoke current session.
-- [ ] Clear refresh cookie.
-- [ ] Return `{ ok: true }`.
+- [x] Revoke current session.
+  - 2026-04-04: logout now revokes the refresh-token-matched session using a transactional pessimistic lock.
+- [x] Clear refresh cookie.
+  - 2026-04-04: logout clears `ctzn_refresh_token` with the secure auth cookie policy.
+- [x] Return `{ ok: true }`.
+  - 2026-04-04: logout response returns `{ ok: true }`.
 
 ### 4.2 Signature verification rules
 - [ ] Parse SIWE-like message and reject malformed payloads.
@@ -201,10 +204,12 @@ Use this file as the **single source of implementation tracking** for wallet-sig
   - 2026-04-04: `auth_users.wallet_address` is unique and persisted normalized lowercase.
 - [x] Unique constraint/index on challenge nonce.
   - 2026-04-04: `auth_challenges.nonce` uses unique DB index.
-- [ ] Partial index for active sessions (`is_revoked=false`).
+- [x] Partial index for active sessions (`is_revoked=false`).
+  - 2026-04-04: `auth_sessions` now includes partial index `IDX_auth_sessions_active_user` scoped to non-revoked sessions.
 - [x] Challenge consume path uses transactional lock (`SELECT ... FOR UPDATE`).
   - 2026-04-04: verify path now locks challenge row with pessimistic write transaction.
-- [ ] Cleanup jobs remove expired challenges/sessions.
+- [x] Cleanup jobs remove expired challenges/sessions.
+  - 2026-04-04: backend service now runs auth artifact cleanup for expired challenges/sessions during challenge and refresh paths.
 
 ### 5.3 Refresh rotation and revocation
 - [ ] Store refresh token hash only (Argon2id or SHA-256 + pepper).
@@ -224,7 +229,8 @@ Use this file as the **single source of implementation tracking** for wallet-sig
 - [ ] Return machine-readable `401` error codes for invalid/expired tokens.
 
 ### 6.2 Refresh token lifecycle
-- [ ] Generate >=256-bit random refresh token.
+- [x] Generate >=256-bit random refresh token.
+  - 2026-04-04: refresh token generation uses `randomBytes(32)` (256-bit entropy) and base64url encoding.
 - [ ] Set cookie with `HttpOnly`, `Secure`, `SameSite`, restricted `path`.
 - [ ] Rotate on every refresh.
 - [ ] Revoke on logout, compromise signals, or anomalies.

@@ -2,6 +2,7 @@ import {
   Column,
   CreateDateColumn,
   Entity,
+  Index,
   JoinColumn,
   ManyToOne,
   PrimaryGeneratedColumn,
@@ -10,6 +11,7 @@ import {
 import { AuthUser } from './auth-user.entity';
 
 @Entity({ name: 'auth_sessions' })
+@Index('IDX_auth_sessions_active_user', ['userId'], { where: 'revoked_at IS NULL' })
 export class AuthSession {
   @PrimaryGeneratedColumn('uuid')
   id!: string;
