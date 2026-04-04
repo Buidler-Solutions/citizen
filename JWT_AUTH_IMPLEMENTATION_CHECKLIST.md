@@ -20,7 +20,8 @@ Use this file as the **single source of implementation tracking** for wallet-sig
 - [ ] Assign implementation owner(s) (wallet, frontend, backend, infra/security).
 - [ ] Confirm scope: extension signer-only, backend session authority, builder-sponsored fee model unchanged.
 - [ ] Confirm environment plan: local, staging, canary, production.
-- [ ] Create tracking issues/epics linked to each section below.
+- [-] Create tracking issues/epics linked to each section below.
+  - 2026-04-04: initial backend implementation PR started with challenge/verify/refresh/logout + session schema.
 - [ ] Define rollout + rollback decision owner.
 
 ---
@@ -30,7 +31,8 @@ Use this file as the **single source of implementation tracking** for wallet-sig
 ### 1.1 Component responsibilities
 - [ ] Wallet extension only handles key custody + signatures.
 - [ ] Frontend handles connect/sign UX and in-memory access token use.
-- [ ] Backend is source of truth for challenges, sessions, JWTs, and revocation.
+- [-] Backend is source of truth for challenges, sessions, JWTs, and revocation.
+  - 2026-04-04: backend endpoints and session persistence scaffold added; cryptographic signature verification still pending.
 - [ ] PostgreSQL stores users/challenges/sessions and revocation state.
 
 ### 1.2 Trust boundaries
@@ -40,14 +42,20 @@ Use this file as the **single source of implementation tracking** for wallet-sig
 - [ ] All auth endpoints enforce HTTPS + HSTS.
 
 ### 1.3 End-to-end auth flow
-- [ ] Frontend requests challenge (`POST /auth/challenge`).
-- [ ] Backend stores one-time challenge with TTL.
+- [x] Frontend requests challenge (`POST /auth/challenge`).
+  - 2026-04-04: endpoint implemented in backend.
+- [x] Backend stores one-time challenge with TTL.
+  - 2026-04-04: `auth_challenges` entity + TTL-based expiration persisted.
 - [ ] Wallet signs challenge after explicit user approval.
-- [ ] Frontend verifies signature (`POST /auth/verify`).
-- [ ] Backend issues access token + refresh cookie + session row.
+- [x] Frontend verifies signature (`POST /auth/verify`).
+  - 2026-04-04: endpoint implemented; full secp256k1 signature recovery is still pending.
+- [x] Backend issues access token + refresh cookie + session row.
+  - 2026-04-04: access JWT, `ctzn_refresh_token` cookie, and `auth_sessions` row created during verify.
 - [ ] Protected APIs enforce Bearer access token.
-- [ ] Refresh flow rotates refresh token and issues new access token.
-- [ ] Logout/revocation invalidates session.
+- [-] Refresh flow rotates refresh token and issues new access token.
+  - 2026-04-04: refresh endpoint issues new access token; rotation hardening still pending.
+- [x] Logout/revocation invalidates session.
+  - 2026-04-04: logout revokes active session and clears refresh cookie.
 
 ---
 
@@ -166,9 +174,12 @@ Use this file as the **single source of implementation tracking** for wallet-sig
 ## 5) PostgreSQL schema and session model
 
 ### 5.1 Schema implementation
-- [ ] `users` table exists (`id`, unique `wallet_address`, timestamps).
-- [ ] `auth_challenges` table exists (`id`, `wallet_address`, unique `nonce`, message/context, expiry, `used_at`).
-- [ ] `sessions` table exists (`id`, `user_id`, `refresh_token_hash`, expiry, revocation fields, metadata).
+- [x] `users` table exists (`id`, unique `wallet_address`, timestamps).
+  - 2026-04-04: implemented as `auth_users` table with unique wallet address.
+- [x] `auth_challenges` table exists (`id`, `wallet_address`, unique `nonce`, message/context, expiry, `used_at`).
+  - 2026-04-04: implemented with `domain`, `uri`, and `chain_id` context fields.
+- [x] `sessions` table exists (`id`, `user_id`, `refresh_token_hash`, expiry, revocation fields, metadata).
+  - 2026-04-04: implemented as `auth_sessions` with user-agent/IP metadata.
 
 ### 5.2 Constraints and integrity
 - [ ] Unique index on normalized wallet address.

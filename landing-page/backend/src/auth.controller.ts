@@ -1,9 +1,12 @@
-import { Body, Controller, Post } from '@nestjs/common';
+import { Body, Controller, Post, Req, Res } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
+import { AuthChallengeDto } from './auth/dto/auth-challenge.dto';
 import { ForgotPasswordDto } from './auth/dto/forgot-password.dto';
 import { ResetPasswordDto } from './auth/dto/reset-password.dto';
+import { AuthVerifyDto } from './auth/dto/auth-verify.dto';
 import { OnboardingNotificationService } from './mail/onboarding-notification.service';
 import { UserService } from './user/user.service';
+import { WalletAuthService } from './wallet-auth.service';
 
 interface TokenRequest {
   username: string;
@@ -11,12 +14,30 @@ interface TokenRequest {
   subject?: string;
 }
 
+const REFRESH_COOKIE_NAME = 'ctzn_refresh_token';
+
+
+const parseCookieValue = (cookieHeader: string | string[] | undefined, cookieName: string): string | undefined => {
+  const normalizedHeader = Array.isArray(cookieHeader) ? cookieHeader.join(';') : cookieHeader;
+
+  if (!normalizedHeader) {
+    return undefined;
+  }
+
+  return normalizedHeader
+    .split(';')
+    .map((pair) => pair.trim())
+    .find((pair) => pair.startsWith(`${cookieName}=`))
+    ?.slice(cookieName.length + 1);
+};
+
 @Controller('auth')
 export class AuthController {
   constructor(
     private readonly jwtService: JwtService,
     private readonly userService: UserService,
     private readonly onboardingNotificationService: OnboardingNotificationService,
+    private readonly walletAuthService: WalletAuthService,
   ) {}
 
   @Post('token')
@@ -35,6 +56,67 @@ export class AuthController {
         role: user.role,
       },
     };
+  }
+
+  @Post('challenge')
+  async challenge(@Body() payload: AuthChallengeDto) {
+    return this.walletAuthService.createChallenge(payload.address, payload.domain, payload.uri, payload.chainId);
+  }
+
+  @Post('verify')
+  async verify(
+    @Body() payload: AuthVerifyDto,
+    @Req() request: { headers: Record<string, string | string[] | undefined>; ip?: string },
+    @Res({ passthrough: true }) response: { cookie: (...args: unknown[]) => void },
+  ) {
+    const authResult = await this.walletAuthService.verifyChallenge({
+      challengeId: payload.challengeId,
+      message: payload.message,
+      signature: payload.signature,
+      address: payload.address,
+      userAgent: String(request.headers['user-agent'] ?? ''),
+      ipAddress: request.ip ?? '',
+    });
+
+    response.cookie(REFRESH_COOKIE_NAME, authResult.refreshToken, {
+      httpOnly: true,
+      secure: true,
+      sameSite: 'strict',
+      path: '/auth',
+      expires: authResult.refreshExpiresAt,
+    });
+
+    return {
+      accessToken: authResult.accessToken,
+      tokenType: authResult.tokenType,
+      expiresIn: authResult.expiresIn,
+      sessionId: authResult.sessionId,
+      user: authResult.user,
+    };
+  }
+
+  @Post('refresh')
+  async refresh(@Req() request: { headers: Record<string, string | string[] | undefined> }) {
+    const refreshToken = parseCookieValue(request.headers.cookie, REFRESH_COOKIE_NAME);
+    return this.walletAuthService.refreshSession(refreshToken ?? '');
+  }
+
+  @Post('logout')
+  async logout(
+    @Req() request: { headers: Record<string, string | string[] | undefined> },
+    @Res({ passthrough: true }) response: { clearCookie: (...args: unknown[]) => void },
+  ) {
+    const refreshToken = parseCookieValue(request.headers.cookie, REFRESH_COOKIE_NAME);
+    await this.walletAuthService.revokeSession(refreshToken ?? '');
+
+    response.clearCookie(REFRESH_COOKIE_NAME, {
+      httpOnly: true,
+      secure: true,
+      sameSite: 'strict',
+      path: '/auth',
+    });
+
+    return { ok: true };
   }
 
   @Post('forgot-password')
