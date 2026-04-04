@@ -49,6 +49,13 @@ export class WalletAuthService {
       .filter(Boolean);
   }
 
+  private getAllowedChainIds(): number[] {
+    return (this.configService.get<string>('AUTH_ALLOWED_CHAIN_IDS', '') ?? '')
+      .split(',')
+      .map((value) => Number(value.trim()))
+      .filter((value) => Number.isInteger(value) && value > 0);
+  }
+
   private getChallengeTtlSeconds(): number {
     const raw = Number(this.configService.get<string>('AUTH_CHALLENGE_TTL_SECONDS', '300'));
     return Number.isFinite(raw) && raw > 30 ? Math.trunc(raw) : 300;
@@ -72,6 +79,26 @@ export class WalletAuthService {
     return randomBytes(32).toString('base64url');
   }
 
+  private validateUri(uri: string, normalizedDomain: string): void {
+    let parsed: URL;
+
+    try {
+      parsed = new URL(uri);
+    } catch {
+      throw new BadRequestException('Invalid URI.');
+    }
+
+    const normalizedHost = parsed.host.trim().toLowerCase();
+    if (normalizedHost !== normalizedDomain) {
+      throw new BadRequestException('URI domain mismatch.');
+    }
+
+    const isLocalhost = normalizedHost.startsWith('localhost');
+    if (parsed.protocol !== 'https:' && !(isLocalhost && parsed.protocol === 'http:')) {
+      throw new BadRequestException('URI must use HTTPS.');
+    }
+  }
+
   async createChallenge(address: string, domain: string, uri: string, chainId: number): Promise<{ challengeId: string; message: string; expiresAt: string }> {
     const walletAddress = this.normalizeWalletAddress(address);
     const normalizedDomain = this.normalizeDomain(domain);
@@ -88,6 +115,11 @@ export class WalletAuthService {
     if (!Number.isInteger(chainId) || chainId <= 0) {
       throw new BadRequestException('Invalid chainId.');
     }
+    const allowedChainIds = this.getAllowedChainIds();
+    if (allowedChainIds.length > 0 && !allowedChainIds.includes(chainId)) {
+      throw new BadRequestException('Unsupported chainId.');
+    }
+    this.validateUri(uri, normalizedDomain);
 
     const now = new Date();
     const nonce = randomBytes(16).toString('hex');
@@ -133,41 +165,45 @@ export class WalletAuthService {
     refreshToken: string;
     refreshExpiresAt: Date;
   }> {
-    const challenge = await this.authChallengeRepository.findOne({
-      where: { id: input.challengeId },
-      lock: { mode: 'pessimistic_write' },
-    });
-
-    if (!challenge) {
-      throw new UnauthorizedException('Challenge not found.');
-    }
-
-    if (challenge.usedAt) {
-      throw new UnauthorizedException('Challenge already used.');
-    }
-
-    if (challenge.expiresAt.getTime() <= Date.now()) {
-      throw new UnauthorizedException('Challenge expired.');
-    }
-
-    if (input.message !== challenge.message) {
-      throw new UnauthorizedException('Challenge message mismatch.');
-    }
-
     const normalizedAddress = this.normalizeWalletAddress(input.address);
-    if (normalizedAddress !== challenge.walletAddress) {
-      throw new UnauthorizedException('Wallet address mismatch.');
-    }
+    await this.authChallengeRepository.manager.transaction(async (manager) => {
+      const locked = await manager
+        .getRepository(AuthChallenge)
+        .createQueryBuilder('challenge')
+        .setLock('pessimistic_write')
+        .where('challenge.id = :id', { id: input.challengeId })
+        .getOne();
 
-    // Initial implementation gate:
-    // requires non-empty wallet signature and reserves full secp256k1
-    // recovery/verification for the next phase.
-    if (!input.signature?.trim()) {
-      throw new UnauthorizedException('Invalid signature.');
-    }
+      if (!locked) {
+        throw new UnauthorizedException('Challenge not found.');
+      }
 
-    challenge.usedAt = new Date();
-    await this.authChallengeRepository.save(challenge);
+      if (locked.usedAt) {
+        throw new UnauthorizedException('Challenge already used.');
+      }
+
+      if (locked.expiresAt.getTime() <= Date.now()) {
+        throw new UnauthorizedException('Challenge expired.');
+      }
+
+      if (input.message !== locked.message) {
+        throw new UnauthorizedException('Challenge message mismatch.');
+      }
+
+      if (normalizedAddress !== locked.walletAddress) {
+        throw new UnauthorizedException('Wallet address mismatch.');
+      }
+
+      // Initial implementation gate:
+      // requires non-empty wallet signature and reserves full secp256k1
+      // recovery/verification for the next phase.
+      if (!input.signature?.trim()) {
+        throw new UnauthorizedException('Invalid signature.');
+      }
+
+      locked.usedAt = new Date();
+      await manager.getRepository(AuthChallenge).save(locked);
+    });
 
     let user = await this.authUserRepository.findOne({ where: { walletAddress: normalizedAddress } });
     if (!user) {
@@ -220,27 +256,46 @@ export class WalletAuthService {
     };
   }
 
-  async refreshSession(refreshToken: string): Promise<{ accessToken: string; tokenType: string; expiresIn: number }> {
+  async refreshSession(refreshToken: string): Promise<{
+    accessToken: string;
+    tokenType: string;
+    expiresIn: number;
+    refreshToken: string;
+    refreshExpiresAt: Date;
+  }> {
     if (!refreshToken?.trim()) {
       throw new UnauthorizedException('Missing refresh token.');
     }
 
     const tokenHash = this.hashRefreshToken(refreshToken);
-    const session = await this.authSessionRepository.findOne({
-      where: { refreshTokenHash: tokenHash, revokedAt: IsNull() },
-      relations: ['user'],
-    });
+    const { session, nextRefreshToken } = await this.authSessionRepository.manager.transaction(async (manager) => {
+      const lockedSession = await manager
+        .getRepository(AuthSession)
+        .createQueryBuilder('session')
+        .setLock('pessimistic_write')
+        .leftJoinAndSelect('session.user', 'user')
+        .where('session.refresh_token_hash = :tokenHash', { tokenHash })
+        .andWhere('session.revoked_at IS NULL')
+        .getOne();
 
-    if (!session || !session.user || session.expiresAt.getTime() <= Date.now()) {
-      throw new UnauthorizedException('Invalid refresh token.');
-    }
+      if (!lockedSession || !lockedSession.user || lockedSession.expiresAt.getTime() <= Date.now()) {
+        throw new UnauthorizedException('Invalid refresh token.');
+      }
+
+      const rotatedRefreshToken = this.createRefreshToken();
+      lockedSession.refreshTokenHash = this.hashRefreshToken(rotatedRefreshToken);
+      lockedSession.lastUsedAt = new Date();
+      await manager.getRepository(AuthSession).save(lockedSession);
+
+      return {
+        session: lockedSession,
+        nextRefreshToken: rotatedRefreshToken,
+      };
+    });
 
     const issuer = this.configService.get<string>('AUTH_JWT_ISSUER', 'citizen-landing-backend');
     const audience = this.configService.get<string>('AUTH_JWT_AUDIENCE', 'citizen-landing-frontend');
     const expiresIn = this.getAccessTokenTtlSeconds();
-
-    session.lastUsedAt = new Date();
-    await this.authSessionRepository.save(session);
 
     const accessToken = this.jwtService.sign(
       {
@@ -259,6 +314,8 @@ export class WalletAuthService {
       accessToken,
       tokenType: 'Bearer',
       expiresIn,
+      refreshToken: nextRefreshToken,
+      refreshExpiresAt: session.expiresAt,
     };
   }
 

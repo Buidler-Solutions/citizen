@@ -96,9 +96,25 @@ export class AuthController {
   }
 
   @Post('refresh')
-  async refresh(@Req() request: { headers: Record<string, string | string[] | undefined> }) {
+  async refresh(
+    @Req() request: { headers: Record<string, string | string[] | undefined> },
+    @Res({ passthrough: true }) response: { cookie: (...args: unknown[]) => void },
+  ) {
     const refreshToken = parseCookieValue(request.headers.cookie, REFRESH_COOKIE_NAME);
-    return this.walletAuthService.refreshSession(refreshToken ?? '');
+    const authResult = await this.walletAuthService.refreshSession(refreshToken ?? '');
+    response.cookie(REFRESH_COOKIE_NAME, authResult.refreshToken, {
+      httpOnly: true,
+      secure: true,
+      sameSite: 'strict',
+      path: '/auth',
+      expires: authResult.refreshExpiresAt,
+    });
+
+    return {
+      accessToken: authResult.accessToken,
+      tokenType: authResult.tokenType,
+      expiresIn: authResult.expiresIn,
+    };
   }
 
   @Post('logout')
