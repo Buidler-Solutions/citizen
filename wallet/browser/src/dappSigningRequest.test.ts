@@ -4,6 +4,7 @@ import {
   DAPP_SIGNING_METHOD,
   signingScopePayloadV2FromEnvelope,
   signingPreimageFromEnvelope,
+  protocolSigningPreimageFromEnvelope,
 } from './dappSigningRequest';
 
 describe('createDappSigningRequestEnvelope', () => {
@@ -37,6 +38,9 @@ describe('createDappSigningRequestEnvelope', () => {
       createdAt: envelope.createdAt,
       expiresAt: envelope.expiresAt,
     });
+    expect(protocolSigningPreimageFromEnvelope(envelope)).toBe(
+      '{"metadata":{"app":"demo","version":1},"namespace":"citizen.kyc","operation":"submit"}',
+    );
     expect(signingPreimageFromEnvelope(envelope)).toBe(
       `{"createdAt":"2026-01-02T03:04:05.000Z","expiresAt":"2026-01-02T03:09:05.000Z","method":"ctzn_signCitizenTx","origin":"https://demo.citizen.local","payloadHash":"${envelope.payloadHash}","requestId":"${envelope.requestId}","scope":"citizen_dapp_signing_v2","tabUrl":"https://demo.citizen.local/forms/apply"}`,
     );
@@ -79,6 +83,40 @@ describe('createDappSigningRequestEnvelope', () => {
 
     expect(envelope.riskFlags).toContain('policy_violation');
     expect(envelope.policyChecks.map((check) => check.code)).toContain('builder_credit_payload_missing');
+  });
+
+  it('adds form commitment receipt policy checks for forms.commitment namespace', async () => {
+    const missingFields = await createDappSigningRequestEnvelope({
+      origin: 'https://demo.citizen.local',
+      payload: {
+        namespace: 'forms.commitment',
+        action: 'SUBMIT_COMMITMENT_RECEIPT',
+        object_id: 'form-001',
+        payload: {},
+      },
+    });
+
+    expect(missingFields.riskFlags).toContain('policy_violation');
+    expect(missingFields.policyChecks.map((check) => check.code)).toContain(
+      'form_commitment_receipt_missing',
+    );
+
+    const validCommitment = await createDappSigningRequestEnvelope({
+      origin: 'https://demo.citizen.local',
+      payload: {
+        namespace: 'forms.commitment',
+        action: 'SUBMIT_COMMITMENT_RECEIPT',
+        object_id: 'form-001',
+        payload: {
+          data_hash: 'sha256:abc123',
+          encrypted_form_url: 'https://storage.citizen.local/forms/form-001.cipher',
+        },
+      },
+    });
+
+    expect(validCommitment.policyChecks.map((check) => check.code)).not.toContain(
+      'form_commitment_receipt_missing',
+    );
   });
 
   it('treats malformed JSON payload strings as policy violations', async () => {

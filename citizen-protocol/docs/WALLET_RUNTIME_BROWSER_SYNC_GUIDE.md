@@ -1,6 +1,6 @@
 # Wallet Runtime Browser Sync Guide
 
-_Date: 2026-04-04_
+_Date: 2026-04-06_
 
 This guide captures the conclusions from a runtime-alignment review of:
 
@@ -12,11 +12,11 @@ Use this as the working baseline for follow-up synchronization PRs.
 
 ## Executive Summary
 
-The Rust wallet + CLI have meaningful WRCP implementation progress, but the browser extension is **not yet strict-runtime complete**.
+The Rust wallet + CLI have meaningful WRCP implementation progress, and the browser extension has now closed key protocol-lane signing gaps — but it is **not yet strict-runtime complete**.
 
 - Rust wallet crate implements WRCP TX payload helpers and multisig proof/dry-run primitives.
 - Wallet CLI exposes multisig proof authoring and dry-run commands.
-- Browser extension supports auth lane and dApp signing flow, but currently signs `payloadHash` scope artifacts rather than the full WRCP-TX-V1 runtime canonical preimage contract.
+- Browser extension now signs canonical protocol preimage bytes (`canonical_payload_v1`) for protocol-lane artifacts and performs local verify-before-return.
 - WRCP document itself marks browser/mobile parity as in progress and strict-compat gates as not complete.
 
 ## What is Implemented Today
@@ -45,9 +45,9 @@ The Rust wallet + CLI have meaningful WRCP implementation progress, but the brow
 
 ### Browser extension strict runtime compatibility
 
-1. Extension dApp protocol flow currently signs `payloadHash` bytes with `signatureScope: payload_hash_v1`.
-2. WRCP strict contract expects deterministic signing over the canonical WRCP entry preimage, including runtime-required fields.
-3. Therefore, extension flow is not yet a 1:1 WRCP-TX-V1 runtime signing replacement.
+1. Extension dApp protocol flow now signs canonical payload preimages, but WRCP strict-complete status still depends on shared conformance vectors + CI release gating.
+2. Browser protocol policy checks now include `forms.commitment` required commitment fields (`data_hash`, `encrypted_form_url`) for pre-submit safety.
+3. Browser multisig UX parity remains incomplete for full strict-runtime replacement claims.
 
 ### WRCP process gaps
 
@@ -56,20 +56,25 @@ The Rust wallet + CLI have meaningful WRCP implementation progress, but the brow
 3. Wallet/ledger parity vector consumption is incomplete.
 4. Runtime-rejection telemetry checklist remains open.
 
-### Documentation drift noted
+### Documentation/vector sync status
 
-The WRCP profile checklist claims `docs/test-vectors/wrcp_tx_v1/signature_cases.json` is present, but repository state during review only showed:
+The missing WRCP signature vector skeleton is now present, so the expected skeleton set exists in repository state:
 
 - `docs/test-vectors/wrcp_tx_v1/canonical_payloads.json`
+- `docs/test-vectors/wrcp_tx_v1/signature_cases.json`
 - `docs/test-vectors/wrcp_msig_v1/proof_matrix.json`
+
+Remaining gap: wallet + ledger tests are not yet fully consuming all WRCP vector files as a shared conformance source.
 
 ## Browser Extension Current Capability (Accurate Positioning)
 
 The browser extension is currently best described as:
 
 - **Auth-lane ready** for dApp sign-in flows (`personal_sign`, `ctzn_signTypedData_v4`).
-- **Protocol-adjacent** for canonicalized dApp payload envelope signing and payload-hash commitments.
+- **Protocol-lane upgraded** for canonical preimage signing (`canonical_payload_v1`) with local verification.
 - **Not yet strict WRCP complete** against Rust runtime canonical preimage + conformance gate requirements.
+
+See `citizen-protocol/docs/WALLET_RUNTIME_BROWSER_SYNC_PROGRESS_LOG.md` for the implementation log and merged change history.
 
 ## Recommended Synchronization Work Plan
 
@@ -115,4 +120,3 @@ For every related PR:
 2. State which phase (A/B/C/D) the PR addresses.
 3. Update WRCP checklist statuses in the same PR.
 4. Include evidence (tests/fixtures/CI links) for any status change from `[ ]`/`[~]` to `[x]`.
-
