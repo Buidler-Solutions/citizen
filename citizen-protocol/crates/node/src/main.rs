@@ -709,6 +709,27 @@ fn default_namespaces() -> Vec<NamespaceRuleset> {
         },
         NamespaceRuleset {
             descriptor: citizen_types::NamespaceDescriptor {
+                namespace: "forms.commitment".into(),
+                version: 1,
+                rules_hash: "sha256:forms-commitment-default-v1".into(),
+                governed_by: "governance.vote".into(),
+            },
+            writers: BTreeSet::from(["forms.commitment".into()]),
+            validators: vec![
+                citizen_types::NamespaceRule {
+                    name: "require_signature".into(),
+                    config: json!({}),
+                },
+                citizen_types::NamespaceRule {
+                    name: "require_payload_fields".into(),
+                    config: json!({
+                        "fields": ["data_hash", "encrypted_form_url"],
+                    }),
+                },
+            ],
+        },
+        NamespaceRuleset {
+            descriptor: citizen_types::NamespaceDescriptor {
                 namespace: "builder.credits".into(),
                 version: 1,
                 rules_hash: "sha256:builder-credits-default-v1".into(),
@@ -884,11 +905,15 @@ mod tests {
         let validator_config = NodeConfig {
             node_role: NodeRole::Validator,
             network_id: "citizen-othernet".to_string(),
+            manifest_enforce: false,
+            startup_secret: Some("role-agnostic-startup-secret".to_string()),
             ..NodeConfig::default()
         };
         let observer_config = NodeConfig {
             node_role: NodeRole::Observer,
             network_id: "citizen-othernet".to_string(),
+            manifest_enforce: false,
+            startup_secret: Some("role-agnostic-startup-secret".to_string()),
             ..NodeConfig::default()
         };
 
@@ -970,6 +995,10 @@ mod tests {
             .namespaces
             .iter()
             .any(|ruleset| ruleset.descriptor.namespace == "builder.credits"));
+        assert!(config
+            .namespaces
+            .iter()
+            .any(|ruleset| ruleset.descriptor.namespace == "forms.commitment"));
         assert!(config
             .namespaces
             .iter()

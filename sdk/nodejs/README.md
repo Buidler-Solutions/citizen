@@ -75,6 +75,25 @@ await fetch("/api/forms/submit", {
 });
 ```
 
+To anchor an encrypted form host reference on-chain as a commitment receipt, use the SDK namespace helper:
+
+```js
+import { createFormCommitmentReceipt } from "@citizen-protocol/nodejs-sdk";
+
+const tx = createFormCommitmentReceipt({
+  formId: "form-001",
+  dataHash: "sha256:7a0c4f...d2",
+  encryptedFormUrl: "https://storage.example.gov/forms/form-001.cipher",
+  commitmentReceipt: {
+    hosted_at: new Date().toISOString(),
+    storage_provider: "example.gov-encrypted-blob-store"
+  }
+});
+
+// tx.namespace === "forms.commitment"
+// tx.action === "SUBMIT_COMMITMENT_RECEIPT"
+```
+
 The helper calls `ctzn_getCitizenSigner` + `ctzn_signCitizenTx` and returns runtime-aligned commitment fields:
 - `payloadHash` in `sha256:<hex>` format
 - canonical `signingPayload`

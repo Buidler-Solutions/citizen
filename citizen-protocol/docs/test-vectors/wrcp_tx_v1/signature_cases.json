@@ -1,0 +1,79 @@
+{
+  "profile": "WRCP-TX-V1",
+  "schema_version": 1,
+  "generated_at": "2026-04-05",
+  "cases": [
+    {
+      "case_id": "txv1.signature.valid.placeholder.accept",
+      "description": "Valid WRCP-TX-V1 signature placeholder for cross-crate fixture wiring.",
+      "entry": {
+        "entry_id": "11111111-1111-4111-8111-111111111111",
+        "namespace": "builder.credits",
+        "action": "MULTISIG_CREDIT_GRANT",
+        "object_id": "grant-001",
+        "payload": {
+          "grant_id": "grant-001",
+          "amount": 100
+        },
+        "privacy_flag": false,
+        "payload_commitment": null,
+        "ciphertext_hex": null,
+        "nonce_hex": null,
+        "salt_hex": null,
+        "kdf_params": null,
+        "consent_receipt": null,
+        "privacy_mode": "none",
+        "authorized_readers": [],
+        "custodian_policy_id": null,
+        "key_wrapped_secrets": [],
+        "revocation_events": [],
+        "field_reader_acls": {},
+        "author": "did:citizen:validator:alice",
+        "timestamp": 1767225600
+      },
+      "public_key_hex": "",
+      "signature_hex": "",
+      "expected": {
+        "expect_accept": true,
+        "reason_code": null,
+        "notes": "Public key and signature are intentionally blank until deterministic signing fixtures are wired in wallet+ledger tests."
+      }
+    },
+    {
+      "case_id": "txv1.signature.invalid.placeholder.reject",
+      "description": "Invalid WRCP-TX-V1 signature placeholder for negative parity checks.",
+      "entry": {
+        "entry_id": "11111111-1111-4111-8111-111111111111",
+        "namespace": "builder.credits",
+        "action": "MULTISIG_CREDIT_GRANT",
+        "object_id": "grant-001",
+        "payload": {
+          "grant_id": "grant-001",
+          "amount": 100
+        },
+        "privacy_flag": false,
+        "payload_commitment": null,
+        "ciphertext_hex": null,
+        "nonce_hex": null,
+        "salt_hex": null,
+        "kdf_params": null,
+        "consent_receipt": null,
+        "privacy_mode": "none",
+        "authorized_readers": [],
+        "custodian_policy_id": null,
+        "key_wrapped_secrets": [],
+        "revocation_events": [],
+        "field_reader_acls": {},
+        "author": "did:citizen:validator:alice",
+        "timestamp": 1767225600
+      },
+      "public_key_hex": "",
+      "signature_hex": "00",
+      "expected": {
+        "expect_accept": false,
+        "reason_code": "INVALID_SIGNATURE",
+        "notes": "Reason code may be refined to the canonical WRCP signature failure code once wallet+ledger vector consumers are fully wired."
+      }
+    }
+  ]
+}
