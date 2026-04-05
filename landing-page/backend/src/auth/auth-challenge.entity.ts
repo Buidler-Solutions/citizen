@@ -11,7 +11,7 @@ export class AuthChallenge {
   @Column({ name: 'signature_scheme', length: 40, default: 'evm_eip191' })
   signatureScheme!: string;
 
-  @Column({ name: 'public_key', length: 128, nullable: true })
+  @Column({ name: 'public_key', type: 'varchar', length: 128, nullable: true })
   publicKey!: string | null;
 
   @Column({ length: 160 })
