@@ -6,6 +6,7 @@ api_port = 8082
 data_dir = "data/beta"
 bind_addr = "127.0.0.1:9101"
 network_key_rotation_secs = 3600
+manifest_enforce = false
 
 [[namespaces]]
 descriptor.namespace = "identity.citizen"
