@@ -124,9 +124,27 @@ To relay signed-hash metadata into the Citizen network from backend:
 
 ```bash
 CITIZEN_SIGNED_SUBMISSION_RELAY_URL=http://127.0.0.1:8081/api/v1/your-relay-endpoint
+CITIZEN_SIGNED_SUBMISSION_RELAY_FORMAT=metadata
 CITIZEN_SIGNED_SUBMISSION_RELAY_MAX_ATTEMPTS=3
 CITIZEN_SIGNED_SUBMISSION_RELAY_RETRY_BACKOFF_MS=250
 ```
+
+`CITIZEN_SIGNED_SUBMISSION_RELAY_FORMAT` controls payload shape:
+
+- `metadata` (default): sends onboarding metadata contract (for dedicated relay adapters).
+- `runtime_envelope`: sends a Citizen runtime `SignedEnvelope<LedgerEntry>` request body directly to `/api/v1/envelopes/submit`.
+
+When using `runtime_envelope`, optionally override these defaults to match your validator namespace policy:
+
+```bash
+CITIZEN_SIGNED_SUBMISSION_RUNTIME_AUTHOR=forms.commitment
+CITIZEN_SIGNED_SUBMISSION_RUNTIME_NAMESPACE=forms.commitment
+CITIZEN_SIGNED_SUBMISSION_RUNTIME_ACTION=SUBMIT_ONBOARDING_INTEREST
+CITIZEN_SIGNED_SUBMISSION_RUNTIME_SIGNING_PRIVATE_KEY_PEM="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----"
+```
+
+`runtime_envelope` mode requires `CITIZEN_SIGNED_SUBMISSION_RUNTIME_SIGNING_PRIVATE_KEY_PEM` (Ed25519 PKCS#8 PEM). The backend signs canonical runtime entry payloads with this key so Rust runtime namespace policies can validate signatures deterministically.
+When relay returns non-2xx, backend errors now include upstream `detail/error/message` snippets from runtime responses to help diagnose namespace/policy mismatches.
 
 If `CITIZEN_SIGNED_SUBMISSION_RELAY_URL` is configured, onboarding writes fail when relay submission fails, so PostgreSQL and network relay remain synchronized per request.
 The relay URL is fail-closed validated on submit: it must be an absolute `http://` or `https://` URL (invalid values are rejected before persistence).
