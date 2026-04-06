@@ -29,6 +29,11 @@ Validate that one onboarding submission is handled in two coordinated data paths
 
 ```bash
 CITIZEN_SIGNED_SUBMISSION_RELAY_URL=http://127.0.0.1:8081/api/v1/your-relay-endpoint
+CITIZEN_SIGNED_SUBMISSION_RELAY_FORMAT=runtime_envelope
+CITIZEN_SIGNED_SUBMISSION_RUNTIME_AUTHOR=forms.commitment
+CITIZEN_SIGNED_SUBMISSION_RUNTIME_NAMESPACE=forms.commitment
+CITIZEN_SIGNED_SUBMISSION_RUNTIME_ACTION=SUBMIT_ONBOARDING_INTEREST
+CITIZEN_SIGNED_SUBMISSION_RUNTIME_SIGNING_PRIVATE_KEY_PEM="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----"
 CITIZEN_SIGNED_SUBMISSION_RELAY_MAX_ATTEMPTS=3
 CITIZEN_SIGNED_SUBMISSION_RELAY_RETRY_BACKOFF_MS=250
 ```
@@ -152,4 +157,3 @@ The E2E is considered passed only when **all** are true:
 - **`walletPayloadHash does not match walletSigningPayload`:** payload mutation between sign and submit.
 - **`walletSignerDid does not match walletVerifyingKey`:** signer metadata mismatch.
 - **Relay unavailable/rejected errors:** runtime endpoint down, wrong path, or policy rejection upstream.
-
