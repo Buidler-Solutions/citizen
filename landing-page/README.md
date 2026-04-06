@@ -189,6 +189,7 @@ curl http://localhost:3001/interest/stats \
 - How-to (install + record): `landing-page/howtos/installing-asciinema-for-recording.md`
 - Runbook (upload + shortcode): `landing-page/runbook/asciinema-admin-upload-and-onboarding-shortcode.md`
 - Runbook (email architecture checkpoint): `landing-page/runbook/onboarding-email-notification-checkpoint.md`
+- Runbook (wallet-signed onboarding E2E): `landing-page/runbook/wallet-signed-onboarding-e2e.md`
 
 ## Email + password reset environment additions
 
