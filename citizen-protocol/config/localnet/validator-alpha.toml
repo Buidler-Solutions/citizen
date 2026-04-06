@@ -6,6 +6,7 @@ api_port = 8081
 data_dir = "data/alpha"
 bind_addr = "127.0.0.1:9100"
 network_key_rotation_secs = 3600
+manifest_enforce = false
 
 [[namespaces]]
 descriptor.namespace = "identity.citizen"
