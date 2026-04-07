@@ -1,6 +1,6 @@
 import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
 import { unlink } from 'fs/promises';
-import { createHash, createPublicKey, randomUUID, verify } from 'crypto';
+import { KeyObject, createCipheriv, createHash, createPrivateKey, createPublicKey, randomBytes, randomUUID, sign, verify } from 'crypto';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { CreateLeadDto } from './dto/create-lead.dto';
@@ -35,6 +35,21 @@ const DEFAULT_CAMPAIGN_CARDS = [
 const DEFAULT_RELAY_MAX_ATTEMPTS = 3;
 const DEFAULT_RELAY_RETRY_BACKOFF_MS = 250;
 const MAX_RELAY_RETRY_BACKOFF_MS = 5000;
+const DEFAULT_RUNTIME_NAMESPACE = 'forms.commitment';
+const DEFAULT_RUNTIME_ACTION = 'SUBMIT_ONBOARDING_INTEREST';
+const DEFAULT_RUNTIME_AUTHOR = 'forms.commitment';
+const ED25519_SPKI_DER_PREFIX_HEX = '302a300506032b6570032100';
+type RuntimePrivacyMode = 'none' | 'passphrase' | 'hybrid';
+type RuntimeEntryPrivacyFields = {
+  privacy_flag: boolean;
+  privacy_mode: RuntimePrivacyMode;
+  payload_commitment?: string;
+  ciphertext_hex?: string;
+  nonce_hex?: string;
+  consent_receipt?: Record<string, unknown>;
+  authorized_readers?: string[];
+  key_wrapped_secrets?: Array<Record<string, string>>;
+};
 
 const DEFAULT_ROLE_OPTIONS = [
   {
@@ -256,41 +271,7 @@ export class LeadService {
 
     this.assertRelayMetadata(payload);
 
-    const relayPayload = {
-      namespace: 'onboarding.interest',
-      action: 'SUBMIT_ONBOARDING_INTEREST',
-      object_id: payload.email.trim().toLowerCase(),
-      trace_id: relayTraceId,
-      deduplication_key: relayDeduplicationKey,
-      metadata: {
-        role: normalizedRole,
-        country: payload.country.trim(),
-        submitted_at: new Date().toISOString(),
-        signed_payload_hash: payload.walletPayloadHash,
-      },
-      wallet_signature: {
-        signer: payload.walletSignerDid,
-        verifying_key: payload.walletVerifyingKey,
-        signature: payload.walletSignature,
-        payload_hash: payload.walletPayloadHash,
-        algorithm: payload.walletAlgorithm.toLowerCase(),
-        signature_scope: signatureScope,
-      },
-      data_custody: {
-        on_chain_commitment: {
-          payload_hash: payload.walletPayloadHash,
-          signer: payload.walletSignerDid,
-          verifying_key: payload.walletVerifyingKey,
-          signature_scope: signatureScope,
-        },
-        off_chain_record: {
-          system: 'landing-page-backend',
-          table: 'interest_submissions',
-          contains_pii: true,
-          fields: ['fullName', 'institution', 'email', 'country', 'role', 'missionNeed'],
-        },
-      },
-    };
+    const relayPayload = this.buildRelayPayload(payload, normalizedRole, signatureScope, relayTraceId, relayDeduplicationKey);
 
     const retryPolicy = this.getRelayRetryPolicy();
 
@@ -329,8 +310,12 @@ export class LeadService {
 
         if (!retryableStatus || finalAttempt) {
           this.recordRelaySubmissionOutcome('failure');
+          const relayErrorDetail = await this.extractRelayErrorDetail(response);
+          const relayFailureMessage = relayErrorDetail
+            ? `Citizen network relay rejected signed onboarding payload (trace_id=${relayTraceId}, status=${response.status}, detail=${relayErrorDetail}).`
+            : `Citizen network relay rejected signed onboarding payload (trace_id=${relayTraceId}, status=${response.status}).`;
           throw new BadRequestException(
-            `Citizen network relay rejected signed onboarding payload (trace_id=${relayTraceId}, status=${response.status}).`,
+            relayFailureMessage,
           );
         }
       } catch (error) {
@@ -363,6 +348,281 @@ export class LeadService {
     }
   }
 
+  private buildRelayPayload(
+    payload: CreateLeadDto,
+    normalizedRole: string,
+    signatureScope: 'canonical_payload_v1' | 'payload_hash_v1',
+    relayTraceId: string,
+    relayDeduplicationKey: string,
+  ): Record<string, unknown> {
+    const relayFormatRaw = process.env.CITIZEN_SIGNED_SUBMISSION_RELAY_FORMAT?.trim().toLowerCase();
+    const relayFormat = relayFormatRaw === 'runtime_envelope' ? 'runtime_envelope' : 'metadata';
+
+    if (relayFormat === 'runtime_envelope') {
+      return this.buildRuntimeEnvelopeRelayPayload(payload, normalizedRole, signatureScope, relayTraceId, relayDeduplicationKey);
+    }
+
+    return {
+      namespace: 'onboarding.interest',
+      action: 'SUBMIT_ONBOARDING_INTEREST',
+      object_id: payload.email.trim().toLowerCase(),
+      trace_id: relayTraceId,
+      deduplication_key: relayDeduplicationKey,
+      metadata: {
+        role: normalizedRole,
+        country: payload.country.trim(),
+        submitted_at: new Date().toISOString(),
+        signed_payload_hash: payload.walletPayloadHash,
+      },
+      wallet_signature: {
+        signer: payload.walletSignerDid,
+        verifying_key: payload.walletVerifyingKey,
+        signature: payload.walletSignature,
+        payload_hash: payload.walletPayloadHash,
+        algorithm: payload.walletAlgorithm.toLowerCase(),
+        signature_scope: signatureScope,
+      },
+      data_custody: {
+        on_chain_commitment: {
+          payload_hash: payload.walletPayloadHash,
+          signer: payload.walletSignerDid,
+          verifying_key: payload.walletVerifyingKey,
+          signature_scope: signatureScope,
+        },
+        off_chain_record: {
+          system: 'landing-page-backend',
+          table: 'interest_submissions',
+          contains_pii: true,
+          fields: ['fullName', 'institution', 'email', 'country', 'role', 'missionNeed'],
+        },
+      },
+    };
+  }
+
+  private buildRuntimeEnvelopeRelayPayload(
+    payload: CreateLeadDto,
+    normalizedRole: string,
+    signatureScope: 'canonical_payload_v1' | 'payload_hash_v1',
+    relayTraceId: string,
+    relayDeduplicationKey: string,
+  ): Record<string, unknown> {
+    const runtimeNamespace = process.env.CITIZEN_SIGNED_SUBMISSION_RUNTIME_NAMESPACE?.trim() || DEFAULT_RUNTIME_NAMESPACE;
+    const runtimeAction = process.env.CITIZEN_SIGNED_SUBMISSION_RUNTIME_ACTION?.trim() || DEFAULT_RUNTIME_ACTION;
+    const runtimeAuthor = process.env.CITIZEN_SIGNED_SUBMISSION_RUNTIME_AUTHOR?.trim() || DEFAULT_RUNTIME_AUTHOR;
+    const objectId = payload.email.trim().toLowerCase();
+    const entryId = randomUUID();
+    const nowIso = new Date().toISOString();
+    const timestamp = Math.floor(Date.now() / 1000);
+    const signedOnboardingPayload = JSON.parse(payload.walletSigningPayload) as Record<string, unknown>;
+    const runtimeSigningPrivateKeyPemRaw = process.env.CITIZEN_SIGNED_SUBMISSION_RUNTIME_SIGNING_PRIVATE_KEY_PEM?.trim();
+    const runtimePrivacy = this.resolveRuntimePrivacySettings(payload.walletSignerDid, payload.walletPayloadHash, signedOnboardingPayload);
+
+    if (!runtimeSigningPrivateKeyPemRaw) {
+      throw new BadRequestException(
+        'CITIZEN_SIGNED_SUBMISSION_RUNTIME_SIGNING_PRIVATE_KEY_PEM is required when CITIZEN_SIGNED_SUBMISSION_RELAY_FORMAT=runtime_envelope.',
+      );
+    }
+
+    const runtimeSigningPrivateKeyPem = this.normalizePemValue(runtimeSigningPrivateKeyPemRaw);
+    const runtimePrivateKey = this.parseRuntimeSigningPrivateKey(runtimeSigningPrivateKeyPem);
+    const runtimeAuthorPublicKeyHex = this.exportEd25519PublicKeyHex(runtimePrivateKey);
+
+    const runtimeEntryPayload = {
+      data_hash: payload.walletPayloadHash,
+      encrypted_form_url: `interest_submissions://${objectId}`,
+      relay_trace_id: relayTraceId,
+      deduplication_key: relayDeduplicationKey,
+      wallet_signer: payload.walletSignerDid,
+      role: normalizedRole,
+      country: payload.country.trim(),
+      signed_submission: signedOnboardingPayload,
+      payload_wallet_signature: {
+        signer: payload.walletSignerDid,
+        verifying_key: payload.walletVerifyingKey,
+        signature: payload.walletSignature,
+        payload_hash: payload.walletPayloadHash,
+        algorithm: payload.walletAlgorithm.toLowerCase(),
+        signature_scope: signatureScope,
+      },
+      author_public_key: runtimeAuthorPublicKeyHex,
+    };
+
+    const signingPayload = this.canonicalJson({
+      entry_id: entryId,
+      namespace: runtimeNamespace,
+      action: runtimeAction,
+      object_id: objectId,
+      payload: runtimeEntryPayload,
+      author: runtimeAuthor,
+      ...runtimePrivacy,
+      timestamp,
+    });
+
+    const runtimeSignature = sign(null, Buffer.from(signingPayload, 'utf8'), runtimePrivateKey).toString('hex');
+
+    return {
+      envelope_id: randomUUID(),
+      signer: runtimeAuthor,
+      signature: runtimeSignature,
+      submitted_at: nowIso,
+      payload: {
+        entry_id: entryId,
+        namespace: runtimeNamespace,
+        action: runtimeAction,
+        object_id: objectId,
+        payload: runtimeEntryPayload,
+        ...runtimePrivacy,
+        author: runtimeAuthor,
+        signature: runtimeSignature,
+        timestamp,
+      },
+    };
+  }
+
+  private resolveRuntimePrivacyMode(): RuntimePrivacyMode {
+    const runtimePrivacyModeRaw = process.env.CITIZEN_SIGNED_SUBMISSION_RUNTIME_PRIVACY_MODE?.trim().toLowerCase();
+    const runtimePrivacyMode = runtimePrivacyModeRaw ?? 'none';
+
+    if (runtimePrivacyMode !== 'none' && runtimePrivacyMode !== 'passphrase' && runtimePrivacyMode !== 'hybrid') {
+      throw new BadRequestException(
+        'CITIZEN_SIGNED_SUBMISSION_RUNTIME_PRIVACY_MODE must be one of: none, passphrase, hybrid.',
+      );
+    }
+
+    const runtimePrivacyFlagRaw = process.env.CITIZEN_SIGNED_SUBMISSION_RUNTIME_PRIVACY_FLAG?.trim().toLowerCase();
+    if (runtimePrivacyFlagRaw) {
+      if (runtimePrivacyFlagRaw !== 'true' && runtimePrivacyFlagRaw !== 'false') {
+        throw new BadRequestException(
+          'CITIZEN_SIGNED_SUBMISSION_RUNTIME_PRIVACY_FLAG must be true or false when provided.',
+        );
+      }
+      const runtimePrivacyFlag = runtimePrivacyFlagRaw === 'true';
+      if (runtimePrivacyFlag !== (runtimePrivacyMode !== 'none')) {
+        throw new BadRequestException(
+          'CITIZEN_SIGNED_SUBMISSION_RUNTIME_PRIVACY_FLAG must match CITIZEN_SIGNED_SUBMISSION_RUNTIME_PRIVACY_MODE.',
+        );
+      }
+    }
+
+    return runtimePrivacyMode;
+  }
+
+  private resolveRuntimePrivacySettings(
+    subjectDid: string,
+    payloadCommitment: string,
+    signedOnboardingPayload: Record<string, unknown>,
+  ): RuntimeEntryPrivacyFields {
+    const runtimePrivacyMode = this.resolveRuntimePrivacyMode();
+
+    if (runtimePrivacyMode === 'none') {
+      return {
+        privacy_flag: false,
+        privacy_mode: 'none',
+      };
+    }
+
+    if (runtimePrivacyMode === 'passphrase') {
+      throw new BadRequestException(
+        'Runtime onboarding relay does not support privacy_mode=passphrase. Use privacy_mode=hybrid for onboarding encrypted metadata relay.',
+      );
+    }
+
+    const authorizedReadersRaw = process.env.CITIZEN_SIGNED_SUBMISSION_RUNTIME_HYBRID_AUTHORIZED_READERS?.trim() ?? '';
+    const authorizedReaders = authorizedReadersRaw
+      .split(',')
+      .map((reader) => reader.trim())
+      .filter(Boolean);
+
+    if (authorizedReaders.length === 0) {
+      throw new BadRequestException(
+        'CITIZEN_SIGNED_SUBMISSION_RUNTIME_HYBRID_AUTHORIZED_READERS is required when CITIZEN_SIGNED_SUBMISSION_RUNTIME_PRIVACY_MODE=hybrid.',
+      );
+    }
+
+    const plaintext = Buffer.from(this.canonicalJson(signedOnboardingPayload), 'utf8');
+    const dek = randomBytes(32);
+    const nonce = randomBytes(12);
+    const cipher = createCipheriv('aes-256-gcm', dek, nonce);
+    const ciphertext = Buffer.concat([cipher.update(plaintext), cipher.final(), cipher.getAuthTag()]);
+    const wrappedDekBase = createHash('sha256').update(dek).digest('hex');
+    const wrapAlgorithm = process.env.CITIZEN_SIGNED_SUBMISSION_RUNTIME_HYBRID_WRAP_ALGORITHM?.trim()
+      || 'sha256-reader-salted-wrap-v1';
+
+    const keyWrappedSecrets = authorizedReaders.map((readerId) => ({
+      reader_id: readerId,
+      wrapped_dek: createHash('sha256').update(`${readerId}:${wrappedDekBase}`).digest('hex'),
+      wrap_algorithm: wrapAlgorithm,
+    }));
+
+    const now = Math.floor(Date.now() / 1000);
+    const ttlSeconds = Number.parseInt(
+      process.env.CITIZEN_SIGNED_SUBMISSION_RUNTIME_HYBRID_CONSENT_TTL_SECONDS?.trim() ?? '31536000',
+      10,
+    );
+    const normalizedTtlSeconds = Number.isFinite(ttlSeconds) && ttlSeconds > 0 ? ttlSeconds : 31536000;
+    const policyRef = process.env.CITIZEN_SIGNED_SUBMISSION_RUNTIME_HYBRID_POLICY_REF?.trim()
+      || 'policy:onboarding:hybrid:v1';
+
+    return {
+      privacy_flag: true,
+      privacy_mode: 'hybrid',
+      payload_commitment: payloadCommitment,
+      ciphertext_hex: ciphertext.toString('hex'),
+      nonce_hex: nonce.toString('hex'),
+      authorized_readers: authorizedReaders,
+      key_wrapped_secrets: keyWrappedSecrets,
+      consent_receipt: {
+        subject_did: subjectDid,
+        data_hash: payloadCommitment,
+        policy_ref: policyRef,
+        granted_at: now,
+        expires_at: now + normalizedTtlSeconds,
+        authorized_readers: authorizedReaders,
+        field_reader_acls: {},
+      },
+    };
+  }
+
+  private parseRuntimeSigningPrivateKey(privateKeyPem: string) {
+    try {
+      return createPrivateKey({
+        key: privateKeyPem,
+        format: 'pem',
+      });
+    } catch {
+      throw new BadRequestException(
+        'CITIZEN_SIGNED_SUBMISSION_RUNTIME_SIGNING_PRIVATE_KEY_PEM must be a valid PEM-encoded Ed25519 private key.',
+      );
+    }
+  }
+
+  private normalizePemValue(privateKeyPem: string): string {
+    const maybeQuotedPem = privateKeyPem.trim();
+    const unquotedPem = maybeQuotedPem.length > 1
+      && ((maybeQuotedPem.startsWith('"') && maybeQuotedPem.endsWith('"'))
+        || (maybeQuotedPem.startsWith('\'') && maybeQuotedPem.endsWith('\'')))
+      ? maybeQuotedPem.slice(1, -1)
+      : maybeQuotedPem;
+
+    return unquotedPem.replace(/\\n/g, '\n');
+  }
+
+  private exportEd25519PublicKeyHex(privateKey: KeyObject): string {
+    try {
+      const publicKeyDer = createPublicKey(privateKey).export({ format: 'der', type: 'spki' }) as Buffer;
+      const spkiPrefix = Buffer.from(ED25519_SPKI_DER_PREFIX_HEX, 'hex');
+      const rawPublicKey = publicKeyDer.subarray(spkiPrefix.length);
+      if (rawPublicKey.length !== 32) {
+        throw new Error('invalid key length');
+      }
+      return rawPublicKey.toString('hex');
+    } catch {
+      throw new BadRequestException(
+        'CITIZEN_SIGNED_SUBMISSION_RUNTIME_SIGNING_PRIVATE_KEY_PEM must be a valid Ed25519 keypair.',
+      );
+    }
+  }
+
   private getRelayRetryPolicy(): { maxAttempts: number; retryBackoffMs: number } {
     const maxAttemptsRaw = process.env.CITIZEN_SIGNED_SUBMISSION_RELAY_MAX_ATTEMPTS;
     const retryBackoffRaw = process.env.CITIZEN_SIGNED_SUBMISSION_RELAY_RETRY_BACKOFF_MS;
@@ -383,6 +643,28 @@ export class LeadService {
       return error.message;
     }
     return String(error);
+  }
+
+  private async extractRelayErrorDetail(response: Response): Promise<string | null> {
+    try {
+      const contentType = response.headers.get('content-type') ?? '';
+      if (contentType.includes('application/json')) {
+        const json = await response.json() as Record<string, unknown>;
+        const detail = json.detail ?? json.error ?? json.message;
+        if (typeof detail === 'string' && detail.trim().length > 0) {
+          return detail.trim().slice(0, 320);
+        }
+        return JSON.stringify(json).slice(0, 320);
+      }
+
+      const text = (await response.text()).trim();
+      if (!text) {
+        return null;
+      }
+      return text.slice(0, 320);
+    } catch {
+      return null;
+    }
   }
 
   private async delay(ms: number): Promise<void> {

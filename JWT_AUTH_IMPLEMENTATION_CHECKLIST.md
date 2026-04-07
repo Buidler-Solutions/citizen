@@ -20,7 +20,8 @@ Use this file as the **single source of implementation tracking** for wallet-sig
 - [ ] Assign implementation owner(s) (wallet, frontend, backend, infra/security).
 - [ ] Confirm scope: extension signer-only, backend session authority, builder-sponsored fee model unchanged.
 - [ ] Confirm environment plan: local, staging, canary, production.
-- [ ] Create tracking issues/epics linked to each section below.
+- [-] Create tracking issues/epics linked to each section below.
+  - 2026-04-04: initial backend implementation PR started with challenge/verify/refresh/logout + session schema.
 - [ ] Define rollout + rollback decision owner.
 
 ---
@@ -30,7 +31,8 @@ Use this file as the **single source of implementation tracking** for wallet-sig
 ### 1.1 Component responsibilities
 - [ ] Wallet extension only handles key custody + signatures.
 - [ ] Frontend handles connect/sign UX and in-memory access token use.
-- [ ] Backend is source of truth for challenges, sessions, JWTs, and revocation.
+- [-] Backend is source of truth for challenges, sessions, JWTs, and revocation.
+  - 2026-04-04: backend endpoints and session persistence scaffold added; cryptographic signature verification still pending.
 - [ ] PostgreSQL stores users/challenges/sessions and revocation state.
 
 ### 1.2 Trust boundaries
@@ -40,14 +42,20 @@ Use this file as the **single source of implementation tracking** for wallet-sig
 - [ ] All auth endpoints enforce HTTPS + HSTS.
 
 ### 1.3 End-to-end auth flow
-- [ ] Frontend requests challenge (`POST /auth/challenge`).
-- [ ] Backend stores one-time challenge with TTL.
+- [x] Frontend requests challenge (`POST /auth/challenge`).
+  - 2026-04-04: endpoint implemented in backend.
+- [x] Backend stores one-time challenge with TTL.
+  - 2026-04-04: `auth_challenges` entity + TTL-based expiration persisted.
 - [ ] Wallet signs challenge after explicit user approval.
-- [ ] Frontend verifies signature (`POST /auth/verify`).
-- [ ] Backend issues access token + refresh cookie + session row.
+- [x] Frontend verifies signature (`POST /auth/verify`).
+  - 2026-04-04: endpoint implemented with canonical SIWE-like message parsing/validation; full secp256k1 signature recovery is still pending.
+- [x] Backend issues access token + refresh cookie + session row.
+  - 2026-04-04: access JWT, `ctzn_refresh_token` cookie, and `auth_sessions` row created during verify.
 - [ ] Protected APIs enforce Bearer access token.
-- [ ] Refresh flow rotates refresh token and issues new access token.
-- [ ] Logout/revocation invalidates session.
+- [-] Refresh flow rotates refresh token and issues new access token.
+  - 2026-04-04: refresh endpoint issues new access token; rotation hardening still pending.
+- [x] Logout/revocation invalidates session.
+  - 2026-04-04: logout revokes active session and clears refresh cookie.
 
 ---
 
@@ -120,44 +128,74 @@ Use this file as the **single source of implementation tracking** for wallet-sig
 ### 4.1 Endpoint contracts
 
 #### A) `POST /auth/challenge`
-- [ ] Validate address format, domain allowlist, chainId allowlist.
-- [ ] Apply per-IP and per-wallet rate limits.
-- [ ] Generate secure nonce (>=128 bits) and challenge payload.
-- [ ] Persist challenge with TTL and unused status.
-- [ ] Return `{ challengeId, message, expiresAt }`.
+- [x] Validate address format, domain allowlist, chainId allowlist.
+  - 2026-04-04: backend now enforces wallet regex, optional domain allowlist, and optional `AUTH_ALLOWED_CHAIN_IDS`.
+- [x] Apply per-IP and per-wallet rate limits.
+  - 2026-04-04: challenge endpoint now enforces configurable in-memory limits keyed by IP (`AUTH_CHALLENGE_RATE_LIMIT_MAX_PER_IP`) and wallet (`AUTH_CHALLENGE_RATE_LIMIT_MAX_PER_WALLET`) within a shared challenge window.
+- [x] Generate secure nonce (>=128 bits) and challenge payload.
+  - 2026-04-04: challenge nonce uses `randomBytes(16)` and SIWE-like challenge content.
+- [x] Persist challenge with TTL and unused status.
+  - 2026-04-04: challenge rows are written with TTL expiration and `usedAt = null`.
+- [x] Return `{ challengeId, message, expiresAt }`.
+  - 2026-04-04: challenge endpoint returns persisted id + message + ISO expiry.
 
 #### B) `POST /auth/verify`
-- [ ] Validate challenge exists, unused, and unexpired.
-- [ ] Validate exact message match with issued challenge.
-- [ ] Recover signer address and compare against expected address.
-- [ ] Atomically consume nonce/challenge.
-- [ ] Upsert user, create session, hash refresh token, issue access JWT.
-- [ ] Set refresh cookie securely.
-- [ ] Return `{ accessToken, tokenType, expiresIn, sessionId, user }`.
+- [x] Validate challenge exists, unused, and unexpired.
+  - 2026-04-04: verify path performs DB-backed checks before issuing sessions.
+- [x] Validate exact message match with issued challenge.
+  - 2026-04-04: verify rejects message mismatch against stored challenge payload.
+- [-] Recover signer address and compare against expected address for EVM mode; verify derived address from provided public key for Citizen mode.
+  - 2026-04-04: `citizen_ed25519` now verifies public-key-derived `ctzn:` address + Ed25519 signature; EVM mode keeps strict envelope checks unless recovery library is explicitly enabled.
+- [x] Atomically consume nonce/challenge.
+  - 2026-04-04: challenge consumption now runs inside a pessimistic-write transaction.
+- [x] Upsert user, create session, hash refresh token, issue access JWT.
+  - 2026-04-04: verify upserts user and persists hashed refresh token in `auth_sessions`.
+- [x] Set refresh cookie securely.
+  - 2026-04-04: verify response sets `ctzn_refresh_token` as `HttpOnly + Secure + SameSite=Strict`.
+- [x] Return `{ accessToken, tokenType, expiresIn, sessionId, user }`.
+  - 2026-04-04: verify response currently returns those fields.
 
 #### C) `POST /auth/refresh`
-- [ ] Validate refresh cookie presence and token format.
-- [ ] Validate token hash against active non-revoked session.
-- [ ] Rotate refresh token atomically.
-- [ ] Issue new access token and update session last-used metadata.
-- [ ] Return `{ accessToken, tokenType, expiresIn }`.
+- [x] Validate refresh cookie presence and token format.
+  - 2026-04-04: refresh endpoint requires cookie-backed token value.
+- [x] Validate token hash against active non-revoked session.
+  - 2026-04-04: refresh lookup matches hash against non-revoked active session.
+- [x] Rotate refresh token atomically.
+  - 2026-04-04: refresh now rotates token hash in a pessimistic-write transaction.
+- [x] Issue new access token and update session last-used metadata.
+  - 2026-04-04: refresh updates `last_used_at`, rotates cookie, and reissues access JWT.
+- [x] Return `{ accessToken, tokenType, expiresIn }`.
+  - 2026-04-04: refresh response keeps access-token-only payload while setting new refresh cookie.
 
 #### D) `POST /auth/logout`
-- [ ] Revoke current session.
-- [ ] Clear refresh cookie.
-- [ ] Return `{ ok: true }`.
+- [x] Revoke current session.
+  - 2026-04-04: logout now revokes the refresh-token-matched session using a transactional pessimistic lock.
+- [x] Clear refresh cookie.
+  - 2026-04-04: logout clears `ctzn_refresh_token` with the secure auth cookie policy.
+- [x] Return `{ ok: true }`.
+  - 2026-04-04: logout response returns `{ ok: true }`.
 
 ### 4.2 Signature verification rules
-- [ ] Parse SIWE-like message and reject malformed payloads.
-- [ ] Reconstruct canonical message bytes exactly.
-- [ ] Verify secp256k1-compatible signature recovery.
-- [ ] Enforce nonce single-use, time window, domain/URI/audience, chainId.
-- [ ] Write audit event for every verify attempt (success/failure reason).
+- [x] Parse challenge payloads and reject malformed payloads for the active scheme.
+  - 2026-04-04: verify now parses a scheme-tagged canonical message for `evm_eip191` and `citizen_ed25519` with strict field validation.
+- [x] Support explicit opt-in signature schemes (`evm_eip191`, `citizen_ed25519`) and allowlist via config.
+  - 2026-04-04: `AUTH_ENABLED_SIGNATURE_SCHEMES` + per-request `scheme` selector added; unsupported schemes are rejected.
+- [x] Reconstruct canonical message bytes exactly.
+  - 2026-04-04: verify now rebuilds canonical challenge content and rejects mismatches.
+- [-] Verify secp256k1-compatible signature recovery when `evm_eip191` is selected.
+  - 2026-04-04: backend now gates full EVM recovery behind explicit opt-in (`AUTH_EVM_SIGNATURE_RECOVERY_ENABLED=true`) and dependency availability; default path remains envelope validation.
+- [x] Enforce nonce single-use, time window, domain/URI/audience, chainId.
+  - 2026-04-04: verify now enforces challenge time-window parity, domain/URI/chain binding, and one-time nonce consumption via lock.
+- [x] Write audit event for every verify attempt (success/failure reason).
+  - 2026-04-04: verify now emits structured backend audit logs with success/failure reasons and request metadata.
 
 ### 4.3 JWT issuance and key management
-- [ ] JWT includes `sub`, `wallet`, `sessionId`, `iat`, `exp`, `iss`, `aud` (optional scope/role).
-- [ ] Access TTL set to 5–15 minutes.
-- [ ] Session/refresh TTL set by risk policy (7–30 days).
+- [x] JWT includes `sub`, `wallet`, `sessionId`, `iat`, `exp`, `iss`, `aud` (optional scope/role).
+  - 2026-04-04: access JWT issuance signs with subject + issuer/audience/expires and embeds wallet/session claims.
+- [x] Access TTL set to 5–15 minutes.
+  - 2026-04-04: access token TTL is configured via `AUTH_ACCESS_TOKEN_TTL_SECONDS` with a default of 900 seconds (15 minutes).
+- [x] Session/refresh TTL set by risk policy (7–30 days).
+  - 2026-04-04: refresh/session expiry is configured via `AUTH_REFRESH_TOKEN_TTL_SECONDS` with a default of 14 days.
 - [ ] Use RS256 or EdDSA preferred (HS256 only with strict constraints).
 - [ ] Include `kid` and support key rotation + rollover window.
 
@@ -166,16 +204,24 @@ Use this file as the **single source of implementation tracking** for wallet-sig
 ## 5) PostgreSQL schema and session model
 
 ### 5.1 Schema implementation
-- [ ] `users` table exists (`id`, unique `wallet_address`, timestamps).
-- [ ] `auth_challenges` table exists (`id`, `wallet_address`, unique `nonce`, message/context, expiry, `used_at`).
-- [ ] `sessions` table exists (`id`, `user_id`, `refresh_token_hash`, expiry, revocation fields, metadata).
+- [x] `users` table exists (`id`, unique `wallet_address`, timestamps).
+  - 2026-04-04: implemented as `auth_users` table with unique wallet address.
+- [x] `auth_challenges` table exists (`id`, `wallet_address`, unique `nonce`, message/context, expiry, `used_at`).
+  - 2026-04-04: implemented with `domain`, `uri`, and `chain_id` context fields.
+- [x] `sessions` table exists (`id`, `user_id`, `refresh_token_hash`, expiry, revocation fields, metadata).
+  - 2026-04-04: implemented as `auth_sessions` with user-agent/IP metadata.
 
 ### 5.2 Constraints and integrity
-- [ ] Unique index on normalized wallet address.
-- [ ] Unique constraint/index on challenge nonce.
-- [ ] Partial index for active sessions (`is_revoked=false`).
-- [ ] Challenge consume path uses transactional lock (`SELECT ... FOR UPDATE`).
-- [ ] Cleanup jobs remove expired challenges/sessions.
+- [x] Unique index on normalized wallet address.
+  - 2026-04-04: `auth_users.wallet_address` is unique and persisted normalized lowercase.
+- [x] Unique constraint/index on challenge nonce.
+  - 2026-04-04: `auth_challenges.nonce` uses unique DB index.
+- [x] Partial index for active sessions (`is_revoked=false`).
+  - 2026-04-04: `auth_sessions` now includes partial index `IDX_auth_sessions_active_user` scoped to non-revoked sessions.
+- [x] Challenge consume path uses transactional lock (`SELECT ... FOR UPDATE`).
+  - 2026-04-04: verify path now locks challenge row with pessimistic write transaction.
+- [x] Cleanup jobs remove expired challenges/sessions.
+  - 2026-04-04: backend service now runs auth artifact cleanup for expired challenges/sessions during challenge and refresh paths.
 
 ### 5.3 Refresh rotation and revocation
 - [ ] Store refresh token hash only (Argon2id or SHA-256 + pepper).
@@ -190,13 +236,18 @@ Use this file as the **single source of implementation tracking** for wallet-sig
 
 ### 6.1 Access token lifecycle
 - [ ] Mint on verify and refresh.
-- [ ] Validate signature + claims (`exp`, `iss`, `aud`, `sessionId`) on protected routes.
-- [ ] Return machine-readable `401` error codes for invalid/expired tokens.
+- [x] Validate signature + claims (`exp`, `iss`, `aud`, `sessionId`) on protected routes.
+  - 2026-04-04: guard now verifies issuer/audience and enforces non-revoked active session for JWTs carrying `sessionId`.
+- [x] Return machine-readable `401` error codes for invalid/expired tokens.
+  - 2026-04-04: `JwtAuthGuard` now returns structured `UnauthorizedException` payloads with `TOKEN_MISSING`, `TOKEN_EXPIRED`, `TOKEN_INVALID`, and `SESSION_REVOKED` codes.
 
 ### 6.2 Refresh token lifecycle
-- [ ] Generate >=256-bit random refresh token.
-- [ ] Set cookie with `HttpOnly`, `Secure`, `SameSite`, restricted `path`.
-- [ ] Rotate on every refresh.
+- [x] Generate >=256-bit random refresh token.
+  - 2026-04-04: refresh token generation uses `randomBytes(32)` (256-bit entropy) and base64url encoding.
+- [x] Set cookie with `HttpOnly`, `Secure`, `SameSite`, restricted `path`.
+  - 2026-04-04: verify/refresh/logout use `ctzn_refresh_token` with `HttpOnly + Secure + SameSite=Strict + path=/auth`.
+- [x] Rotate on every refresh.
+  - 2026-04-04: refresh flow replaces the persisted refresh-token hash inside a pessimistic-write transaction and sets a newly minted refresh cookie on each successful refresh.
 - [ ] Revoke on logout, compromise signals, or anomalies.
 
 ### 6.3 Storage strategy
@@ -220,8 +271,10 @@ Use this file as the **single source of implementation tracking** for wallet-sig
 - [ ] Rate limiting active (IP, wallet, ASN, endpoint).
 - [ ] Abuse detection + temporary lockout behavior implemented.
 - [ ] JWT issuer/audience validation enforced everywhere.
-- [ ] Session revocation checks active on protected routes.
-- [ ] Audit trail covers challenge, verify, refresh, logout.
+- [x] Session revocation checks active on protected routes.
+  - 2026-04-04: JWT guard validates session revocation/expiry when `sessionId` claim is present.
+- [x] Audit trail covers challenge, verify, refresh, logout.
+  - 2026-04-04: structured audit logs now emit for challenge issuance, verify success/failure, refresh rotation, and logout revocation.
 
 ### 7.3 CSRF/XSS hardening
 - [ ] Refresh/logout CSRF protection validated.
@@ -311,4 +364,3 @@ Use this file as the **single source of implementation tracking** for wallet-sig
 - [ ] Operations/runbook sign-off complete.
 - [ ] Rollback drill executed successfully.
 - [ ] Post-launch monitoring owners on-call and acknowledged.
-

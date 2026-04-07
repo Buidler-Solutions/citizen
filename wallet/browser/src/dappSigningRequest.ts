@@ -17,7 +17,8 @@ export type DappSigningPolicyCheck = {
     | 'missing_namespace'
     | 'invalid_namespace'
     | 'missing_operation'
-    | 'builder_credit_payload_missing';
+    | 'builder_credit_payload_missing'
+    | 'form_commitment_receipt_missing';
   message: string;
 };
 
@@ -62,8 +63,11 @@ function collectUnsupportedTopLevelFields(payload: unknown): boolean {
   }
   const allowed = new Set([
     'namespace',
+    'action',
     'operation',
     'entry',
+    'objectId',
+    'object_id',
     'consent',
     'metadata',
     'proof',
@@ -89,7 +93,7 @@ function collectPolicyChecks(payload: unknown): DappSigningPolicyCheck[] {
 
   const checks: DappSigningPolicyCheck[] = [];
   const namespace = payload.namespace;
-  const operation = payload.operation;
+  const operation = payload.operation ?? payload.action;
 
   if (typeof namespace !== 'string' || namespace.trim().length === 0) {
     checks.push({
@@ -106,7 +110,7 @@ function collectPolicyChecks(payload: unknown): DappSigningPolicyCheck[] {
   if (typeof operation !== 'string' || operation.trim().length === 0) {
     checks.push({
       code: 'missing_operation',
-      message: 'Payload operation is required before signing.',
+      message: 'Payload action/operation is required before signing.',
     });
   }
 
@@ -115,6 +119,24 @@ function collectPolicyChecks(payload: unknown): DappSigningPolicyCheck[] {
       code: 'builder_credit_payload_missing',
       message: 'builder.credits payloads should include builderCredit policy details.',
     });
+  }
+
+  if (namespace === 'forms.commitment') {
+    const formPayload = isObjectRecord(payload.payload) ? payload.payload : null;
+    const dataHash = formPayload?.data_hash;
+    const encryptedFormUrl = formPayload?.encrypted_form_url;
+    if (
+      typeof dataHash !== 'string'
+      || !dataHash.startsWith('sha256:')
+      || typeof encryptedFormUrl !== 'string'
+      || encryptedFormUrl.trim().length === 0
+    ) {
+      checks.push({
+        code: 'form_commitment_receipt_missing',
+        message:
+          'forms.commitment payload requires payload.data_hash (sha256:<hex>) and payload.encrypted_form_url.',
+      });
+    }
   }
 
   return checks;
@@ -201,4 +223,8 @@ export function signingScopePayloadV2FromEnvelope(
 
 export function signingPreimageFromEnvelope(envelope: DappSigningRequestEnvelope): string {
   return canonicalJson(signingScopePayloadV2FromEnvelope(envelope));
+}
+
+export function protocolSigningPreimageFromEnvelope(envelope: DappSigningRequestEnvelope): string {
+  return envelope.canonicalPayload;
 }

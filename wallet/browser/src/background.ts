@@ -5,6 +5,7 @@ import {
   createDappSigningRequestEnvelope,
   signingScopePayloadV2FromEnvelope,
   signingPreimageFromEnvelope,
+  protocolSigningPreimageFromEnvelope,
 } from './dappSigningRequest';
 import {
   pruneRetainedRequests,
@@ -751,7 +752,8 @@ async function getOrCreateProtocolSigner(): Promise<StoredProtocolSigner> {
 async function createSignedCitizenResult(envelope: DappSigningRequestEnvelope): Promise<WalletResponse> {
   const signer = await getOrCreateProtocolSigner();
   const requestScopePreimage = signingPreimageFromEnvelope(envelope);
-  const payloadBytes = new TextEncoder().encode(envelope.payloadHash);
+  const protocolSigningPreimage = protocolSigningPreimageFromEnvelope(envelope);
+  const payloadBytes = new TextEncoder().encode(protocolSigningPreimage);
   const privateKey = await crypto.subtle.importKey(
     'pkcs8',
     base64ToBytes(signer.pkcs8Base64),
@@ -764,6 +766,22 @@ async function createSignedCitizenResult(envelope: DappSigningRequestEnvelope): 
     privateKey,
     payloadBytes,
   );
+  const publicKey = await crypto.subtle.importKey(
+    'spki',
+    base64ToBytes(signer.spkiBase64),
+    { name: 'Ed25519' },
+    false,
+    ['verify'],
+  );
+  const localSignatureVerified = await crypto.subtle.verify(
+    { name: 'Ed25519' },
+    publicKey,
+    signature,
+    payloadBytes,
+  );
+  if (!localSignatureVerified) {
+    return walletError('PROTOCOL_SIGN_VERIFY_FAILED', 'Unable to verify protocol signature locally before returning result.');
+  }
 
   return {
     ok: true,
@@ -779,12 +797,14 @@ async function createSignedCitizenResult(envelope: DappSigningRequestEnvelope): 
       payloadHash: envelope.payloadHash,
       payloadHashHex: envelope.payloadHash.replace('sha256:', ''),
       requestScopePreimage,
+      protocolSigningPreimage,
       requestScopePayload: signingScopePayloadV2FromEnvelope(envelope),
       createdAt: envelope.createdAt,
       expiresAt: envelope.expiresAt,
       riskFlags: envelope.riskFlags,
       algorithm: 'ed25519',
-      signatureScope: 'payload_hash_v1',
+      signatureScope: 'canonical_payload_v1',
+      localSignatureVerified,
     },
   };
 }

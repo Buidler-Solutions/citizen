@@ -124,9 +124,59 @@ To relay signed-hash metadata into the Citizen network from backend:
 
 ```bash
 CITIZEN_SIGNED_SUBMISSION_RELAY_URL=http://127.0.0.1:8081/api/v1/your-relay-endpoint
+CITIZEN_SIGNED_SUBMISSION_RELAY_FORMAT=metadata
 CITIZEN_SIGNED_SUBMISSION_RELAY_MAX_ATTEMPTS=3
 CITIZEN_SIGNED_SUBMISSION_RELAY_RETRY_BACKOFF_MS=250
 ```
+
+`CITIZEN_SIGNED_SUBMISSION_RELAY_FORMAT` controls payload shape:
+
+- `metadata` (default): sends onboarding metadata contract (for dedicated relay adapters).
+- `runtime_envelope`: sends a Citizen runtime `SignedEnvelope<LedgerEntry>` request body directly to `/api/v1/envelopes/submit`.
+
+When using `runtime_envelope`, optionally override these defaults to match your validator namespace policy:
+
+```bash
+CITIZEN_SIGNED_SUBMISSION_RUNTIME_AUTHOR=forms.commitment
+CITIZEN_SIGNED_SUBMISSION_RUNTIME_NAMESPACE=forms.commitment
+CITIZEN_SIGNED_SUBMISSION_RUNTIME_ACTION=SUBMIT_ONBOARDING_INTEREST
+CITIZEN_SIGNED_SUBMISSION_RUNTIME_SIGNING_PRIVATE_KEY_PEM="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----"
+# Optional guardrails (defaults shown)
+CITIZEN_SIGNED_SUBMISSION_RUNTIME_PRIVACY_MODE=hybrid
+# CITIZEN_SIGNED_SUBMISSION_RUNTIME_PRIVACY_FLAG=false
+# Required when privacy_mode=hybrid
+CITIZEN_SIGNED_SUBMISSION_RUNTIME_HYBRID_AUTHORIZED_READERS=did:reader:ops,did:reader:audit
+# Optional hybrid controls
+# CITIZEN_SIGNED_SUBMISSION_RUNTIME_HYBRID_POLICY_REF=policy:onboarding:hybrid:v1
+# CITIZEN_SIGNED_SUBMISSION_RUNTIME_HYBRID_CONSENT_TTL_SECONDS=31536000
+# CITIZEN_SIGNED_SUBMISSION_RUNTIME_HYBRID_WRAP_ALGORITHM=sha256-reader-salted-wrap-v1
+```
+
+`runtime_envelope` mode requires `CITIZEN_SIGNED_SUBMISSION_RUNTIME_SIGNING_PRIVATE_KEY_PEM` (Ed25519 PKCS#8 PEM). The backend signs canonical runtime entry payloads with this key so Rust runtime namespace policies can validate signatures deterministically.
+Onboarding runtime relay now supports `privacy_mode=hybrid` and generates runtime envelope privacy fields (`ciphertext_hex`, `nonce_hex`, `payload_commitment`, `authorized_readers`, `key_wrapped_secrets`, `consent_receipt`) from onboarding signed payload metadata. `privacy_mode=passphrase` remains unsupported in this flow and fails closed.
+When relay returns non-2xx, backend errors now include upstream `detail/error/message` snippets from runtime responses to help diagnose namespace/policy mismatches.
+
+### Runtime privacy options (comprehensive)
+
+Citizen runtime ledger entries support these privacy modes:
+
+| privacy_mode | privacy_flag | What it means | Required runtime fields (ledger-level) | Onboarding relay status |
+| --- | --- | --- | --- | --- |
+| `none` | `false` | Public/cleartext payload path (no encrypted envelope fields). | No encryption fields required. | ✅ Supported (legacy/default compatibility). |
+| `passphrase` | `true` | Single-holder encrypted payload where one-time passphrase-derived key decrypts data. | `ciphertext_hex`, `nonce_hex`, `payload_commitment`, plus `salt_hex` and `kdf_params`, and a matching `consent_receipt`. | ❌ Not supported by current onboarding relay payload builder. |
+| `hybrid` | `true` | Shared encrypted payload path using wrapped DEKs for authorized readers (and optional field ACL metadata). | `ciphertext_hex`, `nonce_hex`, `payload_commitment`, non-empty `key_wrapped_secrets`, matching reader/wrap coherence, and a matching `consent_receipt`. | ✅ **Supported now** for onboarding runtime relay when `CITIZEN_SIGNED_SUBMISSION_RUNTIME_HYBRID_AUTHORIZED_READERS` is configured. |
+
+Why onboarding now prefers `hybrid`:
+
+1. The onboarding relay already submits **commitment metadata** (`data_hash`, `encrypted_form_url`) and wallet signature evidence; hybrid mode now wraps that signed onboarding payload into encrypted envelope fields for runtime policy compatibility.
+2. Hybrid mode enables explicit authorized-reader metadata (`authorized_readers`, `key_wrapped_secrets`) and an embedded consent receipt shape expected by runtime privacy checks.
+3. Full form custody remains off-chain (`interest_submissions://...`) while on-chain entries carry deterministic privacy metadata and commitments.
+
+Operational guidance:
+
+- Prefer `CITIZEN_SIGNED_SUBMISSION_RUNTIME_PRIVACY_MODE=hybrid` and set `CITIZEN_SIGNED_SUBMISSION_RUNTIME_HYBRID_AUTHORIZED_READERS` to governed reader DIDs.
+- Only set `CITIZEN_SIGNED_SUBMISSION_RUNTIME_PRIVACY_FLAG` if you need explicit guardrail checks; when set, it must match the mode (`true` for `hybrid`, `false` for `none`).
+- `privacy_mode=passphrase` remains intentionally blocked in onboarding runtime relay; use wallet/CLI encrypt-then-commit workflows when passphrase mode is required.
 
 If `CITIZEN_SIGNED_SUBMISSION_RELAY_URL` is configured, onboarding writes fail when relay submission fails, so PostgreSQL and network relay remain synchronized per request.
 The relay URL is fail-closed validated on submit: it must be an absolute `http://` or `https://` URL (invalid values are rejected before persistence).
@@ -189,6 +239,7 @@ curl http://localhost:3001/interest/stats \
 - How-to (install + record): `landing-page/howtos/installing-asciinema-for-recording.md`
 - Runbook (upload + shortcode): `landing-page/runbook/asciinema-admin-upload-and-onboarding-shortcode.md`
 - Runbook (email architecture checkpoint): `landing-page/runbook/onboarding-email-notification-checkpoint.md`
+- Runbook (wallet-signed onboarding E2E): `landing-page/runbook/wallet-signed-onboarding-e2e.md`
 
 ## Email + password reset environment additions
 

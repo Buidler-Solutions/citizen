@@ -10,6 +10,7 @@ import {
   BrowserWalletSigner,
   CitizenNodeClient,
   canonicalizeJson,
+  createFormCommitmentReceipt,
   createMultisigCreditGrant,
   createSponsorshipUsage,
   signCitizenPayloadWithWallet
@@ -47,6 +48,50 @@ function resolveVectorFixturePath(filename) {
 test("canonicalizeJson sorts keys recursively", () => {
   const output = canonicalizeJson({ z: 1, a: { d: 2, c: 1 } });
   assert.equal(output, '{"a":{"c":1,"d":2},"z":1}');
+});
+
+test("createFormCommitmentReceipt returns forms.commitment operation payload", () => {
+  const operation = createFormCommitmentReceipt({
+    formId: "form-123",
+    dataHash: "sha256:abcdef123456",
+    encryptedFormUrl: "https://storage.citizen.local/forms/form-123.cipher",
+    commitmentReceipt: {
+      hosted_at: "2026-04-05T02:00:00Z",
+      host: "storage.citizen.local"
+    }
+  });
+
+  assert.equal(operation.namespace, "forms.commitment");
+  assert.equal(operation.action, "SUBMIT_COMMITMENT_RECEIPT");
+  assert.equal(operation.objectId, "form-123");
+  assert.equal(operation.payload.data_hash, "sha256:abcdef123456");
+  assert.equal(
+    operation.payload.encrypted_form_url,
+    "https://storage.citizen.local/forms/form-123.cipher"
+  );
+  assert.equal(operation.payload.commitment_receipt.host, "storage.citizen.local");
+});
+
+test("createFormCommitmentReceipt validates hash and URL inputs", () => {
+  assert.throws(
+    () =>
+      createFormCommitmentReceipt({
+        formId: "form-123",
+        dataHash: "not-a-sha",
+        encryptedFormUrl: "https://storage.citizen.local/forms/form-123.cipher"
+      }),
+    /dataHash must be a sha256:<hex> digest string/
+  );
+
+  assert.throws(
+    () =>
+      createFormCommitmentReceipt({
+        formId: "form-123",
+        dataHash: "sha256:abcdef123456",
+        encryptedFormUrl: "ftp://storage.citizen.local/forms/form-123.cipher"
+      }),
+    /encryptedFormUrl must be a valid http\(s\) URL/
+  );
 });
 
 

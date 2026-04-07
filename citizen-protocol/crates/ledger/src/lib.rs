@@ -177,7 +177,7 @@ impl<S: LedgerStorage + 'static> Ledger<S> {
             let field_name = field.as_str().ok_or_else(|| {
                 ProtocolError::ValidationFailed("payload field names must be strings".into())
             })?;
-            if entry.payload.get(field_name).is_none() {
+            if Self::payload_field_value(&entry.payload, field_name).is_none() {
                 return Err(ProtocolError::ValidationFailed(format!(
                     "payload field '{field_name}' is required for namespace {}",
                     entry.namespace
@@ -185,6 +185,18 @@ impl<S: LedgerStorage + 'static> Ledger<S> {
             }
         }
         Ok(())
+    }
+
+    fn payload_field_value<'a>(payload: &'a Value, field_path: &str) -> Option<&'a Value> {
+        if field_path.is_empty() {
+            return None;
+        }
+
+        let mut current = payload;
+        for segment in field_path.split('.') {
+            current = current.get(segment)?;
+        }
+        Some(current)
     }
 
     fn allowed_actions(&self, entry: &LedgerEntry, config: &Value) -> Result<()> {
@@ -2756,5 +2768,56 @@ mod tests {
         ledger
             .validate_entry_submission(&entry)
             .expect("valid signature should be accepted");
+    }
+
+    #[test]
+    fn require_payload_fields_accepts_nested_field_paths() {
+        let ledger = Ledger::in_memory();
+        let namespace = "forms.commitment";
+        ledger.bootstrap_namespaces(vec![namespace_with_rules(
+            namespace,
+            vec![NamespaceRule {
+                name: "require_payload_fields".into(),
+                config: json!({"fields": ["wallet_signature.signer"]}),
+            }],
+        )]);
+
+        let mut entry = test_entry(namespace);
+        entry.payload = json!({
+            "wallet_signature": {
+                "signer": "did:key:ed25519:abc123"
+            }
+        });
+
+        ledger
+            .apply_entry(entry)
+            .expect("nested payload field should satisfy require_payload_fields");
+    }
+
+    #[test]
+    fn require_payload_fields_rejects_missing_nested_field_paths() {
+        let ledger = Ledger::in_memory();
+        let namespace = "forms.commitment";
+        ledger.bootstrap_namespaces(vec![namespace_with_rules(
+            namespace,
+            vec![NamespaceRule {
+                name: "require_payload_fields".into(),
+                config: json!({"fields": ["wallet_signature.signer"]}),
+            }],
+        )]);
+
+        let mut entry = test_entry(namespace);
+        entry.payload = json!({
+            "wallet_signature": {
+                "verifying_key": "deadbeef"
+            }
+        });
+
+        let err = ledger
+            .apply_entry(entry)
+            .expect_err("missing nested signer should fail validation");
+        assert!(err
+            .to_string()
+            .contains("payload field 'wallet_signature.signer' is required"));
     }
 }
