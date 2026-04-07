@@ -60,7 +60,8 @@ For default localnet target (`forms.commitment`), the policy requires:
 
 - writer `forms.commitment`
 - validator `require_signature`
-- required payload fields: `data_hash`, `encrypted_form_url`
+- required payload fields: `data_hash`, `encrypted_form_url`, `payload_wallet_signature.signer`
+- discoverability mirror field: `wallet_signer` (same DID value as `payload_wallet_signature.signer`)
 
 If your runtime uses a different namespace, set:
 
@@ -127,4 +128,3 @@ If builder-credit gate is enabled on runtime (`require_builder_credit_for_all_wr
 - **422 from runtime**
   - check namespace policy validation failures
   - check signature validity and required payload fields
-

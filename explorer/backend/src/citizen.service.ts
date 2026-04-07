@@ -37,6 +37,24 @@ type NamespaceEntries = {
   }>;
 };
 
+type WalletSignerEntry = NamespaceEntries['entries'][number] & {
+  payload: NamespaceEntries['entries'][number]['payload'] & {
+    payload_wallet_signature?: {
+      signer?: string;
+    };
+    wallet_signature?: {
+      signer?: string;
+    };
+  };
+};
+
+type WalletSignerEntries = {
+  namespace: string;
+  wallet_signer: string;
+  total_entries: number;
+  matched_entries: number;
+  entries: WalletSignerEntry[];
+};
 
 
 type FileManifestMetadata = {
@@ -117,6 +135,39 @@ export class CitizenService {
   async getEntries(namespace: string): Promise<ApiSource<NamespaceEntries>> {
     const endpoint = `${this.baseUrl.replace(/\/$/, '')}/entries/${namespace}`;
     return this.fetchJson<NamespaceEntries>(endpoint);
+  }
+
+  async getEntriesByWalletSigner(
+    namespace: string,
+    signerDid: string,
+  ): Promise<ApiSource<WalletSignerEntries>> {
+    const entries = await this.getEntries(namespace);
+    const normalizedSigner = signerDid.trim().toLowerCase();
+    const filteredEntries = entries.data.entries.filter((entry) => {
+      const payloadWalletSignature = entry.payload.payload_wallet_signature;
+      const legacyWalletSignature = entry.payload.wallet_signature;
+      const signerCandidate =
+        payloadWalletSignature && typeof payloadWalletSignature === 'object'
+          ? (payloadWalletSignature as { signer?: unknown }).signer
+          : legacyWalletSignature && typeof legacyWalletSignature === 'object'
+            ? (legacyWalletSignature as { signer?: unknown }).signer
+            : null;
+      if (typeof signerCandidate !== 'string') {
+        return false;
+      }
+      return signerCandidate.trim().toLowerCase() === normalizedSigner;
+    }) as WalletSignerEntry[];
+
+    return {
+      source: entries.source,
+      data: {
+        namespace,
+        wallet_signer: signerDid,
+        total_entries: entries.data.entries.length,
+        matched_entries: filteredEntries.length,
+        entries: filteredEntries,
+      },
+    };
   }
 
   async getReceipt(receiptId: string): Promise<ApiSource<ReceiptLookup>> {

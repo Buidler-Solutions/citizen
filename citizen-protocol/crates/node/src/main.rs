@@ -723,7 +723,7 @@ fn default_namespaces() -> Vec<NamespaceRuleset> {
                 citizen_types::NamespaceRule {
                     name: "require_payload_fields".into(),
                     config: json!({
-                        "fields": ["data_hash", "encrypted_form_url"],
+                        "fields": ["data_hash", "encrypted_form_url", "payload_wallet_signature.signer"],
                     }),
                 },
             ],
