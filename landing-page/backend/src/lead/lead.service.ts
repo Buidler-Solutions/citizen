@@ -403,14 +403,15 @@ export class LeadService {
     const nowIso = new Date().toISOString();
     const timestamp = Math.floor(Date.now() / 1000);
     const signedOnboardingPayload = JSON.parse(payload.walletSigningPayload) as Record<string, unknown>;
-    const runtimeSigningPrivateKeyPem = process.env.CITIZEN_SIGNED_SUBMISSION_RUNTIME_SIGNING_PRIVATE_KEY_PEM?.trim();
+    const runtimeSigningPrivateKeyPemRaw = process.env.CITIZEN_SIGNED_SUBMISSION_RUNTIME_SIGNING_PRIVATE_KEY_PEM?.trim();
 
-    if (!runtimeSigningPrivateKeyPem) {
+    if (!runtimeSigningPrivateKeyPemRaw) {
       throw new BadRequestException(
         'CITIZEN_SIGNED_SUBMISSION_RUNTIME_SIGNING_PRIVATE_KEY_PEM is required when CITIZEN_SIGNED_SUBMISSION_RELAY_FORMAT=runtime_envelope.',
       );
     }
 
+    const runtimeSigningPrivateKeyPem = this.normalizePemValue(runtimeSigningPrivateKeyPemRaw);
     const runtimePrivateKey = this.parseRuntimeSigningPrivateKey(runtimeSigningPrivateKeyPem);
     const runtimeAuthorPublicKeyHex = this.exportEd25519PublicKeyHex(runtimePrivateKey);
 
@@ -419,10 +420,11 @@ export class LeadService {
       encrypted_form_url: `interest_submissions://${objectId}`,
       relay_trace_id: relayTraceId,
       deduplication_key: relayDeduplicationKey,
+      wallet_signer: payload.walletSignerDid,
       role: normalizedRole,
       country: payload.country.trim(),
       signed_submission: signedOnboardingPayload,
-      wallet_signature: {
+      payload_wallet_signature: {
         signer: payload.walletSignerDid,
         verifying_key: payload.walletVerifyingKey,
         signature: payload.walletSignature,
@@ -476,6 +478,17 @@ export class LeadService {
         'CITIZEN_SIGNED_SUBMISSION_RUNTIME_SIGNING_PRIVATE_KEY_PEM must be a valid PEM-encoded Ed25519 private key.',
       );
     }
+  }
+
+  private normalizePemValue(privateKeyPem: string): string {
+    const maybeQuotedPem = privateKeyPem.trim();
+    const unquotedPem = maybeQuotedPem.length > 1
+      && ((maybeQuotedPem.startsWith('"') && maybeQuotedPem.endsWith('"'))
+        || (maybeQuotedPem.startsWith('\'') && maybeQuotedPem.endsWith('\'')))
+      ? maybeQuotedPem.slice(1, -1)
+      : maybeQuotedPem;
+
+    return unquotedPem.replace(/\\n/g, '\n');
   }
 
   private exportEd25519PublicKeyHex(privateKey: KeyObject): string {

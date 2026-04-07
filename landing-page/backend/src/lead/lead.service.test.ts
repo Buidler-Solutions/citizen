@@ -258,6 +258,11 @@ test('create can relay onboarding submission as runtime envelope payload', async
     const entryPayload = relayEntry.payload as Record<string, unknown>;
     assert.equal(entryPayload.data_hash, signedPayload.walletPayloadHash);
     assert.equal(entryPayload.encrypted_form_url, 'interest_submissions://runtime-envelope@example.com');
+    assert.equal(entryPayload.wallet_signer, signedPayload.walletSignerDid);
+    assert.equal(
+      (entryPayload.payload_wallet_signature as Record<string, unknown>).signer,
+      signedPayload.walletSignerDid,
+    );
     assert.match(String(entryPayload.author_public_key), /^[0-9a-f]{64}$/);
   } finally {
     process.env.CITIZEN_SIGNED_SUBMISSION_RELAY_URL = originalRelayUrl;
@@ -265,6 +270,37 @@ test('create can relay onboarding submission as runtime envelope payload', async
     process.env.CITIZEN_SIGNED_SUBMISSION_RUNTIME_NAMESPACE = originalRuntimeNamespace;
     process.env.CITIZEN_SIGNED_SUBMISSION_RUNTIME_ACTION = originalRuntimeAction;
     process.env.CITIZEN_SIGNED_SUBMISSION_RUNTIME_AUTHOR = originalRuntimeAuthor;
+    process.env.CITIZEN_SIGNED_SUBMISSION_RUNTIME_SIGNING_PRIVATE_KEY_PEM = originalRuntimePrivateKey;
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('create accepts runtime relay key when PEM newlines are escaped', async () => {
+  const relayUrl = 'http://127.0.0.1:8081/api/v1/envelopes/submit';
+  const { privateKey: runtimePrivateKey } = generateKeyPairSync('ed25519');
+  const runtimePrivateKeyPem = runtimePrivateKey.export({ format: 'pem', type: 'pkcs8' }).toString();
+  const escapedRuntimePrivateKeyPem = runtimePrivateKeyPem.replace(/\n/g, '\\n');
+  const originalRelayUrl = process.env.CITIZEN_SIGNED_SUBMISSION_RELAY_URL;
+  const originalRelayFormat = process.env.CITIZEN_SIGNED_SUBMISSION_RELAY_FORMAT;
+  const originalRuntimePrivateKey = process.env.CITIZEN_SIGNED_SUBMISSION_RUNTIME_SIGNING_PRIVATE_KEY_PEM;
+  const originalFetch = globalThis.fetch;
+
+  process.env.CITIZEN_SIGNED_SUBMISSION_RELAY_URL = relayUrl;
+  process.env.CITIZEN_SIGNED_SUBMISSION_RELAY_FORMAT = 'runtime_envelope';
+  process.env.CITIZEN_SIGNED_SUBMISSION_RUNTIME_SIGNING_PRIVATE_KEY_PEM = escapedRuntimePrivateKeyPem;
+
+  const mockedFetch = (async () => ({
+    ok: true,
+    status: 200,
+  } as Response)) as unknown as typeof fetch;
+  globalThis.fetch = mockedFetch;
+
+  try {
+    const service = createService();
+    await assert.doesNotReject(service.create(buildSignedPayload({ email: 'runtime-escaped-key@example.com' })));
+  } finally {
+    process.env.CITIZEN_SIGNED_SUBMISSION_RELAY_URL = originalRelayUrl;
+    process.env.CITIZEN_SIGNED_SUBMISSION_RELAY_FORMAT = originalRelayFormat;
     process.env.CITIZEN_SIGNED_SUBMISSION_RUNTIME_SIGNING_PRIVATE_KEY_PEM = originalRuntimePrivateKey;
     globalThis.fetch = originalFetch;
   }

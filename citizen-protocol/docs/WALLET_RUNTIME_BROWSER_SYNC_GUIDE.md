@@ -46,7 +46,7 @@ The Rust wallet + CLI have meaningful WRCP implementation progress, and the brow
 ### Browser extension strict runtime compatibility
 
 1. Extension dApp protocol flow now signs canonical payload preimages, but WRCP strict-complete status still depends on shared conformance vectors + CI release gating.
-2. Browser protocol policy checks now include `forms.commitment` required commitment fields (`data_hash`, `encrypted_form_url`) for pre-submit safety.
+2. Browser protocol policy checks now include `forms.commitment` required commitment fields (`data_hash`, `encrypted_form_url`, `payload_wallet_signature.signer`) for pre-submit safety. Runtime relay payloads also mirror the signer DID to `wallet_signer` for easier explorer/index querying.
 3. Browser multisig UX parity remains incomplete for full strict-runtime replacement claims.
 
 ### WRCP process gaps

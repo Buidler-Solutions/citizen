@@ -25,6 +25,14 @@ export class AppController {
     return this.citizenService.getEntries(namespace);
   }
 
+  @Get('entries/:namespace/wallet-signers/:signerDid')
+  async entriesByWalletSigner(
+    @Param('namespace') namespace: string,
+    @Param('signerDid') signerDid: string,
+  ) {
+    return this.citizenService.getEntriesByWalletSigner(namespace, decodeURIComponent(signerDid));
+  }
+
   @Get('receipts/:receiptId')
   async receipt(@Param('receiptId') receiptId: string) {
     return this.citizenService.getReceipt(receiptId);

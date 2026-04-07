@@ -38,6 +38,26 @@ type EntryResponse = {
   };
 };
 
+type WalletSignerEntryResponse = {
+  source: string;
+  data: {
+    namespace: string;
+    wallet_signer: string;
+    total_entries: number;
+    matched_entries: number;
+    entries: {
+      entry_id: string;
+      namespace: string;
+      action: string;
+      object_id?: string;
+      payload: Record<string, unknown>;
+      author: string;
+      signature: string;
+      timestamp: number;
+    }[];
+  };
+};
+
 type ReceiptResponse = {
   source: string;
   data: {
@@ -163,6 +183,7 @@ const assetAccountId = process.env.NEXT_PUBLIC_ASSET_ACCOUNT_ID ?? 'did:ledger:a
 const fileManifestId = process.env.NEXT_PUBLIC_FILE_MANIFEST_ID;
 const payloadEntryId = process.env.NEXT_PUBLIC_PAYLOAD_ENTRY_ID;
 const payloadNamespace = process.env.NEXT_PUBLIC_PAYLOAD_NAMESPACE;
+const walletSignerDid = process.env.NEXT_PUBLIC_WALLET_SIGNER_DID;
 
 async function loadBlock(): Promise<BlockResponse | null> {
   return safeFetchJson<BlockResponse>(`${apiBase}/blocks/${blockHeight}`);
@@ -170,6 +191,15 @@ async function loadBlock(): Promise<BlockResponse | null> {
 
 async function loadEntries(): Promise<EntryResponse | null> {
   return safeFetchJson<EntryResponse>(`${apiBase}/entries/${namespace}`);
+}
+
+async function loadWalletSignerEntries(
+  namespaceName: string,
+  signerDid: string,
+): Promise<WalletSignerEntryResponse | null> {
+  return safeFetchJson<WalletSignerEntryResponse>(
+    `${apiBase}/entries/${encodeURIComponent(namespaceName)}/wallet-signers/${encodeURIComponent(signerDid)}`
+  );
 }
 
 async function loadReceipt(id: string): Promise<ReceiptResponse | null> {
@@ -204,9 +234,12 @@ async function loadAssetPositions(accountId: string): Promise<AssetPositionsResp
 }
 
 export default async function HomePage() {
-  const [block, entries, receipt, fileManifest, fileTimeline, payloadFieldRefs, assetPositions] = await Promise.all([
+  const [block, entries, walletSignerEntries, receipt, fileManifest, fileTimeline, payloadFieldRefs, assetPositions] = await Promise.all([
     loadBlock(),
     loadEntries(),
+    walletSignerDid
+      ? loadWalletSignerEntries(namespace, walletSignerDid)
+      : Promise.resolve(null),
     receiptId ? loadReceipt(receiptId) : Promise.resolve(null),
     fileManifestId ? loadFileManifest(fileManifestId) : Promise.resolve(null),
     fileManifestId ? loadFileTimeline(fileManifestId) : Promise.resolve(null),
@@ -323,6 +356,49 @@ export default async function HomePage() {
               {receiptId
                 ? 'Receipt data unavailable. Confirm the API service is running and reachable.'
                 : <>Set <code>NEXT_PUBLIC_RECEIPT_ID</code> to inspect canonical receipt finality proofs.</>}
+            </p>
+          )}
+        </div>
+
+        <div className="card">
+          <h2>Wallet Signer Index View</h2>
+          {walletSignerEntries ? (
+            <>
+              <p className="subtitle">
+                Signer: <code>{walletSignerEntries.data.wallet_signer}</code>
+              </p>
+              <p className="privacy-note">
+                Matched {walletSignerEntries.data.matched_entries} of {walletSignerEntries.data.total_entries} entries in namespace{' '}
+                <code>{walletSignerEntries.data.namespace}</code>.
+              </p>
+              {(walletSignerEntries.data.entries ?? []).length > 0 ? (
+                <ul>
+                  {walletSignerEntries.data.entries.map((entry) => (
+                    <li key={entry.entry_id}>
+                      <div className="row">
+                        <span>Entry ID</span>
+                        <strong className="mono">{entry.entry_id}</strong>
+                      </div>
+                      <div className="row">
+                        <span>Action</span>
+                        <strong>{entry.action}</strong>
+                      </div>
+                      <div className="row">
+                        <span>Author</span>
+                        <strong className="mono">{entry.author}</strong>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p>No entries found for this wallet signer in the selected namespace.</p>
+              )}
+            </>
+          ) : (
+            <p>
+              {walletSignerDid
+                ? 'Wallet-signer index unavailable. Confirm backend API service is running and reachable.'
+                : <>Set <code>NEXT_PUBLIC_WALLET_SIGNER_DID</code> to inspect entries by <code>payload.payload_wallet_signature.signer</code>.</>}
             </p>
           )}
         </div>
