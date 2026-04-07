@@ -1,4 +1,21 @@
 {
   "challenges": [],
-  "sessions": []
+  "sessions": [
+    {
+      "sessionId": "3b386d82-39eb-4a03-ac5c-8d433e700b69",
+      "wallet": "0xdc4d35ca7227001575df47f9a8ada9f96efff93a",
+      "network": "futurenet",
+      "issuedAt": 1775548069851,
+      "expiresAt": 1775549869851,
+      "revoked": false
+    },
+    {
+      "sessionId": "9e883a53-afe5-4cd3-84f8-addb73f99339",
+      "wallet": "0xdc4d35ca7227001575df47f9a8ada9f96efff93a",
+      "network": "futurenet",
+      "issuedAt": 1775548115561,
+      "expiresAt": 1775549915561,
+      "revoked": false
+    }
+  ]
 }
