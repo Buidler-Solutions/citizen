@@ -96,6 +96,11 @@ type CitizenPayloadSignature = {
   signatureScope?: 'payload_hash_v1' | 'canonical_payload_v1';
 };
 
+type WalletEncryptionReader = {
+  readerDid?: string;
+  publicKeyHex?: string;
+};
+
 type SignedSubmissionEnvelope = {
   payload: {
     fullName: string;
@@ -112,6 +117,8 @@ type SignedSubmissionEnvelope = {
   walletSigningPayload: string;
   walletAlgorithm: string;
   walletSignatureScope: 'payload_hash_v1' | 'canonical_payload_v1';
+  walletReaderDid?: string;
+  walletReaderX25519PublicKey?: string;
 };
 
 type SubmissionCreateResponse = {
@@ -589,6 +596,10 @@ export function InterestForm() {
         params: [protocolSigningPayload],
       }) as CitizenPayloadSignature;
 
+      const walletReaderResult = await provider.request({
+        method: 'ctzn_getEncryptionPublicKey',
+      }).catch(() => null) as WalletEncryptionReader | null;
+
       if (
         !signResult
         || typeof signResult.signer !== 'string'
@@ -611,6 +622,8 @@ export function InterestForm() {
         walletSigningPayload: signResult.signingPayload,
         walletAlgorithm: signResult.algorithm ?? 'ed25519',
         walletSignatureScope: signResult.signatureScope === 'canonical_payload_v1' ? 'canonical_payload_v1' : 'payload_hash_v1',
+        walletReaderDid: walletReaderResult?.readerDid,
+        walletReaderX25519PublicKey: walletReaderResult?.publicKeyHex,
       };
 
       setSignedSubmission(signedEnvelope);
@@ -658,6 +671,8 @@ export function InterestForm() {
           walletSigningPayload: envelopeToSubmit.walletSigningPayload,
           walletAlgorithm: envelopeToSubmit.walletAlgorithm,
           walletSignatureScope: envelopeToSubmit.walletSignatureScope,
+          walletReaderDid: envelopeToSubmit.walletReaderDid,
+          walletReaderX25519PublicKey: envelopeToSubmit.walletReaderX25519PublicKey,
         }),
       });
       if (!response.ok) {

@@ -24,6 +24,14 @@ CITIZEN_SIGNED_SUBMISSION_RUNTIME_ACTION=SUBMIT_ONBOARDING_INTEREST
 # Required signer key (Ed25519 PKCS#8 PEM)
 CITIZEN_SIGNED_SUBMISSION_RUNTIME_SIGNING_PRIVATE_KEY_PEM="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----"
 
+# Hybrid privacy runtime key wrapping.
+# If omitted or invalid, backend falls back to an ephemeral per-entry X25519 author keypair.
+# Accepts either 32-byte hex (optionally 0x-prefixed) or X25519 PKCS#8 PEM.
+CITIZEN_SIGNED_SUBMISSION_RUNTIME_HYBRID_AUTHOR_X25519_PRIVATE_KEY_HEX=<64-hex-or-pem>
+CITIZEN_SIGNED_SUBMISSION_RUNTIME_HYBRID_READER_X25519_PUBLIC_KEYS_JSON='{"did:reader:ops":"<64-hex>","did:reader:audit":"<64-hex>"}'
+# Optional twin-wallet object format:
+# {"did:reader:ops":{"signer_0x":"0xabc...","x25519_public_key":"0x<64-hex>"}}
+
 # Relay retries
 CITIZEN_SIGNED_SUBMISSION_RELAY_MAX_ATTEMPTS=3
 CITIZEN_SIGNED_SUBMISSION_RELAY_RETRY_BACKOFF_MS=250

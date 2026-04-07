@@ -57,5 +57,14 @@ export class CreateLeadDto {
   @IsOptional()
   @IsIn(['payload_hash_v1', 'canonical_payload_v1'])
   walletSignatureScope?: 'payload_hash_v1' | 'canonical_payload_v1';
-}
 
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  walletReaderDid?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(1000)
+  walletReaderX25519PublicKey?: string;
+}

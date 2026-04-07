@@ -110,6 +110,7 @@ const PASSWORD_HASH_KEY = 'citizen.browser.wallet.password_hash.v1';
 const SESSION_UNLOCKED_KEY = 'citizen.browser.wallet.unlocked.v1';
 const NETWORK_KEY = 'citizen.browser.wallet.network.v1';
 const PROTOCOL_SIGNER_KEY = 'citizen.browser.wallet.protocol_signer.v1';
+const ENCRYPTION_READER_KEYS_KEY = 'citizen.browser.wallet.encryption_reader_keys.v1';
 const DAPP_PENDING_REQUESTS_KEY = 'citizen.browser.wallet.dapp_pending_requests.v1';
 const DAPP_REQUEST_AUDIT_KEY = 'citizen.browser.wallet.dapp_request_audit.v1';
 const DAPP_ORIGIN_PERMISSIONS_KEY = 'citizen.browser.wallet.dapp_origin_permissions.v1';
@@ -180,6 +181,15 @@ type StoredProtocolSigner = {
   keyId: string;
   did: string;
   verifyingKeyHex: string;
+  spkiBase64: string;
+  pkcs8Base64: string;
+  createdAt: string;
+};
+
+type StoredEncryptionReaderKey = {
+  walletId: string;
+  did: string;
+  publicKeyHex: string;
   spkiBase64: string;
   pkcs8Base64: string;
   createdAt: string;
@@ -747,6 +757,46 @@ async function getOrCreateProtocolSigner(): Promise<StoredProtocolSigner> {
   };
   await chrome.storage.local.set({ [PROTOCOL_SIGNER_KEY]: signer });
   return signer;
+}
+
+async function getOrCreateEncryptionReaderKey(walletId: string): Promise<StoredEncryptionReaderKey> {
+  const stored = await chrome.storage.local.get(ENCRYPTION_READER_KEYS_KEY);
+  const existingMap = (stored[ENCRYPTION_READER_KEYS_KEY] as Record<string, StoredEncryptionReaderKey> | undefined) ?? {};
+  const existing = existingMap[walletId];
+  if (
+    existing
+    && typeof existing.pkcs8Base64 === 'string'
+    && typeof existing.spkiBase64 === 'string'
+    && typeof existing.publicKeyHex === 'string'
+  ) {
+    return existing;
+  }
+
+  const generated = await crypto.subtle.generateKey({ name: 'X25519' }, true, ['deriveBits']);
+  if (!('privateKey' in generated) || !('publicKey' in generated)) {
+    throw new Error('Unable to generate wallet encryption reader keypair.');
+  }
+  const [pkcs8, spki] = await Promise.all([
+    crypto.subtle.exportKey('pkcs8', generated.privateKey),
+    crypto.subtle.exportKey('spki', generated.publicKey),
+  ]);
+  const publicKeyHex = toHex(new Uint8Array(spki).slice(-32));
+  const reader: StoredEncryptionReaderKey = {
+    walletId,
+    did: `did:key:x25519:${publicKeyHex}`,
+    publicKeyHex,
+    spkiBase64: bytesToBase64(spki),
+    pkcs8Base64: bytesToBase64(pkcs8),
+    createdAt: new Date().toISOString(),
+  };
+
+  await chrome.storage.local.set({
+    [ENCRYPTION_READER_KEYS_KEY]: {
+      ...existingMap,
+      [walletId]: reader,
+    },
+  });
+  return reader;
 }
 
 async function createSignedCitizenResult(envelope: DappSigningRequestEnvelope): Promise<WalletResponse> {
@@ -1459,6 +1509,7 @@ async function handleWalletRequest(
   }
 
   const wallet = await getStoredWallet();
+  const activeWalletRecord = await getActiveWalletRecord();
   const account = wallet.address;
   await recordRequest(request, account);
 
@@ -1572,6 +1623,22 @@ async function handleWalletRequest(
           verifyingKey: signer.verifyingKeyHex,
           algorithm: 'ed25519',
           createdAt: signer.createdAt,
+        },
+      };
+    }
+    case 'ctzn_getEncryptionPublicKey': {
+      if (!activeWalletRecord) {
+        return walletError('ERR_WALLET_NOT_CONFIGURED', 'No active wallet is configured.');
+      }
+      const readerKey = await getOrCreateEncryptionReaderKey(activeWalletRecord.id);
+      return {
+        ok: true,
+        result: {
+          readerDid: readerKey.did,
+          publicKeyHex: readerKey.publicKeyHex,
+          algorithm: 'x25519',
+          createdAt: readerKey.createdAt,
+          signer0x: account,
         },
       };
     }
