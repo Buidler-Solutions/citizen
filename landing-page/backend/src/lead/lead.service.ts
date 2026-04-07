@@ -1,6 +1,6 @@
 import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
 import { unlink } from 'fs/promises';
-import { KeyObject, createCipheriv, createHash, createPrivateKey, createPublicKey, randomBytes, randomUUID, sign, verify } from 'crypto';
+import { KeyObject, createCipheriv, createHash, createPrivateKey, createPublicKey, diffieHellman, generateKeyPairSync, randomBytes, randomUUID, sign, verify } from 'crypto';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { CreateLeadDto } from './dto/create-lead.dto';
@@ -39,6 +39,8 @@ const DEFAULT_RUNTIME_NAMESPACE = 'forms.commitment';
 const DEFAULT_RUNTIME_ACTION = 'SUBMIT_ONBOARDING_INTEREST';
 const DEFAULT_RUNTIME_AUTHOR = 'forms.commitment';
 const ED25519_SPKI_DER_PREFIX_HEX = '302a300506032b6570032100';
+const X25519_SPKI_DER_PREFIX_HEX = '302a300506032b656e032100';
+const X25519_PKCS8_DER_PREFIX_HEX = '302e020100300506032b656e04220420';
 type RuntimePrivacyMode = 'none' | 'passphrase' | 'hybrid';
 type RuntimeEntryPrivacyFields = {
   privacy_flag: boolean;
@@ -49,6 +51,10 @@ type RuntimeEntryPrivacyFields = {
   consent_receipt?: Record<string, unknown>;
   authorized_readers?: string[];
   key_wrapped_secrets?: Array<Record<string, string>>;
+};
+type RuntimePrivacyResolution = {
+  entryPrivacy: RuntimeEntryPrivacyFields;
+  hybridAuthorX25519PublicKeyHex?: string;
 };
 
 const DEFAULT_ROLE_OPTIONS = [
@@ -415,7 +421,13 @@ export class LeadService {
     const timestamp = Math.floor(Date.now() / 1000);
     const signedOnboardingPayload = JSON.parse(payload.walletSigningPayload) as Record<string, unknown>;
     const runtimeSigningPrivateKeyPemRaw = process.env.CITIZEN_SIGNED_SUBMISSION_RUNTIME_SIGNING_PRIVATE_KEY_PEM?.trim();
-    const runtimePrivacy = this.resolveRuntimePrivacySettings(payload.walletSignerDid, payload.walletPayloadHash, signedOnboardingPayload);
+    const runtimePrivacy = this.resolveRuntimePrivacySettings(
+      payload,
+      payload.walletSignerDid,
+      payload.walletPayloadHash,
+      signedOnboardingPayload,
+      entryId,
+    );
 
     if (!runtimeSigningPrivateKeyPemRaw) {
       throw new BadRequestException(
@@ -435,7 +447,7 @@ export class LeadService {
       wallet_signer: payload.walletSignerDid,
       role: normalizedRole,
       country: payload.country.trim(),
-      signed_submission: signedOnboardingPayload,
+      signed_submission_commitment: payload.walletPayloadHash,
       payload_wallet_signature: {
         signer: payload.walletSignerDid,
         verifying_key: payload.walletVerifyingKey,
@@ -447,6 +459,25 @@ export class LeadService {
       author_public_key: runtimeAuthorPublicKeyHex,
     };
 
+    if (runtimePrivacy.entryPrivacy.privacy_mode !== 'hybrid') {
+      Object.assign(runtimeEntryPayload, {
+        signed_submission: signedOnboardingPayload,
+      });
+    }
+    if (runtimePrivacy.hybridAuthorX25519PublicKeyHex) {
+      Object.assign(runtimeEntryPayload, {
+        hybrid_author_x25519_public_key: runtimePrivacy.hybridAuthorX25519PublicKeyHex,
+      });
+    }
+    if (payload.walletReaderDid?.trim() && payload.walletReaderX25519PublicKey?.trim()) {
+      Object.assign(runtimeEntryPayload, {
+        wallet_reader: {
+          did: payload.walletReaderDid.trim(),
+          x25519_public_key: payload.walletReaderX25519PublicKey.trim(),
+        },
+      });
+    }
+
     const signingPayload = this.canonicalJson({
       entry_id: entryId,
       namespace: runtimeNamespace,
@@ -454,7 +485,6 @@ export class LeadService {
       object_id: objectId,
       payload: runtimeEntryPayload,
       author: runtimeAuthor,
-      ...runtimePrivacy,
       timestamp,
     });
 
@@ -471,7 +501,7 @@ export class LeadService {
         action: runtimeAction,
         object_id: objectId,
         payload: runtimeEntryPayload,
-        ...runtimePrivacy,
+        ...runtimePrivacy.entryPrivacy,
         author: runtimeAuthor,
         signature: runtimeSignature,
         timestamp,
@@ -508,16 +538,20 @@ export class LeadService {
   }
 
   private resolveRuntimePrivacySettings(
+    payload: CreateLeadDto,
     subjectDid: string,
     payloadCommitment: string,
     signedOnboardingPayload: Record<string, unknown>,
-  ): RuntimeEntryPrivacyFields {
+    entryId: string,
+  ): RuntimePrivacyResolution {
     const runtimePrivacyMode = this.resolveRuntimePrivacyMode();
 
     if (runtimePrivacyMode === 'none') {
       return {
-        privacy_flag: false,
-        privacy_mode: 'none',
+        entryPrivacy: {
+          privacy_flag: false,
+          privacy_mode: 'none',
+        },
       };
     }
 
@@ -528,10 +562,15 @@ export class LeadService {
     }
 
     const authorizedReadersRaw = process.env.CITIZEN_SIGNED_SUBMISSION_RUNTIME_HYBRID_AUTHORIZED_READERS?.trim() ?? '';
-    const authorizedReaders = authorizedReadersRaw
+    const configuredAuthorizedReaders = authorizedReadersRaw
       .split(',')
       .map((reader) => reader.trim())
       .filter(Boolean);
+    const walletReaderDid = payload.walletReaderDid?.trim();
+    const authorizedReaders = Array.from(new Set([
+      ...configuredAuthorizedReaders,
+      ...(walletReaderDid ? [walletReaderDid] : []),
+    ]));
 
     if (authorizedReaders.length === 0) {
       throw new BadRequestException(
@@ -539,20 +578,66 @@ export class LeadService {
       );
     }
 
+    const authorX25519KeyPair = this.resolveHybridAuthorX25519KeyPair();
+    const readerPublicKeysRaw = process.env.CITIZEN_SIGNED_SUBMISSION_RUNTIME_HYBRID_READER_X25519_PUBLIC_KEYS_JSON?.trim();
+    const walletReaderKeyRaw = payload.walletReaderX25519PublicKey?.trim();
+    const hasWalletReaderKey = Boolean(walletReaderDid && walletReaderKeyRaw);
+
+    const authorPrivateKey = authorX25519KeyPair.privateKey;
+    const authorPublicKeyHex = authorX25519KeyPair.publicKeyHex;
+    let readerPublicKeys: Record<string, string> = {};
+    if (readerPublicKeysRaw) {
+      try {
+        readerPublicKeys = this.parseReaderX25519PublicKeys(readerPublicKeysRaw);
+      } catch (error) {
+        if (!hasWalletReaderKey) {
+          throw error;
+        }
+        this.logger.warn(
+          `Invalid CITIZEN_SIGNED_SUBMISSION_RUNTIME_HYBRID_READER_X25519_PUBLIC_KEYS_JSON. `
+          + `Proceeding with wallet-provided reader key only. reason=${this.toErrorMessage(error)}`,
+        );
+      }
+    } else if (!hasWalletReaderKey) {
+      throw new BadRequestException(
+        'CITIZEN_SIGNED_SUBMISSION_RUNTIME_HYBRID_READER_X25519_PUBLIC_KEYS_JSON is required when no wallet reader key is provided.',
+      );
+    }
+
+    if (walletReaderDid && walletReaderKeyRaw) {
+      const normalizedWalletReaderKey = this.resolveReaderX25519PublicKey(walletReaderKeyRaw);
+      if (!normalizedWalletReaderKey) {
+        throw new BadRequestException('walletReaderX25519PublicKey must be a valid X25519 public key.');
+      }
+      readerPublicKeys[walletReaderDid] = normalizedWalletReaderKey;
+    }
+    const effectiveAuthorizedReaders = authorizedReaders.filter((readerId) => Boolean(readerPublicKeys[readerId]));
+    if (effectiveAuthorizedReaders.length === 0) {
+      throw new BadRequestException(
+        'No valid hybrid authorized readers could be resolved. Provide X25519 public keys via env JSON or wallet reader metadata.',
+      );
+    }
     const plaintext = Buffer.from(this.canonicalJson(signedOnboardingPayload), 'utf8');
     const dek = randomBytes(32);
-    const nonce = randomBytes(12);
-    const cipher = createCipheriv('aes-256-gcm', dek, nonce);
-    const ciphertext = Buffer.concat([cipher.update(plaintext), cipher.final(), cipher.getAuthTag()]);
-    const wrappedDekBase = createHash('sha256').update(dek).digest('hex');
+    const payloadNonce = randomBytes(12);
+    const payloadCipher = createCipheriv('chacha20-poly1305', dek, payloadNonce, { authTagLength: 16 });
+    const payloadCiphertext = Buffer.concat([payloadCipher.update(plaintext), payloadCipher.final(), payloadCipher.getAuthTag()]);
     const wrapAlgorithm = process.env.CITIZEN_SIGNED_SUBMISSION_RUNTIME_HYBRID_WRAP_ALGORITHM?.trim()
-      || 'sha256-reader-salted-wrap-v1';
+      || 'x25519-chacha20poly1305';
 
-    const keyWrappedSecrets = authorizedReaders.map((readerId) => ({
-      reader_id: readerId,
-      wrapped_dek: createHash('sha256').update(`${readerId}:${wrappedDekBase}`).digest('hex'),
-      wrap_algorithm: wrapAlgorithm,
-    }));
+    const keyWrappedSecrets = effectiveAuthorizedReaders.map((readerId) => {
+      const readerPublicKeyHex = readerPublicKeys[readerId];
+      return {
+        reader_id: readerId,
+        wrapped_dek: this.wrapDekForReader({
+          dek,
+          authorPrivateKey,
+          readerPublicKeyHex,
+          wrapContext: `${entryId}:${readerId}`,
+        }),
+        wrap_algorithm: wrapAlgorithm,
+      };
+    });
 
     const now = Math.floor(Date.now() / 1000);
     const ttlSeconds = Number.parseInt(
@@ -564,23 +649,234 @@ export class LeadService {
       || 'policy:onboarding:hybrid:v1';
 
     return {
-      privacy_flag: true,
-      privacy_mode: 'hybrid',
-      payload_commitment: payloadCommitment,
-      ciphertext_hex: ciphertext.toString('hex'),
-      nonce_hex: nonce.toString('hex'),
-      authorized_readers: authorizedReaders,
-      key_wrapped_secrets: keyWrappedSecrets,
-      consent_receipt: {
-        subject_did: subjectDid,
-        data_hash: payloadCommitment,
-        policy_ref: policyRef,
-        granted_at: now,
-        expires_at: now + normalizedTtlSeconds,
-        authorized_readers: authorizedReaders,
-        field_reader_acls: {},
+      entryPrivacy: {
+        privacy_flag: true,
+        privacy_mode: 'hybrid',
+        payload_commitment: payloadCommitment,
+        ciphertext_hex: payloadCiphertext.toString('hex'),
+        nonce_hex: payloadNonce.toString('hex'),
+        authorized_readers: effectiveAuthorizedReaders,
+        key_wrapped_secrets: keyWrappedSecrets,
+        consent_receipt: {
+          subject_did: subjectDid,
+          data_hash: payloadCommitment,
+          policy_ref: policyRef,
+          granted_at: now,
+          expires_at: now + normalizedTtlSeconds,
+          authorized_readers: effectiveAuthorizedReaders,
+          field_reader_acls: {},
+        },
       },
+      hybridAuthorX25519PublicKeyHex: authorPublicKeyHex,
     };
+  }
+
+  private resolveHybridAuthorX25519KeyPair(): { privateKey: KeyObject; publicKeyHex: string } {
+    const configured = process.env.CITIZEN_SIGNED_SUBMISSION_RUNTIME_HYBRID_AUTHOR_X25519_PRIVATE_KEY_HEX?.trim();
+    if (configured) {
+      try {
+        const privateKey = this.parseX25519PrivateKey(configured);
+        return {
+          privateKey,
+          publicKeyHex: this.exportX25519PublicKeyHex(privateKey),
+        };
+      } catch (error) {
+        this.logger.warn(
+          `Invalid CITIZEN_SIGNED_SUBMISSION_RUNTIME_HYBRID_AUTHOR_X25519_PRIVATE_KEY_HEX. `
+          + `Falling back to ephemeral per-entry X25519 keypair. reason=${this.toErrorMessage(error)}`,
+        );
+      }
+    }
+
+    const { privateKey } = generateKeyPairSync('x25519');
+    return {
+      privateKey,
+      publicKeyHex: this.exportX25519PublicKeyHex(privateKey),
+    };
+  }
+
+  private parseReaderX25519PublicKeys(rawValue: string): Record<string, string> {
+    try {
+      const parsed = JSON.parse(rawValue) as Record<string, unknown>;
+      return Object.fromEntries(
+        Object.entries(parsed).map(([readerId, value]) => {
+          const normalized = this.resolveReaderX25519PublicKey(value);
+          if (!normalized) {
+            throw new BadRequestException(
+              `Invalid X25519 reader public key for ${readerId}. `
+              + 'Provide x25519 public key (hex/0x/did:key/PEM), '
+              + 'or provide object with signer_0x plus x25519_public_key.',
+            );
+          }
+          return [readerId, normalized];
+        }),
+      );
+    } catch (error) {
+      if (error instanceof BadRequestException) {
+        throw error;
+      }
+      throw new BadRequestException(
+        'CITIZEN_SIGNED_SUBMISSION_RUNTIME_HYBRID_READER_X25519_PUBLIC_KEYS_JSON must be a valid JSON object.',
+      );
+    }
+  }
+
+  private resolveReaderX25519PublicKey(value: unknown): string | null {
+    if (typeof value === 'string') {
+      const normalized = this.normalizeX25519PublicKeyHex(value);
+      if (normalized) {
+        return normalized;
+      }
+      return this.deriveX25519PublicKeyFromPrivateHex(value);
+    }
+
+    if (!value || typeof value !== 'object') {
+      return null;
+    }
+
+    const objectValue = value as Record<string, unknown>;
+    const publicKeyCandidate = objectValue.x25519_public_key
+      ?? objectValue.x25519PublicKey
+      ?? objectValue.encryption_public_key
+      ?? objectValue.encryptionPublicKey;
+    if (typeof publicKeyCandidate === 'string') {
+      const normalized = this.normalizeX25519PublicKeyHex(publicKeyCandidate);
+      if (normalized) {
+        return normalized;
+      }
+    }
+
+    const privateKeyCandidate = objectValue.x25519_private_key
+      ?? objectValue.x25519PrivateKey
+      ?? objectValue.encryption_private_key
+      ?? objectValue.encryptionPrivateKey;
+    if (typeof privateKeyCandidate === 'string') {
+      return this.deriveX25519PublicKeyFromPrivateHex(privateKeyCandidate);
+    }
+
+    return null;
+  }
+
+  private parseX25519PrivateKey(privateKeyValue: string): KeyObject {
+    const normalizedHex = privateKeyValue.trim().replace(/^0x/i, '').toLowerCase();
+    if (/^[a-f0-9]{64}$/.test(normalizedHex)) {
+      const der = Buffer.concat([
+        Buffer.from(X25519_PKCS8_DER_PREFIX_HEX, 'hex'),
+        Buffer.from(normalizedHex, 'hex'),
+      ]);
+      return createPrivateKey({ key: der, format: 'der', type: 'pkcs8' });
+    }
+
+    try {
+      const pem = this.normalizePemValue(privateKeyValue);
+      const privateKey = createPrivateKey({ key: pem, format: 'pem' });
+      const publicDer = createPublicKey(privateKey).export({ format: 'der', type: 'spki' }) as Buffer;
+      const x25519Prefix = Buffer.from(X25519_SPKI_DER_PREFIX_HEX, 'hex');
+      if (publicDer.subarray(0, x25519Prefix.length).equals(x25519Prefix)) {
+        return privateKey;
+      }
+    } catch {
+      // fallthrough to final validation error
+    }
+
+    throw new BadRequestException(
+      'CITIZEN_SIGNED_SUBMISSION_RUNTIME_HYBRID_AUTHOR_X25519_PRIVATE_KEY_HEX must be 32-byte hex (optionally prefixed with 0x) or a valid X25519 PEM private key.',
+    );
+  }
+
+  private exportX25519PublicKeyHex(privateKey: KeyObject): string {
+    const publicDer = createPublicKey(privateKey).export({ format: 'der', type: 'spki' }) as Buffer;
+    const spkiPrefix = Buffer.from(X25519_SPKI_DER_PREFIX_HEX, 'hex');
+    const rawPublicKey = publicDer.subarray(spkiPrefix.length);
+    if (rawPublicKey.length !== 32) {
+      throw new BadRequestException('Derived X25519 public key length is invalid.');
+    }
+    return rawPublicKey.toString('hex');
+  }
+
+  private createX25519PublicKeyFromHex(publicKeyHex: string): KeyObject {
+    const normalized = this.normalizeX25519PublicKeyHex(publicKeyHex);
+    if (!normalized) {
+      throw new BadRequestException('X25519 reader public key must be 32-byte hex.');
+    }
+    const der = Buffer.concat([
+      Buffer.from(X25519_SPKI_DER_PREFIX_HEX, 'hex'),
+      Buffer.from(normalized, 'hex'),
+    ]);
+    return createPublicKey({ key: der, format: 'der', type: 'spki' });
+  }
+
+  private normalizeX25519PublicKeyHex(publicKeyValue: string): string | null {
+    const normalized = publicKeyValue.trim();
+    const didSegments = normalized.split(':');
+    const didTail = didSegments[didSegments.length - 1] ?? '';
+    const candidates = [
+      normalized,
+      normalized.replace(/^0x/i, ''),
+      didTail,
+      didTail.replace(/^0x/i, ''),
+    ];
+    for (const candidate of candidates) {
+      if (/^[a-f0-9]{64}$/i.test(candidate)) {
+        return candidate.toLowerCase();
+      }
+    }
+
+    if (normalized.includes('BEGIN PUBLIC KEY')) {
+      try {
+        const pem = this.normalizePemValue(normalized);
+        const publicDer = createPublicKey({ key: pem, format: 'pem' }).export({ format: 'der', type: 'spki' }) as Buffer;
+        const spkiPrefix = Buffer.from(X25519_SPKI_DER_PREFIX_HEX, 'hex');
+        const rawPublicKey = publicDer.subarray(spkiPrefix.length);
+        if (publicDer.subarray(0, spkiPrefix.length).equals(spkiPrefix) && rawPublicKey.length === 32) {
+          return rawPublicKey.toString('hex');
+        }
+      } catch {
+        return null;
+      }
+    }
+
+    return null;
+  }
+
+  private deriveX25519PublicKeyFromPrivateHex(privateKeyValue: string): string | null {
+    const normalized = privateKeyValue.trim().replace(/^0x/i, '').toLowerCase();
+    if (!/^[a-f0-9]{64}$/.test(normalized)) {
+      return null;
+    }
+    try {
+      const privateKey = this.parseX25519PrivateKey(normalized);
+      return this.exportX25519PublicKeyHex(privateKey);
+    } catch {
+      return null;
+    }
+  }
+
+  private wrapDekForReader(params: {
+    dek: Buffer;
+    authorPrivateKey: KeyObject;
+    readerPublicKeyHex: string;
+    wrapContext: string;
+  }): string {
+    const readerPublicKey = this.createX25519PublicKeyFromHex(params.readerPublicKeyHex);
+    const sharedSecret = diffieHellman({
+      privateKey: params.authorPrivateKey,
+      publicKey: readerPublicKey,
+    });
+    const wrapKey = createHash('sha256').update(sharedSecret).digest();
+    const nonceInput = Buffer.concat([
+      sharedSecret,
+      params.dek,
+      Buffer.from(params.wrapContext, 'utf8'),
+    ]);
+    const nonce = createHash('sha256').update(nonceInput).digest().subarray(0, 12);
+    const cipher = createCipheriv('chacha20-poly1305', wrapKey, nonce, { authTagLength: 16 });
+    const wrappedCiphertext = Buffer.concat([
+      cipher.update(params.dek),
+      cipher.final(),
+      cipher.getAuthTag(),
+    ]);
+    return Buffer.concat([nonce, wrappedCiphertext]).toString('hex');
   }
 
   private parseRuntimeSigningPrivateKey(privateKeyPem: string) {
