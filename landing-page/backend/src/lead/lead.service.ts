@@ -1,6 +1,6 @@
 import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
 import { unlink } from 'fs/promises';
-import { KeyObject, createHash, createPrivateKey, createPublicKey, randomUUID, sign, verify } from 'crypto';
+import { KeyObject, createCipheriv, createHash, createPrivateKey, createPublicKey, randomBytes, randomUUID, sign, verify } from 'crypto';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { CreateLeadDto } from './dto/create-lead.dto';
@@ -39,6 +39,17 @@ const DEFAULT_RUNTIME_NAMESPACE = 'forms.commitment';
 const DEFAULT_RUNTIME_ACTION = 'SUBMIT_ONBOARDING_INTEREST';
 const DEFAULT_RUNTIME_AUTHOR = 'forms.commitment';
 const ED25519_SPKI_DER_PREFIX_HEX = '302a300506032b6570032100';
+type RuntimePrivacyMode = 'none' | 'passphrase' | 'hybrid';
+type RuntimeEntryPrivacyFields = {
+  privacy_flag: boolean;
+  privacy_mode: RuntimePrivacyMode;
+  payload_commitment?: string;
+  ciphertext_hex?: string;
+  nonce_hex?: string;
+  consent_receipt?: Record<string, unknown>;
+  authorized_readers?: string[];
+  key_wrapped_secrets?: Array<Record<string, string>>;
+};
 
 const DEFAULT_ROLE_OPTIONS = [
   {
@@ -404,6 +415,7 @@ export class LeadService {
     const timestamp = Math.floor(Date.now() / 1000);
     const signedOnboardingPayload = JSON.parse(payload.walletSigningPayload) as Record<string, unknown>;
     const runtimeSigningPrivateKeyPemRaw = process.env.CITIZEN_SIGNED_SUBMISSION_RUNTIME_SIGNING_PRIVATE_KEY_PEM?.trim();
+    const runtimePrivacy = this.resolveRuntimePrivacySettings(payload.walletSignerDid, payload.walletPayloadHash, signedOnboardingPayload);
 
     if (!runtimeSigningPrivateKeyPemRaw) {
       throw new BadRequestException(
@@ -442,6 +454,7 @@ export class LeadService {
       object_id: objectId,
       payload: runtimeEntryPayload,
       author: runtimeAuthor,
+      ...runtimePrivacy,
       timestamp,
     });
 
@@ -458,11 +471,114 @@ export class LeadService {
         action: runtimeAction,
         object_id: objectId,
         payload: runtimeEntryPayload,
-        privacy_flag: false,
-        privacy_mode: 'none',
+        ...runtimePrivacy,
         author: runtimeAuthor,
         signature: runtimeSignature,
         timestamp,
+      },
+    };
+  }
+
+  private resolveRuntimePrivacyMode(): RuntimePrivacyMode {
+    const runtimePrivacyModeRaw = process.env.CITIZEN_SIGNED_SUBMISSION_RUNTIME_PRIVACY_MODE?.trim().toLowerCase();
+    const runtimePrivacyMode = runtimePrivacyModeRaw ?? 'none';
+
+    if (runtimePrivacyMode !== 'none' && runtimePrivacyMode !== 'passphrase' && runtimePrivacyMode !== 'hybrid') {
+      throw new BadRequestException(
+        'CITIZEN_SIGNED_SUBMISSION_RUNTIME_PRIVACY_MODE must be one of: none, passphrase, hybrid.',
+      );
+    }
+
+    const runtimePrivacyFlagRaw = process.env.CITIZEN_SIGNED_SUBMISSION_RUNTIME_PRIVACY_FLAG?.trim().toLowerCase();
+    if (runtimePrivacyFlagRaw) {
+      if (runtimePrivacyFlagRaw !== 'true' && runtimePrivacyFlagRaw !== 'false') {
+        throw new BadRequestException(
+          'CITIZEN_SIGNED_SUBMISSION_RUNTIME_PRIVACY_FLAG must be true or false when provided.',
+        );
+      }
+      const runtimePrivacyFlag = runtimePrivacyFlagRaw === 'true';
+      if (runtimePrivacyFlag !== (runtimePrivacyMode !== 'none')) {
+        throw new BadRequestException(
+          'CITIZEN_SIGNED_SUBMISSION_RUNTIME_PRIVACY_FLAG must match CITIZEN_SIGNED_SUBMISSION_RUNTIME_PRIVACY_MODE.',
+        );
+      }
+    }
+
+    return runtimePrivacyMode;
+  }
+
+  private resolveRuntimePrivacySettings(
+    subjectDid: string,
+    payloadCommitment: string,
+    signedOnboardingPayload: Record<string, unknown>,
+  ): RuntimeEntryPrivacyFields {
+    const runtimePrivacyMode = this.resolveRuntimePrivacyMode();
+
+    if (runtimePrivacyMode === 'none') {
+      return {
+        privacy_flag: false,
+        privacy_mode: 'none',
+      };
+    }
+
+    if (runtimePrivacyMode === 'passphrase') {
+      throw new BadRequestException(
+        'Runtime onboarding relay does not support privacy_mode=passphrase. Use privacy_mode=hybrid for onboarding encrypted metadata relay.',
+      );
+    }
+
+    const authorizedReadersRaw = process.env.CITIZEN_SIGNED_SUBMISSION_RUNTIME_HYBRID_AUTHORIZED_READERS?.trim() ?? '';
+    const authorizedReaders = authorizedReadersRaw
+      .split(',')
+      .map((reader) => reader.trim())
+      .filter(Boolean);
+
+    if (authorizedReaders.length === 0) {
+      throw new BadRequestException(
+        'CITIZEN_SIGNED_SUBMISSION_RUNTIME_HYBRID_AUTHORIZED_READERS is required when CITIZEN_SIGNED_SUBMISSION_RUNTIME_PRIVACY_MODE=hybrid.',
+      );
+    }
+
+    const plaintext = Buffer.from(this.canonicalJson(signedOnboardingPayload), 'utf8');
+    const dek = randomBytes(32);
+    const nonce = randomBytes(12);
+    const cipher = createCipheriv('aes-256-gcm', dek, nonce);
+    const ciphertext = Buffer.concat([cipher.update(plaintext), cipher.final(), cipher.getAuthTag()]);
+    const wrappedDekBase = createHash('sha256').update(dek).digest('hex');
+    const wrapAlgorithm = process.env.CITIZEN_SIGNED_SUBMISSION_RUNTIME_HYBRID_WRAP_ALGORITHM?.trim()
+      || 'sha256-reader-salted-wrap-v1';
+
+    const keyWrappedSecrets = authorizedReaders.map((readerId) => ({
+      reader_id: readerId,
+      wrapped_dek: createHash('sha256').update(`${readerId}:${wrappedDekBase}`).digest('hex'),
+      wrap_algorithm: wrapAlgorithm,
+    }));
+
+    const now = Math.floor(Date.now() / 1000);
+    const ttlSeconds = Number.parseInt(
+      process.env.CITIZEN_SIGNED_SUBMISSION_RUNTIME_HYBRID_CONSENT_TTL_SECONDS?.trim() ?? '31536000',
+      10,
+    );
+    const normalizedTtlSeconds = Number.isFinite(ttlSeconds) && ttlSeconds > 0 ? ttlSeconds : 31536000;
+    const policyRef = process.env.CITIZEN_SIGNED_SUBMISSION_RUNTIME_HYBRID_POLICY_REF?.trim()
+      || 'policy:onboarding:hybrid:v1';
+
+    return {
+      privacy_flag: true,
+      privacy_mode: 'hybrid',
+      payload_commitment: payloadCommitment,
+      ciphertext_hex: ciphertext.toString('hex'),
+      nonce_hex: nonce.toString('hex'),
+      authorized_readers: authorizedReaders,
+      key_wrapped_secrets: keyWrappedSecrets,
+      consent_receipt: {
+        subject_did: subjectDid,
+        data_hash: payloadCommitment,
+        policy_ref: policyRef,
+        granted_at: now,
+        expires_at: now + normalizedTtlSeconds,
+        authorized_readers: authorizedReaders,
+        field_reader_acls: {},
       },
     };
   }
