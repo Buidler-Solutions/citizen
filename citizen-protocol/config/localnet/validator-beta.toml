@@ -6,6 +6,7 @@ api_port = 8082
 data_dir = "data/beta"
 bind_addr = "127.0.0.1:9101"
 network_key_rotation_secs = 3600
+manifest_enforce = false
 
 [[namespaces]]
 descriptor.namespace = "identity.citizen"
@@ -49,6 +50,19 @@ writers = ["governance.vote"]
 [[namespaces.validators]]
 name = "require_signature"
 config = {}
+
+[[namespaces]]
+descriptor.namespace = "forms.commitment"
+descriptor.version = 1
+descriptor.rules_hash = "sha256:forms-commitment-v1"
+descriptor.governed_by = "governance.vote"
+writers = ["forms.commitment"]
+[[namespaces.validators]]
+name = "require_signature"
+config = {}
+[[namespaces.validators]]
+name = "require_payload_fields"
+config.fields = ["data_hash", "encrypted_form_url"]
 
 
 [[namespaces]]

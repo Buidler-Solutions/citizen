@@ -62,6 +62,19 @@ writers = ["governance.vote"]
 name = "require_signature"
 config = {}
 
+[[namespaces]]
+descriptor.namespace = "forms.commitment"
+descriptor.version = 1
+descriptor.rules_hash = "sha256:forms-commitment-v1"
+descriptor.governed_by = "governance.vote"
+writers = ["forms.commitment"]
+[[namespaces.validators]]
+name = "require_signature"
+config = {}
+[[namespaces.validators]]
+name = "require_payload_fields"
+config.fields = ["data_hash", "encrypted_form_url"]
+
 [[validators]]
 validator_id = "futurenet-beta"
 public_key = "REPLACE_WITH_BETA_VERIFYING_KEY_HEX"

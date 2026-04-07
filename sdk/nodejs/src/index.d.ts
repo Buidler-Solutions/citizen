@@ -77,9 +77,28 @@ export type BuilderCreditsOperation = {
   payload: Record<string, unknown>;
 };
 
+export type CreateFormCommitmentReceiptRequest = {
+  formId: string;
+  dataHash: string;
+  encryptedFormUrl: string;
+  commitmentReceipt?: Record<string, unknown>;
+};
+
+export type FormCommitmentOperation = {
+  namespace: "forms.commitment";
+  action: "SUBMIT_COMMITMENT_RECEIPT";
+  objectId: string;
+  payload: {
+    data_hash: string;
+    encrypted_form_url: string;
+    commitment_receipt: Record<string, unknown> | null;
+  };
+};
+
 export function canonicalizeJson(value: unknown): string;
 export function sha256DigestHex(input: string | Uint8Array): Promise<string>;
 export function signCitizenPayloadWithWallet(args: { payload: unknown; provider?: WalletProvider }): Promise<CitizenPayloadSignature>;
+export function createFormCommitmentReceipt(args: CreateFormCommitmentReceiptRequest): FormCommitmentOperation;
 export function createMultisigCreditGrant(args: CreateMultisigCreditGrantRequest): BuilderCreditsOperation;
 export function createSponsorshipUsage(args: CreateSponsorshipUsageRequest): BuilderCreditsOperation;
 export function validateBuilderCreditsPayload(args: {

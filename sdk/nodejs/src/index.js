@@ -124,6 +124,55 @@ function assertNonEmptyString(value, field) {
   }
 }
 
+function assertSha256Digest(value, field) {
+  if (typeof value !== "string" || !/^sha256:[0-9a-f]{6,}$/i.test(value)) {
+    throw new Error(`${field} must be a sha256:<hex> digest string`);
+  }
+}
+
+function assertHttpUrl(value, field) {
+  if (typeof value !== "string" || !value.trim()) {
+    throw new Error(`${field} must be a non-empty URL`);
+  }
+
+  let parsed;
+  try {
+    parsed = new URL(value);
+  } catch {
+    throw new Error(`${field} must be a valid http(s) URL`);
+  }
+
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+    throw new Error(`${field} must be a valid http(s) URL`);
+  }
+}
+
+export function createFormCommitmentReceipt({
+  formId,
+  dataHash,
+  encryptedFormUrl,
+  commitmentReceipt
+}) {
+  assertNonEmptyString(formId, "formId");
+  assertSha256Digest(dataHash, "dataHash");
+  assertHttpUrl(encryptedFormUrl, "encryptedFormUrl");
+
+  if (commitmentReceipt !== undefined && (typeof commitmentReceipt !== "object" || commitmentReceipt === null || Array.isArray(commitmentReceipt))) {
+    throw new Error("commitmentReceipt must be an object when provided");
+  }
+
+  return {
+    namespace: "forms.commitment",
+    action: "SUBMIT_COMMITMENT_RECEIPT",
+    objectId: formId,
+    payload: {
+      data_hash: dataHash,
+      encrypted_form_url: encryptedFormUrl,
+      commitment_receipt: commitmentReceipt ?? null
+    }
+  };
+}
+
 export function createMultisigCreditGrant({ builderId, amount, multisigProofs }) {
   assertNonEmptyString(builderId, "builderId");
 

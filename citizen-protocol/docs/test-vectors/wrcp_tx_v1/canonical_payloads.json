@@ -1,0 +1,41 @@
+{
+  "profile": "WRCP-TX-V1",
+  "schema_version": 1,
+  "generated_at": "2026-04-04",
+  "cases": [
+    {
+      "case_id": "txv1.none.minimal.accept",
+      "description": "Minimal privacy_mode=none payload with deterministic canonical JSON output.",
+      "entry": {
+        "entry_id": "11111111-1111-4111-8111-111111111111",
+        "namespace": "builder.credits",
+        "action": "MULTISIG_CREDIT_GRANT",
+        "object_id": "grant-001",
+        "payload": {
+          "grant_id": "grant-001",
+          "amount": 100
+        },
+        "privacy_flag": false,
+        "payload_commitment": null,
+        "ciphertext_hex": null,
+        "nonce_hex": null,
+        "salt_hex": null,
+        "kdf_params": null,
+        "consent_receipt": null,
+        "privacy_mode": "none",
+        "authorized_readers": [],
+        "custodian_policy_id": null,
+        "key_wrapped_secrets": [],
+        "revocation_events": [],
+        "field_reader_acls": {},
+        "author": "did:citizen:validator:alice",
+        "timestamp": 1767225600
+      },
+      "expected": {
+        "expect_accept": true,
+        "canonical_json": "",
+        "notes": "Canonical JSON intentionally left blank until wallet+ledger fixtures are wired."
+      }
+    }
+  ]
+}

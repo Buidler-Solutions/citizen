@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import * as assert from 'node:assert/strict';
 import { createHash, generateKeyPairSync, sign } from 'node:crypto';
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, HttpException } from '@nestjs/common';
 import { LeadService } from './lead.service';
 import type { CreateLeadDto } from './dto/create-lead.dto';
 
@@ -203,6 +203,331 @@ test('stats report relay direct-submit failure rate from relay outcomes', async 
       failedRelaySubmissions: 1,
       relayDirectSubmitFailureRate: 0.5,
     });
+  } finally {
+    process.env.CITIZEN_SIGNED_SUBMISSION_RELAY_URL = originalRelayUrl;
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('create can relay onboarding submission as runtime envelope payload', async () => {
+  const relayUrl = 'http://127.0.0.1:8081/api/v1/envelopes/submit';
+  const { privateKey: runtimePrivateKey } = generateKeyPairSync('ed25519');
+  const runtimePrivateKeyPem = runtimePrivateKey.export({ format: 'pem', type: 'pkcs8' }).toString();
+  const originalRelayUrl = process.env.CITIZEN_SIGNED_SUBMISSION_RELAY_URL;
+  const originalRelayFormat = process.env.CITIZEN_SIGNED_SUBMISSION_RELAY_FORMAT;
+  const originalRuntimeNamespace = process.env.CITIZEN_SIGNED_SUBMISSION_RUNTIME_NAMESPACE;
+  const originalRuntimeAction = process.env.CITIZEN_SIGNED_SUBMISSION_RUNTIME_ACTION;
+  const originalRuntimeAuthor = process.env.CITIZEN_SIGNED_SUBMISSION_RUNTIME_AUTHOR;
+  const originalRuntimePrivateKey = process.env.CITIZEN_SIGNED_SUBMISSION_RUNTIME_SIGNING_PRIVATE_KEY_PEM;
+  const originalRuntimePrivacyMode = process.env.CITIZEN_SIGNED_SUBMISSION_RUNTIME_PRIVACY_MODE;
+  const originalFetch = globalThis.fetch;
+
+  process.env.CITIZEN_SIGNED_SUBMISSION_RELAY_URL = relayUrl;
+  process.env.CITIZEN_SIGNED_SUBMISSION_RELAY_FORMAT = 'runtime_envelope';
+  process.env.CITIZEN_SIGNED_SUBMISSION_RUNTIME_NAMESPACE = 'forms.commitment';
+  process.env.CITIZEN_SIGNED_SUBMISSION_RUNTIME_ACTION = 'SUBMIT_ONBOARDING_INTEREST';
+  process.env.CITIZEN_SIGNED_SUBMISSION_RUNTIME_AUTHOR = 'forms.commitment';
+  process.env.CITIZEN_SIGNED_SUBMISSION_RUNTIME_SIGNING_PRIVATE_KEY_PEM = runtimePrivateKeyPem;
+
+  let capturedRequestBody: Record<string, unknown> | null = null;
+  const mockedFetch = (async (_input: RequestInfo | URL, init?: RequestInit) => {
+    capturedRequestBody = JSON.parse((init?.body as string | undefined) ?? '{}') as Record<string, unknown>;
+    return {
+      ok: true,
+      status: 200,
+    } as Response;
+  }) as unknown as typeof fetch;
+  globalThis.fetch = mockedFetch;
+
+  try {
+    const service = createService();
+    const signedPayload = buildSignedPayload({ email: 'runtime-envelope@example.com' });
+    await service.create(signedPayload);
+
+    assert.ok(capturedRequestBody);
+    const relayBody = capturedRequestBody as Record<string, unknown>;
+    const relayEntry = relayBody.payload as Record<string, unknown>;
+    assert.equal(relayBody.signer, 'forms.commitment');
+    assert.equal(relayEntry.author, 'forms.commitment');
+    assert.equal(relayEntry.namespace, 'forms.commitment');
+    assert.equal(relayEntry.action, 'SUBMIT_ONBOARDING_INTEREST');
+    assert.equal(relayEntry.object_id, 'runtime-envelope@example.com');
+    assert.equal(relayEntry.privacy_flag, false);
+    assert.equal(relayEntry.privacy_mode, 'none');
+    assert.notEqual(relayBody.signature, signedPayload.walletSignature);
+    assert.equal(relayBody.signature, relayEntry.signature);
+    assert.match(String(relayEntry.entry_id), /^[0-9a-fA-F-]{36}$/);
+
+    const entryPayload = relayEntry.payload as Record<string, unknown>;
+    assert.equal(entryPayload.data_hash, signedPayload.walletPayloadHash);
+    assert.equal(entryPayload.encrypted_form_url, 'interest_submissions://runtime-envelope@example.com');
+    assert.equal(entryPayload.wallet_signer, signedPayload.walletSignerDid);
+    assert.equal(
+      (entryPayload.payload_wallet_signature as Record<string, unknown>).signer,
+      signedPayload.walletSignerDid,
+    );
+    assert.match(String(entryPayload.author_public_key), /^[0-9a-f]{64}$/);
+  } finally {
+    process.env.CITIZEN_SIGNED_SUBMISSION_RELAY_URL = originalRelayUrl;
+    process.env.CITIZEN_SIGNED_SUBMISSION_RELAY_FORMAT = originalRelayFormat;
+    process.env.CITIZEN_SIGNED_SUBMISSION_RUNTIME_NAMESPACE = originalRuntimeNamespace;
+    process.env.CITIZEN_SIGNED_SUBMISSION_RUNTIME_ACTION = originalRuntimeAction;
+    process.env.CITIZEN_SIGNED_SUBMISSION_RUNTIME_AUTHOR = originalRuntimeAuthor;
+    process.env.CITIZEN_SIGNED_SUBMISSION_RUNTIME_SIGNING_PRIVATE_KEY_PEM = originalRuntimePrivateKey;
+    process.env.CITIZEN_SIGNED_SUBMISSION_RUNTIME_PRIVACY_MODE = originalRuntimePrivacyMode;
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('create can relay onboarding submission as hybrid privacy runtime envelope payload', async () => {
+  const relayUrl = 'http://127.0.0.1:8081/api/v1/envelopes/submit';
+  const { privateKey: runtimePrivateKey } = generateKeyPairSync('ed25519');
+  const runtimePrivateKeyPem = runtimePrivateKey.export({ format: 'pem', type: 'pkcs8' }).toString();
+  const originalRelayUrl = process.env.CITIZEN_SIGNED_SUBMISSION_RELAY_URL;
+  const originalRelayFormat = process.env.CITIZEN_SIGNED_SUBMISSION_RELAY_FORMAT;
+  const originalRuntimePrivateKey = process.env.CITIZEN_SIGNED_SUBMISSION_RUNTIME_SIGNING_PRIVATE_KEY_PEM;
+  const originalRuntimePrivacyMode = process.env.CITIZEN_SIGNED_SUBMISSION_RUNTIME_PRIVACY_MODE;
+  const originalHybridReaders = process.env.CITIZEN_SIGNED_SUBMISSION_RUNTIME_HYBRID_AUTHORIZED_READERS;
+  const originalHybridPolicyRef = process.env.CITIZEN_SIGNED_SUBMISSION_RUNTIME_HYBRID_POLICY_REF;
+  const originalHybridTtl = process.env.CITIZEN_SIGNED_SUBMISSION_RUNTIME_HYBRID_CONSENT_TTL_SECONDS;
+  const originalFetch = globalThis.fetch;
+
+  process.env.CITIZEN_SIGNED_SUBMISSION_RELAY_URL = relayUrl;
+  process.env.CITIZEN_SIGNED_SUBMISSION_RELAY_FORMAT = 'runtime_envelope';
+  process.env.CITIZEN_SIGNED_SUBMISSION_RUNTIME_SIGNING_PRIVATE_KEY_PEM = runtimePrivateKeyPem;
+  process.env.CITIZEN_SIGNED_SUBMISSION_RUNTIME_PRIVACY_MODE = 'hybrid';
+  process.env.CITIZEN_SIGNED_SUBMISSION_RUNTIME_HYBRID_AUTHORIZED_READERS = 'did:reader:ops,did:reader:audit';
+  process.env.CITIZEN_SIGNED_SUBMISSION_RUNTIME_HYBRID_POLICY_REF = 'policy:onboarding:hybrid:test';
+  process.env.CITIZEN_SIGNED_SUBMISSION_RUNTIME_HYBRID_CONSENT_TTL_SECONDS = '3600';
+
+  let capturedRequestBody: Record<string, unknown> | null = null;
+  const mockedFetch = (async (_input: RequestInfo | URL, init?: RequestInit) => {
+    capturedRequestBody = JSON.parse((init?.body as string | undefined) ?? '{}') as Record<string, unknown>;
+    return {
+      ok: true,
+      status: 200,
+    } as Response;
+  }) as unknown as typeof fetch;
+  globalThis.fetch = mockedFetch;
+
+  try {
+    const service = createService();
+    const signedPayload = buildSignedPayload({ email: 'runtime-hybrid@example.com' });
+    await service.create(signedPayload);
+
+    assert.ok(capturedRequestBody);
+    const relayEntry = (capturedRequestBody as Record<string, unknown>).payload as Record<string, unknown>;
+    assert.equal(relayEntry.privacy_flag, true);
+    assert.equal(relayEntry.privacy_mode, 'hybrid');
+    assert.equal(relayEntry.payload_commitment, signedPayload.walletPayloadHash);
+    assert.match(String(relayEntry.ciphertext_hex), /^[0-9a-f]+$/);
+    assert.match(String(relayEntry.nonce_hex), /^[0-9a-f]+$/);
+    assert.deepEqual(relayEntry.authorized_readers, ['did:reader:ops', 'did:reader:audit']);
+
+    const keyWrappedSecrets = relayEntry.key_wrapped_secrets as Array<Record<string, unknown>>;
+    assert.equal(keyWrappedSecrets.length, 2);
+    assert.equal(keyWrappedSecrets[0].reader_id, 'did:reader:ops');
+    assert.equal(keyWrappedSecrets[1].reader_id, 'did:reader:audit');
+    assert.equal(keyWrappedSecrets[0].wrap_algorithm, 'sha256-reader-salted-wrap-v1');
+
+    const consentReceipt = relayEntry.consent_receipt as Record<string, unknown>;
+    assert.equal(consentReceipt.subject_did, signedPayload.walletSignerDid);
+    assert.equal(consentReceipt.data_hash, signedPayload.walletPayloadHash);
+    assert.equal(consentReceipt.policy_ref, 'policy:onboarding:hybrid:test');
+    assert.deepEqual(consentReceipt.authorized_readers, ['did:reader:ops', 'did:reader:audit']);
+  } finally {
+    process.env.CITIZEN_SIGNED_SUBMISSION_RELAY_URL = originalRelayUrl;
+    process.env.CITIZEN_SIGNED_SUBMISSION_RELAY_FORMAT = originalRelayFormat;
+    process.env.CITIZEN_SIGNED_SUBMISSION_RUNTIME_SIGNING_PRIVATE_KEY_PEM = originalRuntimePrivateKey;
+    process.env.CITIZEN_SIGNED_SUBMISSION_RUNTIME_PRIVACY_MODE = originalRuntimePrivacyMode;
+    process.env.CITIZEN_SIGNED_SUBMISSION_RUNTIME_HYBRID_AUTHORIZED_READERS = originalHybridReaders;
+    process.env.CITIZEN_SIGNED_SUBMISSION_RUNTIME_HYBRID_POLICY_REF = originalHybridPolicyRef;
+    process.env.CITIZEN_SIGNED_SUBMISSION_RUNTIME_HYBRID_CONSENT_TTL_SECONDS = originalHybridTtl;
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('create accepts runtime relay key when PEM newlines are escaped', async () => {
+  const relayUrl = 'http://127.0.0.1:8081/api/v1/envelopes/submit';
+  const { privateKey: runtimePrivateKey } = generateKeyPairSync('ed25519');
+  const runtimePrivateKeyPem = runtimePrivateKey.export({ format: 'pem', type: 'pkcs8' }).toString();
+  const escapedRuntimePrivateKeyPem = runtimePrivateKeyPem.replace(/\n/g, '\\n');
+  const originalRelayUrl = process.env.CITIZEN_SIGNED_SUBMISSION_RELAY_URL;
+  const originalRelayFormat = process.env.CITIZEN_SIGNED_SUBMISSION_RELAY_FORMAT;
+  const originalRuntimePrivateKey = process.env.CITIZEN_SIGNED_SUBMISSION_RUNTIME_SIGNING_PRIVATE_KEY_PEM;
+  const originalRuntimePrivacyMode = process.env.CITIZEN_SIGNED_SUBMISSION_RUNTIME_PRIVACY_MODE;
+  const originalFetch = globalThis.fetch;
+
+  process.env.CITIZEN_SIGNED_SUBMISSION_RELAY_URL = relayUrl;
+  process.env.CITIZEN_SIGNED_SUBMISSION_RELAY_FORMAT = 'runtime_envelope';
+  process.env.CITIZEN_SIGNED_SUBMISSION_RUNTIME_SIGNING_PRIVATE_KEY_PEM = escapedRuntimePrivateKeyPem;
+  process.env.CITIZEN_SIGNED_SUBMISSION_RUNTIME_PRIVACY_MODE = 'none';
+
+  const mockedFetch = (async () => ({
+    ok: true,
+    status: 200,
+  } as Response)) as unknown as typeof fetch;
+  globalThis.fetch = mockedFetch;
+
+  try {
+    const service = createService();
+    await assert.doesNotReject(service.create(buildSignedPayload({ email: 'runtime-escaped-key@example.com' })));
+  } finally {
+    process.env.CITIZEN_SIGNED_SUBMISSION_RELAY_URL = originalRelayUrl;
+    process.env.CITIZEN_SIGNED_SUBMISSION_RELAY_FORMAT = originalRelayFormat;
+    process.env.CITIZEN_SIGNED_SUBMISSION_RUNTIME_SIGNING_PRIVATE_KEY_PEM = originalRuntimePrivateKey;
+    process.env.CITIZEN_SIGNED_SUBMISSION_RUNTIME_PRIVACY_MODE = originalRuntimePrivacyMode;
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('create fails closed when runtime envelope relay key is missing', async () => {
+  const relayUrl = 'http://127.0.0.1:8081/api/v1/envelopes/submit';
+  const originalRelayUrl = process.env.CITIZEN_SIGNED_SUBMISSION_RELAY_URL;
+  const originalRelayFormat = process.env.CITIZEN_SIGNED_SUBMISSION_RELAY_FORMAT;
+  const originalRuntimePrivateKey = process.env.CITIZEN_SIGNED_SUBMISSION_RUNTIME_SIGNING_PRIVATE_KEY_PEM;
+
+  process.env.CITIZEN_SIGNED_SUBMISSION_RELAY_URL = relayUrl;
+  process.env.CITIZEN_SIGNED_SUBMISSION_RELAY_FORMAT = 'runtime_envelope';
+  delete process.env.CITIZEN_SIGNED_SUBMISSION_RUNTIME_SIGNING_PRIVATE_KEY_PEM;
+
+  try {
+    const service = createService();
+    await assert.rejects(
+      service.create(buildSignedPayload({ email: 'runtime-missing-key@example.com' })),
+      (error: unknown) => error instanceof BadRequestException,
+    );
+  } finally {
+    process.env.CITIZEN_SIGNED_SUBMISSION_RELAY_URL = originalRelayUrl;
+    process.env.CITIZEN_SIGNED_SUBMISSION_RELAY_FORMAT = originalRelayFormat;
+    process.env.CITIZEN_SIGNED_SUBMISSION_RUNTIME_SIGNING_PRIVATE_KEY_PEM = originalRuntimePrivateKey;
+  }
+});
+
+test('create fails closed when runtime onboarding passphrase privacy mode is selected', async () => {
+  const relayUrl = 'http://127.0.0.1:8081/api/v1/envelopes/submit';
+  const { privateKey: runtimePrivateKey } = generateKeyPairSync('ed25519');
+  const runtimePrivateKeyPem = runtimePrivateKey.export({ format: 'pem', type: 'pkcs8' }).toString();
+  const originalRelayUrl = process.env.CITIZEN_SIGNED_SUBMISSION_RELAY_URL;
+  const originalRelayFormat = process.env.CITIZEN_SIGNED_SUBMISSION_RELAY_FORMAT;
+  const originalRuntimePrivateKey = process.env.CITIZEN_SIGNED_SUBMISSION_RUNTIME_SIGNING_PRIVATE_KEY_PEM;
+  const originalRuntimePrivacyMode = process.env.CITIZEN_SIGNED_SUBMISSION_RUNTIME_PRIVACY_MODE;
+
+  process.env.CITIZEN_SIGNED_SUBMISSION_RELAY_URL = relayUrl;
+  process.env.CITIZEN_SIGNED_SUBMISSION_RELAY_FORMAT = 'runtime_envelope';
+  process.env.CITIZEN_SIGNED_SUBMISSION_RUNTIME_SIGNING_PRIVATE_KEY_PEM = runtimePrivateKeyPem;
+  process.env.CITIZEN_SIGNED_SUBMISSION_RUNTIME_PRIVACY_MODE = 'passphrase';
+
+  try {
+    const service = createService();
+    await assert.rejects(
+      service.create(buildSignedPayload({ email: 'runtime-privacy-mode@example.com' })),
+      (error: unknown) => error instanceof BadRequestException
+        && error.message.includes('does not support privacy_mode=passphrase'),
+    );
+  } finally {
+    process.env.CITIZEN_SIGNED_SUBMISSION_RELAY_URL = originalRelayUrl;
+    process.env.CITIZEN_SIGNED_SUBMISSION_RELAY_FORMAT = originalRelayFormat;
+    process.env.CITIZEN_SIGNED_SUBMISSION_RUNTIME_SIGNING_PRIVATE_KEY_PEM = originalRuntimePrivateKey;
+    process.env.CITIZEN_SIGNED_SUBMISSION_RUNTIME_PRIVACY_MODE = originalRuntimePrivacyMode;
+  }
+});
+
+test('create fails closed when runtime hybrid privacy mode has no authorized readers', async () => {
+  const relayUrl = 'http://127.0.0.1:8081/api/v1/envelopes/submit';
+  const { privateKey: runtimePrivateKey } = generateKeyPairSync('ed25519');
+  const runtimePrivateKeyPem = runtimePrivateKey.export({ format: 'pem', type: 'pkcs8' }).toString();
+  const originalRelayUrl = process.env.CITIZEN_SIGNED_SUBMISSION_RELAY_URL;
+  const originalRelayFormat = process.env.CITIZEN_SIGNED_SUBMISSION_RELAY_FORMAT;
+  const originalRuntimePrivateKey = process.env.CITIZEN_SIGNED_SUBMISSION_RUNTIME_SIGNING_PRIVATE_KEY_PEM;
+  const originalRuntimePrivacyMode = process.env.CITIZEN_SIGNED_SUBMISSION_RUNTIME_PRIVACY_MODE;
+  const originalHybridReaders = process.env.CITIZEN_SIGNED_SUBMISSION_RUNTIME_HYBRID_AUTHORIZED_READERS;
+
+  process.env.CITIZEN_SIGNED_SUBMISSION_RELAY_URL = relayUrl;
+  process.env.CITIZEN_SIGNED_SUBMISSION_RELAY_FORMAT = 'runtime_envelope';
+  process.env.CITIZEN_SIGNED_SUBMISSION_RUNTIME_SIGNING_PRIVATE_KEY_PEM = runtimePrivateKeyPem;
+  process.env.CITIZEN_SIGNED_SUBMISSION_RUNTIME_PRIVACY_MODE = 'hybrid';
+  process.env.CITIZEN_SIGNED_SUBMISSION_RUNTIME_HYBRID_AUTHORIZED_READERS = '';
+
+  try {
+    const service = createService();
+    await assert.rejects(
+      service.create(buildSignedPayload({ email: 'runtime-hybrid-missing-readers@example.com' })),
+      (error: unknown) => error instanceof BadRequestException
+        && error.message.includes('HYBRID_AUTHORIZED_READERS is required'),
+    );
+  } finally {
+    process.env.CITIZEN_SIGNED_SUBMISSION_RELAY_URL = originalRelayUrl;
+    process.env.CITIZEN_SIGNED_SUBMISSION_RELAY_FORMAT = originalRelayFormat;
+    process.env.CITIZEN_SIGNED_SUBMISSION_RUNTIME_SIGNING_PRIVATE_KEY_PEM = originalRuntimePrivateKey;
+    process.env.CITIZEN_SIGNED_SUBMISSION_RUNTIME_PRIVACY_MODE = originalRuntimePrivacyMode;
+    process.env.CITIZEN_SIGNED_SUBMISSION_RUNTIME_HYBRID_AUTHORIZED_READERS = originalHybridReaders;
+  }
+});
+
+test('create fails closed when runtime privacy flag conflicts with privacy mode', async () => {
+  const relayUrl = 'http://127.0.0.1:8081/api/v1/envelopes/submit';
+  const { privateKey: runtimePrivateKey } = generateKeyPairSync('ed25519');
+  const runtimePrivateKeyPem = runtimePrivateKey.export({ format: 'pem', type: 'pkcs8' }).toString();
+  const originalRelayUrl = process.env.CITIZEN_SIGNED_SUBMISSION_RELAY_URL;
+  const originalRelayFormat = process.env.CITIZEN_SIGNED_SUBMISSION_RELAY_FORMAT;
+  const originalRuntimePrivateKey = process.env.CITIZEN_SIGNED_SUBMISSION_RUNTIME_SIGNING_PRIVATE_KEY_PEM;
+  const originalRuntimePrivacyMode = process.env.CITIZEN_SIGNED_SUBMISSION_RUNTIME_PRIVACY_MODE;
+  const originalRuntimePrivacyFlag = process.env.CITIZEN_SIGNED_SUBMISSION_RUNTIME_PRIVACY_FLAG;
+
+  process.env.CITIZEN_SIGNED_SUBMISSION_RELAY_URL = relayUrl;
+  process.env.CITIZEN_SIGNED_SUBMISSION_RELAY_FORMAT = 'runtime_envelope';
+  process.env.CITIZEN_SIGNED_SUBMISSION_RUNTIME_SIGNING_PRIVATE_KEY_PEM = runtimePrivateKeyPem;
+  process.env.CITIZEN_SIGNED_SUBMISSION_RUNTIME_PRIVACY_MODE = 'none';
+  process.env.CITIZEN_SIGNED_SUBMISSION_RUNTIME_PRIVACY_FLAG = 'true';
+
+  try {
+    const service = createService();
+    await assert.rejects(
+      service.create(buildSignedPayload({ email: 'runtime-privacy-flag@example.com' })),
+      (error: unknown) => error instanceof BadRequestException
+        && error.message.includes('must match'),
+    );
+  } finally {
+    process.env.CITIZEN_SIGNED_SUBMISSION_RELAY_URL = originalRelayUrl;
+    process.env.CITIZEN_SIGNED_SUBMISSION_RELAY_FORMAT = originalRelayFormat;
+    process.env.CITIZEN_SIGNED_SUBMISSION_RUNTIME_SIGNING_PRIVATE_KEY_PEM = originalRuntimePrivateKey;
+    process.env.CITIZEN_SIGNED_SUBMISSION_RUNTIME_PRIVACY_MODE = originalRuntimePrivacyMode;
+    process.env.CITIZEN_SIGNED_SUBMISSION_RUNTIME_PRIVACY_FLAG = originalRuntimePrivacyFlag;
+  }
+});
+
+test('create includes relay error detail in rejection message', async () => {
+  const relayUrl = 'http://127.0.0.1:8081/api/v1/envelopes/submit';
+  const originalRelayUrl = process.env.CITIZEN_SIGNED_SUBMISSION_RELAY_URL;
+  const originalFetch = globalThis.fetch;
+
+  process.env.CITIZEN_SIGNED_SUBMISSION_RELAY_URL = relayUrl;
+
+  const mockedFetch = (async () => ({
+    ok: false,
+    status: 422,
+    headers: {
+      get: (name: string) => (name.toLowerCase() === 'content-type' ? 'application/json' : null),
+    },
+    json: async () => ({ error: 'author forms.commitment is not permitted for namespace onboarding.interest' }),
+    text: async () => '',
+  } as unknown as Response)) as unknown as typeof fetch;
+  globalThis.fetch = mockedFetch;
+
+  try {
+    const service = createService();
+    await assert.rejects(
+      service.create(buildSignedPayload({ email: 'relay-error-detail@example.com' })),
+      (error: unknown) => {
+        if (!(error instanceof HttpException)) {
+          return false;
+        }
+        const message = error.message;
+        return message.includes('status=422')
+          && message.includes('detail=author forms.commitment is not permitted for namespace onboarding.interest');
+      },
+    );
   } finally {
     process.env.CITIZEN_SIGNED_SUBMISSION_RELAY_URL = originalRelayUrl;
     globalThis.fetch = originalFetch;

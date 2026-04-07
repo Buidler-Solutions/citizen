@@ -1,0 +1,808 @@
+import {
+  BadRequestException,
+  Injectable,
+  Logger,
+  UnauthorizedException,
+  HttpException,
+  HttpStatus,
+} from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { JwtService } from '@nestjs/jwt';
+import { InjectRepository } from '@nestjs/typeorm';
+import { createHash, createPublicKey, randomBytes, verify as verifySignature } from 'crypto';
+import { Repository } from 'typeorm';
+import { AuthChallenge } from './auth/auth-challenge.entity';
+import { AuthSession } from './auth/auth-session.entity';
+import { AuthUser } from './auth/auth-user.entity';
+
+const ED25519_SPKI_PREFIX = Buffer.from('302a300506032b6570032100', 'hex');
+
+type AuthSignatureScheme = 'evm_eip191' | 'citizen_ed25519';
+
+export interface VerifyChallengeInput {
+  challengeId: string;
+  message: string;
+  signature: string;
+  address: string;
+  scheme?: AuthSignatureScheme;
+  publicKey?: string;
+  userAgent?: string;
+  ipAddress?: string;
+}
+
+interface ParsedChallengeMessage {
+  domain: string;
+  walletAddress: string;
+  scheme: AuthSignatureScheme;
+  uri: string;
+  version: string;
+  chainId: number;
+  nonce: string;
+  issuedAt: string;
+  expirationTime: string;
+  publicKey?: string;
+}
+
+@Injectable()
+export class WalletAuthService {
+  private readonly logger = new Logger(WalletAuthService.name);
+  private readonly challengeRateLimitBuckets = new Map<string, { count: number; resetsAt: number }>();
+
+  constructor(
+    @InjectRepository(AuthUser)
+    private readonly authUserRepository: Repository<AuthUser>,
+    @InjectRepository(AuthChallenge)
+    private readonly authChallengeRepository: Repository<AuthChallenge>,
+    @InjectRepository(AuthSession)
+    private readonly authSessionRepository: Repository<AuthSession>,
+    private readonly jwtService: JwtService,
+    private readonly configService: ConfigService,
+  ) {}
+
+  private normalizeWalletAddress(address: string): string {
+    return address.trim().toLowerCase();
+  }
+
+  private normalizeDomain(domain: string): string {
+    return domain.trim().toLowerCase();
+  }
+
+  private normalizeSignatureScheme(scheme?: string): AuthSignatureScheme {
+    const normalized = (scheme ?? this.configService.get<string>('AUTH_SIGNATURE_SCHEME', 'evm_eip191'))
+      .trim()
+      .toLowerCase();
+
+    if (normalized === 'evm_eip191') {
+      return 'evm_eip191';
+    }
+
+    if (normalized === 'citizen_ed25519') {
+      return 'citizen_ed25519';
+    }
+
+    throw new BadRequestException('Unsupported auth signature scheme.');
+  }
+
+  private getEnabledAuthSchemes(): Set<AuthSignatureScheme> {
+    const configuredSchemes = (this.configService.get<string>('AUTH_ENABLED_SIGNATURE_SCHEMES', 'evm_eip191') ?? '')
+      .split(',')
+      .map((value) => value.trim().toLowerCase())
+      .filter(Boolean);
+
+    const enabled = new Set<AuthSignatureScheme>();
+    for (const scheme of configuredSchemes) {
+      if (scheme === 'evm_eip191' || scheme === 'citizen_ed25519') {
+        enabled.add(scheme);
+      }
+    }
+
+    if (enabled.size === 0) {
+      enabled.add('evm_eip191');
+    }
+
+    return enabled;
+  }
+
+  private assertSchemeEnabled(scheme: AuthSignatureScheme): void {
+    const enabled = this.getEnabledAuthSchemes();
+    if (!enabled.has(scheme)) {
+      throw new BadRequestException('Requested auth signature scheme is disabled.');
+    }
+  }
+
+  private isEvmRecoveryEnabled(): boolean {
+    const raw = (this.configService.get<string>('AUTH_EVM_SIGNATURE_RECOVERY_ENABLED', 'false') ?? 'false')
+      .trim()
+      .toLowerCase();
+    return raw === '1' || raw === 'true' || raw === 'yes';
+  }
+
+  private normalizeCitizenPublicKey(publicKey?: string): string {
+    const normalized = (publicKey ?? '').trim().toLowerCase();
+    if (!/^[a-f0-9]{64}$/.test(normalized)) {
+      throw new BadRequestException('Invalid Citizen public key format.');
+    }
+    return normalized;
+  }
+
+  private deriveCitizenAddressFromPublicKey(publicKeyHex: string): string {
+    const digest = createHash('sha256').update(Buffer.from(publicKeyHex, 'hex')).digest('hex');
+    return `ctzn:${digest.slice(0, 40)}`;
+  }
+
+  private getAllowedAuthDomains(): string[] {
+    return (this.configService.get<string>('AUTH_ALLOWED_DOMAINS', '') ?? '')
+      .split(',')
+      .map((value) => value.trim().toLowerCase())
+      .filter(Boolean);
+  }
+
+  private getAllowedChainIds(): number[] {
+    return (this.configService.get<string>('AUTH_ALLOWED_CHAIN_IDS', '') ?? '')
+      .split(',')
+      .map((value) => Number(value.trim()))
+      .filter((value) => Number.isInteger(value) && value > 0);
+  }
+
+  private getChallengeTtlSeconds(): number {
+    const raw = Number(this.configService.get<string>('AUTH_CHALLENGE_TTL_SECONDS', '300'));
+    return Number.isFinite(raw) && raw > 30 ? Math.trunc(raw) : 300;
+  }
+
+  private getChallengeRateLimitWindowMs(): number {
+    const raw = Number(this.configService.get<string>('AUTH_CHALLENGE_RATE_LIMIT_WINDOW_SECONDS', '60'));
+    const seconds = Number.isFinite(raw) && raw >= 10 ? Math.trunc(raw) : 60;
+    return seconds * 1000;
+  }
+
+  private getChallengeRateLimitMaxPerIp(): number {
+    const raw = Number(this.configService.get<string>('AUTH_CHALLENGE_RATE_LIMIT_MAX_PER_IP', '30'));
+    return Number.isFinite(raw) && raw >= 1 ? Math.trunc(raw) : 30;
+  }
+
+  private getChallengeRateLimitMaxPerWallet(): number {
+    const raw = Number(this.configService.get<string>('AUTH_CHALLENGE_RATE_LIMIT_MAX_PER_WALLET', '10'));
+    return Number.isFinite(raw) && raw >= 1 ? Math.trunc(raw) : 10;
+  }
+
+  private getAccessTokenTtlSeconds(): number {
+    const raw = Number(this.configService.get<string>('AUTH_ACCESS_TOKEN_TTL_SECONDS', '900'));
+    return Number.isFinite(raw) && raw > 60 ? Math.trunc(raw) : 900;
+  }
+
+  private getRefreshTokenTtlSeconds(): number {
+    const raw = Number(this.configService.get<string>('AUTH_REFRESH_TOKEN_TTL_SECONDS', `${60 * 60 * 24 * 14}`));
+    return Number.isFinite(raw) && raw > 300 ? Math.trunc(raw) : 60 * 60 * 24 * 14;
+  }
+
+  private hashRefreshToken(token: string): string {
+    return createHash('sha256').update(token).digest('hex');
+  }
+
+  private createRefreshToken(): string {
+    return randomBytes(32).toString('base64url');
+  }
+
+  private consumeChallengeRateLimit(key: string, max: number): boolean {
+    const now = Date.now();
+    const windowMs = this.getChallengeRateLimitWindowMs();
+    const existing = this.challengeRateLimitBuckets.get(key);
+    if (!existing || now >= existing.resetsAt) {
+      this.challengeRateLimitBuckets.set(key, {
+        count: 1,
+        resetsAt: now + windowMs,
+      });
+      return false;
+    }
+
+    existing.count += 1;
+    return existing.count > max;
+  }
+
+  private isValidRefreshTokenFormat(token: string): boolean {
+    return /^[A-Za-z0-9_-]{40,200}$/.test(token.trim());
+  }
+
+  private async cleanupExpiredAuthArtifacts(): Promise<void> {
+    await this.authChallengeRepository
+      .createQueryBuilder()
+      .delete()
+      .where('expires_at <= NOW()')
+      .execute();
+
+    await this.authSessionRepository
+      .createQueryBuilder()
+      .delete()
+      .where('expires_at <= NOW()')
+      .execute();
+  }
+
+  private validateUri(uri: string, normalizedDomain: string): void {
+    let parsed: URL;
+
+    try {
+      parsed = new URL(uri);
+    } catch {
+      throw new BadRequestException('Invalid URI.');
+    }
+
+    const normalizedHost = parsed.host.trim().toLowerCase();
+    if (normalizedHost !== normalizedDomain) {
+      throw new BadRequestException('URI domain mismatch.');
+    }
+
+    const isLocalhost = normalizedHost.startsWith('localhost');
+    if (parsed.protocol !== 'https:' && !(isLocalhost && parsed.protocol === 'http:')) {
+      throw new BadRequestException('URI must use HTTPS.');
+    }
+  }
+
+  private parseChallengeMessage(message: string): ParsedChallengeMessage {
+    const lines = message.split('\n');
+    if (lines.length < 10) {
+      throw new UnauthorizedException('Malformed challenge payload.');
+    }
+
+    const domainPrefix = ' wants you to sign in with your Citizen wallet:';
+    const domainLine = lines[0] ?? '';
+    if (!domainLine.endsWith(domainPrefix)) {
+      throw new UnauthorizedException('Malformed challenge payload.');
+    }
+
+    const readField = (line: string, label: string): string => {
+      if (!line.startsWith(`${label}: `)) {
+        throw new UnauthorizedException('Malformed challenge payload.');
+      }
+      return line.slice(label.length + 2).trim();
+    };
+
+    const domain = this.normalizeDomain(domainLine.slice(0, -domainPrefix.length));
+    const walletAddress = this.normalizeWalletAddress((lines[1] ?? '').trim());
+    const scheme = this.normalizeSignatureScheme(readField(lines[3] ?? '', 'Scheme'));
+    const uri = readField(lines[4] ?? '', 'URI');
+    const version = readField(lines[5] ?? '', 'Version');
+    const chainIdRaw = readField(lines[6] ?? '', 'Chain ID');
+    const nonce = readField(lines[7] ?? '', 'Nonce');
+    const issuedAt = readField(lines[8] ?? '', 'Issued At');
+    const expirationTime = readField(lines[9] ?? '', 'Expiration Time');
+
+    const chainId = Number(chainIdRaw);
+    if (!Number.isInteger(chainId) || chainId <= 0) {
+      throw new UnauthorizedException('Malformed challenge payload.');
+    }
+
+    if (!nonce || !uri || !issuedAt || !expirationTime) {
+      throw new UnauthorizedException('Malformed challenge payload.');
+    }
+
+    if (version !== '1') {
+      throw new UnauthorizedException('Unsupported challenge version.');
+    }
+
+    let publicKey: string | undefined;
+    if (scheme === 'evm_eip191') {
+      if (!/^0x[a-f0-9]{40}$/.test(walletAddress)) {
+        throw new UnauthorizedException('Malformed challenge payload.');
+      }
+    } else {
+      if (!/^ctzn:[a-f0-9]{40}$/.test(walletAddress)) {
+        throw new UnauthorizedException('Malformed challenge payload.');
+      }
+
+      if (lines.length < 11) {
+        throw new UnauthorizedException('Malformed challenge payload.');
+      }
+      publicKey = this.normalizeCitizenPublicKey(readField(lines[10] ?? '', 'Public Key'));
+    }
+
+    return {
+      domain,
+      walletAddress,
+      scheme,
+      uri,
+      version,
+      chainId,
+      nonce,
+      issuedAt,
+      expirationTime,
+      publicKey,
+    };
+  }
+
+  private buildCanonicalMessage(parsed: ParsedChallengeMessage): string {
+    const messageLines = [
+      `${parsed.domain} wants you to sign in with your Citizen wallet:`,
+      parsed.walletAddress,
+      '',
+      `Scheme: ${parsed.scheme}`,
+      `URI: ${parsed.uri}`,
+      `Version: ${parsed.version}`,
+      `Chain ID: ${parsed.chainId}`,
+      `Nonce: ${parsed.nonce}`,
+      `Issued At: ${parsed.issuedAt}`,
+      `Expiration Time: ${parsed.expirationTime}`,
+    ];
+
+    if (parsed.scheme === 'citizen_ed25519') {
+      messageLines.push(`Public Key: ${parsed.publicKey ?? ''}`);
+    }
+
+    return messageLines.join('\n');
+  }
+
+  private verifyEvmSignature(signature: string, message: string, expectedAddress: string): void {
+    void message;
+    void expectedAddress;
+    const normalizedSignature = signature.trim().toLowerCase();
+    if (!/^0x[a-f0-9]{130}$/.test(normalizedSignature)) {
+      throw new UnauthorizedException('Invalid signature.');
+    }
+
+    const recoveryByte = Number.parseInt(normalizedSignature.slice(-2), 16);
+    if (![0, 1, 27, 28].includes(recoveryByte)) {
+      throw new UnauthorizedException('Invalid signature.');
+    }
+
+    if (this.isEvmRecoveryEnabled()) {
+      throw new BadRequestException(
+        'EVM cryptographic signer recovery is enabled but ethereum-cryptography is not installed in this backend runtime.',
+      );
+    }
+  }
+
+  private verifyCitizenSignature(
+    signature: string,
+    message: string,
+    expectedAddress: string,
+    publicKeyHex: string,
+  ): void {
+    const normalizedSignature = signature.trim();
+    if (!/^[A-Za-z0-9_-]{86,120}$/.test(normalizedSignature)) {
+      throw new UnauthorizedException('Invalid signature.');
+    }
+
+    const keyBytes = Buffer.from(publicKeyHex, 'hex');
+    const derivedAddress = this.deriveCitizenAddressFromPublicKey(publicKeyHex);
+    if (derivedAddress !== expectedAddress) {
+      throw new UnauthorizedException('Citizen public key/address mismatch.');
+    }
+
+    const signatureBytes = Buffer.from(normalizedSignature, 'base64url');
+    const spkiKey = Buffer.concat([ED25519_SPKI_PREFIX, keyBytes]);
+    const publicKey = createPublicKey({ key: spkiKey, format: 'der', type: 'spki' });
+
+    const isValid = verifySignature(null, Buffer.from(message, 'utf8'), publicKey, signatureBytes);
+    if (!isValid) {
+      throw new UnauthorizedException('Invalid signature.');
+    }
+  }
+
+  private writeVerifyAuditLog(
+    outcome: 'success' | 'failure',
+    reason: string,
+    input: VerifyChallengeInput,
+    walletAddress?: string,
+  ): void {
+    this.logger.log(
+      JSON.stringify({
+        event: 'wallet_auth_verify',
+        outcome,
+        reason,
+        challengeId: input.challengeId,
+        walletAddress: walletAddress ?? this.normalizeWalletAddress(input.address),
+        scheme: input.scheme ?? 'n/a',
+        userAgent: input.userAgent ?? '',
+        ipAddress: input.ipAddress ?? '',
+        occurredAt: new Date().toISOString(),
+      }),
+    );
+  }
+
+  private writeAuthAuditLog(
+    event: 'wallet_auth_challenge' | 'wallet_auth_refresh' | 'wallet_auth_logout',
+    outcome: 'success' | 'failure',
+    reason: string,
+    metadata: Record<string, unknown>,
+  ): void {
+    this.logger.log(
+      JSON.stringify({
+        event,
+        outcome,
+        reason,
+        occurredAt: new Date().toISOString(),
+        ...metadata,
+      }),
+    );
+  }
+
+  async createChallenge(
+    address: string,
+    domain: string,
+    uri: string,
+    chainId: number,
+    scheme?: AuthSignatureScheme,
+    publicKey?: string,
+    ipAddress?: string,
+  ): Promise<{ challengeId: string; message: string; expiresAt: string; scheme: AuthSignatureScheme }> {
+    await this.cleanupExpiredAuthArtifacts();
+
+    const signatureScheme = this.normalizeSignatureScheme(scheme);
+    this.assertSchemeEnabled(signatureScheme);
+
+    const walletAddress = this.normalizeWalletAddress(address);
+    const normalizedDomain = this.normalizeDomain(domain);
+    const normalizedIpAddress = (ipAddress ?? '').trim().toLowerCase() || 'unknown';
+
+    let citizenPublicKey: string | undefined;
+    if (signatureScheme === 'evm_eip191') {
+      if (!/^0x[a-f0-9]{40}$/.test(walletAddress)) {
+        throw new BadRequestException('Invalid wallet address format.');
+      }
+    } else {
+      citizenPublicKey = this.normalizeCitizenPublicKey(publicKey);
+      const derivedAddress = this.deriveCitizenAddressFromPublicKey(citizenPublicKey);
+      if (walletAddress !== derivedAddress) {
+        throw new BadRequestException('Citizen address does not match provided public key.');
+      }
+    }
+
+    if (this.consumeChallengeRateLimit(`challenge:ip:${normalizedIpAddress}`, this.getChallengeRateLimitMaxPerIp())) {
+      this.writeAuthAuditLog('wallet_auth_challenge', 'failure', 'rate-limited-ip', {
+        walletAddress,
+        scheme: signatureScheme,
+        ipAddress: normalizedIpAddress,
+      });
+      throw new HttpException('Challenge rate limit exceeded for IP.', HttpStatus.TOO_MANY_REQUESTS);
+    }
+    if (this.consumeChallengeRateLimit(`challenge:wallet:${walletAddress}`, this.getChallengeRateLimitMaxPerWallet())) {
+      this.writeAuthAuditLog('wallet_auth_challenge', 'failure', 'rate-limited-wallet', {
+        walletAddress,
+        scheme: signatureScheme,
+        ipAddress: normalizedIpAddress,
+      });
+      throw new HttpException('Challenge rate limit exceeded for wallet.', HttpStatus.TOO_MANY_REQUESTS);
+    }
+
+    const allowedDomains = this.getAllowedAuthDomains();
+    if (allowedDomains.length > 0 && !allowedDomains.includes(normalizedDomain)) {
+      throw new BadRequestException('Unsupported auth domain.');
+    }
+
+    if (!Number.isInteger(chainId) || chainId <= 0) {
+      throw new BadRequestException('Invalid chainId.');
+    }
+    const allowedChainIds = this.getAllowedChainIds();
+    if (allowedChainIds.length > 0 && !allowedChainIds.includes(chainId)) {
+      throw new BadRequestException('Unsupported chainId.');
+    }
+    this.validateUri(uri, normalizedDomain);
+
+    const now = new Date();
+    const nonce = randomBytes(16).toString('hex');
+    const issuedAt = now.toISOString();
+    const expiresAt = new Date(now.getTime() + this.getChallengeTtlSeconds() * 1000);
+
+    const messageLines = [
+      `${normalizedDomain} wants you to sign in with your Citizen wallet:`,
+      walletAddress,
+      '',
+      `Scheme: ${signatureScheme}`,
+      `URI: ${uri}`,
+      'Version: 1',
+      `Chain ID: ${chainId}`,
+      `Nonce: ${nonce}`,
+      `Issued At: ${issuedAt}`,
+      `Expiration Time: ${expiresAt.toISOString()}`,
+    ];
+    if (signatureScheme === 'citizen_ed25519') {
+      messageLines.push(`Public Key: ${citizenPublicKey}`);
+    }
+    const message = messageLines.join('\n');
+
+    const challenge = this.authChallengeRepository.create({
+      walletAddress,
+      signatureScheme,
+      publicKey: citizenPublicKey ?? null,
+      domain: normalizedDomain,
+      uri,
+      chainId,
+      nonce,
+      message,
+      expiresAt,
+      usedAt: null,
+    });
+
+    const saved = await this.authChallengeRepository.save(challenge);
+    this.writeAuthAuditLog('wallet_auth_challenge', 'success', 'challenge-issued', {
+      challengeId: saved.id,
+      walletAddress,
+      scheme: signatureScheme,
+      domain: normalizedDomain,
+      chainId,
+      ipAddress: normalizedIpAddress,
+    });
+
+    return {
+      challengeId: saved.id,
+      message: saved.message,
+      expiresAt: saved.expiresAt.toISOString(),
+      scheme: signatureScheme,
+    };
+  }
+
+  async verifyChallenge(input: VerifyChallengeInput): Promise<{
+    accessToken: string;
+    tokenType: string;
+    expiresIn: number;
+    sessionId: string;
+    user: { id: string; walletAddress: string };
+    refreshToken: string;
+    refreshExpiresAt: Date;
+  }> {
+    const normalizedAddress = this.normalizeWalletAddress(input.address);
+
+    try {
+      const locked = await this.authChallengeRepository.manager.transaction(async (manager) => {
+        const challenge = await manager
+          .getRepository(AuthChallenge)
+          .createQueryBuilder('challenge')
+          .setLock('pessimistic_write')
+          .where('challenge.id = :id', { id: input.challengeId })
+          .getOne();
+
+        if (!challenge) {
+          throw new UnauthorizedException('Challenge not found.');
+        }
+
+        if (challenge.usedAt) {
+          throw new UnauthorizedException('Challenge already used.');
+        }
+
+        if (challenge.expiresAt.getTime() <= Date.now()) {
+          throw new UnauthorizedException('Challenge expired.');
+        }
+
+        if (input.message !== challenge.message) {
+          throw new UnauthorizedException('Challenge message mismatch.');
+        }
+
+        if (normalizedAddress !== challenge.walletAddress) {
+          throw new UnauthorizedException('Wallet address mismatch.');
+        }
+
+        const parsedMessage = this.parseChallengeMessage(input.message);
+        const canonicalMessage = this.buildCanonicalMessage(parsedMessage);
+
+        if (canonicalMessage !== input.message) {
+          throw new UnauthorizedException('Challenge canonicalization mismatch.');
+        }
+
+        if (parsedMessage.scheme !== challenge.signatureScheme) {
+          throw new UnauthorizedException('Challenge scheme mismatch.');
+        }
+        this.assertSchemeEnabled(parsedMessage.scheme);
+
+        if (parsedMessage.walletAddress !== challenge.walletAddress) {
+          throw new UnauthorizedException('Challenge wallet address mismatch.');
+        }
+
+        if (parsedMessage.domain !== challenge.domain) {
+          throw new UnauthorizedException('Challenge domain mismatch.');
+        }
+
+        if (parsedMessage.uri !== challenge.uri) {
+          throw new UnauthorizedException('Challenge URI mismatch.');
+        }
+
+        if (parsedMessage.chainId !== challenge.chainId) {
+          throw new UnauthorizedException('Challenge chainId mismatch.');
+        }
+
+        if (parsedMessage.scheme === 'citizen_ed25519') {
+          const requestPublicKey = this.normalizeCitizenPublicKey(input.publicKey);
+          if (requestPublicKey !== challenge.publicKey || requestPublicKey !== parsedMessage.publicKey) {
+            throw new UnauthorizedException('Challenge public key mismatch.');
+          }
+        }
+
+        this.validateUri(parsedMessage.uri, parsedMessage.domain);
+
+        const issuedAt = Date.parse(parsedMessage.issuedAt);
+        const expirationTime = Date.parse(parsedMessage.expirationTime);
+        if (!Number.isFinite(issuedAt) || !Number.isFinite(expirationTime) || expirationTime <= issuedAt) {
+          throw new UnauthorizedException('Challenge time window invalid.');
+        }
+
+        if (Math.abs(issuedAt - challenge.createdAt.getTime()) > 120_000) {
+          throw new UnauthorizedException('Challenge issuedAt mismatch.');
+        }
+
+        if (Math.abs(expirationTime - challenge.expiresAt.getTime()) > 1_000) {
+          throw new UnauthorizedException('Challenge expiration mismatch.');
+        }
+
+        if (parsedMessage.scheme === 'evm_eip191') {
+          this.verifyEvmSignature(input.signature, input.message, normalizedAddress);
+        } else {
+          this.verifyCitizenSignature(
+            input.signature,
+            input.message,
+            normalizedAddress,
+            this.normalizeCitizenPublicKey(input.publicKey),
+          );
+        }
+
+        challenge.usedAt = new Date();
+        await manager.getRepository(AuthChallenge).save(challenge);
+        return challenge;
+      });
+
+      let user = await this.authUserRepository.findOne({ where: { walletAddress: normalizedAddress } });
+      if (!user) {
+        user = this.authUserRepository.create({ walletAddress: normalizedAddress });
+        user = await this.authUserRepository.save(user);
+      }
+
+      const refreshToken = this.createRefreshToken();
+      const refreshExpiresAt = new Date(Date.now() + this.getRefreshTokenTtlSeconds() * 1000);
+      const session = this.authSessionRepository.create({
+        userId: user.id,
+        refreshTokenHash: this.hashRefreshToken(refreshToken),
+        expiresAt: refreshExpiresAt,
+        revokedAt: null,
+        revokedReason: null,
+        lastUsedAt: new Date(),
+        userAgent: input.userAgent ?? '',
+        ipAddress: input.ipAddress ?? '',
+      });
+
+      const savedSession = await this.authSessionRepository.save(session);
+      const expiresIn = this.getAccessTokenTtlSeconds();
+      const issuer = this.configService.get<string>('AUTH_JWT_ISSUER', 'citizen-landing-backend');
+      const audience = this.configService.get<string>('AUTH_JWT_AUDIENCE', 'citizen-landing-frontend');
+
+      const accessToken = this.jwtService.sign(
+        {
+          wallet: user.walletAddress,
+          sessionId: savedSession.id,
+        },
+        {
+          subject: user.id,
+          issuer,
+          audience,
+          expiresIn,
+        },
+      );
+
+      this.writeVerifyAuditLog('success', 'verified', input, locked.walletAddress);
+
+      return {
+        accessToken,
+        tokenType: 'Bearer',
+        expiresIn,
+        sessionId: savedSession.id,
+        user: {
+          id: user.id,
+          walletAddress: user.walletAddress,
+        },
+        refreshToken,
+        refreshExpiresAt,
+      };
+    } catch (error) {
+      this.writeVerifyAuditLog(
+        'failure',
+        error instanceof Error ? error.message : 'unknown error',
+        input,
+      );
+      throw error;
+    }
+  }
+
+  async refreshSession(refreshToken: string): Promise<{
+    accessToken: string;
+    tokenType: string;
+    expiresIn: number;
+    refreshToken: string;
+    refreshExpiresAt: Date;
+  }> {
+    if (!refreshToken?.trim()) {
+      throw new UnauthorizedException('Missing refresh token.');
+    }
+    if (!this.isValidRefreshTokenFormat(refreshToken)) {
+      throw new UnauthorizedException('Invalid refresh token.');
+    }
+
+    await this.cleanupExpiredAuthArtifacts();
+
+    const tokenHash = this.hashRefreshToken(refreshToken);
+    const { session, nextRefreshToken } = await this.authSessionRepository.manager.transaction(
+      async (manager) => {
+        const lockedSession = await manager
+          .getRepository(AuthSession)
+          .createQueryBuilder('session')
+          .setLock('pessimistic_write')
+          .leftJoinAndSelect('session.user', 'user')
+          .where('session.refresh_token_hash = :tokenHash', { tokenHash })
+          .andWhere('session.revoked_at IS NULL')
+          .getOne();
+
+        if (!lockedSession || !lockedSession.user || lockedSession.expiresAt.getTime() <= Date.now()) {
+          throw new UnauthorizedException('Invalid refresh token.');
+        }
+
+        const rotatedRefreshToken = this.createRefreshToken();
+        lockedSession.refreshTokenHash = this.hashRefreshToken(rotatedRefreshToken);
+        lockedSession.lastUsedAt = new Date();
+        await manager.getRepository(AuthSession).save(lockedSession);
+
+        return {
+          session: lockedSession,
+          nextRefreshToken: rotatedRefreshToken,
+        };
+      },
+    );
+
+    const issuer = this.configService.get<string>('AUTH_JWT_ISSUER', 'citizen-landing-backend');
+    const audience = this.configService.get<string>('AUTH_JWT_AUDIENCE', 'citizen-landing-frontend');
+    const expiresIn = this.getAccessTokenTtlSeconds();
+
+    const accessToken = this.jwtService.sign(
+      {
+        wallet: session.user.walletAddress,
+        sessionId: session.id,
+      },
+      {
+        subject: session.user.id,
+        issuer,
+        audience,
+        expiresIn,
+      },
+    );
+
+    const response = {
+      accessToken,
+      tokenType: 'Bearer',
+      expiresIn,
+      refreshToken: nextRefreshToken,
+      refreshExpiresAt: session.expiresAt,
+    };
+    this.writeAuthAuditLog('wallet_auth_refresh', 'success', 'refresh-rotated', {
+      sessionId: session.id,
+      userId: session.user.id,
+    });
+
+    return response;
+  }
+
+  async revokeSession(refreshToken: string): Promise<void> {
+    if (!refreshToken?.trim()) {
+      return;
+    }
+    if (!this.isValidRefreshTokenFormat(refreshToken)) {
+      return;
+    }
+
+    const tokenHash = this.hashRefreshToken(refreshToken);
+    await this.authSessionRepository.manager.transaction(async (manager) => {
+      const session = await manager
+        .getRepository(AuthSession)
+        .createQueryBuilder('session')
+        .setLock('pessimistic_write')
+        .where('session.refresh_token_hash = :tokenHash', { tokenHash })
+        .andWhere('session.revoked_at IS NULL')
+        .getOne();
+
+      if (!session) {
+        return;
+      }
+
+      session.revokedAt = new Date();
+      session.revokedReason = 'logout';
+      await manager.getRepository(AuthSession).save(session);
+      this.writeAuthAuditLog('wallet_auth_logout', 'success', 'session-revoked', {
+        sessionId: session.id,
+        userId: session.userId,
+      });
+    });
+  }
+}

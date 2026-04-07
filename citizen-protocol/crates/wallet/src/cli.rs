@@ -11,10 +11,10 @@ use std::path::{Path, PathBuf};
 use uuid::Uuid;
 
 use crate::{
-    compute_file_manifest_commitment, decrypt_secret_key, encrypt_secret_key,
-    generate_mnemonic_phrase, parse_verifying_key, sign_entry, verify_entry_signature,
-    verify_offchain_file_reconciliation, ActionPolicy, EncryptedSecretKey, EntryDraft,
-    WalletKeypair,
+    build_wrcp_msig_v1_proof, build_wrcp_msig_v1_signing_payload, compute_file_manifest_commitment,
+    decrypt_secret_key, dry_run_wrcp_msig_v1, encrypt_secret_key, generate_mnemonic_phrase,
+    parse_verifying_key, sign_entry, verify_entry_signature, verify_offchain_file_reconciliation,
+    ActionPolicy, EncryptedSecretKey, EntryDraft, WalletKeypair, WrcpMsigV1Proof,
 };
 
 #[derive(Debug, Parser)]
@@ -260,11 +260,19 @@ enum Commands {
         #[arg(long)]
         entry_json: String,
         #[arg(long)]
+        namespace_policy_json: String,
+        #[arg(long)]
         approver: String,
         #[arg(long)]
         secret_key_hex: String,
         #[arg(long)]
         expected_public_key: Option<String>,
+    },
+    DryRunBuilderCreditGrant {
+        #[arg(long)]
+        entry_json: String,
+        #[arg(long)]
+        namespace_policy_json: String,
     },
     SignBuilderCreditGrant {
         #[arg(long, default_value = "wallet.json")]
@@ -314,9 +322,8 @@ enum Commands {
 
 #[derive(Debug, Serialize)]
 struct BuilderCreditProof {
-    approver: String,
-    public_key: String,
-    signature: String,
+    #[serde(flatten)]
+    proof: WrcpMsigV1Proof,
     signing_payload: String,
 }
 
@@ -877,18 +884,13 @@ pub fn run() -> anyhow::Result<()> {
         }
         Commands::SignBuilderCreditProof {
             entry_json,
+            namespace_policy_json,
             approver,
             secret_key_hex,
             expected_public_key,
         } => {
             let entry: LedgerEntry = serde_json::from_str(&entry_json)?;
-            let amount = entry
-                .payload
-                .get("amount")
-                .and_then(Value::as_u64)
-                .ok_or_else(|| {
-                    anyhow::anyhow!("entry payload.amount must be a positive integer")
-                })?;
+            let namespace_policy: Value = serde_json::from_str(&namespace_policy_json)?;
             let secret_bytes = hex::decode(secret_key_hex)?;
             let keypair = WalletKeypair::from_secret_bytes(Uuid::new_v4(), &secret_bytes)?;
             let public_key = keypair.verifying_key_hex();
@@ -899,24 +901,35 @@ pub fn run() -> anyhow::Result<()> {
                     ));
                 }
             }
-            let signing_payload = serde_json::to_string(&json!({
-                "entry_id": entry.entry_id,
-                "namespace": entry.namespace,
-                "action": entry.action,
-                "object_id": entry.object_id,
-                "author": entry.author,
-                "amount": amount,
-                "timestamp": entry.timestamp,
-                "approver": approver
-            }))?;
-            let signature = keypair.sign_bytes(signing_payload.as_bytes());
+            let amount = entry
+                .payload
+                .get("amount")
+                .and_then(Value::as_u64)
+                .ok_or_else(|| {
+                    anyhow::anyhow!("entry payload.amount must be a positive integer")
+                })?;
+            let proof = build_wrcp_msig_v1_proof(&entry, &approver, &keypair, &namespace_policy)?;
+            let signing_payload = build_wrcp_msig_v1_signing_payload(&entry, amount, &approver)?;
             let proof = BuilderCreditProof {
-                approver,
-                public_key,
-                signature: hex::encode(signature.to_bytes()),
+                proof,
                 signing_payload,
             };
             println!("{}", serde_json::to_string_pretty(&proof)?);
+        }
+        Commands::DryRunBuilderCreditGrant {
+            entry_json,
+            namespace_policy_json,
+        } => {
+            let entry: LedgerEntry = serde_json::from_str(&entry_json)?;
+            let namespace_policy: Value = serde_json::from_str(&namespace_policy_json)?;
+            let report = dry_run_wrcp_msig_v1(&entry, &namespace_policy);
+            println!("{}", serde_json::to_string_pretty(&report)?);
+            if !report.ok {
+                return Err(anyhow::anyhow!(
+                    "dry-run failed with {} error(s)",
+                    report.errors.len()
+                ));
+            }
         }
         Commands::SignBuilderCreditGrant {
             path,
