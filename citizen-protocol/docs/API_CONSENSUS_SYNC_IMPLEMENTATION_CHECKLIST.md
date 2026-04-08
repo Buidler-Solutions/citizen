@@ -106,6 +106,12 @@ Last updated: 2026-04-08 (localnet configs flipped to consensus-backed ingestion
 - Added scripted evidence harness at `scripts/capture_api_consensus_sync_evidence.sh` to launch the three-validator localnet, submit to Alpha, assert Beta/Gamma visibility, verify height parity, and write timestamped artifacts under `docs/artifacts/`.
 - Remaining Checkpoint 5 evidence capture (curl artifacts/log snapshots/block-height parity) is still pending a full localnet validation run in the implementation PR context using the new harness.
 
+## Checkpoint 0 implementation notes (in progress)
+
+- Added scripted baseline harness at `scripts/capture_api_consensus_sync_baseline_evidence.sh` to run Alpha/Beta/Gamma with temporary `api_local_finalize_mode = true` overlays, submit to Alpha, and capture divergence artifacts under `docs/artifacts/`.
+- The baseline harness asserts the expected pre-change behavior (`alpha_contains=true`, `beta_contains=false`, `gamma_contains=false`) and emits API snapshots/log tails needed for the historical comparison checkpoint.
+- Baseline evidence artifacts still need to be captured in this PR context (same as Checkpoint 5 convergence evidence capture), then linked directly in this checklist.
+
 ## Checkpoint 7 — Documentation + rollout
 
 - [x] Update localnet/runbook docs to describe consensus-backed ingestion path.
