@@ -36,6 +36,31 @@ infrastructure.
    against `http://127.0.0.1:8081`).
 4. Press `Ctrl+C` in the launcher to stop all nodes cleanly.
 
+## API Ingestion Mode (Compatibility Flag)
+
+Validator write ingestion supports two modes behind
+`api_local_finalize_mode`:
+
+- `true` (migration compatibility default): API submissions continue to finalize
+  locally on the receiving validator.
+- `false` (target default for consensus-backed ingestion): API submissions are
+  admitted/validated at the edge and enqueued into the shared txpool for block
+  proposal + consensus finality.
+
+Recommended localnet setting for convergence testing:
+
+```toml
+api_local_finalize_mode = false
+```
+
+When this is set to `false`, operators should expect:
+
+- `POST /api/v1/entries/submit` and `POST /api/v1/envelopes/submit` to return
+  `202 Accepted` with queue diagnostics in the response body.
+- Queue saturation to return `429` with `status: "queue_full"`.
+- Entries submitted to one validator to become visible on other validators
+  after consensus finality (rather than immediately as node-local state).
+
 ## Adapting to Production
 
 - **Replace signing keys**: swap `signing_key_hex` in each config with HSM-backed
@@ -79,6 +104,33 @@ infrastructure.
   - Only grant-issuance bootstrap actions (`MULTISIG_CREDIT_GRANT` / `PROGRAMMABLE_CREDIT_GRANT` in `builder.credits`) are exempt from needing a pre-existing `credit_grant_id`.
   - Missing/invalid keys return `401`; missing scopes return `403`; over-limit
     clients receive `429`.
+
+## Queue Health + Alerting Hooks
+
+In consensus-backed ingestion mode (`api_local_finalize_mode = false`), include
+the following checks in your operations pipeline:
+
+- **Stuck queue detector**: alert when write traffic is present (`enqueued_total`
+  increasing) but block intake is stalled (`drained_total` flat) for longer than
+  two block intervals.
+- **Zero-throughput detector**: alert when queue length remains above zero while
+  `drained_total` remains unchanged for the same window.
+- **Duplicate pressure monitor**: watch
+  `enqueue_rejected_duplicate_total` for sudden jumps that may indicate client
+  replay storms.
+- **Capacity pressure monitor**: watch `enqueue_rejected_full_total` and HTTP
+  `429 queue_full` responses; sustained growth indicates txpool capacity is too
+  small for current ingress rate.
+
+Operator playbook for alerts:
+
+1. Confirm consensus liveness (block heights advancing on all validators).
+2. Check queue telemetry from recent submit responses (`queue_len`,
+   `queue_capacity`, counters).
+3. Reduce ingress pressure (tighten API rate limits or temporarily gate keys) if
+   queue-full rejections persist.
+4. Escalate to validator incident handling if queue drain remains stalled despite
+   healthy ingress and available capacity.
 
 ## Config Reference
 
