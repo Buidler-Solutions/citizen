@@ -53,12 +53,12 @@ Status: Draft implementation checkpoint checklist for making API submissions flo
 
 - [x] Extend `ConsensusEngine` to receive shared txpool handle.
 - [x] Implement `collect_entries()` to drain txpool using `max_entries_per_block`.
-- [ ] Ensure proposer includes drained entries in proposal entry root.
+- [x] Ensure proposer includes drained entries in proposal entry root.
 - [ ] Keep commit/finality path unchanged (`finalize_block` + `ledger.apply_block`).
 - [ ] Add/adjust consensus tests:
-  - [ ] proposal with non-empty entries.
-  - [ ] commit applies entries once.
-  - [ ] repeated commit/replay does not double-apply.
+  - [x] proposal with non-empty entries.
+  - [x] commit applies entries once.
+  - [x] repeated commit/replay does not double-apply.
 
 ## Checkpoint 4 — Node/runtime wiring
 
