@@ -61,6 +61,23 @@ When this is set to `false`, operators should expect:
 - Entries submitted to one validator to become visible on other validators
   after consensus finality (rather than immediately as node-local state).
 
+## API → Consensus Convergence Evidence Capture
+
+To produce a timestamped artifact proving submit-to-one/read-on-all behavior,
+run:
+
+```bash
+scripts/capture_api_consensus_sync_evidence.sh
+```
+
+The script will:
+
+- build and start the three localnet validators,
+- submit one entry to Alpha (`8081`) only,
+- verify that the same `entry_id` is visible on Beta/Gamma,
+- verify block-height parity across all validators, and
+- write a report under `docs/artifacts/` containing API snapshots + log tails.
+
 ## Admission vs Ingestion Responsibility (Operator Note)
 
 Admission and ingestion are complementary controls and both are required in
