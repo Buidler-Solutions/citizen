@@ -64,8 +64,8 @@ Status: Draft implementation checkpoint checklist for making API submissions flo
 
 - [x] In node bootstrap, instantiate one shared txpool per node process.
 - [x] Pass txpool to both API server and consensus engine.
-- [ ] Verify observer mode remains read-only and does not enqueue writes.
-- [ ] Add startup logging fields for mode/queue diagnostics.
+- [x] Verify observer mode remains read-only and does not enqueue writes.
+- [x] Add startup logging fields for mode/queue diagnostics.
 
 ## Checkpoint 5 — Localnet convergence validation
 
