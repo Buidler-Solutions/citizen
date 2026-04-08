@@ -3,6 +3,7 @@ block_time_millis = 1000
 quorum_bps = 8000
 signing_key_hex = "3f3e3d3c3b3a393837363534333231302f2e2d2c2b2a29282726252423222120"
 api_port = 8083
+api_local_finalize_mode = false
 data_dir = "data/gamma"
 bind_addr = "127.0.0.1:9102"
 network_key_rotation_secs = 3600
