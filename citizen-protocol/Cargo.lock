@@ -822,6 +822,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "citizen-txpool"
+version = "0.1.0"
+dependencies = [
+ "citizen-types",
+ "parking_lot",
+ "serde_json",
+ "uuid",
+]
+
+[[package]]
 name = "citizen-types"
 version = "0.1.0"
 dependencies = [
