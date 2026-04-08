@@ -1046,12 +1046,13 @@ pub fn decrypt_payload_with_hybrid(
         .ok_or_else(|| {
             ProtocolError::ValidationFailed("no DEK wrap found for caller DID".into())
         })?;
-    if key_wrap.wrap_algorithm != "x25519-xchacha20poly1305" {
+    if !is_supported_hybrid_wrap_algorithm(&key_wrap.wrap_algorithm) {
         return Err(ProtocolError::ValidationFailed(
             "unsupported DEK wrap algorithm".into(),
         ));
     }
     let caller_secret = parse_x25519_secret_key(caller_private_key_hex)?;
+    assert_caller_key_matches_did(caller_did, &caller_secret)?;
     let author_pubkey = parse_x25519_public_key(author_public_key_hex)?;
     let dek =
         privacy::unwrap_dek_for_reader(&key_wrap.wrapped_dek, &caller_secret, &author_pubkey)?;
@@ -1073,6 +1074,30 @@ pub fn decrypt_payload_with_hybrid(
         },
     };
     decrypt_payload_with_dek(&encrypted, &dek)
+}
+
+fn is_supported_hybrid_wrap_algorithm(algorithm: &str) -> bool {
+    matches!(
+        algorithm,
+        // Canonical label used by current wallet encrypt/sign flow.
+        "x25519-xchacha20poly1305"
+            // Legacy label accepted for backward compatibility with older entries.
+            | "x25519-chacha20poly1305"
+    )
+}
+
+fn assert_caller_key_matches_did(caller_did: &str, caller_secret: &StaticSecret) -> Result<()> {
+    const DID_PREFIX: &str = "did:key:x25519:";
+    if let Some(public_hex) = caller_did.strip_prefix(DID_PREFIX) {
+        let expected = parse_x25519_public_key(public_hex)?;
+        let actual = X25519PublicKey::from(caller_secret);
+        if actual.as_bytes() != expected.as_bytes() {
+            return Err(ProtocolError::ValidationFailed(
+                "caller DID does not match provided X25519 private key".into(),
+            ));
+        }
+    }
+    Ok(())
 }
 
 pub fn ensure_active_reader_grant(
@@ -2465,6 +2490,99 @@ mod tests {
         )
         .expect_err("revoked grant must be denied");
         assert!(revoked.to_string().contains("grant has been revoked"));
+    }
+
+    #[test]
+    fn hybrid_decrypt_accepts_legacy_wrap_algorithm_label() {
+        let author = WalletKeypair::generate();
+        let reader_secret = StaticSecret::from([21u8; 32]);
+        let reader_public = X25519PublicKey::from(&reader_secret);
+
+        let mut reader_public_keys = BTreeMap::new();
+        reader_public_keys.insert(
+            "did:ledger:reader".to_string(),
+            hex::encode(reader_public.as_bytes()),
+        );
+
+        let draft = EntryDraft {
+            namespace: "audit.procurement".to_string(),
+            action: "RECORD_EVENT".to_string(),
+            object_id: "AUD-7".to_string(),
+            payload: json!({"document_hash":"abc123","event":"BID_OPENED"}),
+            privacy_flag: true,
+            privacy_mode: PrivacyMode::Hybrid,
+            encryption_passphrase: None,
+            authorized_readers: vec!["did:ledger:reader".to_string()],
+            custodian_policy_id: None,
+            key_wrapped_secrets: vec![],
+            revocation_events: vec![],
+            field_reader_acls: Default::default(),
+            reader_public_keys,
+            author: "did:ledger:auditor".to_string(),
+            timestamp: 1_736_500_140,
+        };
+
+        let mut entry = sign_entry(draft, &author).expect("sign hybrid entry");
+        entry.key_wrapped_secrets[0].wrap_algorithm = "x25519-chacha20poly1305".to_string();
+
+        let decrypted = decrypt_payload_with_hybrid(
+            &entry,
+            "did:ledger:reader",
+            &hex::encode(reader_secret.to_bytes()),
+            &hex::encode(X25519PublicKey::from(&x25519_secret_from_wallet(&author)).as_bytes()),
+            1_736_500_141,
+        )
+        .expect("legacy label should remain decryptable");
+
+        assert_eq!(decrypted["event"], "BID_OPENED");
+    }
+
+    #[test]
+    fn hybrid_decrypt_rejects_caller_key_mismatch_for_did_key_reader() {
+        let author = WalletKeypair::generate();
+        let authorized_secret = StaticSecret::from([31u8; 32]);
+        let authorized_public = X25519PublicKey::from(&authorized_secret);
+        let impostor_secret = StaticSecret::from([32u8; 32]);
+
+        let authorized_did = format!("did:key:x25519:{}", hex::encode(authorized_public.as_bytes()));
+
+        let mut reader_public_keys = BTreeMap::new();
+        reader_public_keys.insert(
+            authorized_did.clone(),
+            hex::encode(authorized_public.as_bytes()),
+        );
+
+        let draft = EntryDraft {
+            namespace: "forms.commitment".to_string(),
+            action: "SUBMIT_ONBOARDING_INTEREST".to_string(),
+            object_id: "onboarding_submission:test".to_string(),
+            payload: json!({"data_hash":"sha256:abc","encrypted_form_url":"interest_submissions://test"}),
+            privacy_flag: true,
+            privacy_mode: PrivacyMode::Hybrid,
+            encryption_passphrase: None,
+            authorized_readers: vec![authorized_did.clone()],
+            custodian_policy_id: None,
+            key_wrapped_secrets: vec![],
+            revocation_events: vec![],
+            field_reader_acls: Default::default(),
+            reader_public_keys,
+            author: "did:ledger:auditor".to_string(),
+            timestamp: 1_736_500_150,
+        };
+
+        let entry = sign_entry(draft, &author).expect("sign hybrid entry");
+        let err = decrypt_payload_with_hybrid(
+            &entry,
+            &authorized_did,
+            &hex::encode(impostor_secret.to_bytes()),
+            &hex::encode(X25519PublicKey::from(&x25519_secret_from_wallet(&author)).as_bytes()),
+            1_736_500_151,
+        )
+        .expect_err("key mismatch must be rejected");
+
+        assert!(err
+            .to_string()
+            .contains("caller DID does not match provided X25519 private key"));
     }
 
     #[test]
