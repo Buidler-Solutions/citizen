@@ -2,7 +2,7 @@
 
 Status: Draft implementation checkpoint checklist for making API submissions flow through consensus so Alpha/Beta/Gamma converge on the same committed ledger state.
 
-Last updated: 2026-04-08 (queue telemetry counters + implementation progress sync).
+Last updated: 2026-04-08 (duplicate-entry rejection guard + implementation progress sync).
 
 ## Objective
 
@@ -85,7 +85,7 @@ Last updated: 2026-04-08 (queue telemetry counters + implementation progress syn
 
 - [x] Queue overflow strategy defined and tested.
 - [ ] Restart semantics documented (in-memory queue loss vs persistence).
-- [ ] Duplicate submissions across nodes handled deterministically.
+- [x] Duplicate submissions across nodes handled deterministically.
 - [x] Metrics added (queue length, enqueue/dequeue rates, rejected duplicates).
 - [ ] Alerting hooks documented for stuck queue / zero-throughput conditions.
 
@@ -96,6 +96,8 @@ Last updated: 2026-04-08 (queue telemetry counters + implementation progress syn
 - Coverage added in txpool + API tests for saturation behavior.
 - `citizen-txpool` now maintains counters for `enqueued_total`, `drained_total`, `enqueue_rejected_duplicate_total`, and `enqueue_rejected_full_total`, exposed via `metrics_snapshot()`.
 - API queued/duplicate/full responses now include queue telemetry fields (`queue_len`, `queue_capacity`, and relevant counters) for operator diagnostics.
+- `citizen-ledger::Ledger::apply_entry` now rejects repeated `entry_id` submissions in the same namespace before persistence, so duplicate submissions racing across validators converge on deterministic duplicate rejection rather than double-write behavior.
+- Coverage added in ledger tests to assert duplicate `entry_id` submissions are rejected and do not create additional stored entries.
 
 ## Checkpoint 7 — Documentation + rollout
 
