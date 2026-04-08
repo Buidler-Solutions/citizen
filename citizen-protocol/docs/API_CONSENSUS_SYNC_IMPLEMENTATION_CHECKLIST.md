@@ -2,7 +2,7 @@
 
 Status: Draft implementation checkpoint checklist for making API submissions flow through consensus so Alpha/Beta/Gamma converge on the same committed ledger state.
 
-Last updated: 2026-04-08 (implementation progress sync).
+Last updated: 2026-04-08 (queue overflow handling + implementation progress sync).
 
 ## Objective
 
@@ -83,11 +83,17 @@ Last updated: 2026-04-08 (implementation progress sync).
 
 ## Checkpoint 6 — Failure/operability checks
 
-- [ ] Queue overflow strategy defined and tested.
+- [x] Queue overflow strategy defined and tested.
 - [ ] Restart semantics documented (in-memory queue loss vs persistence).
 - [ ] Duplicate submissions across nodes handled deterministically.
 - [ ] Metrics added (queue length, enqueue/dequeue rates, rejected duplicates).
 - [ ] Alerting hooks documented for stuck queue / zero-throughput conditions.
+
+### Checkpoint 6 implementation notes
+
+- `citizen-txpool` now enforces bounded capacity via `TxPool::with_capacity(capacity)` and returns `EnqueueResult::Full { .. }` when the queue is saturated.
+- API submission handlers map queue saturation to `429 Too Many Requests` with `status: "queue_full"` and queue capacity diagnostics.
+- Coverage added in txpool + API tests for saturation behavior.
 
 ## Checkpoint 7 — Documentation + rollout
 

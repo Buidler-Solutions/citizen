@@ -2346,21 +2346,43 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
         }
 
         let enqueue_result = txpool.enqueue(entry);
-        let status = match enqueue_result {
-            EnqueueResult::Queued { .. } => "queued",
-            EnqueueResult::Duplicate { .. } => "duplicate",
-        };
-        (
-            StatusCode::ACCEPTED,
-            Json(serde_json::json!({
-                "status": status,
-                "entry_id": entry_id,
-                "namespace": namespace,
-                "envelope_id": envelope.envelope_id,
-                "queue_len": txpool.len(),
-                "local_finalize_mode": false,
-            })),
-        )
+        match enqueue_result {
+            EnqueueResult::Queued { .. } => (
+                StatusCode::ACCEPTED,
+                Json(serde_json::json!({
+                    "status": "queued",
+                    "entry_id": entry_id,
+                    "namespace": namespace,
+                    "envelope_id": envelope.envelope_id,
+                    "queue_len": txpool.len(),
+                    "local_finalize_mode": false,
+                })),
+            ),
+            EnqueueResult::Duplicate { .. } => (
+                StatusCode::ACCEPTED,
+                Json(serde_json::json!({
+                    "status": "duplicate",
+                    "entry_id": entry_id,
+                    "namespace": namespace,
+                    "envelope_id": envelope.envelope_id,
+                    "queue_len": txpool.len(),
+                    "local_finalize_mode": false,
+                })),
+            ),
+            EnqueueResult::Full { capacity, .. } => (
+                StatusCode::TOO_MANY_REQUESTS,
+                Json(serde_json::json!({
+                    "error": "transaction queue full",
+                    "status": "queue_full",
+                    "entry_id": entry_id,
+                    "namespace": namespace,
+                    "envelope_id": envelope.envelope_id,
+                    "queue_len": txpool.len(),
+                    "queue_capacity": capacity,
+                    "local_finalize_mode": false,
+                })),
+            ),
+        }
     }
 
     async fn handle_get_receipt(
@@ -3773,6 +3795,62 @@ mod tests {
             .expect("submit response");
 
         assert_eq!(submit.status(), StatusCode::BAD_REQUEST);
+        assert_eq!(txpool.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn submit_entry_rejected_when_queue_is_full() {
+        let txpool = Arc::new(TxPool::with_capacity(0));
+        let server = {
+            let storage = Arc::new(MemoryStorage::new());
+            let ledger = Arc::new(Ledger::new(storage, KeyRegistry::new()));
+            ledger.bootstrap_namespaces(vec![NamespaceRuleset {
+                descriptor: NamespaceDescriptor {
+                    namespace: "audit.procurement".to_string(),
+                    version: 1,
+                    rules_hash: "rules-v1".to_string(),
+                    governed_by: "governance".to_string(),
+                },
+                writers: BTreeSet::new(),
+                validators: vec![NamespaceRule {
+                    name: "require_signature".to_string(),
+                    config: json!({}),
+                }],
+            }]);
+            ApiServer::with_edge_config_and_txpool(
+                ledger,
+                ApiEdgeConfig {
+                    local_finalize_mode: false,
+                    ..ApiEdgeConfig::default()
+                },
+                Arc::clone(&txpool),
+            )
+        };
+        let app = server.router();
+        let envelope = test_envelope();
+        let entry = envelope.payload;
+
+        let submit = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/entries/submit")
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        serde_json::to_vec(&entry).expect("serialize entry"),
+                    ))
+                    .expect("request"),
+            )
+            .await
+            .expect("submit response");
+
+        assert_eq!(submit.status(), StatusCode::TOO_MANY_REQUESTS);
+        let submit_body = axum::body::to_bytes(submit.into_body(), usize::MAX)
+            .await
+            .expect("submit bytes");
+        let submit_json: Value = serde_json::from_slice(&submit_body).expect("submit json");
+        assert_eq!(submit_json["status"], "queue_full");
+        assert_eq!(submit_json["queue_capacity"], 0);
         assert_eq!(txpool.len(), 0);
     }
 
