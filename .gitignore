@@ -44,3 +44,12 @@ wallet/backend/.env
 wallet/backend/data/
 wallet/backend/data/wallet-auth-audit.log
 wallet/backend/data/wallet-auth-state.json
+wallet/sdk/typescript-auth/node_modules/
+citizen-protocol/data/alpha/CURRENT
+citizen-protocol/data/beta/CURRENT
+citizen-protocol/data/gamma/CURRENT
+runtime-signing-private.pem
+runtime-signing-public.pem
+site/
+citizen-protocol/site/
+wallet/sdk/typescript-auth/node_modules/

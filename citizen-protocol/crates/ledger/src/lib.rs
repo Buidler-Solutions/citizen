@@ -91,7 +91,63 @@ impl<S: LedgerStorage + 'static> Ledger<S> {
         for rule in &ruleset.validators {
             self.validate_rule(entry, &rule.name, &rule.config)?;
         }
+        self.validate_privacy_flag_guards(entry)?;
         Ok(())
+    }
+
+    fn validate_privacy_flag_guards(&self, entry: &LedgerEntry) -> Result<()> {
+        if !entry.privacy_flag {
+            return Ok(());
+        }
+
+        if entry.privacy_mode == PrivacyMode::None {
+            return Err(ProtocolError::ValidationFailed(
+                "code=PRIVACY_MODE_REQUIRED summary='privacy_flag=true requires encrypted privacy_mode' details='privacy_mode=none is incompatible with privacy_flag=true' guidance='Set privacy_mode to passphrase or hybrid and include required encryption fields.'".into(),
+            ));
+        }
+
+        if Self::looks_like_email(entry.object_id.as_str()) {
+            return Err(ProtocolError::ValidationFailed(format!(
+                "code=PRIVACY_OBJECT_ID_PII summary='object_id appears to contain direct PII while privacy_flag=true' details='object_id={}' guidance='Use a non-PII object identifier (for example, a commitment-derived alias or opaque UUID).'",
+                entry.object_id
+            )));
+        }
+
+        let pii_payload_fields = [
+            "email",
+            "country",
+            "fullName",
+            "institution",
+            "missionNeed",
+            "firstName",
+            "lastName",
+            "phone",
+            "address",
+        ];
+        let leaking_fields: Vec<&str> = pii_payload_fields
+            .iter()
+            .copied()
+            .filter(|field| entry.payload.get(field).is_some())
+            .collect();
+        if !leaking_fields.is_empty() {
+            return Err(ProtocolError::ValidationFailed(format!(
+                "code=PRIVACY_PAYLOAD_PII summary='payload contains cleartext sensitive fields while privacy_flag=true' details='fields={}' guidance='Remove these fields from cleartext payload and keep them only inside encrypted ciphertext referenced by payload_commitment.'",
+                leaking_fields.join(",")
+            )));
+        }
+
+        Ok(())
+    }
+
+    fn looks_like_email(value: &str) -> bool {
+        let trimmed = value.trim();
+        if trimmed.is_empty() || trimmed.contains(' ') {
+            return false;
+        }
+        let mut parts = trimmed.split('@');
+        let local = parts.next().unwrap_or_default();
+        let domain = parts.next().unwrap_or_default();
+        parts.next().is_none() && !local.is_empty() && domain.contains('.')
     }
 
     fn validate_rule(&self, entry: &LedgerEntry, rule_name: &str, config: &Value) -> Result<()> {
@@ -2819,5 +2875,60 @@ mod tests {
         assert!(err
             .to_string()
             .contains("payload field 'wallet_signature.signer' is required"));
+    }
+
+    #[test]
+    fn privacy_flag_true_rejects_email_object_id_with_actionable_error_code() {
+        let ledger = Ledger::in_memory();
+        let namespace = "forms.commitment";
+        ledger.bootstrap_namespaces(vec![namespace_with_rules(
+            namespace,
+            vec![NamespaceRule {
+                name: "require_signature".into(),
+                config: json!({}),
+            }],
+        )]);
+
+        let mut entry = test_entry(namespace);
+        entry.privacy_flag = true;
+        entry.privacy_mode = PrivacyMode::Hybrid;
+        entry.object_id = "person@example.com".into();
+
+        let err = ledger
+            .apply_entry(entry)
+            .expect_err("email object_id should be blocked when privacy_flag=true");
+        let message = err.to_string();
+        assert!(message.contains("code=PRIVACY_OBJECT_ID_PII"));
+        assert!(message.contains("guidance='Use a non-PII object identifier"));
+    }
+
+    #[test]
+    fn privacy_flag_true_rejects_sensitive_payload_fields_with_actionable_error_code() {
+        let ledger = Ledger::in_memory();
+        let namespace = "forms.commitment";
+        ledger.bootstrap_namespaces(vec![namespace_with_rules(
+            namespace,
+            vec![NamespaceRule {
+                name: "require_signature".into(),
+                config: json!({}),
+            }],
+        )]);
+
+        let mut entry = test_entry(namespace);
+        entry.privacy_flag = true;
+        entry.privacy_mode = PrivacyMode::Hybrid;
+        entry.object_id = "onboarding_submission:abc123".into();
+        entry.payload = json!({
+            "email": "person@example.com",
+            "country": "Philippines",
+            "data_hash": "sha256:abc123"
+        });
+
+        let err = ledger
+            .apply_entry(entry)
+            .expect_err("sensitive payload fields should be blocked when privacy_flag=true");
+        let message = err.to_string();
+        assert!(message.contains("code=PRIVACY_PAYLOAD_PII"));
+        assert!(message.contains("fields=email,country"));
     }
 }
