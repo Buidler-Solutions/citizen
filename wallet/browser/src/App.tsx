@@ -33,7 +33,7 @@ type ActivityEntry = {
 type VaultWallet = {
   id: string;
   name: string;
-  address: string;
+  signerDid: string;
   hasMnemonic: boolean;
   mnemonicWordCount?: MnemonicWordCount | null;
   createdAt: string;
@@ -81,6 +81,19 @@ type DirectSubmitReceipt = {
   receiptId: string | null;
   receiptHash: string | null;
   submittedAt: string;
+};
+
+type ProtocolKeyMaterial = {
+  signer: {
+    did: string;
+    verifyingKey: string;
+    algorithm: string;
+  };
+  reader: {
+    readerDid: string;
+    publicKeyHex: string;
+    algorithm: string;
+  };
 };
 
 
@@ -219,6 +232,7 @@ export function App() {
   });
   const [composeMessage, setComposeMessage] = useState('Authorize Citizen transaction payload v1');
   const [composeSignature, setComposeSignature] = useState('');
+  const [protocolKeyMaterial, setProtocolKeyMaterial] = useState<ProtocolKeyMaterial | null>(null);
   const [state, setState] = useState<WalletState>({
     account: 'Not initialized',
     network: 'mainnet',
@@ -249,7 +263,7 @@ export function App() {
   const checklist = useMemo(
     () =>
       buildStrictBuilderCreditChecklist({
-        authorDid: state.account,
+        authorDid: protocolKeyMaterial?.signer.did ?? state.account,
         creditGrantId: grantId,
         sponsorBuilderId: sponsorDid,
         sponsoredDid,
@@ -259,7 +273,7 @@ export function App() {
         multisigThreshold,
         grantScope,
       }),
-    [grantAmount, grantId, grantScope, multisigThreshold, sponsorDid, sponsorUsageAmount, sponsoredDid, sponsorshipId, state.account],
+    [grantAmount, grantId, grantScope, multisigThreshold, protocolKeyMaterial?.signer.did, sponsorDid, sponsorUsageAmount, sponsoredDid, sponsorshipId, state.account],
   );
 
   const refreshState = useCallback(async () => {
@@ -331,6 +345,7 @@ export function App() {
       }
 
       if (!hasWallet || !isUnlocked) {
+        setProtocolKeyMaterial(null);
         setState({
           account: hasWallet ? (isUnlocked ? 'Ready' : 'Locked') : 'Wallet not configured',
           network,
@@ -343,9 +358,15 @@ export function App() {
         return;
       }
 
-      const accountResponse = (await callWallet('citizen_accounts')) as { ok: boolean; result?: string[] };
-      const account = accountResponse.ok ? accountResponse.result?.[0] ?? 'Unavailable' : 'Unavailable';
-      setState({ account, network, lastRequest: lastRequest ?? null });
+      const protocolMaterialResponse = await callWallet('ctzn_getCitizenKeyMaterial');
+      if (protocolMaterialResponse.ok && protocolMaterialResponse.result && typeof protocolMaterialResponse.result === 'object') {
+        const material = protocolMaterialResponse.result as ProtocolKeyMaterial;
+        setProtocolKeyMaterial(material);
+        setState({ account: material.signer.did, network, lastRequest: lastRequest ?? null });
+      } else {
+        setProtocolKeyMaterial(null);
+        setState({ account: 'Unavailable', network, lastRequest: lastRequest ?? null });
+      }
     } finally {
       setIsLoading(false);
     }
@@ -427,19 +448,19 @@ export function App() {
   const handleRevealSecret = async () => {
     setStatus('');
     if (!secretPassword) {
-      setStatus('Enter password to view secret key.');
+      setStatus('Enter password to view protocol signer secret.');
       return;
     }
 
-    const result = await callWallet('wallet_exportPrivateKey', [secretPassword]);
+    const result = await callWallet('wallet_exportProtocolSignerSecret', [secretPassword]);
     if (!result.ok || typeof result.result !== 'string') {
-      setStatus(result.error ?? 'Unable to reveal secret key.');
+      setStatus(result.error ?? 'Unable to reveal protocol signer secret.');
       return;
     }
 
     setSecretKey(result.result);
     setSecretPassword('');
-    setStatus('Secret key revealed. Keep it private and rotate if exposed.');
+    setStatus('Protocol signer secret revealed. Keep it private and rotate if exposed.');
   };
 
   const handleCopySecret = async () => {
@@ -447,7 +468,7 @@ export function App() {
       return;
     }
     await navigator.clipboard.writeText(secretKey);
-    setStatus('Secret key copied to clipboard.');
+    setStatus('Protocol signer secret copied to clipboard.');
   };
 
   const handleRevealMnemonic = async () => {
@@ -549,12 +570,13 @@ export function App() {
       setStatus('Compose a transaction payload first.');
       return;
     }
-    const result = await callWallet('personal_sign', [composeMessage, state.account]);
-    if (!result.ok || typeof result.result !== 'string') {
+    const result = await callWallet('ctzn_signCitizenTx', [{ message: composeMessage }]);
+    if (!result.ok || !result.result || typeof result.result !== 'object') {
       setStatus(result.error ?? 'Unable to sign composed transaction payload.');
       return;
     }
-    setComposeSignature(result.result);
+    const payload = result.result as { signature?: string };
+    setComposeSignature(payload.signature ?? '');
     setStatus('Composed payload signed successfully.');
     await refreshState();
   };
@@ -666,13 +688,14 @@ export function App() {
     await refreshState();
   };
 
-  const handleCopyWalletAddress = async () => {
-    if (!state.account || state.account === 'Unavailable') {
-      setStatus('Wallet address is unavailable to copy.');
+  const handleCopySignerDid = async () => {
+    const signerDid = protocolKeyMaterial?.signer.did;
+    if (!signerDid || signerDid === 'Unavailable') {
+      setStatus('Signer DID is unavailable to copy.');
       return;
     }
-    await navigator.clipboard.writeText(state.account);
-    setStatus('Wallet address copied to clipboard.');
+    await navigator.clipboard.writeText(signerDid);
+    setStatus('Signer DID copied to clipboard.');
   };
 
   if (isLoading) {
@@ -805,17 +828,28 @@ export function App() {
           </div>
           <p className="network-pill">citizen-{state.network}</p>
           <p className="network-pill">Approval UI rollout: {rolloutLabel(APPROVAL_UI_ROLLOUT_STAGE)}</p>
-          <div className="top-address-row">
-            <p className="top-address" title={state.account}>Wallet: {mask(state.account)}</p>
-            <button
-              className="copy-address-button"
-              onClick={() => void handleCopyWalletAddress()}
-              aria-label="Copy wallet address to clipboard"
-              title="Copy wallet address"
-            >
-              📋
-            </button>
-          </div>
+          {protocolKeyMaterial ? (
+            <div className="top-address-row">
+              <p className="top-address" title={protocolKeyMaterial.signer.did}>
+                Signer (Ed25519): {mask(protocolKeyMaterial.signer.did)}
+              </p>
+              <button
+                className="copy-address-button"
+                onClick={() => void handleCopySignerDid()}
+                aria-label="Copy signer DID to clipboard"
+                title="Copy signer DID"
+              >
+                📋
+              </button>
+            </div>
+          ) : null}
+          {protocolKeyMaterial ? (
+            <div className="top-address-row">
+              <p className="top-address" title={protocolKeyMaterial.reader.readerDid}>
+                Reader (X25519): {mask(protocolKeyMaterial.reader.readerDid)}
+              </p>
+            </div>
+          ) : null}
         </header>
         {menuOpen ? (
           <nav className="menu-panel" aria-label="Wallet menu">
@@ -1131,7 +1165,7 @@ export function App() {
                   <div key={wallet.id} className="vault-row">
                     <div>
                       <strong>{wallet.name}</strong>
-                      <p className="meta-text">{mask(wallet.address)}</p>
+                      <p className="meta-text">{mask(wallet.signerDid)}</p>
                       {wallet.mnemonicWordCount ? (
                         <p className="meta-text">Seed: {wallet.mnemonicWordCount} words</p>
                       ) : null}
@@ -1167,17 +1201,17 @@ export function App() {
               </article>
 
               <article className="request-card">
-                <h2>Secret key (reveal/hide)</h2>
+                <h2>Protocol signer secret (Ed25519 seed) (reveal/hide)</h2>
                 <div className="form-grid">
                   <input
                     type="password"
-                    placeholder="Re-enter password to reveal secret key"
+                    placeholder="Re-enter password to reveal protocol signer secret"
                     value={secretPassword}
                     onChange={(event) => setSecretPassword(event.target.value)}
                   />
-                  <button className="primary" onClick={handleRevealSecret}>Reveal secret key</button>
-                  {secretKey ? <button className="ghost" onClick={() => setSecretKey('')}>Hide secret key</button> : null}
-                  {secretKey ? <button className="ghost" onClick={handleCopySecret}>Copy secret key</button> : null}
+                  <button className="primary" onClick={handleRevealSecret}>Reveal protocol signer secret</button>
+                  {secretKey ? <button className="ghost" onClick={() => setSecretKey('')}>Hide secret</button> : null}
+                  {secretKey ? <button className="ghost" onClick={handleCopySecret}>Copy secret</button> : null}
                   {secretKey ? <code className="secret-box">{secretKey}</code> : <p className="meta-text">Hidden</p>}
                 </div>
               </article>

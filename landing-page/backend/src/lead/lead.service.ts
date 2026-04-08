@@ -137,7 +137,7 @@ export class LeadService {
       networkRelay: string;
     };
   } {
-    const relayUrlRaw = process.env.CITIZEN_SIGNED_SUBMISSION_RELAY_URL?.trim();
+    const relayUrlRaw = this.normalizeEnvValue(process.env.CITIZEN_SIGNED_SUBMISSION_RELAY_URL);
     const relayMode = this.resolveRelayMode(relayUrlRaw);
 
     return {
@@ -361,7 +361,7 @@ export class LeadService {
     relayTraceId: string,
     relayDeduplicationKey: string,
   ): Record<string, unknown> {
-    const relayFormatRaw = process.env.CITIZEN_SIGNED_SUBMISSION_RELAY_FORMAT?.trim().toLowerCase();
+    const relayFormatRaw = this.normalizeEnvValue(process.env.CITIZEN_SIGNED_SUBMISSION_RELAY_FORMAT).toLowerCase();
     const relayFormat = relayFormatRaw === 'runtime_envelope' ? 'runtime_envelope' : 'metadata';
 
     if (relayFormat === 'runtime_envelope') {
@@ -672,7 +672,9 @@ export class LeadService {
   }
 
   private resolveHybridAuthorX25519KeyPair(): { privateKey: KeyObject; publicKeyHex: string } {
-    const configured = process.env.CITIZEN_SIGNED_SUBMISSION_RUNTIME_HYBRID_AUTHOR_X25519_PRIVATE_KEY_HEX?.trim();
+    const configured = this.normalizeEnvValue(
+      process.env.CITIZEN_SIGNED_SUBMISSION_RUNTIME_HYBRID_AUTHOR_X25519_PRIVATE_KEY_HEX,
+    );
     if (configured) {
       try {
         const privateKey = this.parseX25519PrivateKey(configured);
@@ -697,9 +699,18 @@ export class LeadService {
 
   private parseReaderX25519PublicKeys(rawValue: string): Record<string, string> {
     try {
-      const parsed = JSON.parse(rawValue) as Record<string, unknown>;
+      const normalizedRawValue = this.normalizeEnvValue(rawValue);
+      const parsedValue = JSON.parse(normalizedRawValue) as unknown;
+      const parsed = typeof parsedValue === 'string'
+        ? JSON.parse(this.normalizeEnvValue(parsedValue))
+        : parsedValue;
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        throw new BadRequestException(
+          'CITIZEN_SIGNED_SUBMISSION_RUNTIME_HYBRID_READER_X25519_PUBLIC_KEYS_JSON must be a valid JSON object.',
+        );
+      }
       return Object.fromEntries(
-        Object.entries(parsed).map(([readerId, value]) => {
+        Object.entries(parsed as Record<string, unknown>).map(([readerId, value]) => {
           const normalized = this.resolveReaderX25519PublicKey(value);
           if (!normalized) {
             throw new BadRequestException(
@@ -758,7 +769,8 @@ export class LeadService {
   }
 
   private parseX25519PrivateKey(privateKeyValue: string): KeyObject {
-    const normalizedHex = privateKeyValue.trim().replace(/^0x/i, '').toLowerCase();
+    const normalizedValue = this.normalizeEnvValue(privateKeyValue);
+    const normalizedHex = normalizedValue.replace(/^0x/i, '').toLowerCase();
     if (/^[a-f0-9]{64}$/.test(normalizedHex)) {
       const der = Buffer.concat([
         Buffer.from(X25519_PKCS8_DER_PREFIX_HEX, 'hex'),
@@ -768,7 +780,7 @@ export class LeadService {
     }
 
     try {
-      const pem = this.normalizePemValue(privateKeyValue);
+      const pem = this.normalizePemValue(normalizedValue);
       const privateKey = createPrivateKey({ key: pem, format: 'pem' });
       const publicDer = createPublicKey(privateKey).export({ format: 'der', type: 'spki' }) as Buffer;
       const x25519Prefix = Buffer.from(X25519_SPKI_DER_PREFIX_HEX, 'hex');
@@ -893,14 +905,24 @@ export class LeadService {
   }
 
   private normalizePemValue(privateKeyPem: string): string {
-    const maybeQuotedPem = privateKeyPem.trim();
-    const unquotedPem = maybeQuotedPem.length > 1
-      && ((maybeQuotedPem.startsWith('"') && maybeQuotedPem.endsWith('"'))
-        || (maybeQuotedPem.startsWith('\'') && maybeQuotedPem.endsWith('\'')))
-      ? maybeQuotedPem.slice(1, -1)
-      : maybeQuotedPem;
+    const unquotedPem = this.normalizeEnvValue(privateKeyPem);
 
     return unquotedPem.replace(/\\n/g, '\n');
+  }
+
+  private normalizeEnvValue(rawValue: string | undefined): string {
+    if (typeof rawValue !== 'string') {
+      return '';
+    }
+    const trimmed = rawValue.trim();
+    if (
+      trimmed.length > 1
+      && ((trimmed.startsWith('"') && trimmed.endsWith('"'))
+        || (trimmed.startsWith('\'') && trimmed.endsWith('\'')))
+    ) {
+      return trimmed.slice(1, -1).trim();
+    }
+    return trimmed;
   }
 
   private exportEd25519PublicKeyHex(privateKey: KeyObject): string {
@@ -983,7 +1005,7 @@ export class LeadService {
   }
 
   private getValidatedRelayUrl(): URL | null {
-    const relayUrlRaw = process.env.CITIZEN_SIGNED_SUBMISSION_RELAY_URL?.trim();
+    const relayUrlRaw = this.normalizeEnvValue(process.env.CITIZEN_SIGNED_SUBMISSION_RELAY_URL);
     if (!relayUrlRaw) {
       return null;
     }
@@ -1008,12 +1030,13 @@ export class LeadService {
   }
 
   private resolveRelayMode(relayUrlRaw?: string): 'database_only' | 'database_plus_network_relay' | 'invalid_relay_configuration' {
-    if (!relayUrlRaw) {
+    const normalizedRelayUrlRaw = this.normalizeEnvValue(relayUrlRaw);
+    if (!normalizedRelayUrlRaw) {
       return 'database_only';
     }
 
     try {
-      const relayUrl = new URL(relayUrlRaw);
+      const relayUrl = new URL(normalizedRelayUrlRaw);
       if (!['http:', 'https:'].includes(relayUrl.protocol) || !relayUrl.hostname) {
         return 'invalid_relay_configuration';
       }

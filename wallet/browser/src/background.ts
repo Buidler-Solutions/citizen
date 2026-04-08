@@ -109,8 +109,6 @@ const ACTIVE_WALLET_ID_KEY = 'citizen.browser.wallet.active_wallet_id.v1';
 const PASSWORD_HASH_KEY = 'citizen.browser.wallet.password_hash.v1';
 const SESSION_UNLOCKED_KEY = 'citizen.browser.wallet.unlocked.v1';
 const NETWORK_KEY = 'citizen.browser.wallet.network.v1';
-const PROTOCOL_SIGNER_KEY = 'citizen.browser.wallet.protocol_signer.v1';
-const ENCRYPTION_READER_KEYS_KEY = 'citizen.browser.wallet.encryption_reader_keys.v1';
 const DAPP_PENDING_REQUESTS_KEY = 'citizen.browser.wallet.dapp_pending_requests.v1';
 const DAPP_REQUEST_AUDIT_KEY = 'citizen.browser.wallet.dapp_request_audit.v1';
 const DAPP_ORIGIN_PERMISSIONS_KEY = 'citizen.browser.wallet.dapp_origin_permissions.v1';
@@ -135,6 +133,7 @@ const MAX_DAPP_AUDIT_EVENTS = 1_000;
 const DAPP_DECIDED_REQUEST_RETENTION_MS = 24 * 60 * 60 * 1000;
 const DAPP_REQUEST_CONCURRENCY_MODE = 'single_active';
 const MAX_DIRECT_SUBMIT_RECEIPTS = 100;
+const STRICT_PROTOCOL_MODE = true;
 const DIRECT_SUBMIT_ALLOWLIST: readonly string[] = [
   'http://127.0.0.1:8081/api/v1/direct-submit',
 ];
@@ -504,7 +503,7 @@ function createWalletId() {
 function toStoredWallet(wallet: WalletSigner, mnemonicPhrase?: string, derivationPath?: string): StoredWallet {
   return {
     id: createWalletId(),
-    name: `Wallet ${wallet.address.slice(0, 6)}…${wallet.address.slice(-4)}`,
+    name: `Wallet seed-backed`,
     createdAt: new Date().toISOString(),
     privateKey: wallet.privateKey,
     mnemonicPhrase,
@@ -562,6 +561,11 @@ async function getActiveWalletRecord(): Promise<StoredWallet | null> {
   return active ?? vault[0];
 }
 
+async function getWalletRecordById(walletId: string): Promise<StoredWallet | null> {
+  const vault = await ensureVaultInitialized();
+  return vault.find((wallet) => wallet.id === walletId) ?? null;
+}
+
 async function getStoredWallet(): Promise<WalletSigner> {
   const active = await getActiveWalletRecord();
   if (!active) {
@@ -592,15 +596,16 @@ async function hasStoredWallet(): Promise<boolean> {
 }
 
 function shouldPromptWalletUi(method: string): boolean {
-  return [
-    'ctzn_requestAccounts',
-    'citizen_requestAccounts',
-    'citizen_login',
-    'wallet_login',
-    'personal_sign',
-    'ctzn_signTypedData_v4',
-    'ctzn_signCitizenTx',
-  ].includes(method);
+  if (STRICT_PROTOCOL_MODE) {
+    return [
+      'ctzn_signCitizenTx',
+      'ctzn_signAuthChallenge',
+      'ctzn_getCitizenSigner',
+      'ctzn_getEncryptionPublicKey',
+      'ctzn_getCitizenKeyMaterial',
+    ].includes(method);
+  }
+  return ['ctzn_signCitizenTx'].includes(method);
 }
 
 async function openWalletSidePanel(sender: chrome.runtime.MessageSender): Promise<void> {
@@ -715,6 +720,10 @@ function bytesToBase64(bytes: ArrayBuffer | Uint8Array): string {
   return btoa(binary);
 }
 
+function bytesToBase64Url(bytes: ArrayBuffer | Uint8Array): string {
+  return bytesToBase64(bytes).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+}
+
 function toHex(bytes: ArrayBuffer | Uint8Array): string {
   const view = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
   return Array.from(view)
@@ -722,85 +731,151 @@ function toHex(bytes: ArrayBuffer | Uint8Array): string {
     .join('');
 }
 
-async function getOrCreateProtocolSigner(): Promise<StoredProtocolSigner> {
-  const stored = await chrome.storage.local.get(PROTOCOL_SIGNER_KEY);
-  const existing = stored[PROTOCOL_SIGNER_KEY];
-  if (existing && typeof existing === 'object') {
-    const signer = existing as StoredProtocolSigner;
-    if (
-      typeof signer.pkcs8Base64 === 'string'
-      && typeof signer.spkiBase64 === 'string'
-      && typeof signer.verifyingKeyHex === 'string'
-      && typeof signer.did === 'string'
-    ) {
-      return signer;
+function fromHex(value: string): Uint8Array {
+  const normalized = value.startsWith('0x') ? value.slice(2) : value;
+  if (!/^[a-f0-9]+$/i.test(normalized) || normalized.length % 2 !== 0) {
+    throw new Error('Invalid hex input.');
+  }
+  const out = new Uint8Array(normalized.length / 2);
+  for (let i = 0; i < out.length; i += 1) {
+    out[i] = Number.parseInt(normalized.slice(i * 2, (i * 2) + 2), 16);
+  }
+  return out;
+}
+
+function base64UrlToBytes(value: string): Uint8Array {
+  const padded = value.replace(/-/g, '+').replace(/_/g, '/')
+    + '='.repeat((4 - (value.length % 4)) % 4);
+  return base64ToBytes(padded);
+}
+
+async function hmacSha512(key: Uint8Array, data: Uint8Array): Promise<Uint8Array> {
+  const cryptoKey = await crypto.subtle.importKey(
+    'raw',
+    key,
+    { name: 'HMAC', hash: 'SHA-512' },
+    false,
+    ['sign'],
+  );
+  const signature = await crypto.subtle.sign('HMAC', cryptoKey, data);
+  return new Uint8Array(signature);
+}
+
+function parseHardenedDerivationPath(path: string): number[] {
+  const trimmed = path.trim();
+  if (!trimmed.startsWith('m')) {
+    throw new Error('Derivation path must start with m.');
+  }
+  const parts = trimmed.split('/').slice(1).filter(Boolean);
+  if (parts.length === 0) {
+    return [];
+  }
+  return parts.map((part) => {
+    if (!part.endsWith('\'')) {
+      throw new Error('Only hardened derivation path segments are supported.');
     }
-  }
+    const index = Number.parseInt(part.slice(0, -1), 10);
+    if (!Number.isInteger(index) || index < 0) {
+      throw new Error('Invalid hardened derivation index.');
+    }
+    return index;
+  });
+}
 
-  const generated = await crypto.subtle.generateKey({ name: 'Ed25519' }, true, ['sign', 'verify']);
-  if (!('privateKey' in generated) || !('publicKey' in generated)) {
-    throw new Error('Unable to generate Citizen protocol signer keypair.');
+async function deriveEd25519SecretFromMnemonic(mnemonicPhrase: string, derivationPath: string): Promise<Uint8Array> {
+  const seedHex = Mnemonic.fromPhrase(mnemonicPhrase).computeSeed();
+  const seed = fromHex(seedHex);
+  let i = await hmacSha512(new TextEncoder().encode('ed25519 seed'), seed);
+  let key = i.slice(0, 32);
+  let chainCode = i.slice(32);
+  const path = parseHardenedDerivationPath(derivationPath);
+  for (const index of path) {
+    const data = new Uint8Array(1 + key.length + 4);
+    data[0] = 0x00;
+    data.set(key, 1);
+    const offset = 1 + key.length;
+    data[offset] = (index >>> 24) & 0xff;
+    data[offset + 1] = (index >>> 16) & 0xff;
+    data[offset + 2] = (index >>> 8) & 0xff;
+    data[offset + 3] = index & 0xff;
+    i = await hmacSha512(chainCode, data);
+    key = i.slice(0, 32);
+    chainCode = i.slice(32);
   }
-  const [pkcs8, spki] = await Promise.all([
-    crypto.subtle.exportKey('pkcs8', generated.privateKey),
-    crypto.subtle.exportKey('spki', generated.publicKey),
-  ]);
+  return key;
+}
 
-  const verifyingKeyHex = toHex(new Uint8Array(spki).slice(-32));
+async function resolveProtocolSecretForWallet(walletRecord: StoredWallet): Promise<Uint8Array> {
+  if (walletRecord.mnemonicPhrase) {
+    const derivationPath = walletRecord.derivationPath ?? DEFAULT_DERIVATION_PATH;
+    return deriveEd25519SecretFromMnemonic(walletRecord.mnemonicPhrase, derivationPath);
+  }
+  return fromHex(walletRecord.privateKey);
+}
+
+async function getOrCreateProtocolSigner(walletRecord: StoredWallet): Promise<StoredProtocolSigner> {
+  const edPkcs8Prefix = fromHex('302e020100300506032b657004220420');
+  const secret = await resolveProtocolSecretForWallet(walletRecord);
+  const pkcs8 = new Uint8Array(edPkcs8Prefix.length + secret.length);
+  pkcs8.set(edPkcs8Prefix, 0);
+  pkcs8.set(secret, edPkcs8Prefix.length);
+  const privateKey = await crypto.subtle.importKey('pkcs8', pkcs8, { name: 'Ed25519' }, true, ['sign']);
+  const jwk = await crypto.subtle.exportKey('jwk', privateKey);
+  if (typeof jwk.x !== 'string') {
+    throw new Error('Unable to derive Ed25519 verifying key.');
+  }
+  const verifyingKeyHex = toHex(base64UrlToBytes(jwk.x));
+  const spki = fromHex(`302a300506032b6570032100${verifyingKeyHex}`);
   const signer: StoredProtocolSigner = {
-    keyId: crypto.randomUUID(),
+    keyId: walletRecord.id,
     did: `did:key:ed25519:${verifyingKeyHex}`,
     verifyingKeyHex,
     spkiBase64: bytesToBase64(spki),
     pkcs8Base64: bytesToBase64(pkcs8),
     createdAt: new Date().toISOString(),
   };
-  await chrome.storage.local.set({ [PROTOCOL_SIGNER_KEY]: signer });
   return signer;
 }
 
-async function getOrCreateEncryptionReaderKey(walletId: string): Promise<StoredEncryptionReaderKey> {
-  const stored = await chrome.storage.local.get(ENCRYPTION_READER_KEYS_KEY);
-  const existingMap = (stored[ENCRYPTION_READER_KEYS_KEY] as Record<string, StoredEncryptionReaderKey> | undefined) ?? {};
-  const existing = existingMap[walletId];
-  if (
-    existing
-    && typeof existing.pkcs8Base64 === 'string'
-    && typeof existing.spkiBase64 === 'string'
-    && typeof existing.publicKeyHex === 'string'
-  ) {
-    return existing;
+async function getOrCreateEncryptionReaderKey(walletRecord: StoredWallet): Promise<StoredEncryptionReaderKey> {
+  const xPkcs8Prefix = fromHex('302e020100300506032b656e04220420');
+  const secret = await resolveProtocolSecretForWallet(walletRecord);
+  const pkcs8 = new Uint8Array(xPkcs8Prefix.length + secret.length);
+  pkcs8.set(xPkcs8Prefix, 0);
+  pkcs8.set(secret, xPkcs8Prefix.length);
+  const privateKey = await crypto.subtle.importKey('pkcs8', pkcs8, { name: 'X25519' }, true, ['deriveBits']);
+  const jwk = await crypto.subtle.exportKey('jwk', privateKey);
+  if (typeof jwk.x !== 'string') {
+    throw new Error('Unable to derive X25519 public key.');
   }
-
-  const generated = await crypto.subtle.generateKey({ name: 'X25519' }, true, ['deriveBits']);
-  if (!('privateKey' in generated) || !('publicKey' in generated)) {
-    throw new Error('Unable to generate wallet encryption reader keypair.');
-  }
-  const [pkcs8, spki] = await Promise.all([
-    crypto.subtle.exportKey('pkcs8', generated.privateKey),
-    crypto.subtle.exportKey('spki', generated.publicKey),
-  ]);
-  const publicKeyHex = toHex(new Uint8Array(spki).slice(-32));
+  const publicKeyHex = toHex(base64UrlToBytes(jwk.x));
+  const spki = fromHex(`302a300506032b656e032100${publicKeyHex}`);
   const reader: StoredEncryptionReaderKey = {
-    walletId,
+    walletId: walletRecord.id,
     did: `did:key:x25519:${publicKeyHex}`,
     publicKeyHex,
     spkiBase64: bytesToBase64(spki),
     pkcs8Base64: bytesToBase64(pkcs8),
     createdAt: new Date().toISOString(),
   };
-
-  await chrome.storage.local.set({
-    [ENCRYPTION_READER_KEYS_KEY]: {
-      ...existingMap,
-      [walletId]: reader,
-    },
-  });
   return reader;
 }
 
+async function getProtocolWalletDisplayName(
+  walletRecord: StoredWallet,
+  prefix: 'Wallet' | 'Imported',
+): Promise<string> {
+  const signer = await getOrCreateProtocolSigner(walletRecord);
+  const keySuffix = signer.verifyingKeyHex.slice(0, 8);
+  return `${prefix} did:key:ed25519:${keySuffix}…`;
+}
+
 async function createSignedCitizenResult(envelope: DappSigningRequestEnvelope): Promise<WalletResponse> {
-  const signer = await getOrCreateProtocolSigner();
+  const activeWalletRecord = await getActiveWalletRecord();
+  if (!activeWalletRecord) {
+    return walletError('ERR_WALLET_NOT_CONFIGURED', 'No active wallet is configured.');
+  }
+  const signer = await getOrCreateProtocolSigner(activeWalletRecord);
   const requestScopePreimage = signingPreimageFromEnvelope(envelope);
   const protocolSigningPreimage = protocolSigningPreimageFromEnvelope(envelope);
   const payloadBytes = new TextEncoder().encode(protocolSigningPreimage);
@@ -855,6 +930,69 @@ async function createSignedCitizenResult(envelope: DappSigningRequestEnvelope): 
       algorithm: 'ed25519',
       signatureScope: 'canonical_payload_v1',
       localSignatureVerified,
+    },
+  };
+}
+
+async function createAuthChallengeSignatureResult(message: string): Promise<WalletResponse> {
+  const activeWalletRecord = await getActiveWalletRecord();
+  if (!activeWalletRecord) {
+    return walletError('ERR_WALLET_NOT_CONFIGURED', 'No active wallet is configured.');
+  }
+  const signer = await getOrCreateProtocolSigner(activeWalletRecord);
+  const payloadBytes = new TextEncoder().encode(message);
+  const privateKey = await crypto.subtle.importKey(
+    'pkcs8',
+    base64ToBytes(signer.pkcs8Base64),
+    { name: 'Ed25519' },
+    false,
+    ['sign'],
+  );
+  const signature = await crypto.subtle.sign({ name: 'Ed25519' }, privateKey, payloadBytes);
+  return {
+    ok: true,
+    result: {
+      signer: signer.did,
+      verifyingKey: signer.verifyingKeyHex,
+      algorithm: 'ed25519',
+      signature: bytesToBase64Url(signature),
+      signatureEncoding: 'base64url',
+    },
+  };
+}
+
+async function getCitizenKeyMaterial(walletId: string): Promise<{
+  signer: {
+    did: string;
+    verifyingKey: string;
+    algorithm: 'ed25519';
+    createdAt: string;
+  };
+  reader: {
+    readerDid: string;
+    publicKeyHex: string;
+    algorithm: 'x25519';
+    createdAt: string;
+  };
+}> {
+  const walletRecord = await getWalletRecordById(walletId);
+  if (!walletRecord) {
+    throw new Error('No active wallet is configured.');
+  }
+  const signer = await getOrCreateProtocolSigner(walletRecord);
+  const reader = await getOrCreateEncryptionReaderKey(walletRecord);
+  return {
+    signer: {
+      did: signer.did,
+      verifyingKey: signer.verifyingKeyHex,
+      algorithm: 'ed25519',
+      createdAt: signer.createdAt,
+    },
+    reader: {
+      readerDid: reader.did,
+      publicKeyHex: reader.publicKeyHex,
+      algorithm: 'x25519',
+      createdAt: reader.createdAt,
     },
   };
 }
@@ -1091,6 +1229,30 @@ async function exportPrivateKey(password: string): Promise<WalletResponse> {
   return { ok: true, result: wallet.privateKey };
 }
 
+async function exportProtocolSignerSecret(password: string): Promise<WalletResponse> {
+  const unlocked = await isUnlocked();
+  if (!unlocked) {
+    return { ok: false, error: 'Unlock wallet before exporting protocol signer secret.' };
+  }
+
+  const storedHash = await getPasswordHash();
+  if (!storedHash) {
+    return { ok: false, error: 'No password configured.' };
+  }
+
+  const inputHash = await sha256Hex(password);
+  if (inputHash !== storedHash) {
+    return { ok: false, error: 'Invalid password.' };
+  }
+
+  const walletRecord = await getActiveWalletRecord();
+  if (!walletRecord) {
+    return { ok: false, error: 'No active wallet is configured.' };
+  }
+  const secret = await resolveProtocolSecretForWallet(walletRecord);
+  return { ok: true, result: toHex(secret) };
+}
+
 async function exportMnemonic(password: string): Promise<WalletResponse> {
   const unlocked = await isUnlocked();
   if (!unlocked) {
@@ -1146,19 +1308,20 @@ async function importMnemonic(
   const vault = await ensureVaultInitialized();
   const nextWallet: StoredWallet = {
     id: createWalletId(),
-    name: `Imported ${derived.address.slice(0, 6)}…${derived.address.slice(-4)}`,
+    name: 'Imported pending…',
     createdAt: new Date().toISOString(),
     privateKey: derived.privateKey,
     mnemonicPhrase: normalizedPhrase,
     derivationPath,
   };
+  nextWallet.name = await getProtocolWalletDisplayName(nextWallet, 'Imported');
   await saveWalletVault([nextWallet, ...vault], nextWallet.id);
   await markUnlocked();
 
   return {
     ok: true,
     result: {
-      account: derived.address,
+      signerDid: (await getOrCreateProtocolSigner(nextWallet)).did,
       walletId: nextWallet.id,
       derivationPath,
     },
@@ -1180,19 +1343,20 @@ async function generateMnemonicWallet(
   const vault = await ensureVaultInitialized();
   const nextWallet: StoredWallet = {
     id: createWalletId(),
-    name: `Wallet ${derived.address.slice(0, 6)}…${derived.address.slice(-4)}`,
+    name: 'Wallet pending…',
     createdAt: new Date().toISOString(),
     privateKey: derived.privateKey,
     mnemonicPhrase,
     derivationPath,
   };
+  nextWallet.name = await getProtocolWalletDisplayName(nextWallet, 'Wallet');
   await saveWalletVault([nextWallet, ...vault], nextWallet.id);
   await markUnlocked();
 
   return {
     ok: true,
     result: {
-      account: derived.address,
+      signerDid: (await getOrCreateProtocolSigner(nextWallet)).did,
       walletId: nextWallet.id,
       mnemonicPhrase,
       derivationPath,
@@ -1228,12 +1392,16 @@ async function handleWalletRequest(
   if (request.method === 'wallet_listVault') {
     const vault = await ensureVaultInitialized();
     const activeWallet = await getActiveWalletRecord();
+    const vaultWithSigner = await Promise.all(vault.map(async (wallet) => ({
+      wallet,
+      signer: await getOrCreateProtocolSigner(wallet),
+    })));
     return {
       ok: true,
-      result: vault.map((wallet) => ({
+      result: vaultWithSigner.map(({ wallet, signer }) => ({
         id: wallet.id,
         name: wallet.name,
-        address: new Wallet(wallet.privateKey).address,
+        signerDid: signer.did,
         hasMnemonic: Boolean(wallet.mnemonicPhrase),
         mnemonicWordCount: getMnemonicWordCount(wallet.mnemonicPhrase),
         createdAt: wallet.createdAt,
@@ -1429,6 +1597,17 @@ async function handleWalletRequest(
     return exportPrivateKey(password);
   }
 
+  if (request.method === 'wallet_exportProtocolSignerSecret') {
+    if (!isUiRequest) {
+      return { ok: false, error: 'Unauthorized wallet method.' };
+    }
+    const [password] = request.params ?? [];
+    if (typeof password !== 'string') {
+      return { ok: false, error: 'wallet_exportProtocolSignerSecret requires your password.' };
+    }
+    return exportProtocolSignerSecret(password);
+  }
+
   if (request.method === 'wallet_exportMnemonic') {
     if (!isUiRequest) {
       return { ok: false, error: 'Unauthorized wallet method.' };
@@ -1510,15 +1689,15 @@ async function handleWalletRequest(
 
   const wallet = await getStoredWallet();
   const activeWalletRecord = await getActiveWalletRecord();
-  const account = wallet.address;
-  await recordRequest(request, account);
+  const activeSignerDid = activeWalletRecord ? (await getOrCreateProtocolSigner(activeWalletRecord)).did : 'unknown';
+  await recordRequest(request, activeSignerDid);
 
   switch (request.method) {
     case 'ctzn_requestAccounts':
     case 'ctzn_accounts':
     case 'citizen_requestAccounts':
     case 'citizen_accounts':
-      return { ok: true, result: [account] };
+      return walletError('ERR_UNSUPPORTED_METHOD', 'Account-based methods are disabled in strict protocol mode.');
     case 'ctzn_chainId':
     case 'citizen_chainId':
       return { ok: true, result: NETWORKS[await getSelectedNetwork()].chainIdHex };
@@ -1542,104 +1721,42 @@ async function handleWalletRequest(
       };
     case 'citizen_login':
     case 'wallet_login': {
-      const [loginParams] = request.params ?? [];
-      if (loginParams !== undefined && (typeof loginParams !== 'object' || loginParams === null)) {
-        return { ok: false, error: 'citizen_login expects an optional object param.' };
-      }
-
-      const payload = (loginParams ?? {}) as DappLoginParams;
-      const origin = request.origin ?? 'unknown';
-      const selectedNetwork = await getSelectedNetwork();
-      const loginPayload = normalizeLoginPayload(origin, {
-        ...payload,
-        chainId: payload.chainId ?? NETWORKS[selectedNetwork].chainIdHex,
-      });
-      const message = buildLoginMessage(account, loginPayload);
-      const signature = await wallet.signMessage(message);
-      return {
-        ok: true,
-        result: {
-          account,
-          origin,
-          message,
-          signature,
-          domain: loginPayload.domain,
-          uri: loginPayload.uri,
-          chainId: loginPayload.chainId,
-          statement: loginPayload.statement,
-          expirationTime: loginPayload.expirationTime ?? null,
-          issuedAt: loginPayload.issuedAt,
-          nonce: loginPayload.nonce,
-        },
-      };
+      return walletError('ERR_UNSUPPORTED_METHOD', 'Login/account signature methods are disabled in strict protocol mode.');
     }
     case 'personal_sign': {
-      const [rawMessage, requestedAccount] = request.params ?? [];
-      const messageCandidateA = rawMessage;
-      const messageCandidateB = requestedAccount;
-      const message = typeof messageCandidateA === 'string'
-        ? messageCandidateA
-        : typeof messageCandidateB === 'string'
-          ? messageCandidateB
-          : null;
-      const targetAccount = typeof messageCandidateA === 'string'
-        ? requestedAccount
-        : rawMessage;
-
-      if (typeof message !== 'string') {
-        return { ok: false, error: 'personal_sign requires message + account params' };
-      }
-      if (
-        typeof targetAccount === 'string' &&
-        targetAccount.toLowerCase() !== account.toLowerCase()
-      ) {
-        return { ok: false, error: 'Requested account does not match active wallet account' };
-      }
-      const signature = await wallet.signMessage(message);
-      return { ok: true, result: signature };
+      return walletError('ERR_UNSUPPORTED_METHOD', 'personal_sign is disabled in strict protocol mode.');
     }
     case 'ctzn_signTypedData_v4': {
-      const [requestedAccount, typedDataRaw] = request.params ?? [];
-      if (
-        typeof requestedAccount !== 'string' ||
-        requestedAccount.toLowerCase() !== account.toLowerCase()
-      ) {
-        return { ok: false, error: 'Typed-data signing requires the active account as first param.' };
-      }
-      const typedData = parseTypedDataPayload(typedDataRaw);
-      if (!typedData?.domain || !typedData?.types || !typedData?.message) {
-        return { ok: false, error: 'Invalid typed payload for typed-data signing.' };
-      }
-      const { EIP712Domain: _ignoredDomain, ...types } = typedData.types;
-      const signature = await wallet.signTypedData(typedData.domain, types, typedData.message);
-      return { ok: true, result: signature };
+      return walletError('ERR_UNSUPPORTED_METHOD', 'ctzn_signTypedData_v4 is disabled in strict protocol mode.');
     }
     case 'ctzn_getCitizenSigner': {
-      const signer = await getOrCreateProtocolSigner();
+      if (!activeWalletRecord) {
+        return walletError('ERR_WALLET_NOT_CONFIGURED', 'No active wallet is configured.');
+      }
+      const material = await getCitizenKeyMaterial(activeWalletRecord.id);
       return {
         ok: true,
-        result: {
-          did: signer.did,
-          verifyingKey: signer.verifyingKeyHex,
-          algorithm: 'ed25519',
-          createdAt: signer.createdAt,
-        },
+        result: material.signer,
       };
     }
     case 'ctzn_getEncryptionPublicKey': {
       if (!activeWalletRecord) {
         return walletError('ERR_WALLET_NOT_CONFIGURED', 'No active wallet is configured.');
       }
-      const readerKey = await getOrCreateEncryptionReaderKey(activeWalletRecord.id);
+      const material = await getCitizenKeyMaterial(activeWalletRecord.id);
       return {
         ok: true,
-        result: {
-          readerDid: readerKey.did,
-          publicKeyHex: readerKey.publicKeyHex,
-          algorithm: 'x25519',
-          createdAt: readerKey.createdAt,
-          signer0x: account,
-        },
+        result: material.reader,
+      };
+    }
+    case 'ctzn_getCitizenKeyMaterial': {
+      if (!activeWalletRecord) {
+        return walletError('ERR_WALLET_NOT_CONFIGURED', 'No active wallet is configured.');
+      }
+      const material = await getCitizenKeyMaterial(activeWalletRecord.id);
+      return {
+        ok: true,
+        result: material,
       };
     }
     case 'ctzn_signCitizenTx': {
@@ -1657,6 +1774,13 @@ async function handleWalletRequest(
         return walletError('ERR_ORIGIN_BLOCKED', 'This origin is blocked in wallet permissions.');
       }
       return enqueueDappSigningRequest(payload, request, sender);
+    }
+    case 'ctzn_signAuthChallenge': {
+      const [message] = request.params ?? [];
+      if (typeof message !== 'string' || message.trim().length === 0) {
+        return walletError('ERR_MALFORMED_REQUEST', 'ctzn_signAuthChallenge requires a non-empty challenge message.');
+      }
+      return createAuthChallengeSignatureResult(message);
     }
     default:
       return walletError('ERR_UNSUPPORTED_METHOD', `Unsupported method: ${request.method}`);

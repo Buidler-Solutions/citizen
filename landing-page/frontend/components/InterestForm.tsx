@@ -612,6 +612,10 @@ export function InterestForm() {
         setStatus('Wallet signing response was invalid. Please retry and approve the signature request.');
         return null;
       }
+      if (signResult.algorithm && signResult.algorithm.toLowerCase() !== 'ed25519') {
+        setStatus('Wallet signer must use Ed25519 for onboarding payload signatures.');
+        return null;
+      }
 
       const signedEnvelope: SignedSubmissionEnvelope = {
         payload,

@@ -15,6 +15,17 @@ type WalletAuthVerifyResponse = {
   token?: string;
 };
 
+type CitizenSigner = {
+  did?: string;
+  verifyingKey?: string;
+  algorithm?: string;
+};
+
+type CitizenChallengeSignature = {
+  signature?: string;
+  algorithm?: string;
+};
+
 const detectProvider = (): WalletProvider | null => {
   const candidate = (window as typeof window & { citizen?: WalletProvider; ctzn?: WalletProvider });
   return candidate.citizen ?? candidate.ctzn ?? null;
@@ -29,6 +40,21 @@ export function WalletOnboardingLogin() {
     () => process.env.NEXT_PUBLIC_WALLET_AUTH_API_URL ?? 'http://127.0.0.1:4499',
     [],
   );
+
+  const deriveCitizenAddress = useCallback(async (publicKeyHex: string) => {
+    const normalized = publicKeyHex.trim().toLowerCase();
+    if (!/^[a-f0-9]{64}$/.test(normalized)) {
+      throw new Error('Wallet returned an invalid Ed25519 public key.');
+    }
+    const keyBytes = Uint8Array.from(
+      normalized.match(/.{1,2}/g)?.map((pair) => Number.parseInt(pair, 16)) ?? [],
+    );
+    const digest = await crypto.subtle.digest('SHA-256', keyBytes);
+    const digestHex = Array.from(new Uint8Array(digest))
+      .map((byte) => byte.toString(16).padStart(2, '0'))
+      .join('');
+    return `ctzn:${digestHex.slice(0, 40)}`;
+  }, []);
 
   const syncWalletHandshakeState = useCallback(async () => {
     const provider = detectProvider();
@@ -46,15 +72,14 @@ export function WalletOnboardingLogin() {
     }
 
     try {
-      const accountsResult = await provider.request({ method: 'citizen_accounts' });
-      const accounts = Array.isArray(accountsResult) ? accountsResult : [];
-      const selectedWallet = typeof accounts[0] === 'string' ? accounts[0].toLowerCase() : null;
-      if (!selectedWallet) {
+      const signerResult = await provider.request({ method: 'ctzn_getCitizenSigner' }) as CitizenSigner;
+      const signerDid = typeof signerResult?.did === 'string' ? signerResult.did.trim() : '';
+      if (!signerDid) {
         setWallet(null);
-        setStatus('Wallet session found, but no connected account. Reconnect your wallet.');
+        setStatus('Wallet session found, but no active protocol signer. Reconnect your wallet.');
         return;
       }
-      setWallet(selectedWallet);
+      setWallet(signerDid);
       setStatus('Wallet login successful. Your onboarding session is active.');
     } catch {
       setWallet(null);
@@ -76,21 +101,29 @@ export function WalletOnboardingLogin() {
         throw new Error('Citizen wallet extension was not detected in this browser.');
       }
 
-      const accountsResult = await provider.request({ method: 'ctzn_requestAccounts' });
-      const accounts = Array.isArray(accountsResult) ? accountsResult : [];
-      const selectedWallet = typeof accounts[0] === 'string' ? accounts[0] : null;
-      if (!selectedWallet) {
-        throw new Error('Wallet did not return an account.');
+      const signerResult = await provider.request({ method: 'ctzn_getCitizenSigner' }) as CitizenSigner;
+      const signerDid = typeof signerResult?.did === 'string' ? signerResult.did.trim() : '';
+      const signerPublicKey = typeof signerResult?.verifyingKey === 'string'
+        ? signerResult.verifyingKey.trim().toLowerCase()
+        : '';
+      if (!signerDid || !signerPublicKey) {
+        throw new Error('Wallet did not return a protocol signer DID/public key.');
       }
+      if (signerResult.algorithm && signerResult.algorithm.toLowerCase() !== 'ed25519') {
+        throw new Error('Wallet signer algorithm must be Ed25519.');
+      }
+      const citizenAddress = await deriveCitizenAddress(signerPublicKey);
 
       const challengeResponse = await fetch(`${authApiUrl}/auth/challenge`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
-          wallet: selectedWallet,
+          address: citizenAddress,
           domain: window.location.host,
           uri: `${window.location.origin}/onboarding`,
-          network: 'futurenet',
+          chainId: 3096,
+          scheme: 'citizen_ed25519',
+          publicKey: signerPublicKey,
         }),
       });
       if (!challengeResponse.ok) {
@@ -98,12 +131,13 @@ export function WalletOnboardingLogin() {
       }
       const challenge = (await challengeResponse.json()) as WalletAuthChallengeResponse;
 
-      const signature = await provider.request({
-        method: 'personal_sign',
-        params: [challenge.message, selectedWallet],
-      });
-      if (typeof signature !== 'string' || !signature.startsWith('0x')) {
-        throw new Error('Wallet returned an invalid signature.');
+      const signatureResult = await provider.request({
+        method: 'ctzn_signAuthChallenge',
+        params: [challenge.message],
+      }) as CitizenChallengeSignature;
+      const signature = typeof signatureResult?.signature === 'string' ? signatureResult.signature.trim() : '';
+      if (!signature) {
+        throw new Error('Wallet returned an invalid auth challenge signature.');
       }
 
       const verifyResponse = await fetch(`${authApiUrl}/auth/verify`, {
@@ -111,8 +145,11 @@ export function WalletOnboardingLogin() {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
           challengeId: challenge.challengeId,
-          wallet: selectedWallet,
+          message: challenge.message,
+          address: citizenAddress,
           signature,
+          scheme: 'citizen_ed25519',
+          publicKey: signerPublicKey,
         }),
       });
       if (!verifyResponse.ok) {

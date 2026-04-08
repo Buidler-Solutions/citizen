@@ -220,6 +220,36 @@ test('stats report relay direct-submit failure rate from relay outcomes', async 
   }
 });
 
+test('create accepts quoted relay url env values', async () => {
+  const relayUrl = 'https://citizen-relay.example.test/api/v1/submit';
+  const originalRelayUrl = process.env.CITIZEN_SIGNED_SUBMISSION_RELAY_URL;
+  const originalFetch = globalThis.fetch;
+
+  process.env.CITIZEN_SIGNED_SUBMISSION_RELAY_URL = `"${relayUrl}"`;
+
+  let capturedRelayUrl: string | null = null;
+  const mockedFetch = (async (input: RequestInfo | URL) => {
+    capturedRelayUrl = typeof input === 'string' ? input : input.toString();
+    return {
+      ok: true,
+      status: 200,
+    } as Response;
+  }) as unknown as typeof fetch;
+  globalThis.fetch = mockedFetch;
+
+  try {
+    const service = createService();
+    const contract = service.getSignedSubmissionContract();
+    assert.equal(contract.relayMode, 'database_plus_network_relay');
+
+    await service.create(buildSignedPayload({ email: 'quoted-relay-url@example.com' }));
+    assert.equal(capturedRelayUrl, relayUrl);
+  } finally {
+    process.env.CITIZEN_SIGNED_SUBMISSION_RELAY_URL = originalRelayUrl;
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test('create can relay onboarding submission as runtime envelope payload', async () => {
   const relayUrl = 'http://127.0.0.1:8081/api/v1/envelopes/submit';
   const { privateKey: runtimePrivateKey } = generateKeyPairSync('ed25519');
@@ -545,6 +575,52 @@ test('create accepts hybrid author X25519 private key as PEM', async () => {
   }
 });
 
+test('create accepts quoted hybrid author X25519 private key hex from env files', async () => {
+  const relayUrl = 'http://127.0.0.1:8081/api/v1/envelopes/submit';
+  const { privateKey: runtimePrivateKey } = generateKeyPairSync('ed25519');
+  const runtimePrivateKeyPem = runtimePrivateKey.export({ format: 'pem', type: 'pkcs8' }).toString();
+  const { privateKey: hybridAuthorPrivateKey } = generateKeyPairSync('x25519');
+  const { publicKey: readerPublicKey } = generateKeyPairSync('x25519');
+  const originalRelayUrl = process.env.CITIZEN_SIGNED_SUBMISSION_RELAY_URL;
+  const originalRelayFormat = process.env.CITIZEN_SIGNED_SUBMISSION_RELAY_FORMAT;
+  const originalRuntimePrivateKey = process.env.CITIZEN_SIGNED_SUBMISSION_RUNTIME_SIGNING_PRIVATE_KEY_PEM;
+  const originalRuntimePrivacyMode = process.env.CITIZEN_SIGNED_SUBMISSION_RUNTIME_PRIVACY_MODE;
+  const originalHybridReaders = process.env.CITIZEN_SIGNED_SUBMISSION_RUNTIME_HYBRID_AUTHORIZED_READERS;
+  const originalHybridAuthorX25519 = process.env.CITIZEN_SIGNED_SUBMISSION_RUNTIME_HYBRID_AUTHOR_X25519_PRIVATE_KEY_HEX;
+  const originalHybridReaderKeys = process.env.CITIZEN_SIGNED_SUBMISSION_RUNTIME_HYBRID_READER_X25519_PUBLIC_KEYS_JSON;
+  const originalFetch = globalThis.fetch;
+
+  process.env.CITIZEN_SIGNED_SUBMISSION_RELAY_URL = relayUrl;
+  process.env.CITIZEN_SIGNED_SUBMISSION_RELAY_FORMAT = 'runtime_envelope';
+  process.env.CITIZEN_SIGNED_SUBMISSION_RUNTIME_SIGNING_PRIVATE_KEY_PEM = runtimePrivateKeyPem;
+  process.env.CITIZEN_SIGNED_SUBMISSION_RUNTIME_PRIVACY_MODE = 'hybrid';
+  process.env.CITIZEN_SIGNED_SUBMISSION_RUNTIME_HYBRID_AUTHORIZED_READERS = 'did:reader:ops';
+  process.env.CITIZEN_SIGNED_SUBMISSION_RUNTIME_HYBRID_AUTHOR_X25519_PRIVATE_KEY_HEX = `"${exportX25519PrivateHex(hybridAuthorPrivateKey)}"`;
+  process.env.CITIZEN_SIGNED_SUBMISSION_RUNTIME_HYBRID_READER_X25519_PUBLIC_KEYS_JSON = JSON.stringify({
+    'did:reader:ops': exportX25519PublicHex(readerPublicKey),
+  });
+
+  const mockedFetch = (async () => ({
+    ok: true,
+    status: 200,
+  } as Response)) as unknown as typeof fetch;
+  globalThis.fetch = mockedFetch;
+
+  try {
+    const service = createService();
+    await assert.doesNotReject(service.create(buildSignedPayload({ email: 'runtime-hybrid-author-quoted-hex@example.com' })));
+  } finally {
+    process.env.CITIZEN_SIGNED_SUBMISSION_RELAY_URL = originalRelayUrl;
+    process.env.CITIZEN_SIGNED_SUBMISSION_RELAY_FORMAT = originalRelayFormat;
+    process.env.CITIZEN_SIGNED_SUBMISSION_RUNTIME_SIGNING_PRIVATE_KEY_PEM = originalRuntimePrivateKey;
+    process.env.CITIZEN_SIGNED_SUBMISSION_RUNTIME_PRIVACY_MODE = originalRuntimePrivacyMode;
+    process.env.CITIZEN_SIGNED_SUBMISSION_RUNTIME_HYBRID_AUTHORIZED_READERS = originalHybridReaders;
+    process.env.CITIZEN_SIGNED_SUBMISSION_RUNTIME_HYBRID_AUTHOR_X25519_PRIVATE_KEY_HEX = originalHybridAuthorX25519;
+    process.env.CITIZEN_SIGNED_SUBMISSION_RUNTIME_HYBRID_READER_X25519_PUBLIC_KEYS_JSON = originalHybridReaderKeys;
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test('create falls back to ephemeral hybrid author X25519 key when configured key is invalid', async () => {
   const relayUrl = 'http://127.0.0.1:8081/api/v1/envelopes/submit';
   const { privateKey: runtimePrivateKey } = generateKeyPairSync('ed25519');
@@ -675,6 +751,53 @@ test('create accepts reader key object with signer_0x and x25519_public_key', as
   try {
     const service = createService();
     await assert.doesNotReject(service.create(buildSignedPayload({ email: 'runtime-hybrid-reader-object@example.com' })));
+  } finally {
+    process.env.CITIZEN_SIGNED_SUBMISSION_RELAY_URL = originalRelayUrl;
+    process.env.CITIZEN_SIGNED_SUBMISSION_RELAY_FORMAT = originalRelayFormat;
+    process.env.CITIZEN_SIGNED_SUBMISSION_RUNTIME_SIGNING_PRIVATE_KEY_PEM = originalRuntimePrivateKey;
+    process.env.CITIZEN_SIGNED_SUBMISSION_RUNTIME_PRIVACY_MODE = originalRuntimePrivacyMode;
+    process.env.CITIZEN_SIGNED_SUBMISSION_RUNTIME_HYBRID_AUTHORIZED_READERS = originalHybridReaders;
+    process.env.CITIZEN_SIGNED_SUBMISSION_RUNTIME_HYBRID_AUTHOR_X25519_PRIVATE_KEY_HEX = originalHybridAuthorX25519;
+    process.env.CITIZEN_SIGNED_SUBMISSION_RUNTIME_HYBRID_READER_X25519_PUBLIC_KEYS_JSON = originalHybridReaderKeys;
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('create accepts quoted reader key JSON object from env files', async () => {
+  const relayUrl = 'http://127.0.0.1:8081/api/v1/envelopes/submit';
+  const { privateKey: runtimePrivateKey } = generateKeyPairSync('ed25519');
+  const runtimePrivateKeyPem = runtimePrivateKey.export({ format: 'pem', type: 'pkcs8' }).toString();
+  const { privateKey: hybridAuthorPrivateKey } = generateKeyPairSync('x25519');
+  const { publicKey: readerPublicKey } = generateKeyPairSync('x25519');
+  const readerJson = JSON.stringify({
+    'did:reader:ops': exportX25519PublicHex(readerPublicKey),
+  });
+  const originalRelayUrl = process.env.CITIZEN_SIGNED_SUBMISSION_RELAY_URL;
+  const originalRelayFormat = process.env.CITIZEN_SIGNED_SUBMISSION_RELAY_FORMAT;
+  const originalRuntimePrivateKey = process.env.CITIZEN_SIGNED_SUBMISSION_RUNTIME_SIGNING_PRIVATE_KEY_PEM;
+  const originalRuntimePrivacyMode = process.env.CITIZEN_SIGNED_SUBMISSION_RUNTIME_PRIVACY_MODE;
+  const originalHybridReaders = process.env.CITIZEN_SIGNED_SUBMISSION_RUNTIME_HYBRID_AUTHORIZED_READERS;
+  const originalHybridAuthorX25519 = process.env.CITIZEN_SIGNED_SUBMISSION_RUNTIME_HYBRID_AUTHOR_X25519_PRIVATE_KEY_HEX;
+  const originalHybridReaderKeys = process.env.CITIZEN_SIGNED_SUBMISSION_RUNTIME_HYBRID_READER_X25519_PUBLIC_KEYS_JSON;
+  const originalFetch = globalThis.fetch;
+
+  process.env.CITIZEN_SIGNED_SUBMISSION_RELAY_URL = relayUrl;
+  process.env.CITIZEN_SIGNED_SUBMISSION_RELAY_FORMAT = 'runtime_envelope';
+  process.env.CITIZEN_SIGNED_SUBMISSION_RUNTIME_SIGNING_PRIVATE_KEY_PEM = runtimePrivateKeyPem;
+  process.env.CITIZEN_SIGNED_SUBMISSION_RUNTIME_PRIVACY_MODE = 'hybrid';
+  process.env.CITIZEN_SIGNED_SUBMISSION_RUNTIME_HYBRID_AUTHORIZED_READERS = 'did:reader:ops';
+  process.env.CITIZEN_SIGNED_SUBMISSION_RUNTIME_HYBRID_AUTHOR_X25519_PRIVATE_KEY_HEX = exportX25519PrivateHex(hybridAuthorPrivateKey);
+  process.env.CITIZEN_SIGNED_SUBMISSION_RUNTIME_HYBRID_READER_X25519_PUBLIC_KEYS_JSON = `'${readerJson}'`;
+
+  const mockedFetch = (async () => ({
+    ok: true,
+    status: 200,
+  } as Response)) as unknown as typeof fetch;
+  globalThis.fetch = mockedFetch;
+
+  try {
+    const service = createService();
+    await assert.doesNotReject(service.create(buildSignedPayload({ email: 'runtime-hybrid-reader-quoted-json@example.com' })));
   } finally {
     process.env.CITIZEN_SIGNED_SUBMISSION_RELAY_URL = originalRelayUrl;
     process.env.CITIZEN_SIGNED_SUBMISSION_RELAY_FORMAT = originalRelayFormat;

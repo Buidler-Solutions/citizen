@@ -81,6 +81,18 @@ This pattern supports a governed data-plane model where commitments/proofs are c
 For landing-page onboarding integrations, the signing response maps one-to-one with enforced backend fields:
 `walletSignerDid`, `walletVerifyingKey`, `walletSignature`, `walletPayloadHash`, `walletSigningPayload`, `walletAlgorithm`, and `walletSignatureScope`.
 
+### Protocol key material methods
+
+The injected provider exposes explicit key roles for onboarding/runtime envelopes:
+
+- `ctzn_getCitizenSigner` → Ed25519 signer metadata (`did`, `verifyingKey`, `algorithm=ed25519`)
+- `ctzn_getEncryptionPublicKey` → X25519 reader metadata (`readerDid`, `publicKeyHex`, `algorithm=x25519`)
+- `ctzn_getCitizenKeyMaterial` → both signer + reader in one response
+
+These protocol keys are now derived from the active wallet's mnemonic/derivation path material so browser extension key generation stays aligned with wallet-CLI expectations, and protocol responses avoid Ethereum-style signer address fields.
+
+Strict protocol mode is enabled in the extension background flow: account-based signature/account methods (`*_accounts`, `personal_sign`, `ctzn_signTypedData_v4`, legacy login/account signing paths) are intentionally disabled so dApps consume Citizen signer/reader identities only.
+
 ## Approval UI rollout flag
 
 The dedicated pending-request approval surface is now controlled by `VITE_WALLET_APPROVAL_UI_ROLLOUT` in the extension build environment:
