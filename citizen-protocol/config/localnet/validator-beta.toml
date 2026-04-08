@@ -3,6 +3,7 @@ block_time_millis = 1000
 quorum_bps = 8000
 signing_key_hex = "2f2e2d2c2b2a292827262524232221201f1e1d1c1b1a19181716151413121110"
 api_port = 8082
+api_local_finalize_mode = false
 data_dir = "data/beta"
 bind_addr = "127.0.0.1:9101"
 network_key_rotation_secs = 3600

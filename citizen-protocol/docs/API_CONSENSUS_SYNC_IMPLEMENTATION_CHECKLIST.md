@@ -2,7 +2,7 @@
 
 Status: Draft implementation checkpoint checklist for making API submissions flow through consensus so Alpha/Beta/Gamma converge on the same committed ledger state.
 
-Last updated: 2026-04-08 (operator runbook hardening: admission-vs-ingestion note + restart semantics).
+Last updated: 2026-04-08 (localnet configs flipped to consensus-backed ingestion by default).
 
 ## Objective
 
@@ -30,7 +30,7 @@ Last updated: 2026-04-08 (operator runbook hardening: admission-vs-ingestion not
   - [x] `drain(max: usize) -> Vec<LedgerEntry>`
   - [x] Optional: `len()` for diagnostics.
 - [x] Add deterministic dedupe policy (recommended by `entry_id`).
-- [ ] Add unit tests:
+- [x] Add unit tests:
   - [x] enqueue/drain order behavior.
   - [x] dedupe behavior.
   - [x] max-batch drain behavior.
@@ -57,7 +57,7 @@ Last updated: 2026-04-08 (operator runbook hardening: admission-vs-ingestion not
 - [x] Implement `collect_entries()` to drain txpool using `max_entries_per_block`.
 - [x] Ensure proposer includes drained entries in proposal entry root.
 - [x] Keep commit/finality path unchanged (`finalize_block` + `ledger.apply_block`).
-- [ ] Add/adjust consensus tests:
+- [x] Add/adjust consensus tests:
   - [x] proposal with non-empty entries.
   - [x] commit applies entries once.
   - [x] repeated commit/replay does not double-apply.
@@ -99,6 +99,11 @@ Last updated: 2026-04-08 (operator runbook hardening: admission-vs-ingestion not
 - `citizen-ledger::Ledger::apply_entry` now rejects repeated `entry_id` submissions in the same namespace before persistence, so duplicate submissions racing across validators converge on deterministic duplicate rejection rather than double-write behavior.
 - Coverage added in ledger tests to assert duplicate `entry_id` submissions are rejected and do not create additional stored entries.
 - Localnet runbook now documents queue-health alerting hooks for stuck queue / zero-throughput conditions tied to txpool telemetry counters.
+
+## Checkpoint 5 implementation notes (in progress)
+
+- Localnet validator configs now set `api_local_finalize_mode = false` for Alpha/Beta/Gamma so default `scripts/run_localnet.sh` launches exercise consensus-backed ingestion semantics without extra manual edits.
+- Remaining Checkpoint 5 evidence capture (curl artifacts/log snapshots/block-height parity) is still pending a full localnet validation run in the implementation PR context.
 
 ## Checkpoint 7 — Documentation + rollout
 
