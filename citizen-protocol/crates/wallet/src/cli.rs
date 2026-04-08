@@ -9,6 +9,7 @@ use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use uuid::Uuid;
+use x25519_dalek::{PublicKey as X25519PublicKey, StaticSecret};
 
 use crate::{
     build_wrcp_msig_v1_proof, build_wrcp_msig_v1_signing_payload, compute_file_manifest_commitment,
@@ -39,6 +40,20 @@ enum Commands {
         password: Option<String>,
         #[arg(long)]
         with_mnemonic: bool,
+        #[arg(long, default_value_t = 12, value_parser = parse_mnemonic_word_count)]
+        mnemonic_words: u8,
+        #[arg(long)]
+        mnemonic_passphrase: Option<String>,
+        #[arg(long, default_value = "m/44'/930'/0'/0'/0'")]
+        derivation_path: String,
+    },
+    GenerateProtocolKeypairs {
+        #[arg(long)]
+        output: Option<PathBuf>,
+        #[arg(long)]
+        with_mnemonic: bool,
+        #[arg(long)]
+        mnemonic: Option<String>,
         #[arg(long, default_value_t = 12, value_parser = parse_mnemonic_word_count)]
         mnemonic_words: u8,
         #[arg(long)]
@@ -365,6 +380,22 @@ struct KeyExport {
     secret_key_hex: Option<String>,
 }
 
+#[derive(Debug, Serialize)]
+struct ProtocolKeypairsExport {
+    signer_did: String,
+    signer_algorithm: String,
+    signer_ed25519_public_key_hex: String,
+    signer_ed25519_private_key_hex: String,
+    reader_did: String,
+    reader_algorithm: String,
+    reader_x25519_public_key_hex: String,
+    reader_x25519_private_key_hex: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    mnemonic_phrase: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    derivation_path: Option<String>,
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 struct ReceiptStore {
     version: u32,
@@ -519,6 +550,70 @@ pub fn run() -> anyhow::Result<()> {
             store.add_key(record);
             store.save(&path)?;
             println!("Generated key {}", keypair.key_id);
+        }
+        Commands::GenerateProtocolKeypairs {
+            output,
+            with_mnemonic,
+            mnemonic,
+            mnemonic_words,
+            mnemonic_passphrase,
+            derivation_path,
+        } => {
+            let mut generated_mnemonic: Option<String> = None;
+            let has_imported_mnemonic = mnemonic.is_some();
+            let signer_keypair = if let Some(mnemonic_phrase) = mnemonic {
+                let normalized_mnemonic = load_mnemonic_phrase(Some(mnemonic_phrase))?;
+                WalletKeypair::from_mnemonic(
+                    Uuid::new_v4(),
+                    &normalized_mnemonic,
+                    mnemonic_passphrase.as_deref(),
+                    Some(&derivation_path),
+                )?
+            } else if with_mnemonic {
+                let mnemonic_phrase = generate_mnemonic_phrase(mnemonic_words as usize)?;
+                generated_mnemonic = Some(mnemonic_phrase.clone());
+                WalletKeypair::from_mnemonic(
+                    Uuid::new_v4(),
+                    &mnemonic_phrase,
+                    mnemonic_passphrase.as_deref(),
+                    Some(&derivation_path),
+                )?
+            } else {
+                WalletKeypair::generate()
+            };
+            let signer_private_hex = hex::encode(signer_keypair.secret_key_bytes());
+            let signer_public_hex = signer_keypair.verifying_key_hex();
+            let reader_secret = StaticSecret::from(signer_keypair.secret_key_bytes());
+            let reader_public_hex = hex::encode(X25519PublicKey::from(&reader_secret).as_bytes());
+            let reader_private_hex = hex::encode(reader_secret.to_bytes());
+            let export = ProtocolKeypairsExport {
+                signer_did: format!("did:key:ed25519:{signer_public_hex}"),
+                signer_algorithm: "ed25519".to_string(),
+                signer_ed25519_public_key_hex: signer_public_hex,
+                signer_ed25519_private_key_hex: signer_private_hex,
+                reader_did: format!("did:key:x25519:{reader_public_hex}"),
+                reader_algorithm: "x25519".to_string(),
+                reader_x25519_public_key_hex: reader_public_hex,
+                reader_x25519_private_key_hex: reader_private_hex,
+                mnemonic_phrase: generated_mnemonic,
+                derivation_path: if with_mnemonic || has_imported_mnemonic {
+                    Some(derivation_path.clone())
+                } else {
+                    None
+                },
+            };
+            let output_json = serde_json::to_string_pretty(&export)?;
+            if let Some(output_path) = output {
+                if let Some(parent) = output_path.parent() {
+                    if !parent.as_os_str().is_empty() {
+                        fs::create_dir_all(parent)?;
+                    }
+                }
+                fs::write(&output_path, output_json)?;
+                println!("Generated protocol keypairs at {}", output_path.display());
+            } else {
+                println!("{output_json}");
+            }
         }
         Commands::ImportKey {
             path,
