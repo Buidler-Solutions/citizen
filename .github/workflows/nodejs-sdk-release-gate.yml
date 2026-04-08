@@ -3,8 +3,9 @@ name: nodejs-sdk-release-gate
 on:
   pull_request:
     paths:
-      - "citizen-protocol/sdk/nodejs/**"
-      - "citizen-protocol/dapp/apps/api/**"
+      - "sdk/nodejs/**"
+      - "dapp/apps/api/**"
+      - "wallet/sdk/typescript-auth/**"
       - "citizen-protocol/crates/**"
       - "citizen-protocol/config/localnet/**"
       - ".github/workflows/nodejs-sdk-release-gate.yml"
@@ -12,8 +13,9 @@ on:
     branches:
       - main
     paths:
-      - "citizen-protocol/sdk/nodejs/**"
-      - "citizen-protocol/dapp/apps/api/**"
+      - "sdk/nodejs/**"
+      - "dapp/apps/api/**"
+      - "wallet/sdk/typescript-auth/**"
       - "citizen-protocol/crates/**"
       - "citizen-protocol/config/localnet/**"
       - ".github/workflows/nodejs-sdk-release-gate.yml"
@@ -23,14 +25,14 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: citizen-protocol/sdk/nodejs
+        working-directory: sdk/nodejs
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: npm
-          cache-dependency-path: citizen-protocol/sdk/nodejs/package-lock.json
+          cache-dependency-path: sdk/nodejs/package-lock.json
       - run: npm ci
       - run: npm test
 
@@ -38,14 +40,14 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: citizen-protocol/sdk/nodejs
+        working-directory: sdk/nodejs
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: npm
-          cache-dependency-path: citizen-protocol/sdk/nodejs/package-lock.json
+          cache-dependency-path: sdk/nodejs/package-lock.json
       - run: npm ci
       - run: npm pack --dry-run
       - name: Validate tarball file list
@@ -74,6 +76,21 @@ jobs:
           }
           '
 
+  wallet-auth-sdk-typecheck:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: wallet/sdk/typescript-auth
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: wallet/sdk/typescript-auth/package.json
+      - run: npm install --no-package-lock
+      - run: npm run typecheck
+
   sdk-live-node-smoke:
     runs-on: ubuntu-latest
     steps:
@@ -83,9 +100,9 @@ jobs:
         with:
           node-version: 20
           cache: npm
-          cache-dependency-path: citizen-protocol/sdk/nodejs/package-lock.json
+          cache-dependency-path: sdk/nodejs/package-lock.json
       - name: Install SDK dependencies
-        working-directory: citizen-protocol/sdk/nodejs
+        working-directory: sdk/nodejs
         run: npm ci
       - name: Run SDK live smoke (local non-Docker node)
         env:
@@ -93,4 +110,4 @@ jobs:
           CITIZEN_LOCAL_PROTOCOL_DIR: citizen-protocol
           CITIZEN_LOCAL_CONFIG_PATH: config/localnet/validator-alpha.toml
           CITIZEN_NODE_HEALTH_TIMEOUT_MS: "180000"
-        run: node citizen-protocol/sdk/nodejs/scripts/live_node_smoke.mjs
+        run: node sdk/nodejs/scripts/live_node_smoke.mjs

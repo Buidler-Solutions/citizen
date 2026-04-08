@@ -415,7 +415,7 @@ export class LeadService {
     const runtimeNamespace = process.env.CITIZEN_SIGNED_SUBMISSION_RUNTIME_NAMESPACE?.trim() || DEFAULT_RUNTIME_NAMESPACE;
     const runtimeAction = process.env.CITIZEN_SIGNED_SUBMISSION_RUNTIME_ACTION?.trim() || DEFAULT_RUNTIME_ACTION;
     const runtimeAuthor = process.env.CITIZEN_SIGNED_SUBMISSION_RUNTIME_AUTHOR?.trim() || DEFAULT_RUNTIME_AUTHOR;
-    const objectId = payload.email.trim().toLowerCase();
+    const objectId = this.deriveRuntimeEnvelopeObjectId(payload.walletPayloadHash);
     const entryId = randomUUID();
     const nowIso = new Date().toISOString();
     const timestamp = Math.floor(Date.now() / 1000);
@@ -446,7 +446,6 @@ export class LeadService {
       deduplication_key: relayDeduplicationKey,
       wallet_signer: payload.walletSignerDid,
       role: normalizedRole,
-      country: payload.country.trim(),
       signed_submission_commitment: payload.walletPayloadHash,
       payload_wallet_signature: {
         signer: payload.walletSignerDid,
@@ -461,6 +460,7 @@ export class LeadService {
 
     if (runtimePrivacy.entryPrivacy.privacy_mode !== 'hybrid') {
       Object.assign(runtimeEntryPayload, {
+        country: payload.country.trim(),
         signed_submission: signedOnboardingPayload,
       });
     }
@@ -507,6 +507,14 @@ export class LeadService {
         timestamp,
       },
     };
+  }
+
+  private deriveRuntimeEnvelopeObjectId(payloadHash: string): string {
+    const normalizedHash = payloadHash.trim().toLowerCase();
+    const hashBody = normalizedHash.startsWith('sha256:')
+      ? normalizedHash.slice('sha256:'.length)
+      : normalizedHash;
+    return `onboarding_submission:${hashBody}`;
   }
 
   private resolveRuntimePrivacyMode(): RuntimePrivacyMode {

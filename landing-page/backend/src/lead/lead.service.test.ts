@@ -292,7 +292,7 @@ test('create can relay onboarding submission as runtime envelope payload', async
     assert.equal(relayEntry.author, 'forms.commitment');
     assert.equal(relayEntry.namespace, 'forms.commitment');
     assert.equal(relayEntry.action, 'SUBMIT_ONBOARDING_INTEREST');
-    assert.equal(relayEntry.object_id, 'runtime-envelope@example.com');
+    assert.equal(relayEntry.object_id, `onboarding_submission:${signedPayload.walletPayloadHash.slice('sha256:'.length)}`);
     assert.equal(relayEntry.privacy_flag, false);
     assert.equal(relayEntry.privacy_mode, 'none');
     assert.notEqual(relayBody.signature, signedPayload.walletSignature);
@@ -301,7 +301,10 @@ test('create can relay onboarding submission as runtime envelope payload', async
 
     const entryPayload = relayEntry.payload as Record<string, unknown>;
     assert.equal(entryPayload.data_hash, signedPayload.walletPayloadHash);
-    assert.equal(entryPayload.encrypted_form_url, 'interest_submissions://runtime-envelope@example.com');
+    assert.equal(
+      entryPayload.encrypted_form_url,
+      `interest_submissions://onboarding_submission:${signedPayload.walletPayloadHash.slice('sha256:'.length)}`,
+    );
     assert.equal(entryPayload.wallet_signer, signedPayload.walletSignerDid);
     assert.equal(
       (entryPayload.payload_wallet_signature as Record<string, unknown>).signer,
@@ -396,6 +399,7 @@ test('create can relay onboarding submission as hybrid privacy runtime envelope 
     const entryPayload = relayEntry.payload as Record<string, unknown>;
     assert.equal(entryPayload.signed_submission_commitment, signedPayload.walletPayloadHash);
     assert.equal(entryPayload.signed_submission, undefined);
+    assert.equal(entryPayload.country, undefined);
     assert.match(String(entryPayload.hybrid_author_x25519_public_key), /^[0-9a-f]{64}$/);
   } finally {
     process.env.CITIZEN_SIGNED_SUBMISSION_RELAY_URL = originalRelayUrl;
