@@ -2,6 +2,8 @@
 
 Status: Draft implementation checkpoint checklist for making API submissions flow through consensus so Alpha/Beta/Gamma converge on the same committed ledger state.
 
+Last updated: 2026-04-08 (implementation progress sync).
+
 ## Objective
 
 - Replace node-local API finalization with consensus-driven block inclusion.
@@ -23,7 +25,7 @@ Status: Draft implementation checkpoint checklist for making API submissions flo
 ## Checkpoint 1 — Transaction ingress queue (txpool)
 
 - [x] Add shared ingress component (new module or crate, e.g. `crates/txpool`).
-- [ ] Define minimal interface:
+- [x] Define minimal interface:
   - [x] `enqueue(entry: LedgerEntry) -> EnqueueResult`
   - [x] `drain(max: usize) -> Vec<LedgerEntry>`
   - [x] Optional: `len()` for diagnostics.
@@ -35,26 +37,26 @@ Status: Draft implementation checkpoint checklist for making API submissions flo
 
 ## Checkpoint 2 — API write path migration
 
-- [ ] Update `/api/v1/entries/submit` and `/api/v1/envelopes/submit` flow:
+- [x] Update `/api/v1/entries/submit` and `/api/v1/envelopes/submit` flow:
   - [x] Keep auth and builder-credit checks.
   - [x] Keep envelope and namespace validation before queueing.
   - [x] Enqueue instead of immediate `ledger.apply_entry` + local block finalization.
-- [ ] Return explicit queued response contract (`202 Accepted`).
+- [x] Return explicit queued response contract (`202 Accepted`).
   - [x] Include queue/entry identifiers needed for tracing.
 - [ ] Preserve compatibility mode:
   - [x] Introduce config flag (e.g. `api_local_finalize_mode`) defaulting to current safe behavior for migration window.
-  - [ ] Document intended default flip date/release.
-- [ ] Add API tests:
+  - [x] Document intended default flip date/release.
+- [x] Add API tests:
   - [x] valid entry accepted and queued.
   - [x] invalid entry rejected pre-queue.
-  - [ ] auth/scope/rate-limit behavior unchanged.
+  - [x] auth/scope/rate-limit behavior unchanged.
 
 ## Checkpoint 3 — Consensus integration
 
 - [x] Extend `ConsensusEngine` to receive shared txpool handle.
 - [x] Implement `collect_entries()` to drain txpool using `max_entries_per_block`.
 - [x] Ensure proposer includes drained entries in proposal entry root.
-- [ ] Keep commit/finality path unchanged (`finalize_block` + `ledger.apply_block`).
+- [x] Keep commit/finality path unchanged (`finalize_block` + `ledger.apply_block`).
 - [ ] Add/adjust consensus tests:
   - [x] proposal with non-empty entries.
   - [x] commit applies entries once.
@@ -110,3 +112,11 @@ Status: Draft implementation checkpoint checklist for making API submissions flo
 4. Node wiring + integration tests.
 5. Flip localnet configs to consensus-backed mode and validate convergence.
 6. Update runbooks and remove legacy path (or schedule removal).
+
+## Migration note (compatibility flag default)
+
+- `api_local_finalize_mode` remains `true` by default during the migration window.
+- Intended default flip target: **release v0.4.0 (target date: 2026-06-30)**, gated by:
+  - completion of Checkpoint 5 localnet convergence evidence,
+  - completion of Checkpoint 6 operability checks,
+  - runbook rollout updates in Checkpoint 7.
