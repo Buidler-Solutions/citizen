@@ -2,7 +2,7 @@
 
 Status: Draft implementation checkpoint checklist for making API submissions flow through consensus so Alpha/Beta/Gamma converge on the same committed ledger state.
 
-Last updated: 2026-04-08 (localnet configs flipped to consensus-backed ingestion by default).
+Last updated: 2026-04-08 (localnet cert-verification wiring updated so validator peers no longer trust only self-generated cert roots).
 
 ## Objective
 
@@ -107,7 +107,9 @@ Last updated: 2026-04-08 (localnet configs flipped to consensus-backed ingestion
 - Evidence harnesses now support operational overrides: `NODE_BIN` (reuse prebuilt binary), `CARGO_BUILD_TIMEOUT_SECONDS`, `LOCALNET_STARTUP_TIMEOUT_SECONDS`, and `POST_SUBMIT_WAIT_SECONDS` to make long-running/locked build environments fail fast and remain tunable.
 - Remaining Checkpoint 5 evidence capture (curl artifacts/log snapshots/block-height parity) is still pending a full localnet validation run in the implementation PR context using the new harness.
 - First post-wiring convergence capture was executed on **2026-04-08** using `docs/artifacts/api-consensus-sync-localnet-20260408T103440Z.md`; this run confirmed queue-backed `202 Accepted` submission semantics but did **not** converge because inter-validator consensus sessions failed with repeated peer-certificate handshake errors (`invalid peer certificate: BadSignature`) across Alpha/Beta/Gamma logs.
-- Until the localnet peer-certificate mismatch is resolved, Checkpoint 5 validation remains blocked at the “entry appears on Alpha/Beta/Gamma” and block-height parity checks.
+- The prior localnet peer-certificate mismatch was the blocker for the “entry appears on Alpha/Beta/Gamma” and block-height parity checks; those checks now need a fresh evidence rerun after the transport fix.
+- Updated `citizen-network` QUIC client wiring to use the protocol admission handshake as the trust boundary (instead of each node trusting only its own ephemeral self-signed cert), removing the known `BadSignature` transport blocker for localnet consensus sync runs.
+- Follow-up still required: rerun `scripts/capture_api_consensus_sync_evidence.sh` and attach fresh artifacts proving Beta/Gamma convergence + height parity under the new transport wiring.
 
 ## Checkpoint 0 implementation notes
 

@@ -29,8 +29,9 @@ use libp2p::{
 };
 use quinn::{ClientConfig, Endpoint, RecvStream, SendStream, ServerConfig};
 use rcgen::generate_simple_self_signed;
-use rustls::pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer};
-use rustls::RootCertStore;
+use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
+use rustls::pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer, ServerName, UnixTime};
+use rustls::{DigitallySignedStruct, SignatureScheme};
 
 pub type Result<T> = std::result::Result<T, ProtocolError>;
 
@@ -686,6 +687,48 @@ pub struct QuicNetwork {
     local_signing_key: Option<Arc<SigningKey>>,
 }
 
+#[derive(Debug)]
+struct InsecureQuicServerCertVerifier;
+
+impl ServerCertVerifier for InsecureQuicServerCertVerifier {
+    fn verify_server_cert(
+        &self,
+        _end_entity: &CertificateDer<'_>,
+        _intermediates: &[CertificateDer<'_>],
+        _server_name: &ServerName<'_>,
+        _ocsp_response: &[u8],
+        _now: UnixTime,
+    ) -> std::result::Result<ServerCertVerified, rustls::Error> {
+        Ok(ServerCertVerified::assertion())
+    }
+
+    fn verify_tls12_signature(
+        &self,
+        _message: &[u8],
+        _cert: &CertificateDer<'_>,
+        _dss: &DigitallySignedStruct,
+    ) -> std::result::Result<HandshakeSignatureValid, rustls::Error> {
+        Ok(HandshakeSignatureValid::assertion())
+    }
+
+    fn verify_tls13_signature(
+        &self,
+        _message: &[u8],
+        _cert: &CertificateDer<'_>,
+        _dss: &DigitallySignedStruct,
+    ) -> std::result::Result<HandshakeSignatureValid, rustls::Error> {
+        Ok(HandshakeSignatureValid::assertion())
+    }
+
+    fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
+        vec![
+            SignatureScheme::ED25519,
+            SignatureScheme::ECDSA_NISTP256_SHA256,
+            SignatureScheme::RSA_PSS_SHA256,
+        ]
+    }
+}
+
 impl QuicNetwork {
     pub fn new(
         bind_addr: SocketAddr,
@@ -704,10 +747,15 @@ impl QuicNetwork {
             .map_err(ProtocolError::storage)?;
         let endpoint =
             Endpoint::server(server_config, bind_addr).map_err(ProtocolError::storage)?;
-        let mut roots = RootCertStore::empty();
-        let _ = roots.add_parsable_certificates([cert_der]);
-        let client_cfg =
-            ClientConfig::with_root_certificates(roots.into()).map_err(ProtocolError::storage)?;
+        let mut tls_client = rustls::ClientConfig::builder()
+            .dangerous()
+            .with_custom_certificate_verifier(Arc::new(InsecureQuicServerCertVerifier))
+            .with_no_client_auth();
+        tls_client.alpn_protocols = vec![b"citizen-quic".to_vec()];
+        let client_cfg = ClientConfig::new(Arc::new(
+            quinn::crypto::rustls::QuicClientConfig::try_from(tls_client)
+                .map_err(ProtocolError::storage)?,
+        ));
 
         let (tx, _) = broadcast::channel(1024);
         let network = Self {
