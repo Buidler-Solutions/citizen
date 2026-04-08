@@ -7,6 +7,7 @@ use chrono::Utc;
 use citizen_crypto::{canonical_json, hash_block_header, sha256_hex};
 use citizen_ledger::Ledger;
 use citizen_storage::LedgerStorage;
+use citizen_txpool::{EnqueueResult, TxPool};
 use citizen_types::{
     Block, BlockHeader, BlockHeight, CommitProof, ConsentPolicyCheck, ConsentReceipt,
     DeterministicReceipt, DidDocument, DidStatus, FinalityProof, LedgerEntry, NamespaceRuleset,
@@ -29,6 +30,7 @@ use uuid::Uuid;
 pub struct ApiServer<S: LedgerStorage + 'static> {
     ledger: Arc<Ledger<S>>,
     edge: Arc<ApiEdgeState>,
+    txpool: Arc<TxPool>,
 }
 
 #[derive(Clone, Debug)]
@@ -38,6 +40,7 @@ pub struct ApiEdgeConfig {
     pub max_write_requests_per_minute: usize,
     pub offchain_encrypted_files_v1_enabled: bool,
     pub require_builder_credit_for_all_writes: bool,
+    pub local_finalize_mode: bool,
     pub clients: BTreeMap<String, ApiClientProfile>,
 }
 
@@ -62,6 +65,7 @@ impl Default for ApiEdgeConfig {
             max_write_requests_per_minute: 120,
             offchain_encrypted_files_v1_enabled: false,
             require_builder_credit_for_all_writes: false,
+            local_finalize_mode: true,
             clients: BTreeMap::new(),
         }
     }
@@ -397,7 +401,20 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
     }
 
     pub fn with_edge_config(ledger: Arc<Ledger<S>>, edge_config: ApiEdgeConfig) -> Self {
-        Self::with_edge_config_and_store(ledger, edge_config, Arc::new(LocalOffchainObjectStore))
+        Self::with_edge_config_and_txpool(ledger, edge_config, Arc::new(TxPool::default()))
+    }
+
+    pub fn with_edge_config_and_txpool(
+        ledger: Arc<Ledger<S>>,
+        edge_config: ApiEdgeConfig,
+        txpool: Arc<TxPool>,
+    ) -> Self {
+        Self::with_edge_config_and_store(
+            ledger,
+            edge_config,
+            Arc::new(LocalOffchainObjectStore),
+            txpool,
+        )
     }
 
     pub fn with_edge_config_and_minio_store(
@@ -410,6 +427,7 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
             ledger,
             edge_config,
             Arc::new(store),
+            Arc::new(TxPool::default()),
         ))
     }
 
@@ -417,10 +435,12 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
         ledger: Arc<Ledger<S>>,
         edge_config: ApiEdgeConfig,
         object_store: Arc<dyn OffchainObjectStore>,
+        txpool: Arc<TxPool>,
     ) -> Self {
         Self {
             ledger,
             edge: Arc::new(ApiEdgeState::new(edge_config, object_store)),
+            txpool,
         }
     }
 
@@ -447,19 +467,24 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
         let consent_check_ledger = Arc::clone(&self.ledger);
         let submit_ledger = Arc::clone(&self.ledger);
         let submit_edge = Arc::clone(&self.edge);
+        let submit_txpool = Arc::clone(&self.txpool);
         let submit_envelope_ledger = Arc::clone(&self.ledger);
         let submit_envelope_edge = Arc::clone(&self.edge);
+        let submit_envelope_txpool = Arc::clone(&self.txpool);
         let file_intent_ledger = Arc::clone(&self.ledger);
         let file_intent_edge = Arc::clone(&self.edge);
         let file_commit_ledger = Arc::clone(&self.ledger);
         let file_commit_edge = Arc::clone(&self.edge);
+        let file_commit_txpool = Arc::clone(&self.txpool);
         let payload_commit_ledger = Arc::clone(&self.ledger);
         let payload_commit_edge = Arc::clone(&self.edge);
         let payload_fields_edge = Arc::clone(&self.edge);
+        let payload_commit_txpool = Arc::clone(&self.txpool);
         let file_read_ledger = Arc::clone(&self.ledger);
         let file_read_edge = Arc::clone(&self.edge);
         let file_revoke_ledger = Arc::clone(&self.ledger);
         let file_revoke_edge = Arc::clone(&self.edge);
+        let file_revoke_txpool = Arc::clone(&self.txpool);
         let file_manifest_metadata_ledger = Arc::clone(&self.ledger);
         let file_manifest_metadata_edge = Arc::clone(&self.edge);
         let file_alerts_edge = Arc::clone(&self.edge);
@@ -511,7 +536,10 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
                 post(move |headers: HeaderMap, Json(entry): Json<LedgerEntry>| {
                     let ledger = Arc::clone(&submit_ledger);
                     let edge = Arc::clone(&submit_edge);
-                    async move { Self::handle_submit_entry(ledger, edge, headers, entry).await }
+                    let txpool = Arc::clone(&submit_txpool);
+                    async move {
+                        Self::handle_submit_entry(ledger, edge, txpool, headers, entry).await
+                    }
                 }),
             )
             .route(
@@ -520,8 +548,10 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
                     move |headers: HeaderMap, Json(envelope): Json<SignedEnvelope<LedgerEntry>>| {
                         let ledger = Arc::clone(&submit_envelope_ledger);
                         let edge = Arc::clone(&submit_envelope_edge);
+                        let txpool = Arc::clone(&submit_envelope_txpool);
                         async move {
-                            Self::handle_submit_envelope(ledger, edge, headers, envelope).await
+                            Self::handle_submit_envelope(ledger, edge, txpool, headers, envelope)
+                                .await
                         }
                     },
                 ),
@@ -543,7 +573,10 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
                 post(move |headers: HeaderMap, Json(request): Json<FileCommitRequest>| {
                     let ledger = Arc::clone(&file_commit_ledger);
                     let edge = Arc::clone(&file_commit_edge);
-                    async move { Self::handle_commit_file(ledger, edge, headers, request).await }
+                    let txpool = Arc::clone(&file_commit_txpool);
+                    async move {
+                        Self::handle_commit_file(ledger, edge, txpool, headers, request).await
+                    }
                 }),
             )
             .route(
@@ -552,7 +585,11 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
                     move |headers: HeaderMap, Json(request): Json<PayloadCommitRequest>| {
                         let ledger = Arc::clone(&payload_commit_ledger);
                         let edge = Arc::clone(&payload_fields_edge);
-                        async move { Self::handle_commit_payload(ledger, edge, headers, request).await }
+                        let txpool = Arc::clone(&payload_commit_txpool);
+                        async move {
+                            Self::handle_commit_payload(ledger, edge, txpool, headers, request)
+                                .await
+                        }
                     },
                 ),
             )
@@ -569,7 +606,11 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
                 post(move |headers: HeaderMap, Json(request): Json<FileRevokeRequest>| {
                     let ledger = Arc::clone(&file_revoke_ledger);
                     let edge = Arc::clone(&file_revoke_edge);
-                    async move { Self::handle_revoke_file_reader(ledger, edge, headers, request).await }
+                    let txpool = Arc::clone(&file_revoke_txpool);
+                    async move {
+                        Self::handle_revoke_file_reader(ledger, edge, txpool, headers, request)
+                            .await
+                    }
                 }),
             )
             .route(
@@ -671,6 +712,7 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
     async fn handle_submit_entry(
         ledger: Arc<Ledger<S>>,
         edge: Arc<ApiEdgeState>,
+        txpool: Arc<TxPool>,
         headers: HeaderMap,
         entry: LedgerEntry,
     ) -> (StatusCode, Json<serde_json::Value>) {
@@ -691,7 +733,7 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
             submitted_at: Utc::now(),
             payload: entry,
         };
-        Self::process_envelope_submission(ledger, envelope).await
+        Self::process_envelope_submission(ledger, edge, txpool, envelope).await
     }
 
     async fn handle_resolve_did(
@@ -735,6 +777,7 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
     async fn handle_submit_envelope(
         ledger: Arc<Ledger<S>>,
         edge: Arc<ApiEdgeState>,
+        txpool: Arc<TxPool>,
         headers: HeaderMap,
         envelope: SignedEnvelope<LedgerEntry>,
     ) -> (StatusCode, Json<serde_json::Value>) {
@@ -750,7 +793,7 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
         ) {
             return response;
         }
-        Self::process_envelope_submission(ledger, envelope).await
+        Self::process_envelope_submission(ledger, edge, txpool, envelope).await
     }
 
     fn authorize_builder_credit_gate(
@@ -989,6 +1032,7 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
     async fn handle_commit_file(
         ledger: Arc<Ledger<S>>,
         edge: Arc<ApiEdgeState>,
+        txpool: Arc<TxPool>,
         headers: HeaderMap,
         request: FileCommitRequest,
     ) -> (StatusCode, Json<serde_json::Value>) {
@@ -1139,7 +1183,7 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
         }
 
         let (status, Json(base)) =
-            Self::process_envelope_submission(ledger, request.envelope).await;
+            Self::process_envelope_submission(ledger, edge.clone(), txpool, request.envelope).await;
         if status != StatusCode::ACCEPTED {
             return (status, Json(base));
         }
@@ -1180,6 +1224,7 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
     async fn handle_commit_payload(
         ledger: Arc<Ledger<S>>,
         edge: Arc<ApiEdgeState>,
+        txpool: Arc<TxPool>,
         headers: HeaderMap,
         request: PayloadCommitRequest,
     ) -> (StatusCode, Json<serde_json::Value>) {
@@ -1443,7 +1488,7 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
         }
 
         let (status, Json(base)) =
-            Self::process_envelope_submission(ledger, request.envelope).await;
+            Self::process_envelope_submission(ledger, edge.clone(), txpool, request.envelope).await;
         if status != StatusCode::ACCEPTED {
             return (status, Json(base));
         }
@@ -1647,6 +1692,7 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
     async fn handle_revoke_file_reader(
         ledger: Arc<Ledger<S>>,
         edge: Arc<ApiEdgeState>,
+        txpool: Arc<TxPool>,
         headers: HeaderMap,
         request: FileRevokeRequest,
     ) -> (StatusCode, Json<serde_json::Value>) {
@@ -1731,8 +1777,13 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
             return response;
         }
 
-        let (status, Json(base)) =
-            Self::process_envelope_submission(Arc::clone(&ledger), request.envelope).await;
+        let (status, Json(base)) = Self::process_envelope_submission(
+            Arc::clone(&ledger),
+            Arc::clone(&edge),
+            txpool,
+            request.envelope,
+        )
+        .await;
         if status != StatusCode::ACCEPTED {
             return (status, Json(base));
         }
@@ -2219,6 +2270,8 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
 
     async fn process_envelope_submission(
         ledger: Arc<Ledger<S>>,
+        edge: Arc<ApiEdgeState>,
+        txpool: Arc<TxPool>,
         envelope: SignedEnvelope<LedgerEntry>,
     ) -> (StatusCode, Json<serde_json::Value>) {
         if envelope.signature.is_empty() {
@@ -2253,40 +2306,59 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
 
         let entry_id = entry.entry_id;
         let namespace = entry.namespace.clone();
-        if let Err(err) = ledger.apply_entry(entry.clone()) {
-            return protocol_error_response(err);
+        if edge.config.local_finalize_mode {
+            if let Err(err) = ledger.apply_entry(entry.clone()) {
+                return protocol_error_response(err);
+            }
+
+            let offchain_commitments = extract_offchain_commitments(&entry);
+            let finality = match Self::finalize_entry(Arc::clone(&ledger), entry).await {
+                Ok(finality) => finality,
+                Err(err) => return protocol_error_response(err),
+            };
+
+            let receipt = DeterministicReceipt {
+                receipt_id: Uuid::new_v4(),
+                envelope_id: envelope.envelope_id,
+                status: ReceiptStatus::Accepted,
+                validation: ValidationSummary {
+                    namespace: namespace.clone(),
+                    action,
+                    outcome: "namespace rules accepted and finalized".into(),
+                    offchain_commitments,
+                },
+                finality: Some(finality),
+                recorded_at: Utc::now(),
+            };
+            if let Err(err) = ledger.storage().store_receipt(receipt.clone()) {
+                return protocol_error_response(err);
+            }
+
+            return (
+                StatusCode::ACCEPTED,
+                Json(serde_json::json!({
+                    "status": "accepted",
+                    "entry_id": entry_id,
+                    "namespace": namespace,
+                    "receipt": receipt,
+                })),
+            );
         }
 
-        let offchain_commitments = extract_offchain_commitments(&entry);
-        let finality = match Self::finalize_entry(Arc::clone(&ledger), entry).await {
-            Ok(finality) => finality,
-            Err(err) => return protocol_error_response(err),
+        let enqueue_result = txpool.enqueue(entry);
+        let status = match enqueue_result {
+            EnqueueResult::Queued { .. } => "queued",
+            EnqueueResult::Duplicate { .. } => "duplicate",
         };
-
-        let receipt = DeterministicReceipt {
-            receipt_id: Uuid::new_v4(),
-            envelope_id: envelope.envelope_id,
-            status: ReceiptStatus::Accepted,
-            validation: ValidationSummary {
-                namespace: namespace.clone(),
-                action,
-                outcome: "namespace rules accepted and finalized".into(),
-                offchain_commitments,
-            },
-            finality: Some(finality),
-            recorded_at: Utc::now(),
-        };
-        if let Err(err) = ledger.storage().store_receipt(receipt.clone()) {
-            return protocol_error_response(err);
-        }
-
         (
             StatusCode::ACCEPTED,
             Json(serde_json::json!({
-                "status": "accepted",
+                "status": status,
                 "entry_id": entry_id,
                 "namespace": namespace,
-                "receipt": receipt,
+                "envelope_id": envelope.envelope_id,
+                "queue_len": txpool.len(),
+                "local_finalize_mode": false,
             })),
         )
     }
@@ -2847,6 +2919,7 @@ mod tests {
     use citizen_crypto::{sign_message, verifying_key_to_string, KeyRegistry, ValidatorKeypair};
     use citizen_ledger::Ledger;
     use citizen_storage::MemoryStorage;
+    use citizen_txpool::TxPool;
     use citizen_types::{
         LedgerEntry, NamespaceDescriptor, NamespaceRule, NamespaceRuleset, SignedEnvelope,
     };
@@ -3593,6 +3666,114 @@ mod tests {
             receipt_json["receipt"]["finality"]["commit_proof"]["aggregated_signature"],
             "local-dev-finality"
         );
+    }
+
+    #[tokio::test]
+    async fn submit_entry_queues_when_local_finalize_mode_disabled() {
+        let txpool = Arc::new(TxPool::default());
+        let server = {
+            let storage = Arc::new(MemoryStorage::new());
+            let ledger = Arc::new(Ledger::new(storage, KeyRegistry::new()));
+            ledger.bootstrap_namespaces(vec![NamespaceRuleset {
+                descriptor: NamespaceDescriptor {
+                    namespace: "audit.procurement".to_string(),
+                    version: 1,
+                    rules_hash: "rules-v1".to_string(),
+                    governed_by: "governance".to_string(),
+                },
+                writers: BTreeSet::new(),
+                validators: vec![NamespaceRule {
+                    name: "require_signature".to_string(),
+                    config: json!({}),
+                }],
+            }]);
+            ApiServer::with_edge_config_and_txpool(
+                ledger,
+                ApiEdgeConfig {
+                    local_finalize_mode: false,
+                    ..ApiEdgeConfig::default()
+                },
+                Arc::clone(&txpool),
+            )
+        };
+        let app = server.router();
+        let envelope = test_envelope();
+        let entry = envelope.payload;
+
+        let submit = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/entries/submit")
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        serde_json::to_vec(&entry).expect("serialize entry"),
+                    ))
+                    .expect("request"),
+            )
+            .await
+            .expect("submit response");
+
+        assert_eq!(submit.status(), StatusCode::ACCEPTED);
+        let submit_body = axum::body::to_bytes(submit.into_body(), usize::MAX)
+            .await
+            .expect("submit bytes");
+        let submit_json: Value = serde_json::from_slice(&submit_body).expect("submit json");
+        assert_eq!(submit_json["status"], "queued");
+        assert_eq!(submit_json["local_finalize_mode"], false);
+        assert!(submit_json["receipt"].is_null());
+        assert_eq!(txpool.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn invalid_entry_is_rejected_before_queueing() {
+        let txpool = Arc::new(TxPool::default());
+        let server = {
+            let storage = Arc::new(MemoryStorage::new());
+            let ledger = Arc::new(Ledger::new(storage, KeyRegistry::new()));
+            ledger.bootstrap_namespaces(vec![NamespaceRuleset {
+                descriptor: NamespaceDescriptor {
+                    namespace: "audit.procurement".to_string(),
+                    version: 1,
+                    rules_hash: "rules-v1".to_string(),
+                    governed_by: "governance".to_string(),
+                },
+                writers: BTreeSet::new(),
+                validators: vec![NamespaceRule {
+                    name: "require_signature".to_string(),
+                    config: json!({}),
+                }],
+            }]);
+            ApiServer::with_edge_config_and_txpool(
+                ledger,
+                ApiEdgeConfig {
+                    local_finalize_mode: false,
+                    ..ApiEdgeConfig::default()
+                },
+                Arc::clone(&txpool),
+            )
+        };
+        let app = server.router();
+        let envelope = test_envelope();
+        let mut entry = envelope.payload;
+        entry.signature.clear();
+
+        let submit = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/entries/submit")
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        serde_json::to_vec(&entry).expect("serialize entry"),
+                    ))
+                    .expect("request"),
+            )
+            .await
+            .expect("submit response");
+
+        assert_eq!(submit.status(), StatusCode::BAD_REQUEST);
+        assert_eq!(txpool.len(), 0);
     }
 
     #[tokio::test]
@@ -4355,6 +4536,7 @@ mod tests {
             max_write_requests_per_minute: 1,
             offchain_encrypted_files_v1_enabled: true,
             require_builder_credit_for_all_writes: false,
+            local_finalize_mode: true,
             clients: BTreeMap::new(),
         })
         .router();
@@ -4407,6 +4589,7 @@ mod tests {
             max_write_requests_per_minute: 10,
             offchain_encrypted_files_v1_enabled: true,
             require_builder_credit_for_all_writes: false,
+            local_finalize_mode: true,
             clients,
         })
         .router();
@@ -4436,6 +4619,7 @@ mod tests {
             max_write_requests_per_minute: 10,
             offchain_encrypted_files_v1_enabled: true,
             require_builder_credit_for_all_writes: true,
+            local_finalize_mode: true,
             clients: BTreeMap::new(),
         })
         .router();
@@ -4465,6 +4649,7 @@ mod tests {
             max_write_requests_per_minute: 10,
             offchain_encrypted_files_v1_enabled: true,
             require_builder_credit_for_all_writes: true,
+            local_finalize_mode: true,
             clients: BTreeMap::new(),
         })
         .router();
@@ -4570,6 +4755,7 @@ mod tests {
             max_write_requests_per_minute: 10,
             offchain_encrypted_files_v1_enabled: true,
             require_builder_credit_for_all_writes: false,
+            local_finalize_mode: true,
             clients,
         })
         .router();
@@ -4605,6 +4791,7 @@ mod tests {
             max_write_requests_per_minute: 1,
             offchain_encrypted_files_v1_enabled: true,
             require_builder_credit_for_all_writes: false,
+            local_finalize_mode: true,
             clients,
         })
         .router();
@@ -4657,6 +4844,7 @@ mod tests {
             max_write_requests_per_minute: 10,
             offchain_encrypted_files_v1_enabled: true,
             require_builder_credit_for_all_writes: false,
+            local_finalize_mode: true,
             clients,
         });
 
@@ -4701,6 +4889,7 @@ mod tests {
             max_write_requests_per_minute: 10,
             offchain_encrypted_files_v1_enabled: false,
             require_builder_credit_for_all_writes: false,
+            local_finalize_mode: true,
             clients: BTreeMap::new(),
         })
         .router();
@@ -9175,6 +9364,7 @@ mod tests {
             max_write_requests_per_minute: 10,
             offchain_encrypted_files_v1_enabled: true,
             require_builder_credit_for_all_writes: false,
+            local_finalize_mode: true,
             clients,
         })
         .router();
@@ -9220,6 +9410,7 @@ mod tests {
             max_write_requests_per_minute: 10,
             offchain_encrypted_files_v1_enabled: true,
             require_builder_credit_for_all_writes: false,
+            local_finalize_mode: true,
             clients,
         })
         .router();

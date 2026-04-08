@@ -6,6 +6,7 @@ use citizen_crypto::{
 use citizen_ledger::Ledger;
 use citizen_network::{BlockProposal, ConsensusMessage, Network};
 use citizen_storage::LedgerStorage;
+use citizen_txpool::TxPool;
 use citizen_types::{
     Block, BlockHeader, CommitProof, ConsensusConfig, GovernanceAction, GovernanceProposal,
     LedgerEntry, PendingReplacement, ProtocolError, ScheduledRotation, ValidatorId,
@@ -57,6 +58,7 @@ where
     config: RwLock<ConsensusConfig>,
     network: Arc<N>,
     ledger: Arc<Ledger<S>>,
+    txpool: Arc<TxPool>,
     validator_set: RwLock<ValidatorSetSnapshot>,
     signer: ValidatorKeypair,
     rounds: RwLock<HashMap<u64, PendingRound>>,
@@ -75,6 +77,7 @@ where
         config: ConsensusConfig,
         network: Arc<N>,
         ledger: Arc<Ledger<S>>,
+        txpool: Arc<TxPool>,
         validator_set: ValidatorSetSnapshot,
     ) -> Result<Self> {
         ledger.update_validator_set(validator_set.clone())?;
@@ -83,6 +86,7 @@ where
             config: RwLock::new(config),
             network,
             ledger,
+            txpool,
             validator_set: RwLock::new(validator_set),
             signer,
             rounds: RwLock::new(HashMap::new()),
@@ -843,8 +847,8 @@ where
     }
 
     async fn collect_entries(&self) -> Result<Vec<LedgerEntry>> {
-        // Placeholder for namespace-specific logic; simulation uses empty batches.
-        Ok(Vec::new())
+        let max_entries = self.config.read().max_entries_per_block;
+        Ok(self.txpool.drain(max_entries))
     }
 }
 

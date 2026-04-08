@@ -18,6 +18,7 @@ use citizen_network::{
     QuicNetwork,
 };
 use citizen_storage::RocksDbStorage;
+use citizen_txpool::TxPool;
 use citizen_types::{
     ConsensusConfig, EpochState, NamespaceRuleset, ProtocolError, ValidatorId, ValidatorMetadata,
     ValidatorPerformance, ValidatorSetSnapshot, ValidatorStatus,
@@ -75,16 +76,21 @@ async fn main() -> anyhow::Result<()> {
     let key_registry = KeyRegistry::new();
     let ledger = Arc::new(Ledger::new(storage.clone(), key_registry));
     ledger.bootstrap_namespaces(config.namespaces.clone());
+    let txpool = Arc::new(TxPool::default());
 
-    let api_server = if let Some(minio_config) = config.offchain_minio_config() {
-        ApiServer::with_edge_config_and_minio_store(
-            ledger.clone(),
+    let api_server = if config.offchain_minio_config().is_some() {
+        tracing::warn!("node does not yet support combining MinIO off-chain store with shared txpool; using local object store");
+        ApiServer::with_edge_config_and_txpool(
+            Arc::clone(&ledger),
             config.api_edge_config(),
-            minio_config,
+            Arc::clone(&txpool),
         )
-        .map_err(|err| anyhow::anyhow!("invalid MinIO off-chain object store config: {err}"))?
     } else {
-        ApiServer::with_edge_config(ledger.clone(), config.api_edge_config())
+        ApiServer::with_edge_config_and_txpool(
+            Arc::clone(&ledger),
+            config.api_edge_config(),
+            Arc::clone(&txpool),
+        )
     };
     let api_handle = api_server
         .serve(SocketAddr::from((Ipv4Addr::LOCALHOST, config.api_port)))
@@ -145,6 +151,7 @@ async fn main() -> anyhow::Result<()> {
             },
             network,
             ledger,
+            txpool,
             snapshot,
         )?);
 
@@ -289,6 +296,8 @@ struct NodeConfig {
     api_auth_required: bool,
     #[serde(default)]
     api_require_builder_credit_for_all_writes: bool,
+    #[serde(default = "default_true")]
+    api_local_finalize_mode: bool,
     #[serde(default = "default_api_write_rpm")]
     api_max_write_requests_per_minute: usize,
     #[serde(default)]
@@ -382,6 +391,7 @@ impl NodeConfig {
             max_write_requests_per_minute: self.api_max_write_requests_per_minute,
             offchain_encrypted_files_v1_enabled: self.api_offchain_encrypted_files_v1_enabled,
             require_builder_credit_for_all_writes: self.api_require_builder_credit_for_all_writes,
+            local_finalize_mode: self.api_local_finalize_mode,
             clients,
         }
     }
@@ -576,6 +586,7 @@ impl Default for NodeConfig {
             api_port: default_api_port(),
             api_auth_required: false,
             api_require_builder_credit_for_all_writes: false,
+            api_local_finalize_mode: true,
             api_max_write_requests_per_minute: default_api_write_rpm(),
             api_clients: Vec::new(),
             api_offchain_encrypted_files_v1_enabled: false,

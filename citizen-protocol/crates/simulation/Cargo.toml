@@ -11,6 +11,7 @@ citizen-network = { path = "../network" }
 citizen-storage = { path = "../storage" }
 citizen-ledger = { path = "../ledger" }
 citizen-crypto = { path = "../crypto" }
+citizen-txpool = { path = "../txpool" }
 tracing = { workspace = true }
 tokio = { workspace = true }
 serde = { workspace = true }
