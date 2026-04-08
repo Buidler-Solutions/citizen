@@ -104,12 +104,14 @@ Last updated: 2026-04-08 (localnet configs flipped to consensus-backed ingestion
 
 - Localnet validator configs now set `api_local_finalize_mode = false` for Alpha/Beta/Gamma so default `scripts/run_localnet.sh` launches exercise consensus-backed ingestion semantics without extra manual edits.
 - Added scripted evidence harness at `scripts/capture_api_consensus_sync_evidence.sh` to launch the three-validator localnet, submit to Alpha, assert Beta/Gamma visibility, verify height parity, and write timestamped artifacts under `docs/artifacts/`.
+- Evidence harnesses now support operational overrides: `NODE_BIN` (reuse prebuilt binary), `CARGO_BUILD_TIMEOUT_SECONDS`, `LOCALNET_STARTUP_TIMEOUT_SECONDS`, and `POST_SUBMIT_WAIT_SECONDS` to make long-running/locked build environments fail fast and remain tunable.
 - Remaining Checkpoint 5 evidence capture (curl artifacts/log snapshots/block-height parity) is still pending a full localnet validation run in the implementation PR context using the new harness.
 
 ## Checkpoint 0 implementation notes (in progress)
 
 - Added scripted baseline harness at `scripts/capture_api_consensus_sync_baseline_evidence.sh` to run Alpha/Beta/Gamma with temporary `api_local_finalize_mode = true` overlays, submit to Alpha, and capture divergence artifacts under `docs/artifacts/`.
 - The baseline harness asserts the expected pre-change behavior (`alpha_contains=true`, `beta_contains=false`, `gamma_contains=false`) and emits API snapshots/log tails needed for the historical comparison checkpoint.
+- Baseline harness supports the same runtime overrides as the convergence harness (`NODE_BIN`, build/startup/wait timeout env vars) so local and CI runs can tune execution deterministically.
 - Baseline evidence artifacts still need to be captured in this PR context (same as Checkpoint 5 convergence evidence capture), then linked directly in this checklist.
 
 ## Checkpoint 7 — Documentation + rollout
