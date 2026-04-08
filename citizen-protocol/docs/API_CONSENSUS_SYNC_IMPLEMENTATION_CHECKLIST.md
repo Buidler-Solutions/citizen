@@ -2,7 +2,7 @@
 
 Status: Draft implementation checkpoint checklist for making API submissions flow through consensus so Alpha/Beta/Gamma converge on the same committed ledger state.
 
-Last updated: 2026-04-08 (duplicate-entry rejection guard + implementation progress sync).
+Last updated: 2026-04-08 (operator runbook hardening: admission-vs-ingestion note + restart semantics).
 
 ## Objective
 
@@ -84,7 +84,7 @@ Last updated: 2026-04-08 (duplicate-entry rejection guard + implementation progr
 ## Checkpoint 6 — Failure/operability checks
 
 - [x] Queue overflow strategy defined and tested.
-- [ ] Restart semantics documented (in-memory queue loss vs persistence).
+- [x] Restart semantics documented (in-memory queue loss vs persistence).
 - [x] Duplicate submissions across nodes handled deterministically.
 - [x] Metrics added (queue length, enqueue/dequeue rates, rejected duplicates).
 - [x] Alerting hooks documented for stuck queue / zero-throughput conditions.
@@ -104,12 +104,14 @@ Last updated: 2026-04-08 (duplicate-entry rejection guard + implementation progr
 
 - [x] Update localnet/runbook docs to describe consensus-backed ingestion path.
 - [x] Document compatibility flag and migration guidance.
-- [ ] Add operator note: manifest/admission secures peers but does not replace ingestion/consensus wiring.
+- [x] Add operator note: manifest/admission secures peers but does not replace ingestion/consensus wiring.
 - [x] Add release note entry for API submission semantics change.
 
 ### Checkpoint 7 implementation notes
 
 - Added localnet runbook guidance for `api_local_finalize_mode` migration and the consensus-backed ingestion path (`202` queued response, `429 queue_full` on saturation).
+- Added explicit operator note that manifest/admission peer security is necessary but not sufficient for API write convergence; ingestion/consensus wiring must still be enabled.
+- Added restart semantics guidance clarifying current in-memory txpool loss on restart, durable committed state behavior, and idempotent client retry expectations.
 - Added operator-facing release-note entry for v0.4.0 migration planning: API writes are queue-first in consensus-backed mode and converge through consensus finality instead of node-local immediate finalization.
 
 ## Acceptance Criteria (definition of done)
