@@ -15,6 +15,9 @@ mkdir -p docs/artifacts data/alpha data/beta data/gamma
 
 evidence_stamp="$(date -u +%Y%m%dT%H%M%SZ)"
 evidence_file="docs/artifacts/api-consensus-sync-baseline-${evidence_stamp}.md"
+build_timeout_seconds="${CARGO_BUILD_TIMEOUT_SECONDS:-900}"
+startup_timeout_seconds="${LOCALNET_STARTUP_TIMEOUT_SECONDS:-45}"
+post_submit_wait_seconds="${POST_SUBMIT_WAIT_SECONDS:-4}"
 
 configs=(
   "config/localnet/validator-alpha.toml"
@@ -35,9 +38,25 @@ trap cleanup EXIT
 node_pids=()
 tmp_config_dir="$(mktemp -d)"
 
-echo "[baseline] building citizen-node binary"
-cargo build -p citizen-node >/dev/null
-node_bin="$ROOT_DIR/target/debug/citizen-node"
+print_json_or_raw() {
+  local payload="$1"
+  if jq -e . >/dev/null 2>&1 <<<"$payload"; then
+    jq '.' <<<"$payload"
+  else
+    echo "$payload"
+  fi
+}
+
+node_bin="${NODE_BIN:-$ROOT_DIR/target/debug/citizen-node}"
+if [[ -x "$node_bin" ]]; then
+  echo "[baseline] using existing citizen-node binary at ${node_bin}"
+else
+  echo "[baseline] building citizen-node binary (timeout: ${build_timeout_seconds}s)"
+  if ! timeout "$build_timeout_seconds" cargo build -p citizen-node >/dev/null; then
+    echo "[baseline] failed to build citizen-node within timeout (${build_timeout_seconds}s)" >&2
+    exit 4
+  fi
+fi
 
 for cfg in "${configs[@]}"; do
   cfg_name="$(basename "$cfg")"
@@ -56,7 +75,7 @@ done
 
 for port in "${ports[@]}"; do
   ready=0
-  for _ in $(seq 1 45); do
+  for _ in $(seq 1 "$startup_timeout_seconds"); do
     if curl -fsS "http://127.0.0.1:${port}/health" >/dev/null 2>&1; then
       ready=1
       break
@@ -89,7 +108,7 @@ submit_response="$(curl -sS -X POST \
   -H 'Content-Type: application/json' \
   -d "$submit_payload")"
 
-sleep 4
+sleep "$post_submit_wait_seconds"
 
 alpha_entries="$(curl -sS http://127.0.0.1:8081/api/v1/namespaces/registry.land/entries)"
 beta_entries="$(curl -sS http://127.0.0.1:8082/api/v1/namespaces/registry.land/entries)"
@@ -111,7 +130,7 @@ gamma_height="$(curl -sS http://127.0.0.1:8083/api/v1/status | jq '.latest_heigh
   echo "# API Consensus Sync Baseline Evidence (${evidence_stamp})"
   echo
   echo "## Mode"
-  echo "- validator configs forced to \\`api_local_finalize_mode = true\\` during this run"
+  echo '- validator configs forced to `api_local_finalize_mode = true` during this run'
   echo
   echo "## Submission"
   echo '```json'
@@ -120,7 +139,7 @@ gamma_height="$(curl -sS http://127.0.0.1:8083/api/v1/status | jq '.latest_heigh
   echo
   echo "### Alpha submit response"
   echo '```json'
-  echo "$submit_response" | jq '.'
+  print_json_or_raw "$submit_response"
   echo '```'
   echo
   echo "## Divergence check"
