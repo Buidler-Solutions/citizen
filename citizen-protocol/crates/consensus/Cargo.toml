@@ -11,6 +11,7 @@ citizen-ledger = { path = "../ledger" }
 citizen-governance = { path = "../governance" }
 citizen-network = { path = "../network" }
 citizen-storage = { path = "../storage" }
+citizen-txpool = { path = "../txpool" }
 async-trait = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
