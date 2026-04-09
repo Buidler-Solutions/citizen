@@ -6,7 +6,7 @@
     "dev": "next dev -p 8885",
     "build": "next build",
     "start": "next start -p 8885",
-    "lint": "next lint",
+    "lint": "tsc --noEmit -p tsconfig.json",
     "test:unit": "tsc -p tsconfig.test.json && node --test .tmp-tests/tests.*.test.js"
   },
   "dependencies": {
