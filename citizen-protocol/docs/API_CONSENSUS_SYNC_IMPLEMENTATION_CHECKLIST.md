@@ -36,23 +36,23 @@ Status: Draft implementation checkpoint checklist for making API submissions flo
 ## Checkpoint 2 — API write path migration
 
 - [ ] Update `/api/v1/entries/submit` and `/api/v1/envelopes/submit` flow:
-  - [x] Keep auth and builder-credit checks.
-  - [x] Keep envelope and namespace validation before queueing.
-  - [x] Enqueue instead of immediate `ledger.apply_entry` + local block finalization.
+  - [ ] Keep auth and builder-credit checks.
+  - [ ] Keep envelope and namespace validation before queueing.
+  - [ ] Enqueue instead of immediate `ledger.apply_entry` + local block finalization.
 - [ ] Return explicit queued response contract (`202 Accepted`).
-  - [x] Include queue/entry identifiers needed for tracing.
+  - [ ] Include queue/entry identifiers needed for tracing.
 - [ ] Preserve compatibility mode:
-  - [x] Introduce config flag (e.g. `api_local_finalize_mode`) defaulting to current safe behavior for migration window.
+  - [ ] Introduce config flag (e.g. `api_local_finalize_mode`) defaulting to current safe behavior for migration window.
   - [ ] Document intended default flip date/release.
 - [ ] Add API tests:
-  - [x] valid entry accepted and queued.
-  - [x] invalid entry rejected pre-queue.
+  - [ ] valid entry accepted and queued.
+  - [ ] invalid entry rejected pre-queue.
   - [ ] auth/scope/rate-limit behavior unchanged.
 
 ## Checkpoint 3 — Consensus integration
 
-- [x] Extend `ConsensusEngine` to receive shared txpool handle.
-- [x] Implement `collect_entries()` to drain txpool using `max_entries_per_block`.
+- [ ] Extend `ConsensusEngine` to receive shared txpool handle.
+- [ ] Implement `collect_entries()` to drain txpool using `max_entries_per_block`.
 - [ ] Ensure proposer includes drained entries in proposal entry root.
 - [ ] Keep commit/finality path unchanged (`finalize_block` + `ledger.apply_block`).
 - [ ] Add/adjust consensus tests:
@@ -62,8 +62,8 @@ Status: Draft implementation checkpoint checklist for making API submissions flo
 
 ## Checkpoint 4 — Node/runtime wiring
 
-- [x] In node bootstrap, instantiate one shared txpool per node process.
-- [x] Pass txpool to both API server and consensus engine.
+- [ ] In node bootstrap, instantiate one shared txpool per node process.
+- [ ] Pass txpool to both API server and consensus engine.
 - [ ] Verify observer mode remains read-only and does not enqueue writes.
 - [ ] Add startup logging fields for mode/queue diagnostics.
 
@@ -110,3 +110,4 @@ Status: Draft implementation checkpoint checklist for making API submissions flo
 4. Node wiring + integration tests.
 5. Flip localnet configs to consensus-backed mode and validate convergence.
 6. Update runbooks and remove legacy path (or schedule removal).
+
