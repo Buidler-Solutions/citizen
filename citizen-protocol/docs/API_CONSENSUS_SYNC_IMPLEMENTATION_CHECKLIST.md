@@ -87,7 +87,7 @@ Last updated: 2026-04-08 (duplicate-entry rejection guard + implementation progr
 - [ ] Restart semantics documented (in-memory queue loss vs persistence).
 - [x] Duplicate submissions across nodes handled deterministically.
 - [x] Metrics added (queue length, enqueue/dequeue rates, rejected duplicates).
-- [x] Alerting hooks documented for stuck queue / zero-throughput conditions.
+- [ ] Alerting hooks documented for stuck queue / zero-throughput conditions.
 
 ### Checkpoint 6 implementation notes
 
@@ -98,19 +98,13 @@ Last updated: 2026-04-08 (duplicate-entry rejection guard + implementation progr
 - API queued/duplicate/full responses now include queue telemetry fields (`queue_len`, `queue_capacity`, and relevant counters) for operator diagnostics.
 - `citizen-ledger::Ledger::apply_entry` now rejects repeated `entry_id` submissions in the same namespace before persistence, so duplicate submissions racing across validators converge on deterministic duplicate rejection rather than double-write behavior.
 - Coverage added in ledger tests to assert duplicate `entry_id` submissions are rejected and do not create additional stored entries.
-- Localnet runbook now documents queue-health alerting hooks for stuck queue / zero-throughput conditions tied to txpool telemetry counters.
 
 ## Checkpoint 7 — Documentation + rollout
 
-- [x] Update localnet/runbook docs to describe consensus-backed ingestion path.
-- [x] Document compatibility flag and migration guidance.
+- [ ] Update localnet/runbook docs to describe consensus-backed ingestion path.
+- [ ] Document compatibility flag and migration guidance.
 - [ ] Add operator note: manifest/admission secures peers but does not replace ingestion/consensus wiring.
-- [x] Add release note entry for API submission semantics change.
-
-### Checkpoint 7 implementation notes
-
-- Added localnet runbook guidance for `api_local_finalize_mode` migration and the consensus-backed ingestion path (`202` queued response, `429 queue_full` on saturation).
-- Added operator-facing release-note entry for v0.4.0 migration planning: API writes are queue-first in consensus-backed mode and converge through consensus finality instead of node-local immediate finalization.
+- [ ] Add release note entry for API submission semantics change.
 
 ## Acceptance Criteria (definition of done)
 
