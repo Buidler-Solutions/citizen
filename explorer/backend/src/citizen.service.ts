@@ -118,7 +118,7 @@ type ReceiptLookup = {
 
 @Injectable()
 export class CitizenService {
-  private readonly baseUrl = process.env.CITIZEN_NODE_URL ?? 'http://localhost:8080';
+  private readonly baseUrl = process.env.CITIZEN_NODE_URL ?? 'http://127.0.0.1:8081';
 
   async getStatus() {
     return {

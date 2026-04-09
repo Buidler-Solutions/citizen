@@ -29,7 +29,7 @@ npm run start:dev
 ```
 
 Environment variables:
-- `CITIZEN_NODE_URL` - base URL to a Citizen node API.
+- `CITIZEN_NODE_URL` - base URL to a Citizen node API (defaults to `http://127.0.0.1:8081`).
 - `DATABASE_URL` - optional PostgreSQL connection string.
 
 ### Frontend
@@ -39,8 +39,11 @@ npm install
 npm run dev
 ```
 
+The explorer frontend runs on `http://localhost:8885` by default.
+
 Environment variables:
-- `NEXT_PUBLIC_API_BASE_URL` - base URL for the backend API.
+- `NEXT_PUBLIC_API_BASE_URL` - base URL for the explorer backend API (defaults to `http://127.0.0.1:3001`).
+- `NEXT_PUBLIC_NODE_SOURCE_URL` - fallback node-source label in the UI (defaults to `http://127.0.0.1:8081`).
 - `NEXT_PUBLIC_BLOCK_HEIGHT` - block height to inspect (`1` by default).
 - `NEXT_PUBLIC_NAMESPACE` - namespace to inspect (`governance.vote` by default).
 - `NEXT_PUBLIC_WALLET_SIGNER_DID` - optional signer DID used to query entries by `payload.payload_wallet_signature.signer` (legacy fallback still supported).
