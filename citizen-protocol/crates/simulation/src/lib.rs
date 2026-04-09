@@ -8,7 +8,6 @@ use citizen_crypto::{verifying_key_to_string, KeyRegistry, ValidatorKeypair};
 use citizen_ledger::Ledger;
 use citizen_network::{MessageCounters, MockNetwork, NetworkLatency};
 use citizen_storage::{LedgerStorage, MemoryStorage};
-use citizen_txpool::TxPool;
 use citizen_types::{
     ConsensusConfig, EpochState, NetworkModel, ProtocolError, SimulationConfig, SimulationScenario,
     ValidatorMetadata, ValidatorPerformance, ValidatorSetSnapshot, ValidatorStatus,
@@ -73,7 +72,6 @@ impl SimulationHarness {
                 consensus_config.clone(),
                 network.clone(),
                 ledger.clone(),
-                Arc::new(TxPool::default()),
                 snapshot.clone(),
             )?);
             nodes.push(SimNode {
