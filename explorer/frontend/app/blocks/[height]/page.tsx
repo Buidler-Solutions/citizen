@@ -95,7 +95,7 @@ export default async function BlockDetailPage({
   const blockResponse = await fetchBlockByHeight(height);
   const backHref = '/blocks';
 
-  if (!blockResponse?.data.block) {
+  if (!blockResponse?.data?.block) {
     return (
       <main className="page">
         <section className="card">

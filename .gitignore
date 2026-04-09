@@ -61,3 +61,4 @@ wallet/browser/dist/popup.js
 explorer/frontend/.next
 explorer/frontend/.tmp-tests/app/lib/block-routes.js
 explorer/frontend/.tmp-tests/tests.block-routes.test.js
+explorer/frontend/.tmp-tests/app/lib/blocks.js

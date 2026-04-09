@@ -1,24 +1,24 @@
 # Explorer Frontend Implementation Checkpoints
 
-This checklist tracks frontend milestones that derive directly from Citizen node runtime data surfaced through the explorer backend.
+This checklist tracks frontend milestones that derive directly from Citizen node runtime data.
 
-> Progress note (April 9, 2026): Initial `/blocks` and `/blocks/[height]` implementation is now in place in the frontend with backend-connected fetches and graceful fallback states.
+> Progress note (April 9, 2026): Initial `/blocks` and `/blocks/[height]` implementation is now in place in the frontend with node-runtime-connected fetches and graceful fallback states.
 >
 > Progress note (April 9, 2026 — follow-up): Added route-level loading skeletons for list/detail, compact hash presentation with one-click copy controls in block detail, and improved text contrast/readability defaults in shared explorer styles.
 
-> Progress note (April 9, 2026 — checkpoint sync): Verified in-repo frontend coverage now includes explicit empty/degraded list states, route-level skeletons, card-level click-through to detail, and source-aware detail rendering. Remaining checkpoint gaps are focused on backend pagination contract hardening and client-side list state retention when returning from detail navigation.
+> Progress note (April 9, 2026 — checkpoint sync): Verified in-repo frontend coverage now includes explicit empty/degraded list states, route-level skeletons, card-level click-through to detail, and source-aware detail rendering. Remaining checkpoint gaps are focused on runtime pagination contract hardening and client-side list state retention when returning from detail navigation.
 
 > Progress note (April 9, 2026 — client pagination/state): Migrated `/blocks` pagination to client-managed incremental loading with in-flight request guards, dedupe-by-height append logic, and session-backed list/scroll restoration when returning from block detail.
 
 > Progress note (April 9, 2026 — unit helper coverage): Added frontend unit coverage for `toReadableDate` and `shortHash` formatting helpers via a TypeScript-compiled Node test harness (`npm run test:unit`) to keep summary/detail rendering primitives stable.
 
-> Progress note (April 9, 2026 — backend pagination contract): Explorer backend now serves `GET /blocks` with `items`, `next_cursor`, and `has_more`, and the frontend `/blocks` list fetch path is wired end-to-end to this runtime-backed contract.
+> Progress note (April 9, 2026 — runtime pagination contract): Explorer frontend now consumes `GET /blocks` with `items`, `next_cursor`, and `has_more` from the node runtime, with a deterministic height-walk fallback for older runtime builds.
 
 > Progress note (April 9, 2026 — pagination invariants tests): Added unit coverage for dedupe, merge, and sort pagination invariants in `blocks-list-state` helpers to lock stable descending ordering and no-duplicate append behavior.
 
 > Progress note (April 9, 2026 — comprehensive block entries): Expanded `/blocks/[height]` entry detail rendering to surface consent receipt validity windows, signer metadata, reader grants, wrapped key metadata, ciphertext envelope fields, and raw-entry JSON fallback for operator-level inspection.
 
-> Progress note (April 9, 2026 — route params + explicit API errors): Centralized block route param helpers now back both list/detail routes with test coverage for list→detail param round-trips, and `/blocks` fetch failures now preserve backend-provided error messages (4xx/5xx body/message) before fallback reporting.
+> Progress note (April 9, 2026 — route params + explicit API errors): Centralized block route param helpers now back both list/detail routes with test coverage for list→detail param round-trips, and `/blocks` fetch failures now preserve runtime-provided error messages (4xx/5xx body/message) before fallback reporting.
 
 > Progress note (April 9, 2026 — responsive completion): Added explicit responsive layout tuning for desktop/tablet/mobile breakpoints in shared explorer styles (row stacking, card/header compaction, full-width controls on narrow screens, and monospace overflow safety) and completed the final manual responsive review checkpoint for `/blocks` and `/blocks/[height]`.
 
@@ -28,7 +28,7 @@ This checklist tracks frontend milestones that derive directly from Citizen node
 Build a technically robust and visually elegant blocks list experience where every block row/card is clickable and routes to a dedicated block detail page.
 
 ### Data contract checkpoints
-- [x] Backend exposes a paginated blocks endpoint consumed by the frontend (`GET /blocks?cursor=<cursor>&limit=<n>`), with deterministic ordering by height descending.
+- [x] Frontend consumes the node runtime paginated blocks endpoint directly (`GET /blocks?cursor=<cursor>&limit=<n>`), with deterministic ordering by height descending.
 - [x] Response includes pagination metadata (`next_cursor` + `has_more`) so the UI can request the next page without guessing heights.
 - [x] Each block item includes enough runtime-derived fields to render a useful summary card:
   - [x] `height`
@@ -63,7 +63,7 @@ Build a technically robust and visually elegant blocks list experience where eve
 ### Block detail checkpoints
 - [x] Detail page renders full block header values and comprehensive entry metadata from runtime data (consent, readers, signatures, ciphertext envelope, raw JSON).
 - [x] Add navigation affordances: back to list, previous block, next block (when available).
-- [x] Show canonical source label (backend + node source) for operator trust/debugging.
+- [x] Show canonical source label (node runtime source) for operator trust/debugging.
 - [x] Handle missing height cleanly (`Block not found` state).
 
 ### Quality checkpoints
@@ -73,7 +73,7 @@ Build a technically robust and visually elegant blocks list experience where eve
 - [x] Manual responsive review for common breakpoints (mobile, tablet, desktop).
 
 ### Active implementation next-up (Checkpoint 1 completion track)
-- [x] Add/verify explorer backend paginated `GET /blocks` endpoint contract (`items`, `next_cursor`, `has_more`) so frontend pagination is backed by a stable runtime source.
+- [x] Add/verify node runtime paginated `GET /blocks` endpoint contract (`items`, `next_cursor`, `has_more`) so frontend pagination is backed by a stable runtime source.
 - [x] Move blocks list pagination to a client-state flow that appends pages in-place and avoids full-page cursor transitions.
 - [x] Persist list state (`loaded heights`, `next_cursor`, `scroll position`) across list -> detail -> list navigation to preserve operator context.
 - [x] Add in-flight guards + dedupe-by-height logic in pagination append path to satisfy no-duplicate and repeated-trigger checkpoints.
