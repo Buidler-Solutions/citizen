@@ -4,10 +4,9 @@ use std::collections::{HashSet, VecDeque};
 use std::sync::Arc;
 use uuid::Uuid;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct TxPool {
     inner: Arc<Mutex<TxPoolState>>,
-    capacity: usize,
 }
 
 #[derive(Debug, Default)]
@@ -17,21 +16,8 @@ struct TxPoolState {
 }
 
 impl TxPool {
-    pub fn with_capacity(capacity: usize) -> Self {
-        Self {
-            inner: Arc::new(Mutex::new(TxPoolState::default())),
-            capacity,
-        }
-    }
-
     pub fn enqueue(&self, entry: LedgerEntry) -> EnqueueResult {
         let mut state = self.inner.lock();
-        if state.queue.len() >= self.capacity {
-            return EnqueueResult::Full {
-                entry_id: entry.entry_id,
-                capacity: self.capacity,
-            };
-        }
         if !state.entry_ids.insert(entry.entry_id) {
             return EnqueueResult::Duplicate {
                 entry_id: entry.entry_id,
@@ -69,17 +55,10 @@ impl TxPool {
     }
 }
 
-impl Default for TxPool {
-    fn default() -> Self {
-        Self::with_capacity(10_000)
-    }
-}
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum EnqueueResult {
     Queued { entry_id: Uuid },
     Duplicate { entry_id: Uuid },
-    Full { entry_id: Uuid, capacity: usize },
 }
 
 #[cfg(test)]
@@ -184,27 +163,5 @@ mod tests {
         assert_eq!(second_batch.len(), 1);
         assert_eq!(second_batch[0].entry_id, entries[2].entry_id);
         assert!(pool.is_empty());
-    }
-
-    #[test]
-    fn enqueue_rejects_when_pool_is_full() {
-        let pool = TxPool::with_capacity(1);
-        let first = fixture_entry(Uuid::new_v4());
-        let second = fixture_entry(Uuid::new_v4());
-
-        assert_eq!(
-            pool.enqueue(first.clone()),
-            EnqueueResult::Queued {
-                entry_id: first.entry_id
-            }
-        );
-        assert_eq!(
-            pool.enqueue(second.clone()),
-            EnqueueResult::Full {
-                entry_id: second.entry_id,
-                capacity: 1
-            }
-        );
-        assert_eq!(pool.len(), 1);
     }
 }
