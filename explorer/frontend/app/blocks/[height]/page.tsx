@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { fetchBlockByHeight } from '../../lib/blocks';
 import { shortHash, toReadableDate } from '../../lib/format';
 import CopyableHash from '../../components/copyable-hash';
+import { blockDetailHref, parseBlockHeightParam } from '../../lib/block-routes';
 
 export const dynamic = 'force-dynamic';
 
@@ -10,11 +11,6 @@ type Params = {
 };
 
 type JsonRecord = Record<string, unknown>;
-
-function parseHeight(raw: string): number | null {
-  const value = Number(raw);
-  return Number.isInteger(value) && value >= 0 ? value : null;
-}
 
 function asRecord(value: unknown): JsonRecord | null {
   return value && typeof value === 'object' && !Array.isArray(value)
@@ -81,7 +77,7 @@ export default async function BlockDetailPage({
   params: Promise<Params>;
 }) {
   const resolvedParams = await params;
-  const height = parseHeight(resolvedParams.height);
+  const height = parseBlockHeightParam(resolvedParams.height);
 
   if (height === null) {
     return (
@@ -130,11 +126,11 @@ export default async function BlockDetailPage({
           Back to blocks
         </Link>
         {height > 0 ? (
-          <Link href={`/blocks/${height - 1}`} className="button-link">
+          <Link href={blockDetailHref(height - 1)} className="button-link">
             Previous block
           </Link>
         ) : null}
-        <Link href={`/blocks/${height + 1}`} className="button-link">
+        <Link href={blockDetailHref(height + 1)} className="button-link">
           Next block
         </Link>
       </section>

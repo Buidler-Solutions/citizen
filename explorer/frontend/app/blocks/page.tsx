@@ -1,9 +1,8 @@
 import { fetchBlocksPage } from '../lib/blocks';
+import { cursorFromSearchParams, type SearchParams } from '../lib/block-routes';
 import BlocksListClient from './blocks-list-client';
 
 export const dynamic = 'force-dynamic';
-
-type SearchParams = Record<string, string | string[] | undefined>;
 
 export default async function BlocksPage({
   searchParams,
@@ -11,8 +10,7 @@ export default async function BlocksPage({
   searchParams: Promise<SearchParams>;
 }) {
   const resolvedParams = await searchParams;
-  const cursor =
-    typeof resolvedParams.cursor === 'string' ? resolvedParams.cursor : undefined;
+  const cursor = cursorFromSearchParams(resolvedParams);
 
   const result = await fetchBlocksPage(cursor);
 
