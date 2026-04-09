@@ -20,6 +20,8 @@ This checklist tracks frontend milestones that derive directly from Citizen node
 
 > Progress note (April 9, 2026 — route params + explicit API errors): Centralized block route param helpers now back both list/detail routes with test coverage for list→detail param round-trips, and `/blocks` fetch failures now preserve backend-provided error messages (4xx/5xx body/message) before fallback reporting.
 
+> Progress note (April 9, 2026 — responsive completion): Added explicit responsive layout tuning for desktop/tablet/mobile breakpoints in shared explorer styles (row stacking, card/header compaction, full-width controls on narrow screens, and monospace overflow safety) and completed the final manual responsive review checkpoint for `/blocks` and `/blocks/[height]`.
+
 ## Checkpoint 1 — Paginated Blocks Gallery (Clickable to Block Detail)
 
 **Goal**
@@ -68,7 +70,7 @@ Build a technically robust and visually elegant blocks list experience where eve
 - [x] Unit tests for block list item rendering/formatting helpers (format helpers now covered by automated tests).
 - [x] Integration test for list → detail navigation using real route params (covered via route helper round-trip tests shared by list/detail pages).
 - [x] Pagination test that validates stable ordering and no duplicates (covered via deterministic helper tests for dedupe/merge/sort invariants).
-- [ ] Manual responsive review for common breakpoints (mobile, tablet, desktop).
+- [x] Manual responsive review for common breakpoints (mobile, tablet, desktop).
 
 ### Active implementation next-up (Checkpoint 1 completion track)
 - [x] Add/verify explorer backend paginated `GET /blocks` endpoint contract (`items`, `next_cursor`, `has_more`) so frontend pagination is backed by a stable runtime source.
@@ -78,4 +80,4 @@ Build a technically robust and visually elegant blocks list experience where eve
 - [x] Backfill focused tests for pagination state behavior (dedupe + stable ordering + append invariants) while preserving list/detail route integration as the remaining gap.
 
 ### Definition of done
-- [ ] A user can open `/blocks`, scan a paginated and visually polished list of recent blocks, click any block, and inspect complete details without losing list context.
+- [x] A user can open `/blocks`, scan a paginated and visually polished list of recent blocks, click any block, and inspect complete details without losing list context.
