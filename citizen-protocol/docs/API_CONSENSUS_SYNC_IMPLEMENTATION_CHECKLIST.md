@@ -43,7 +43,7 @@ Last updated: 2026-04-08 (localnet configs flipped to consensus-backed ingestion
   - [x] Enqueue instead of immediate `ledger.apply_entry` + local block finalization.
 - [x] Return explicit queued response contract (`202 Accepted`).
   - [x] Include queue/entry identifiers needed for tracing.
-- [x] Preserve compatibility mode:
+- [ ] Preserve compatibility mode:
   - [x] Introduce config flag (e.g. `api_local_finalize_mode`) defaulting to current safe behavior for migration window.
   - [x] Document intended default flip date/release.
 - [x] Add API tests:
@@ -103,8 +103,7 @@ Last updated: 2026-04-08 (localnet configs flipped to consensus-backed ingestion
 ## Checkpoint 5 implementation notes (in progress)
 
 - Localnet validator configs now set `api_local_finalize_mode = false` for Alpha/Beta/Gamma so default `scripts/run_localnet.sh` launches exercise consensus-backed ingestion semantics without extra manual edits.
-- Added scripted evidence harness at `scripts/capture_api_consensus_sync_evidence.sh` to launch the three-validator localnet, submit to Alpha, assert Beta/Gamma visibility, verify height parity, and write timestamped artifacts under `docs/artifacts/`.
-- Remaining Checkpoint 5 evidence capture (curl artifacts/log snapshots/block-height parity) is still pending a full localnet validation run in the implementation PR context using the new harness.
+- Remaining Checkpoint 5 evidence capture (curl artifacts/log snapshots/block-height parity) is still pending a full localnet validation run in the implementation PR context.
 
 ## Checkpoint 7 — Documentation + rollout
 
