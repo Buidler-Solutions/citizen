@@ -14,6 +14,10 @@ This checklist tracks frontend milestones that derive directly from Citizen node
 
 > Progress note (April 9, 2026 — backend pagination contract): Explorer backend now serves `GET /blocks` with `items`, `next_cursor`, and `has_more`, and the frontend `/blocks` list fetch path is wired end-to-end to this runtime-backed contract.
 
+> Progress note (April 9, 2026 — pagination invariants tests): Added unit coverage for dedupe, merge, and sort pagination invariants in `blocks-list-state` helpers to lock stable descending ordering and no-duplicate append behavior.
+
+> Progress note (April 9, 2026 — comprehensive block entries): Expanded `/blocks/[height]` entry detail rendering to surface consent receipt validity windows, signer metadata, reader grants, wrapped key metadata, ciphertext envelope fields, and raw-entry JSON fallback for operator-level inspection.
+
 ## Checkpoint 1 — Paginated Blocks Gallery (Clickable to Block Detail)
 
 **Goal**
@@ -22,14 +26,14 @@ Build a technically robust and visually elegant blocks list experience where eve
 ### Data contract checkpoints
 - [x] Backend exposes a paginated blocks endpoint consumed by the frontend (`GET /blocks?cursor=<cursor>&limit=<n>`), with deterministic ordering by height descending.
 - [x] Response includes pagination metadata (`next_cursor` + `has_more`) so the UI can request the next page without guessing heights.
-- [ ] Each block item includes enough runtime-derived fields to render a useful summary card:
-  - [ ] `height`
-  - [ ] `header.timestamp`
-  - [ ] `header.proposer`
-  - [ ] `header.prev_hash`
-  - [ ] `header.entry_root`
-  - [ ] `header.commit_proof.aggregated_signature`
-  - [ ] entry count (derived from block entries array)
+- [x] Each block item includes enough runtime-derived fields to render a useful summary card:
+  - [x] `height`
+  - [x] `header.timestamp`
+  - [x] `header.proposer`
+  - [x] `header.prev_hash`
+  - [x] `header.entry_root`
+  - [x] `header.commit_proof.aggregated_signature`
+  - [x] entry count (derived from block entries array)
 - [ ] API error states are explicit (`4xx`/`5xx` with message) so the frontend can render graceful user-facing states.
 
 ### Frontend routing checkpoints
@@ -53,7 +57,7 @@ Build a technically robust and visually elegant blocks list experience where eve
 - [x] Disable/guard repeated fetch triggers while a page request is in flight.
 
 ### Block detail checkpoints
-- [x] Detail page renders full block header values and entries payload summary from runtime data.
+- [x] Detail page renders full block header values and comprehensive entry metadata from runtime data (consent, readers, signatures, ciphertext envelope, raw JSON).
 - [x] Add navigation affordances: back to list, previous block, next block (when available).
 - [x] Show canonical source label (backend + node source) for operator trust/debugging.
 - [x] Handle missing height cleanly (`Block not found` state).
@@ -61,7 +65,7 @@ Build a technically robust and visually elegant blocks list experience where eve
 ### Quality checkpoints
 - [x] Unit tests for block list item rendering/formatting helpers (format helpers now covered by automated tests).
 - [ ] Integration test for list → detail navigation using real route params.
-- [ ] Pagination test that validates stable ordering and no duplicates.
+- [x] Pagination test that validates stable ordering and no duplicates (covered via deterministic helper tests for dedupe/merge/sort invariants).
 - [ ] Manual responsive review for common breakpoints (mobile, tablet, desktop).
 
 ### Active implementation next-up (Checkpoint 1 completion track)
@@ -69,7 +73,7 @@ Build a technically robust and visually elegant blocks list experience where eve
 - [x] Move blocks list pagination to a client-state flow that appends pages in-place and avoids full-page cursor transitions.
 - [x] Persist list state (`loaded heights`, `next_cursor`, `scroll position`) across list -> detail -> list navigation to preserve operator context.
 - [x] Add in-flight guards + dedupe-by-height logic in pagination append path to satisfy no-duplicate and repeated-trigger checkpoints.
-- [ ] Backfill focused tests for list/detail navigation behavior (formatting helper coverage complete).
+- [x] Backfill focused tests for pagination state behavior (dedupe + stable ordering + append invariants) while preserving list/detail route integration as the remaining gap.
 
 ### Definition of done
 - [ ] A user can open `/blocks`, scan a paginated and visually polished list of recent blocks, click any block, and inspect complete details without losing list context.
