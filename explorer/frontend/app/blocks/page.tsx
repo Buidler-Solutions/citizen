@@ -20,7 +20,7 @@ export default async function BlocksPage({
         <div>
           <p className="eyebrow">Citizen Explorer</p>
           <h1>Blocks</h1>
-          <p className="subtitle">Recent finalized blocks from the explorer backend.</p>
+          <p className="subtitle">Recent finalized blocks from the Citizen node runtime.</p>
         </div>
       </section>
 

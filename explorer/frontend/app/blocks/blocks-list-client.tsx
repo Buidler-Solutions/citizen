@@ -138,7 +138,7 @@ export default function BlocksListClient({
       {orderedItems.length === 0 ? (
         <section className="card">
           <h2>No blocks yet</h2>
-          <p className="subtitle">The backend returned an empty block list.</p>
+          <p className="subtitle">The node runtime returned an empty block list.</p>
         </section>
       ) : (
         <section className="block-list">

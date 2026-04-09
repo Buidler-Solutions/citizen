@@ -211,8 +211,7 @@ type StatusResponse = {
   timestamp: number;
 };
 
-const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://127.0.0.1:3001';
-const defaultNodeSource = process.env.NEXT_PUBLIC_NODE_SOURCE_URL ?? 'http://127.0.0.1:8081';
+const nodeRuntimeBase = process.env.NEXT_PUBLIC_NODE_RUNTIME_URL ?? 'http://127.0.0.1:8081';
 
 async function safeFetchJson<T>(url: string): Promise<T | null> {
   try {
@@ -235,11 +234,11 @@ const payloadNamespace = process.env.NEXT_PUBLIC_PAYLOAD_NAMESPACE;
 const walletSignerDid = process.env.NEXT_PUBLIC_WALLET_SIGNER_DID;
 
 async function loadBlock(): Promise<BlockResponse | null> {
-  return safeFetchJson<BlockResponse>(`${apiBase}/blocks/${blockHeight}`);
+  return safeFetchJson<BlockResponse>(`${nodeRuntimeBase}/blocks/${blockHeight}`);
 }
 
 async function loadEntries(): Promise<EntryResponse | null> {
-  return safeFetchJson<EntryResponse>(`${apiBase}/entries/${namespace}`);
+  return safeFetchJson<EntryResponse>(`${nodeRuntimeBase}/entries/${namespace}`);
 }
 
 async function loadWalletSignerEntries(
@@ -247,17 +246,17 @@ async function loadWalletSignerEntries(
   signerDid: string,
 ): Promise<WalletSignerEntryResponse | null> {
   return safeFetchJson<WalletSignerEntryResponse>(
-    `${apiBase}/entries/${encodeURIComponent(namespaceName)}/wallet-signers/${encodeURIComponent(signerDid)}`
+    `${nodeRuntimeBase}/entries/${encodeURIComponent(namespaceName)}/wallet-signers/${encodeURIComponent(signerDid)}`
   );
 }
 
 async function loadReceipt(id: string): Promise<ReceiptResponse | null> {
-  return safeFetchJson<ReceiptResponse>(`${apiBase}/receipts/${id}`);
+  return safeFetchJson<ReceiptResponse>(`${nodeRuntimeBase}/receipts/${id}`);
 }
 
 async function loadFileManifest(manifestId: string): Promise<FileManifestResponse | null> {
   return safeFetchJson<FileManifestResponse>(
-    `${apiBase}/files/manifests/${encodeURIComponent(manifestId)}`
+    `${nodeRuntimeBase}/files/manifests/${encodeURIComponent(manifestId)}`
   );
 }
 
@@ -265,7 +264,7 @@ async function loadFileManifest(manifestId: string): Promise<FileManifestRespons
 
 async function loadFileTimeline(manifestId: string): Promise<FileTimelineResponse | null> {
   return safeFetchJson<FileTimelineResponse>(
-    `${apiBase}/files/timeline/${encodeURIComponent(manifestId)}`
+    `${nodeRuntimeBase}/files/timeline/${encodeURIComponent(manifestId)}`
   );
 }
 
@@ -274,16 +273,16 @@ async function loadPayloadFieldRefs(
   namespaceName: string,
 ): Promise<PayloadFieldRefsResponse | null> {
   return safeFetchJson<PayloadFieldRefsResponse>(
-    `${apiBase}/payloads/fields/${encodeURIComponent(entryId)}/${encodeURIComponent(namespaceName)}`
+    `${nodeRuntimeBase}/payloads/fields/${encodeURIComponent(entryId)}/${encodeURIComponent(namespaceName)}`
   );
 }
 
 async function loadAssetPositions(accountId: string): Promise<AssetPositionsResponse | null> {
-  return safeFetchJson<AssetPositionsResponse>(`${apiBase}/assets/${encodeURIComponent(accountId)}`);
+  return safeFetchJson<AssetPositionsResponse>(`${nodeRuntimeBase}/assets/${encodeURIComponent(accountId)}`);
 }
 
 async function loadStatus(): Promise<StatusResponse | null> {
-  return safeFetchJson<StatusResponse>(`${apiBase}/status`);
+  return safeFetchJson<StatusResponse>(`${nodeRuntimeBase}/status`);
 }
 
 export default async function HomePage() {
@@ -324,12 +323,8 @@ export default async function HomePage() {
         </div>
         <div className="meta">
           <div>
-            <span className="label">Backend</span>
-            <span>{apiBase}</span>
-          </div>
-          <div>
-            <span className="label">Node Source</span>
-            <span>{status?.node ?? block?.source ?? defaultNodeSource}</span>
+            <span className="label">Node Runtime</span>
+            <span>{status?.node ?? block?.source ?? nodeRuntimeBase}</span>
           </div>
         </div>
       </header>
@@ -551,7 +546,7 @@ export default async function HomePage() {
           ) : (
             <p>
               {walletSignerDid
-                ? 'Wallet-signer index unavailable. Confirm backend API service is running and reachable.'
+                ? 'Wallet-signer index unavailable. Confirm the node runtime is running and reachable.'
                 : <>Set <code>NEXT_PUBLIC_WALLET_SIGNER_DID</code> to inspect entries by <code>payload.payload_wallet_signature.signer</code>.</>}
             </p>
           )}

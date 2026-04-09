@@ -1,5 +1,4 @@
-const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://127.0.0.1:3001';
-const nodeBase = process.env.NEXT_PUBLIC_NODE_SOURCE_URL ?? 'http://127.0.0.1:8081';
+const nodeRuntimeBase = process.env.NEXT_PUBLIC_NODE_RUNTIME_URL ?? 'http://127.0.0.1:8081';
 
 type CommitProof = {
   aggregated_signature: string;
@@ -63,9 +62,94 @@ export type BlockPageResult =
   | { ok: true; payload: BlocksPageResponse }
   | { ok: false; message: string };
 
+type BlocksEnvelope = {
+  source?: string;
+  data?: BlocksPageResponse['data'];
+  items?: BlockSummary[];
+  next_cursor?: string | null;
+  has_more?: boolean;
+};
+
+type BlockDetailEnvelope = {
+  source?: string;
+  data?: BlockDetailResponse['data'];
+  height?: number;
+  block?: NodeBlockLookup['block'];
+};
+
+function normalizeBlocksPageResponse(
+  raw: unknown,
+  sourceBase: string,
+): BlocksPageResponse | null {
+  if (!raw || typeof raw !== 'object') {
+    return null;
+  }
+
+  const envelope = raw as BlocksEnvelope;
+  const nested = envelope.data;
+  const topLevelItems = envelope.items;
+
+  if (nested && Array.isArray(nested.items)) {
+    return {
+      source: typeof envelope.source === 'string' ? envelope.source : `${sourceBase.replace(/\/$/, '')}/blocks`,
+      data: nested,
+    };
+  }
+
+  if (Array.isArray(topLevelItems)) {
+    return {
+      source: typeof envelope.source === 'string' ? envelope.source : `${sourceBase.replace(/\/$/, '')}/blocks`,
+      data: {
+        items: topLevelItems,
+        next_cursor: typeof envelope.next_cursor === 'string' || envelope.next_cursor === null
+          ? envelope.next_cursor
+          : null,
+        has_more: Boolean(envelope.has_more),
+      },
+    };
+  }
+
+  return null;
+}
+
+function normalizeBlockDetailResponse(
+  raw: unknown,
+  sourceBase: string,
+  requestedHeight: number,
+): BlockDetailResponse | null {
+  if (!raw || typeof raw !== 'object') {
+    return null;
+  }
+
+  const envelope = raw as BlockDetailEnvelope;
+  if (envelope.data && typeof envelope.data.height === 'number') {
+    return {
+      source: typeof envelope.source === 'string'
+        ? envelope.source
+        : `${sourceBase.replace(/\/$/, '')}/blocks/${envelope.data.height}`,
+      data: envelope.data,
+    };
+  }
+
+  const topLevelBlock = Object.prototype.hasOwnProperty.call(envelope, 'block')
+    ? envelope.block ?? null
+    : null;
+  const topLevelHeight = typeof envelope.height === 'number' ? envelope.height : requestedHeight;
+
+  return {
+    source: typeof envelope.source === 'string'
+      ? envelope.source
+      : `${sourceBase.replace(/\/$/, '')}/blocks/${topLevelHeight}`,
+    data: {
+      height: topLevelHeight,
+      block: topLevelBlock,
+    },
+  };
+}
+
 
 async function backendErrorMessage(response: Response, endpoint: string): Promise<string> {
-  const base = `Backend returned ${response.status} for ${endpoint}.`;
+  const base = `Node runtime returned ${response.status} for ${endpoint}.`;
 
   try {
     const data = (await response.clone().json()) as { message?: string; error?: string };
@@ -99,13 +183,16 @@ export async function fetchBlocksPage(
   }
 
   try {
-    const response = await fetch(`${apiBase}/blocks?${query.toString()}`, {
+    const response = await fetch(`${nodeRuntimeBase.replace(/\/$/, '')}/blocks?${query.toString()}`, {
       cache: 'no-store',
     });
 
     if (response.ok) {
-      const payload = (await response.json()) as BlocksPageResponse;
-      return { ok: true, payload };
+      const rawPayload = await response.json();
+      const normalizedPayload = normalizeBlocksPageResponse(rawPayload, nodeRuntimeBase);
+      if (normalizedPayload) {
+        return { ok: true, payload: normalizedPayload };
+      }
     }
 
     const fallback = await fetchBlocksPageFromNode(cursor, limit);
@@ -115,7 +202,7 @@ export async function fetchBlocksPage(
 
     return {
       ok: false,
-      message: `${await backendErrorMessage(response, '/blocks pagination endpoint')} Localnet fallback also failed.`,
+      message: `${await backendErrorMessage(response, '/blocks pagination endpoint')} Height-walk fallback also failed.`,
     };
   } catch {
     return fetchBlocksPageFromNode(cursor, limit);
@@ -126,12 +213,16 @@ export async function fetchBlockByHeight(
   height: number,
 ): Promise<BlockDetailResponse | null> {
   try {
-    const response = await fetch(`${apiBase}/blocks/${height}`, {
+    const response = await fetch(`${nodeRuntimeBase.replace(/\/$/, '')}/blocks/${height}`, {
       cache: 'no-store',
     });
 
     if (response.ok) {
-      return (await response.json()) as BlockDetailResponse;
+      const rawPayload = await response.json();
+      const normalizedPayload = normalizeBlockDetailResponse(rawPayload, nodeRuntimeBase, height);
+      if (normalizedPayload) {
+        return normalizedPayload;
+      }
     }
   } catch {
     // fallback to direct node lookup below
@@ -143,7 +234,7 @@ export async function fetchBlockByHeight(
   }
 
   return {
-    source: `${nodeBase.replace(/\/$/, '')}/blocks/${height}`,
+    source: `${nodeRuntimeBase.replace(/\/$/, '')}/blocks/${height}`,
     data: nodeBlock,
   };
 }
@@ -158,19 +249,17 @@ async function fetchBlocksPageFromNode(
   }
 
   try {
-    const response = await fetch(`${nodeBase.replace(/\/$/, '')}/blocks?${query.toString()}`, {
+    const response = await fetch(`${nodeRuntimeBase.replace(/\/$/, '')}/blocks?${query.toString()}`, {
       cache: 'no-store',
     });
 
     if (response.ok) {
-      const data = (await response.json()) as BlocksPageResponse['data'];
-      if (Array.isArray(data.items)) {
+      const rawPayload = await response.json();
+      const normalizedPayload = normalizeBlocksPageResponse(rawPayload, nodeRuntimeBase);
+      if (normalizedPayload) {
         return {
           ok: true,
-          payload: {
-            source: `${nodeBase.replace(/\/$/, '')}/blocks`,
-            data,
-          },
+          payload: normalizedPayload,
         };
       }
     }
@@ -198,7 +287,7 @@ async function fetchBlocksPageFromNode(
     return {
       ok: true,
       payload: {
-        source: `${nodeBase.replace(/\/$/, '')}/blocks/:height`,
+        source: `${nodeRuntimeBase.replace(/\/$/, '')}/blocks/:height`,
         data: {
           items: [],
           next_cursor: null,
@@ -213,7 +302,7 @@ async function fetchBlocksPageFromNode(
     return {
       ok: true,
       payload: {
-        source: `${nodeBase.replace(/\/$/, '')}/blocks/:height`,
+        source: `${nodeRuntimeBase.replace(/\/$/, '')}/blocks/:height`,
         data: {
           items: [],
           next_cursor: null,
@@ -244,7 +333,7 @@ async function fetchBlocksPageFromNode(
   return {
     ok: true,
     payload: {
-      source: `${nodeBase.replace(/\/$/, '')}/blocks/:height`,
+      source: `${nodeRuntimeBase.replace(/\/$/, '')}/blocks/:height`,
       data: {
         items,
         next_cursor: hasMore ? String(nextHeight) : null,
@@ -308,7 +397,7 @@ async function findLatestNodeHeight(): Promise<number> {
 
 async function fetchNodeBlock(height: number): Promise<NodeBlockLookup | null> {
   try {
-    const response = await fetch(`${nodeBase.replace(/\/$/, '')}/blocks/${height}`, {
+    const response = await fetch(`${nodeRuntimeBase.replace(/\/$/, '')}/blocks/${height}`, {
       cache: 'no-store',
     });
 
