@@ -6,7 +6,8 @@
     "dev": "next dev -p 8885",
     "build": "next build",
     "start": "next start -p 8885",
-    "lint": "next lint"
+    "lint": "next lint",
+    "test:unit": "tsc -p tsconfig.test.json && node --test .tmp-tests/tests.format.test.js"
   },
   "dependencies": {
     "next": "16.1.7",

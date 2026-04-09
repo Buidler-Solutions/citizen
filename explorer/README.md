@@ -14,6 +14,7 @@ This folder contains a blockchain explorer application for the Citizen Protocol.
 
 ## Canonical contracts used
 Explorer backend now proxies canonical node contracts (no mock fallback payloads):
+- `GET /blocks?cursor=<height>&limit=<n>` -> node/runtime and explorer backend both expose deterministic descending pagination (`items`, `next_cursor`, `has_more`)
 - `GET /blocks/:height` -> node `GET /blocks/:height`
 - `GET /entries/:namespace` -> node `GET /entries/:namespace`
 - `GET /entries/:namespace/wallet-signers/:signerDid` -> explorer index view filtered by `payload.payload_wallet_signature.signer` (with legacy fallback to `payload.wallet_signature.signer`)
