@@ -10,14 +10,18 @@ This checklist tracks frontend milestones that derive directly from Citizen node
 
 > Progress note (April 9, 2026 — client pagination/state): Migrated `/blocks` pagination to client-managed incremental loading with in-flight request guards, dedupe-by-height append logic, and session-backed list/scroll restoration when returning from block detail.
 
+> Progress note (April 9, 2026 — unit helper coverage): Added frontend unit coverage for `toReadableDate` and `shortHash` formatting helpers via a TypeScript-compiled Node test harness (`npm run test:unit`) to keep summary/detail rendering primitives stable.
+
+> Progress note (April 9, 2026 — backend pagination contract): Explorer backend now serves `GET /blocks` with `items`, `next_cursor`, and `has_more`, and the frontend `/blocks` list fetch path is wired end-to-end to this runtime-backed contract.
+
 ## Checkpoint 1 — Paginated Blocks Gallery (Clickable to Block Detail)
 
 **Goal**
 Build a technically robust and visually elegant blocks list experience where every block row/card is clickable and routes to a dedicated block detail page.
 
 ### Data contract checkpoints
-- [ ] Backend exposes a paginated blocks endpoint consumed by the frontend (for example: `GET /blocks?cursor=<cursor>&limit=<n>`), with deterministic ordering by height descending.
-- [ ] Response includes pagination metadata (`next_cursor` and/or `has_more`) so the UI can request the next page without guessing heights.
+- [x] Backend exposes a paginated blocks endpoint consumed by the frontend (`GET /blocks?cursor=<cursor>&limit=<n>`), with deterministic ordering by height descending.
+- [x] Response includes pagination metadata (`next_cursor` + `has_more`) so the UI can request the next page without guessing heights.
 - [ ] Each block item includes enough runtime-derived fields to render a useful summary card:
   - [ ] `height`
   - [ ] `header.timestamp`
@@ -55,17 +59,17 @@ Build a technically robust and visually elegant blocks list experience where eve
 - [x] Handle missing height cleanly (`Block not found` state).
 
 ### Quality checkpoints
-- [ ] Unit tests for block list item rendering/formatting helpers.
+- [x] Unit tests for block list item rendering/formatting helpers (format helpers now covered by automated tests).
 - [ ] Integration test for list → detail navigation using real route params.
 - [ ] Pagination test that validates stable ordering and no duplicates.
 - [ ] Manual responsive review for common breakpoints (mobile, tablet, desktop).
 
 ### Active implementation next-up (Checkpoint 1 completion track)
-- [ ] Add/verify explorer backend paginated `GET /blocks` endpoint contract (`items`, `next_cursor`, `has_more`) so frontend pagination is backed by a stable runtime source instead of placeholder assumptions.
+- [x] Add/verify explorer backend paginated `GET /blocks` endpoint contract (`items`, `next_cursor`, `has_more`) so frontend pagination is backed by a stable runtime source.
 - [x] Move blocks list pagination to a client-state flow that appends pages in-place and avoids full-page cursor transitions.
 - [x] Persist list state (`loaded heights`, `next_cursor`, `scroll position`) across list -> detail -> list navigation to preserve operator context.
 - [x] Add in-flight guards + dedupe-by-height logic in pagination append path to satisfy no-duplicate and repeated-trigger checkpoints.
-- [ ] Backfill focused tests for formatting helpers and list/detail navigation behavior.
+- [ ] Backfill focused tests for list/detail navigation behavior (formatting helper coverage complete).
 
 ### Definition of done
 - [ ] A user can open `/blocks`, scan a paginated and visually polished list of recent blocks, click any block, and inspect complete details without losing list context.

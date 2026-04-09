@@ -1,0 +1,16 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "outDir": ".tmp-tests",
+    "rootDir": ".",
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "target": "es2022",
+    "declaration": false,
+    "sourceMap": false,
+    "types": ["node"],
+    "jsx": "preserve"
+  },
+  "include": ["tests.format.test.ts", "app/lib/format.ts"]
+}

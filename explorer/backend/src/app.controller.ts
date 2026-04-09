@@ -1,4 +1,4 @@
-import { Controller, Get, Param } from '@nestjs/common';
+import { Controller, Get, Param, Query } from '@nestjs/common';
 import { CitizenService } from './citizen.service';
 
 @Controller()
@@ -13,6 +13,14 @@ export class AppController {
   @Get('status')
   async status() {
     return this.citizenService.getStatus();
+  }
+
+  @Get('blocks')
+  async blocks(
+    @Query('cursor') cursor?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.citizenService.getBlocks(cursor, limit);
   }
 
   @Get('blocks/:height')
@@ -42,7 +50,6 @@ export class AppController {
   async fileManifest(@Param('manifestId') manifestId: string) {
     return this.citizenService.getFileManifest(manifestId);
   }
-
 
   @Get('files/timeline/:manifestId')
   async fileTimeline(@Param('manifestId') manifestId: string) {

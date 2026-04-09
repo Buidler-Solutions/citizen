@@ -1,4 +1,4 @@
-use axum::extract::Path;
+use axum::extract::{Path, Query};
 use axum::http::HeaderMap;
 use axum::http::StatusCode;
 use axum::routing::{get, post};
@@ -44,6 +44,12 @@ pub struct ApiEdgeConfig {
 #[derive(Clone, Debug)]
 pub struct ApiClientProfile {
     pub scopes: BTreeSet<String>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+struct BlocksQueryParams {
+    cursor: Option<BlockHeight>,
+    limit: Option<usize>,
 }
 
 impl ApiClientProfile {
@@ -441,6 +447,7 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
 
     fn router(&self) -> Router {
         let blocks_ledger = Arc::clone(&self.ledger);
+        let blocks_list_ledger = Arc::clone(&self.ledger);
         let namespaces_ledger = Arc::clone(&self.ledger);
         let entries_ledger = Arc::clone(&self.ledger);
         let resolve_did_ledger = Arc::clone(&self.ledger);
@@ -471,6 +478,13 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
         let governance_proposals_ledger = Arc::clone(&self.ledger);
         Router::new()
             .route("/health", get(Self::health))
+            .route(
+                "/blocks",
+                get(move |Query(query): Query<BlocksQueryParams>| {
+                    let ledger = Arc::clone(&blocks_list_ledger);
+                    async move { Self::handle_list_blocks(ledger, query).await }
+                }),
+            )
             .route(
                 "/blocks/:height",
                 get(move |Path(height): Path<BlockHeight>| {
@@ -650,6 +664,78 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
     ) -> Json<serde_json::Value> {
         let block = ledger.storage().get_block(height).unwrap_or(None);
         Json(serde_json::json!({"height": height, "block": block}))
+    }
+
+    async fn handle_list_blocks(
+        ledger: Arc<Ledger<S>>,
+        query: BlocksQueryParams,
+    ) -> (StatusCode, Json<serde_json::Value>) {
+        let limit = query.limit.unwrap_or(20);
+        if limit == 0 || limit > 100 {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(
+                    serde_json::json!({"error":"limit must be an integer between 1 and 100"}),
+                ),
+            );
+        }
+
+        let latest_height = ledger.storage().latest_height().unwrap_or(0);
+        let has_any_blocks = ledger
+            .storage()
+            .get_block(latest_height)
+            .unwrap_or(None)
+            .is_some();
+
+        if !has_any_blocks {
+            return (
+                StatusCode::OK,
+                Json(serde_json::json!({
+                    "items": [],
+                    "next_cursor": null,
+                    "has_more": false
+                })),
+            );
+        }
+
+        let mut current_height = std::cmp::min(query.cursor.unwrap_or(latest_height), latest_height);
+        let mut items = Vec::new();
+        let mut scanned = 0usize;
+        let mut exhausted_at_genesis = false;
+
+        while scanned < limit {
+            if let Some(block) = ledger.storage().get_block(current_height).unwrap_or(None) {
+                items.push(serde_json::json!({
+                    "height": current_height,
+                    "header": block.header,
+                    "entry_count": block.entries.len()
+                }));
+                scanned += 1;
+            }
+
+            if current_height == 0 {
+                exhausted_at_genesis = true;
+                break;
+            }
+
+            current_height -= 1;
+        }
+
+        let has_more = !exhausted_at_genesis && current_height <= latest_height;
+        let next_cursor = if has_more {
+            serde_json::Value::from(current_height)
+        } else {
+            serde_json::Value::Null
+        };
+
+        (
+            StatusCode::OK,
+            Json(serde_json::json!({
+                "items": items,
+                "next_cursor": next_cursor,
+                "has_more": has_more
+            })),
+        )
     }
 
     async fn handle_list_namespaces(ledger: Arc<Ledger<S>>) -> Json<serde_json::Value> {
