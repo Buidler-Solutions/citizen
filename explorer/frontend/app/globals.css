@@ -265,6 +265,16 @@ h1 {
   text-decoration: none;
 }
 
+.button-control {
+  cursor: pointer;
+  font: inherit;
+}
+
+.button-control:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
 .copy-inline {
   display: inline-flex;
   align-items: center;
