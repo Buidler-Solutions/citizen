@@ -2,6 +2,8 @@
 
 This checklist tracks frontend milestones that derive directly from Citizen node runtime data surfaced through the explorer backend.
 
+> Progress note (April 9, 2026): Initial `/blocks` and `/blocks/[height]` implementation is now in place in the frontend with backend-connected fetches and graceful fallback states; remaining checklist items stay open.
+
 ## Checkpoint 1 — Paginated Blocks Gallery (Clickable to Block Detail)
 
 **Goal**
@@ -21,30 +23,30 @@ Build a technically robust and visually elegant blocks list experience where eve
 - [ ] API error states are explicit (`4xx`/`5xx` with message) so the frontend can render graceful user-facing states.
 
 ### Frontend routing checkpoints
-- [ ] Add a blocks list route/page (for example `/blocks`) as the primary chain exploration surface.
-- [ ] Add a block details route/page (for example `/blocks/[height]`).
-- [ ] Every rendered block list item is keyboard-focusable and clickable, navigating to the corresponding detail route.
+- [x] Add a blocks list route/page (for example `/blocks`) as the primary chain exploration surface.
+- [x] Add a block details route/page (for example `/blocks/[height]`).
+- [x] Every rendered block list item is keyboard-focusable and clickable, navigating to the corresponding detail route.
 - [ ] Deep links to block detail routes load directly on refresh (SSR/server component safe).
 
 ### UX/UI checkpoints ("stunning" and readable)
-- [ ] Use a clear visual hierarchy (height, proposer, timestamp, entry count, short hashes).
+- [x] Use a clear visual hierarchy (height, proposer, timestamp, entry count, short hashes).
 - [ ] Use compact hash formatting with copy affordances for full values in detail view.
-- [ ] Add tasteful motion/hover states for block cards without reducing readability/performance.
+- [x] Add tasteful motion/hover states for block cards without reducing readability/performance.
 - [ ] Ensure color contrast and typography are accessible in both normal and dense lists.
 - [ ] Provide loading skeletons for first page and next-page fetches.
 - [ ] Provide explicit empty state (no blocks) and degraded state (node unreachable).
 
 ### Pagination interaction checkpoints
-- [ ] Support forward pagination (`Load more` or infinite scroll with guardrails).
+- [x] Support forward pagination (`Load more` or infinite scroll with guardrails).
 - [ ] Preserve scroll position and already loaded pages when navigating back from block detail.
 - [ ] Prevent duplicate blocks when paginating.
 - [ ] Disable/guard repeated fetch triggers while a page request is in flight.
 
 ### Block detail checkpoints
-- [ ] Detail page renders full block header values and entries payload summary from runtime data.
-- [ ] Add navigation affordances: back to list, previous block, next block (when available).
-- [ ] Show canonical source label (backend + node source) for operator trust/debugging.
-- [ ] Handle missing height cleanly (`Block not found` state).
+- [x] Detail page renders full block header values and entries payload summary from runtime data.
+- [x] Add navigation affordances: back to list, previous block, next block (when available).
+- [x] Show canonical source label (backend + node source) for operator trust/debugging.
+- [x] Handle missing height cleanly (`Block not found` state).
 
 ### Quality checkpoints
 - [ ] Unit tests for block list item rendering/formatting helpers.
