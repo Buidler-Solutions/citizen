@@ -61,21 +61,6 @@ When this is set to `false`, operators should expect:
 - Entries submitted to one validator to become visible on other validators
   after consensus finality (rather than immediately as node-local state).
 
-## Admission vs Ingestion Responsibility (Operator Note)
-
-Admission and ingestion are complementary controls and both are required in
-validator deployments:
-
-- **Manifest/admission controls** determine which peers are allowed to
-  participate in validator networking, handshake trust establishment, and commit
-  proof verification.
-- **Ingestion/consensus wiring controls** determine how API writes become
-  canonical ledger state (queueing, proposal inclusion, and consensus finality).
-
-Operationally, a strict admission allowlist alone does **not** guarantee API
-write convergence. Operators must still run validator nodes with consensus-backed
-ingestion (`api_local_finalize_mode = false`) and healthy queue drain/finality.
-
 ## Adapting to Production
 
 - **Replace signing keys**: swap `signing_key_hex` in each config with HSM-backed
@@ -146,25 +131,6 @@ Operator playbook for alerts:
    queue-full rejections persist.
 4. Escalate to validator incident handling if queue drain remains stalled despite
    healthy ingress and available capacity.
-
-## Restart Semantics (Current Implementation)
-
-The current tx ingress queue is process-local and in-memory. This has the
-following operational implications:
-
-- A validator restart clears any queued-but-not-yet-proposed entries on that
-  node.
-- Entries that were already committed by consensus remain durable in RocksDB and
-  are restored from ledger state on restart.
-- Clients should treat `202 Accepted` as "accepted for ingestion attempt" and
-  retry idempotently (same `entry_id`) if commit evidence is not observed within
-  the expected finality window.
-
-Until persistent txpool storage is introduced, operators should combine:
-
-1. conservative rolling-restart procedures,
-2. submitter-side idempotent retry policy, and
-3. queue/finality telemetry checks after maintenance windows.
 
 ## Config Reference
 
