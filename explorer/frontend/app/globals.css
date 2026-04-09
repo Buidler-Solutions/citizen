@@ -599,3 +599,139 @@ h1 {
   .charts-grid,
   .lists-grid { grid-template-columns: 1fr; }
 }
+
+/* Unified explorer theme across dashboard, blocks list, and block detail pages */
+html, body {
+  min-height: 100%;
+}
+
+body {
+  background: #1f2a5a;
+  color: #f5f7ff;
+  font-family: "IBM Plex Mono", "Fira Code", ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.dashboard-content {
+  grid-template-rows: auto;
+  align-content: start;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.dashboard-content > * {
+  margin-top: 0;
+}
+
+.hero.compact {
+  margin-bottom: 8px;
+}
+
+.hero h1,
+h1 {
+  color: var(--text-primary);
+}
+
+.subtitle,
+.eyebrow,
+.label,
+.panel-secondary,
+.panel-date,
+.search-shell {
+  color: var(--text-muted);
+}
+
+.panel-card,
+.card,
+.block-card,
+.meta,
+.kpi,
+.subrow,
+.copy-button,
+.button-link,
+.status-chip.ok,
+.status-chip.warn,
+.list-icon {
+  background: var(--panel);
+  border-color: var(--line);
+  color: var(--text-primary);
+  box-shadow: none;
+}
+
+.panel-card,
+.card,
+.block-card {
+  border: 1px solid var(--line);
+}
+
+.button-link {
+  background: var(--panel);
+  color: var(--text-primary);
+}
+
+.button-link:hover,
+.block-card:hover,
+.block-card:focus-visible,
+.nav-item.active,
+.nav-item:hover {
+  background: color-mix(in oklab, var(--accent) 15%, var(--panel));
+}
+
+.mode-pill,
+.icon-button,
+.wallet-button {
+  transition: background 120ms ease, border-color 120ms ease;
+}
+
+.nav-item.active {
+  border: 1px solid var(--line);
+}
+
+.row,
+.card h2,
+.card h3,
+.panel-card h2,
+.panel-card h3,
+.panel-card h4,
+.list-main p,
+.list-meta strong,
+.mono,
+.copy-inline {
+  color: var(--text-primary);
+}
+
+.list-main small,
+.list-meta small,
+.policy-note,
+.privacy-note {
+  color: var(--text-muted);
+}
+
+.copy-button {
+  font-family: inherit;
+}
+
+pre.mono {
+  max-width: 100%;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 900px) {
+  .explorer-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .explorer-shell.sidebar-collapsed {
+    grid-template-columns: 1fr;
+  }
+
+  .left-nav {
+    grid-template-rows: auto;
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .left-nav-links {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

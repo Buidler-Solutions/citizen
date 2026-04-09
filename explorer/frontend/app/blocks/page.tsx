@@ -15,8 +15,8 @@ export default async function BlocksPage({
   const result = await fetchBlocksPage(cursor);
 
   return (
-    <main className="page">
-      <section className="hero">
+    <>
+      <section className="hero compact">
         <div>
           <p className="eyebrow">Citizen Explorer</p>
           <h1>Blocks</h1>
@@ -25,13 +25,13 @@ export default async function BlocksPage({
       </section>
 
       {!result.ok ? (
-        <section className="card">
+        <section className="panel-card">
           <h2>Node unavailable</h2>
           <p className="subtitle">{result.message}</p>
         </section>
       ) : (
         <BlocksListClient initialPayload={result.payload} initialCursor={cursor} />
       )}
-    </main>
+    </>
   );
 }

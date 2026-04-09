@@ -81,14 +81,14 @@ export default async function BlockDetailPage({
 
   if (height === null) {
     return (
-      <main className="page">
-        <section className="card">
+      <>
+        <section className="panel-card">
           <h1>Invalid block height</h1>
           <Link href="/blocks" className="button-link">
             Back to blocks
           </Link>
         </section>
-      </main>
+      </>
     );
   }
 
@@ -97,23 +97,23 @@ export default async function BlockDetailPage({
 
   if (!blockResponse?.data?.block) {
     return (
-      <main className="page">
-        <section className="card">
+      <>
+        <section className="panel-card">
           <h1>Block not found</h1>
           <p className="subtitle">No block was returned for height {height}.</p>
           <Link href={backHref} className="button-link">
             Back to blocks
           </Link>
         </section>
-      </main>
+      </>
     );
   }
 
   const block = blockResponse.data.block;
 
   return (
-    <main className="page">
-      <section className="hero">
+    <>
+      <section className="hero compact">
         <div>
           <p className="eyebrow">Citizen Explorer</p>
           <h1>Block #{block.header.height}</h1>
@@ -135,7 +135,7 @@ export default async function BlockDetailPage({
         </Link>
       </section>
 
-      <section className="card">
+      <section className="panel-card">
         <h2>Header</h2>
         <div className="stack">
           <div className="row">
@@ -177,7 +177,7 @@ export default async function BlockDetailPage({
         </div>
       </section>
 
-      <section className="card">
+      <section className="panel-card">
         <h2>Entries</h2>
         <p className="subtitle">Total entries: {block.entries.length}</p>
 
@@ -203,7 +203,7 @@ export default async function BlockDetailPage({
             const expiresAt = asNumber(consentReceiptRecord?.expires_at);
 
             return (
-              <article key={`${block.header.height}-entry-${index}`} className="card">
+              <article key={`${block.header.height}-entry-${index}`} className="panel-card">
                 <div className="block-card-header">
                   <h3>Entry #{index + 1}</h3>
                   <span className="status-chip ok">{asString(entryRecord?.action) ?? 'Unknown action'}</span>
@@ -423,6 +423,6 @@ export default async function BlockDetailPage({
           })}
         </div>
       </section>
-    </main>
+    </>
   );
 }
