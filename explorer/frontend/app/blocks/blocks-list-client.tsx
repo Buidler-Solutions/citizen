@@ -9,6 +9,7 @@ import {
 } from '../lib/blocks';
 import { shortHash, toReadableDate } from '../lib/format';
 import { dedupeByHeight, mergePaginatedBlocks, sortByHeightDesc } from '../lib/blocks-list-state';
+import { blockDetailHref } from '../lib/block-routes';
 
 type BlocksListClientProps = {
   initialPayload: BlocksPageResponse;
@@ -106,7 +107,7 @@ export default function BlocksListClient({
     }
   }, [currentCursor, hasMore, items, nextCursor]);
 
-  const detailHrefFor = useCallback((height: number) => `/blocks/${height}`, []);
+  const detailHrefFor = useCallback((height: number) => blockDetailHref(height), []);
 
   const orderedItems = useMemo(() => sortByHeightDesc(items), [items]);
 

@@ -63,6 +63,32 @@ export type BlockPageResult =
   | { ok: true; payload: BlocksPageResponse }
   | { ok: false; message: string };
 
+
+async function backendErrorMessage(response: Response, endpoint: string): Promise<string> {
+  const base = `Backend returned ${response.status} for ${endpoint}.`;
+
+  try {
+    const data = (await response.clone().json()) as { message?: string; error?: string };
+    const message = typeof data.message === 'string' ? data.message : data.error;
+    if (typeof message === 'string' && message.trim().length > 0) {
+      return `${base} ${message.trim()}`;
+    }
+  } catch {
+    // continue to plain text fallback
+  }
+
+  try {
+    const text = await response.text();
+    if (text.trim().length > 0) {
+      return `${base} ${text.trim()}`;
+    }
+  } catch {
+    // keep generic message
+  }
+
+  return base;
+}
+
 export async function fetchBlocksPage(
   cursor?: string,
   limit = 20,
@@ -89,7 +115,7 @@ export async function fetchBlocksPage(
 
     return {
       ok: false,
-      message: `Backend returned ${response.status} for /blocks pagination endpoint, and localnet fallback also failed.`,
+      message: `${await backendErrorMessage(response, '/blocks pagination endpoint')} Localnet fallback also failed.`,
     };
   } catch {
     return fetchBlocksPageFromNode(cursor, limit);
