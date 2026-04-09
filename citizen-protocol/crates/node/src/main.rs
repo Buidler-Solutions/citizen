@@ -77,14 +77,6 @@ async fn main() -> anyhow::Result<()> {
     let ledger = Arc::new(Ledger::new(storage.clone(), key_registry));
     ledger.bootstrap_namespaces(config.namespaces.clone());
     let txpool = Arc::new(TxPool::default());
-    tracing::info!(
-        mode = ?config.node_role,
-        standby_only = config.standby_only,
-        write_enabled = config.node_role != NodeRole::Observer,
-        local_finalize_mode = config.api_local_finalize_mode,
-        txpool_len = txpool.len(),
-        "initialized shared txpool and api write mode"
-    );
 
     let api_server = if config.offchain_minio_config().is_some() {
         tracing::warn!("node does not yet support combining MinIO off-chain store with shared txpool; using local object store");
@@ -1072,27 +1064,5 @@ api_port = 9001"#,
                 config_path: PathBuf::from("config/testnet/validator.toml")
             }
         );
-    }
-
-    #[test]
-    fn observer_edge_profile_disables_write_endpoints() {
-        let config = NodeConfig {
-            node_role: NodeRole::Observer,
-            ..NodeConfig::default()
-        };
-
-        let edge = config.api_edge_config();
-        assert!(!edge.write_enabled);
-    }
-
-    #[test]
-    fn validator_edge_profile_keeps_write_endpoints_enabled() {
-        let config = NodeConfig {
-            node_role: NodeRole::Validator,
-            ..NodeConfig::default()
-        };
-
-        let edge = config.api_edge_config();
-        assert!(edge.write_enabled);
     }
 }

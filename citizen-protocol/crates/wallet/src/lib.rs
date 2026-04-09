@@ -2544,10 +2544,7 @@ mod tests {
         let authorized_public = X25519PublicKey::from(&authorized_secret);
         let impostor_secret = StaticSecret::from([32u8; 32]);
 
-        let authorized_did = format!(
-            "did:key:x25519:{}",
-            hex::encode(authorized_public.as_bytes())
-        );
+        let authorized_did = format!("did:key:x25519:{}", hex::encode(authorized_public.as_bytes()));
 
         let mut reader_public_keys = BTreeMap::new();
         reader_public_keys.insert(
