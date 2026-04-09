@@ -2,7 +2,9 @@
 
 This checklist tracks frontend milestones that derive directly from Citizen node runtime data surfaced through the explorer backend.
 
-> Progress note (April 9, 2026): Initial `/blocks` and `/blocks/[height]` implementation is now in place in the frontend with backend-connected fetches and graceful fallback states; remaining checklist items stay open.
+> Progress note (April 9, 2026): Initial `/blocks` and `/blocks/[height]` implementation is now in place in the frontend with backend-connected fetches and graceful fallback states.
+>
+> Progress note (April 9, 2026 — follow-up): Added route-level loading skeletons for list/detail, compact hash presentation with one-click copy controls in block detail, and improved text contrast/readability defaults in shared explorer styles.
 
 ## Checkpoint 1 — Paginated Blocks Gallery (Clickable to Block Detail)
 
@@ -26,14 +28,14 @@ Build a technically robust and visually elegant blocks list experience where eve
 - [x] Add a blocks list route/page (for example `/blocks`) as the primary chain exploration surface.
 - [x] Add a block details route/page (for example `/blocks/[height]`).
 - [x] Every rendered block list item is keyboard-focusable and clickable, navigating to the corresponding detail route.
-- [ ] Deep links to block detail routes load directly on refresh (SSR/server component safe).
+- [x] Deep links to block detail routes load directly on refresh (SSR/server component safe).
 
 ### UX/UI checkpoints ("stunning" and readable)
 - [x] Use a clear visual hierarchy (height, proposer, timestamp, entry count, short hashes).
-- [ ] Use compact hash formatting with copy affordances for full values in detail view.
+- [x] Use compact hash formatting with copy affordances for full values in detail view.
 - [x] Add tasteful motion/hover states for block cards without reducing readability/performance.
-- [ ] Ensure color contrast and typography are accessible in both normal and dense lists.
-- [ ] Provide loading skeletons for first page and next-page fetches.
+- [x] Ensure color contrast and typography are accessible in both normal and dense lists.
+- [x] Provide loading skeletons for first page and next-page fetches.
 - [ ] Provide explicit empty state (no blocks) and degraded state (node unreachable).
 
 ### Pagination interaction checkpoints

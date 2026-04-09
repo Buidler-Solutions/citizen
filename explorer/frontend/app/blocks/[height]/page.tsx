@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { fetchBlockByHeight } from '../../lib/blocks';
 import { shortHash, toReadableDate } from '../../lib/format';
+import CopyableHash from '../../components/copyable-hash';
 
 export const dynamic = 'force-dynamic';
 
@@ -92,19 +93,35 @@ export default async function BlockDetailPage({
           </div>
           <div className="row">
             <span className="label">Proposer</span>
-            <span className="mono">{block.header.proposer}</span>
+            <CopyableHash
+              label="proposer value"
+              value={block.header.proposer}
+              preview={shortHash(block.header.proposer)}
+            />
           </div>
           <div className="row">
             <span className="label">Prev hash</span>
-            <span className="mono">{block.header.prev_hash}</span>
+            <CopyableHash
+              label="previous hash"
+              value={block.header.prev_hash}
+              preview={shortHash(block.header.prev_hash)}
+            />
           </div>
           <div className="row">
             <span className="label">Entry root</span>
-            <span className="mono">{block.header.entry_root}</span>
+            <CopyableHash
+              label="entry root"
+              value={block.header.entry_root}
+              preview={shortHash(block.header.entry_root)}
+            />
           </div>
           <div className="row">
             <span className="label">Aggregated signature</span>
-            <span className="mono">{block.header.commit_proof.aggregated_signature}</span>
+            <CopyableHash
+              label="aggregated signature"
+              value={block.header.commit_proof.aggregated_signature}
+              preview={shortHash(block.header.commit_proof.aggregated_signature)}
+            />
           </div>
         </div>
       </section>
