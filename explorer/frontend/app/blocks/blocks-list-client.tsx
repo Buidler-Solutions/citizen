@@ -8,6 +8,7 @@ import {
   fetchBlocksPage,
 } from '../lib/blocks';
 import { shortHash, toReadableDate } from '../lib/format';
+import { dedupeByHeight, mergePaginatedBlocks, sortByHeightDesc } from '../lib/blocks-list-state';
 
 type BlocksListClientProps = {
   initialPayload: BlocksPageResponse;
@@ -23,18 +24,6 @@ type StoredBlocksState = {
 };
 
 const storageKey = 'citizen.explorer.blocks.state.v1';
-
-function dedupeByHeight(items: BlockSummary[]): BlockSummary[] {
-  const seen = new Set<number>();
-  return items.filter((item) => {
-    if (seen.has(item.height)) {
-      return false;
-    }
-
-    seen.add(item.height);
-    return true;
-  });
-}
 
 export default function BlocksListClient({
   initialPayload,
@@ -119,10 +108,7 @@ export default function BlocksListClient({
 
   const detailHrefFor = useCallback((height: number) => `/blocks/${height}`, []);
 
-  const orderedItems = useMemo(
-    () => [...items].sort((a, b) => b.height - a.height),
-    [items],
-  );
+  const orderedItems = useMemo(() => sortByHeightDesc(items), [items]);
 
   const onLoadMore = useCallback(async () => {
     if (!hasMore || !nextCursor || isLoadingMore) {
@@ -140,7 +126,7 @@ export default function BlocksListClient({
       return;
     }
 
-    setItems((existing) => dedupeByHeight([...existing, ...result.payload.data.items]));
+    setItems((existing) => mergePaginatedBlocks(existing, result.payload.data.items));
     setNextCursor(result.payload.data.next_cursor);
     setHasMore(result.payload.data.has_more);
     setIsLoadingMore(false);
