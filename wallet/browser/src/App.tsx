@@ -730,6 +730,16 @@ export function App() {
     setStatus('Signer DID copied to clipboard.');
   };
 
+  const handleCopyReaderDid = async () => {
+    const readerDid = protocolKeyMaterial?.reader.readerDid;
+    if (!readerDid || readerDid === 'Unavailable') {
+      setStatus('Reader DID is unavailable to copy.');
+      return;
+    }
+    await navigator.clipboard.writeText(readerDid);
+    setStatus('Reader DID copied to clipboard.');
+  };
+
   if (isLoading) {
     return (
       <main className="wallet-root">
@@ -859,7 +869,6 @@ export function App() {
             </select>
           </div>
           <p className="network-pill">citizen-{state.network}</p>
-          <p className="network-pill">Approval UI rollout: {rolloutLabel(APPROVAL_UI_ROLLOUT_STAGE)}</p>
           {protocolKeyMaterial ? (
             <div className="top-address-row">
               <p className="top-address" title={protocolKeyMaterial.signer.did}>
@@ -880,6 +889,14 @@ export function App() {
               <p className="top-address" title={protocolKeyMaterial.reader.readerDid}>
                 Reader (X25519): {mask(protocolKeyMaterial.reader.readerDid)}
               </p>
+              <button
+                className="copy-address-button"
+                onClick={() => void handleCopyReaderDid()}
+                aria-label="Copy reader DID to clipboard"
+                title="Copy reader DID"
+              >
+                📋
+              </button>
             </div>
           ) : null}
         </header>
@@ -1009,94 +1026,6 @@ export function App() {
                   ))}
                 </article>
               ) : null}
-
-              <article className="request-card">
-                <h2>Approval rollout metrics</h2>
-                <p className="meta-text">Tracked from request audit events for this wallet profile and rollout stage.</p>
-                {approvalMetrics ? (
-                  <dl>
-                    <div><dt>Total decided requests</dt><dd>{approvalMetrics.totalRequests}</dd></div>
-                    <div><dt>Approval rate</dt><dd>{(approvalMetrics.approvalRate * 100).toFixed(1)}%</dd></div>
-                    <div><dt>Rejection rate</dt><dd>{(approvalMetrics.rejectionRate * 100).toFixed(1)}%</dd></div>
-                    <div><dt>Timeout rate</dt><dd>{(approvalMetrics.timeoutRate * 100).toFixed(1)}%</dd></div>
-                    <div>
-                      <dt>Relay/direct submit failure rate</dt>
-                      <dd>{approvalMetrics.relayDirectSubmitFailureRate === null ? 'n/a in wallet-only telemetry' : `${(approvalMetrics.relayDirectSubmitFailureRate * 100).toFixed(1)}%`}</dd>
-                    </div>
-                  </dl>
-                ) : (
-                  <p className="meta-text">No approval metrics captured yet.</p>
-                )}
-              </article>
-
-              <article className="request-card">
-                <h2>Create transaction</h2>
-                <p className="meta-text">Quick CTA to start composing and signing a new transaction payload.</p>
-                <button className="primary" onClick={() => setActiveTab('compose')}>Open Compose tab</button>
-              </article>
-
-              <article className="request-card">
-                <h2>Wallet direct submit (Model 2 preview)</h2>
-                <p className="meta-text">
-                  Direct submit sends signed metadata by default. Canonical payload bytes are only shared when you
-                  explicitly opt in for this submit.
-                </p>
-                <div className="form-grid">
-                  <label htmlFor="direct-submit-destination">Destination endpoint</label>
-                  <select
-                    id="direct-submit-destination"
-                    value={directSubmitDestination}
-                    onChange={(event) => setDirectSubmitDestination(event.target.value)}
-                  >
-                    {(directSubmitConfig?.allowlistedDestinations ?? []).map((destination) => (
-                      <option key={destination} value={destination}>{destination}</option>
-                    ))}
-                  </select>
-                  <label className="checkbox-row">
-                    <input
-                      type="checkbox"
-                      checked={confirmDirectSubmitDestination}
-                      onChange={(event) => setConfirmDirectSubmitDestination(event.target.checked)}
-                    />
-                    <span>I confirm this destination endpoint for this submit.</span>
-                  </label>
-                  <label className="checkbox-row">
-                    <input
-                      type="checkbox"
-                      checked={consentShareSigningPayload}
-                      onChange={(event) => setConsentShareSigningPayload(event.target.checked)}
-                    />
-                    <span>I consent to share canonical signing payload text with this endpoint.</span>
-                  </label>
-                  <div className="button-row">
-                    <button className="primary" onClick={handleDirectSubmitLatestSigned}>
-                      Submit latest signed artifact
-                    </button>
-                    <button className="ghost" onClick={handleSetDefaultDirectSubmitDestination}>
-                      Save as default
-                    </button>
-                  </div>
-                </div>
-                {directSubmitReceipts.length > 0 ? (
-                  <>
-                    <h3>Stored direct submit receipts</h3>
-                    <ul>
-                      {directSubmitReceipts.map((receipt) => (
-                        <li key={`${receipt.traceId}-${receipt.submittedAt}`} className="activity-item">
-                          <div>
-                            <strong>{receipt.receiptId ?? 'pending receipt id'}</strong>
-                            <p className="meta-text">{receipt.destinationUrl}</p>
-                            <p className="meta-text">trace {receipt.traceId}</p>
-                          </div>
-                          <span>{new Date(receipt.submittedAt).toLocaleString()}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </>
-                ) : (
-                  <p className="meta-text">No direct submit receipts stored yet.</p>
-                )}
-              </article>
 
               <article className="request-card">
                 <h2>Signed transaction activity</h2>
