@@ -56,3 +56,4 @@ citizen-protocol/data/alpha/CURRENT
 citizen-protocol/data/beta/CURRENT
 citizen-protocol/data/gamma/CURRENT
 wallet/backend/data/
+wallet/backend/data/wallet-auth-state.json

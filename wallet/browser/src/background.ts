@@ -236,8 +236,16 @@ function walletError(code: string, message: string): WalletResponse {
 }
 
 function isExtensionUiMessage(sender: chrome.runtime.MessageSender): boolean {
-  const expected = chrome.runtime.getURL('');
-  return typeof sender.url === 'string' && sender.url.startsWith(expected);
+  if (sender.id !== chrome.runtime.id || typeof sender.url !== 'string') {
+    return false;
+  }
+  try {
+    const senderUrl = new URL(sender.url);
+    const walletUiUrl = new URL(chrome.runtime.getURL('index.html'));
+    return senderUrl.origin === walletUiUrl.origin && senderUrl.pathname === walletUiUrl.pathname;
+  } catch {
+    return false;
+  }
 }
 
 
@@ -1253,6 +1261,47 @@ async function exportProtocolSignerSecret(password: string): Promise<WalletRespo
   return { ok: true, result: toHex(secret) };
 }
 
+async function exportProtocolKeypairs(password: string): Promise<WalletResponse> {
+  const unlocked = await isUnlocked();
+  if (!unlocked) {
+    return { ok: false, error: 'Unlock wallet before exporting protocol keypairs.' };
+  }
+
+  const storedHash = await getPasswordHash();
+  if (!storedHash) {
+    return { ok: false, error: 'No password configured.' };
+  }
+
+  const inputHash = await sha256Hex(password);
+  if (inputHash !== storedHash) {
+    return { ok: false, error: 'Invalid password.' };
+  }
+
+  const walletRecord = await getActiveWalletRecord();
+  if (!walletRecord) {
+    return { ok: false, error: 'No active wallet is configured.' };
+  }
+
+  const signer = await getOrCreateProtocolSigner(walletRecord);
+  const reader = await getOrCreateEncryptionReaderKey(walletRecord);
+  const protocolSecretHex = toHex(await resolveProtocolSecretForWallet(walletRecord));
+  return {
+    ok: true,
+    result: {
+      signer_did: signer.did,
+      signer_algorithm: 'ed25519',
+      signer_ed25519_public_key_hex: signer.verifyingKeyHex,
+      signer_ed25519_private_key_hex: protocolSecretHex,
+      reader_did: reader.did,
+      reader_algorithm: 'x25519',
+      reader_x25519_public_key_hex: reader.publicKeyHex,
+      reader_x25519_private_key_hex: protocolSecretHex,
+      mnemonic_phrase: walletRecord.mnemonicPhrase ?? null,
+      derivation_path: walletRecord.mnemonicPhrase ? (walletRecord.derivationPath ?? DEFAULT_DERIVATION_PATH) : null,
+    },
+  };
+}
+
 async function exportMnemonic(password: string): Promise<WalletResponse> {
   const unlocked = await isUnlocked();
   if (!unlocked) {
@@ -1606,6 +1655,17 @@ async function handleWalletRequest(
       return { ok: false, error: 'wallet_exportProtocolSignerSecret requires your password.' };
     }
     return exportProtocolSignerSecret(password);
+  }
+
+  if (request.method === 'wallet_exportProtocolKeypairs') {
+    if (!isUiRequest) {
+      return { ok: false, error: 'Unauthorized wallet method.' };
+    }
+    const [password] = request.params ?? [];
+    if (typeof password !== 'string') {
+      return { ok: false, error: 'wallet_exportProtocolKeypairs requires your password.' };
+    }
+    return exportProtocolKeypairs(password);
   }
 
   if (request.method === 'wallet_exportMnemonic') {
