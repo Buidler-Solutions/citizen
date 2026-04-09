@@ -58,3 +58,4 @@ citizen-protocol/data/gamma/CURRENT
 wallet/backend/data/
 wallet/backend/data/wallet-auth-state.json
 wallet/browser/dist/popup.js
+explorer/frontend/.next
