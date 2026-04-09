@@ -9,22 +9,17 @@ type Params = {
   height: string;
 };
 
-type SearchParams = Record<string, string | string[] | undefined>;
-
 function parseHeight(raw: string): number | null {
   const value = Number(raw);
   return Number.isInteger(value) && value >= 0 ? value : null;
 }
 
 export default async function BlockDetailPage({
-  params,
-  searchParams,
+  params
 }: {
   params: Promise<Params>;
-  searchParams: Promise<SearchParams>;
 }) {
   const resolvedParams = await params;
-  const resolvedSearch = await searchParams;
   const height = parseHeight(resolvedParams.height);
 
   if (height === null) {
@@ -41,8 +36,7 @@ export default async function BlockDetailPage({
   }
 
   const blockResponse = await fetchBlockByHeight(height);
-  const backCursor = typeof resolvedSearch.from === 'string' ? resolvedSearch.from : '';
-  const backHref = backCursor ? `/blocks?cursor=${encodeURIComponent(backCursor)}` : '/blocks';
+  const backHref = '/blocks';
 
   if (!blockResponse?.data.block) {
     return (

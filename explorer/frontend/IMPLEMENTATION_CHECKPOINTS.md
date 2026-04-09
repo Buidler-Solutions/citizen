@@ -8,6 +8,8 @@ This checklist tracks frontend milestones that derive directly from Citizen node
 
 > Progress note (April 9, 2026 — checkpoint sync): Verified in-repo frontend coverage now includes explicit empty/degraded list states, route-level skeletons, card-level click-through to detail, and source-aware detail rendering. Remaining checkpoint gaps are focused on backend pagination contract hardening and client-side list state retention when returning from detail navigation.
 
+> Progress note (April 9, 2026 — client pagination/state): Migrated `/blocks` pagination to client-managed incremental loading with in-flight request guards, dedupe-by-height append logic, and session-backed list/scroll restoration when returning from block detail.
+
 ## Checkpoint 1 — Paginated Blocks Gallery (Clickable to Block Detail)
 
 **Goal**
@@ -42,9 +44,9 @@ Build a technically robust and visually elegant blocks list experience where eve
 
 ### Pagination interaction checkpoints
 - [x] Support forward pagination (`Load more` or infinite scroll with guardrails).
-- [ ] Preserve scroll position and already loaded pages when navigating back from block detail.
-- [ ] Prevent duplicate blocks when paginating.
-- [ ] Disable/guard repeated fetch triggers while a page request is in flight.
+- [x] Preserve scroll position and already loaded pages when navigating back from block detail.
+- [x] Prevent duplicate blocks when paginating.
+- [x] Disable/guard repeated fetch triggers while a page request is in flight.
 
 ### Block detail checkpoints
 - [x] Detail page renders full block header values and entries payload summary from runtime data.
@@ -60,9 +62,9 @@ Build a technically robust and visually elegant blocks list experience where eve
 
 ### Active implementation next-up (Checkpoint 1 completion track)
 - [ ] Add/verify explorer backend paginated `GET /blocks` endpoint contract (`items`, `next_cursor`, `has_more`) so frontend pagination is backed by a stable runtime source instead of placeholder assumptions.
-- [ ] Move blocks list pagination to a client-state flow that appends pages in-place and avoids full-page cursor transitions.
-- [ ] Persist list state (`loaded heights`, `next_cursor`, `scroll position`) across list -> detail -> list navigation to preserve operator context.
-- [ ] Add in-flight guards + dedupe-by-height logic in pagination append path to satisfy no-duplicate and repeated-trigger checkpoints.
+- [x] Move blocks list pagination to a client-state flow that appends pages in-place and avoids full-page cursor transitions.
+- [x] Persist list state (`loaded heights`, `next_cursor`, `scroll position`) across list -> detail -> list navigation to preserve operator context.
+- [x] Add in-flight guards + dedupe-by-height logic in pagination append path to satisfy no-duplicate and repeated-trigger checkpoints.
 - [ ] Backfill focused tests for formatting helpers and list/detail navigation behavior.
 
 ### Definition of done
