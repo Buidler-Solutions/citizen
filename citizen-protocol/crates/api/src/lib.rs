@@ -2346,7 +2346,6 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
         }
 
         let enqueue_result = txpool.enqueue(entry);
-        let queue_metrics = txpool.metrics_snapshot();
         match enqueue_result {
             EnqueueResult::Queued { .. } => (
                 StatusCode::ACCEPTED,
@@ -2355,10 +2354,7 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
                     "entry_id": entry_id,
                     "namespace": namespace,
                     "envelope_id": envelope.envelope_id,
-                    "queue_len": queue_metrics.queue_len,
-                    "queue_capacity": queue_metrics.capacity,
-                    "queue_enqueued_total": queue_metrics.enqueued_total,
-                    "queue_drained_total": queue_metrics.drained_total,
+                    "queue_len": txpool.len(),
                     "local_finalize_mode": false,
                 })),
             ),
@@ -2369,9 +2365,7 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
                     "entry_id": entry_id,
                     "namespace": namespace,
                     "envelope_id": envelope.envelope_id,
-                    "queue_len": queue_metrics.queue_len,
-                    "queue_capacity": queue_metrics.capacity,
-                    "queue_duplicate_reject_total": queue_metrics.enqueue_rejected_duplicate_total,
+                    "queue_len": txpool.len(),
                     "local_finalize_mode": false,
                 })),
             ),
@@ -2383,9 +2377,8 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
                     "entry_id": entry_id,
                     "namespace": namespace,
                     "envelope_id": envelope.envelope_id,
-                    "queue_len": queue_metrics.queue_len,
+                    "queue_len": txpool.len(),
                     "queue_capacity": capacity,
-                    "queue_full_reject_total": queue_metrics.enqueue_rejected_full_total,
                     "local_finalize_mode": false,
                 })),
             ),
@@ -3750,10 +3743,6 @@ mod tests {
         let submit_json: Value = serde_json::from_slice(&submit_body).expect("submit json");
         assert_eq!(submit_json["status"], "queued");
         assert_eq!(submit_json["local_finalize_mode"], false);
-        assert_eq!(submit_json["queue_len"], 1);
-        assert_eq!(submit_json["queue_capacity"], 10_000);
-        assert_eq!(submit_json["queue_enqueued_total"], 1);
-        assert_eq!(submit_json["queue_drained_total"], 0);
         assert!(submit_json["receipt"].is_null());
         assert_eq!(txpool.len(), 1);
     }
@@ -3861,9 +3850,7 @@ mod tests {
             .expect("submit bytes");
         let submit_json: Value = serde_json::from_slice(&submit_body).expect("submit json");
         assert_eq!(submit_json["status"], "queue_full");
-        assert_eq!(submit_json["queue_len"], 0);
         assert_eq!(submit_json["queue_capacity"], 0);
-        assert_eq!(submit_json["queue_full_reject_total"], 1);
         assert_eq!(txpool.len(), 0);
     }
 

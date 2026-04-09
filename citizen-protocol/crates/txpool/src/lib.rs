@@ -1,14 +1,12 @@
 use citizen_types::LedgerEntry;
 use parking_lot::Mutex;
 use std::collections::{HashSet, VecDeque};
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use uuid::Uuid;
 
 #[derive(Clone, Debug)]
 pub struct TxPool {
     inner: Arc<Mutex<TxPoolState>>,
-    metrics: Arc<TxPoolMetrics>,
     capacity: usize,
 }
 
@@ -22,7 +20,6 @@ impl TxPool {
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
             inner: Arc::new(Mutex::new(TxPoolState::default())),
-            metrics: Arc::new(TxPoolMetrics::default()),
             capacity,
         }
     }
@@ -30,16 +27,12 @@ impl TxPool {
     pub fn enqueue(&self, entry: LedgerEntry) -> EnqueueResult {
         let mut state = self.inner.lock();
         if state.queue.len() >= self.capacity {
-            self.metrics.enqueue_rejected_full_total.fetch_add(1, Ordering::Relaxed);
             return EnqueueResult::Full {
                 entry_id: entry.entry_id,
                 capacity: self.capacity,
             };
         }
         if !state.entry_ids.insert(entry.entry_id) {
-            self.metrics
-                .enqueue_rejected_duplicate_total
-                .fetch_add(1, Ordering::Relaxed);
             return EnqueueResult::Duplicate {
                 entry_id: entry.entry_id,
             };
@@ -47,7 +40,6 @@ impl TxPool {
 
         let entry_id = entry.entry_id;
         state.queue.push_back(entry);
-        self.metrics.enqueued_total.fetch_add(1, Ordering::Relaxed);
         EnqueueResult::Queued { entry_id }
     }
 
@@ -65,11 +57,6 @@ impl TxPool {
             state.entry_ids.remove(&entry.entry_id);
             drained.push(entry);
         }
-        if !drained.is_empty() {
-            self.metrics
-                .drained_total
-                .fetch_add(drained.len() as u64, Ordering::Relaxed);
-        }
         drained
     }
 
@@ -79,23 +66,6 @@ impl TxPool {
 
     pub fn is_empty(&self) -> bool {
         self.len() == 0
-    }
-
-    pub fn metrics_snapshot(&self) -> TxPoolMetricsSnapshot {
-        TxPoolMetricsSnapshot {
-            queue_len: self.len() as u64,
-            capacity: self.capacity as u64,
-            enqueued_total: self.metrics.enqueued_total.load(Ordering::Relaxed),
-            drained_total: self.metrics.drained_total.load(Ordering::Relaxed),
-            enqueue_rejected_duplicate_total: self
-                .metrics
-                .enqueue_rejected_duplicate_total
-                .load(Ordering::Relaxed),
-            enqueue_rejected_full_total: self
-                .metrics
-                .enqueue_rejected_full_total
-                .load(Ordering::Relaxed),
-        }
     }
 }
 
@@ -110,24 +80,6 @@ pub enum EnqueueResult {
     Queued { entry_id: Uuid },
     Duplicate { entry_id: Uuid },
     Full { entry_id: Uuid, capacity: usize },
-}
-
-#[derive(Debug, Default)]
-struct TxPoolMetrics {
-    enqueued_total: AtomicU64,
-    drained_total: AtomicU64,
-    enqueue_rejected_duplicate_total: AtomicU64,
-    enqueue_rejected_full_total: AtomicU64,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct TxPoolMetricsSnapshot {
-    pub queue_len: u64,
-    pub capacity: u64,
-    pub enqueued_total: u64,
-    pub drained_total: u64,
-    pub enqueue_rejected_duplicate_total: u64,
-    pub enqueue_rejected_full_total: u64,
 }
 
 #[cfg(test)]
@@ -254,50 +206,5 @@ mod tests {
             }
         );
         assert_eq!(pool.len(), 1);
-    }
-
-    #[test]
-    fn metrics_track_enqueue_drain_and_rejections() {
-        let pool = TxPool::with_capacity(2);
-        let first = fixture_entry(Uuid::new_v4());
-        let second = fixture_entry(Uuid::new_v4());
-        let third = fixture_entry(Uuid::new_v4());
-
-        assert_eq!(
-            pool.enqueue(first.clone()),
-            EnqueueResult::Queued {
-                entry_id: first.entry_id
-            }
-        );
-        assert_eq!(
-            pool.enqueue(first.clone()),
-            EnqueueResult::Duplicate {
-                entry_id: first.entry_id
-            }
-        );
-        assert_eq!(
-            pool.enqueue(second.clone()),
-            EnqueueResult::Queued {
-                entry_id: second.entry_id
-            }
-        );
-        assert_eq!(
-            pool.enqueue(third.clone()),
-            EnqueueResult::Full {
-                entry_id: third.entry_id,
-                capacity: 2
-            }
-        );
-
-        let drained = pool.drain(2);
-        assert_eq!(drained.len(), 2);
-
-        let metrics = pool.metrics_snapshot();
-        assert_eq!(metrics.queue_len, 0);
-        assert_eq!(metrics.capacity, 2);
-        assert_eq!(metrics.enqueued_total, 2);
-        assert_eq!(metrics.drained_total, 2);
-        assert_eq!(metrics.enqueue_rejected_duplicate_total, 1);
-        assert_eq!(metrics.enqueue_rejected_full_total, 1);
     }
 }
