@@ -96,6 +96,19 @@ type ProtocolKeyMaterial = {
   };
 };
 
+type ProtocolKeypairsExport = {
+  signer_did: string;
+  signer_algorithm: string;
+  signer_ed25519_public_key_hex: string;
+  signer_ed25519_private_key_hex: string;
+  reader_did: string;
+  reader_algorithm: string;
+  reader_x25519_public_key_hex: string;
+  reader_x25519_private_key_hex: string;
+  mnemonic_phrase: string | null;
+  derivation_path: string | null;
+};
+
 
 type ApprovalMetrics = {
   totalRequests: number;
@@ -156,6 +169,7 @@ const PROFILE_KEY = 'citizen.browser.wallet.profile.v1';
 const DAPP_PENDING_REQUESTS_KEY = 'citizen.browser.wallet.dapp_pending_requests.v1';
 
 const APPROVAL_UI_ROLLOUT_STAGE = getApprovalUiRolloutStageFromEnv();
+const CREDENTIAL_REVEAL_TTL_MS = 60_000;
 
 function rolloutLabel(stage: ApprovalUiRolloutStage): string {
   if (stage === 'general') {
@@ -243,7 +257,7 @@ export function App() {
   const [locked, setLocked] = useState(false);
   const [status, setStatus] = useState('');
   const [secretPassword, setSecretPassword] = useState('');
-  const [secretKey, setSecretKey] = useState('');
+  const [protocolKeypairs, setProtocolKeypairs] = useState<ProtocolKeypairsExport | null>(null);
   const [mnemonicPassword, setMnemonicPassword] = useState('');
   const [mnemonicPhrase, setMnemonicPhrase] = useState('');
   const [importMnemonicPhrase, setImportMnemonicPhrase] = useState('');
@@ -352,7 +366,7 @@ export function App() {
           lastRequest: lastRequest ?? null,
         });
         if (!isUnlocked) {
-          setSecretKey('');
+          setProtocolKeypairs(null);
           setComposeSignature('');
         }
         return;
@@ -375,6 +389,24 @@ export function App() {
   useEffect(() => {
     void refreshState();
   }, [refreshState]);
+
+  useEffect(() => {
+    if (activeTab !== 'security' && protocolKeypairs) {
+      setProtocolKeypairs(null);
+      setSecretPassword('');
+    }
+  }, [activeTab, protocolKeypairs]);
+
+  useEffect(() => {
+    if (!protocolKeypairs) {
+      return;
+    }
+    const timeoutId = window.setTimeout(() => {
+      setProtocolKeypairs(null);
+      setStatus('Protocol wallet credentials auto-hidden after 60 seconds.');
+    }, CREDENTIAL_REVEAL_TTL_MS);
+    return () => window.clearTimeout(timeoutId);
+  }, [protocolKeypairs]);
 
   useEffect(() => {
     const handleStorageChange: Parameters<typeof chrome.storage.onChanged.addListener>[0] = (changes, areaName) => {
@@ -439,7 +471,7 @@ export function App() {
     const result = await callWallet('wallet_lock');
     setStatus(result.ok ? 'Wallet locked.' : result.error ?? 'Failed to lock wallet.');
     setMenuOpen(false);
-    setSecretKey('');
+    setProtocolKeypairs(null);
     setSecretPassword('');
     setComposeSignature('');
     await refreshState();
@@ -448,27 +480,27 @@ export function App() {
   const handleRevealSecret = async () => {
     setStatus('');
     if (!secretPassword) {
-      setStatus('Enter password to view protocol signer secret.');
+      setStatus('Enter password to view wallet protocol credentials.');
       return;
     }
 
-    const result = await callWallet('wallet_exportProtocolSignerSecret', [secretPassword]);
-    if (!result.ok || typeof result.result !== 'string') {
-      setStatus(result.error ?? 'Unable to reveal protocol signer secret.');
+    const result = await callWallet('wallet_exportProtocolKeypairs', [secretPassword]);
+    if (!result.ok || typeof result.result !== 'object' || result.result === null) {
+      setStatus(result.error ?? 'Unable to reveal wallet protocol credentials.');
       return;
     }
 
-    setSecretKey(result.result);
+    setProtocolKeypairs(result.result as ProtocolKeypairsExport);
     setSecretPassword('');
-    setStatus('Protocol signer secret revealed. Keep it private and rotate if exposed.');
+    setStatus('Protocol wallet credentials revealed. Keep them private and rotate if exposed.');
   };
 
   const handleCopySecret = async () => {
-    if (!secretKey) {
+    if (!protocolKeypairs) {
       return;
     }
-    await navigator.clipboard.writeText(secretKey);
-    setStatus('Protocol signer secret copied to clipboard.');
+    await navigator.clipboard.writeText(JSON.stringify(protocolKeypairs, null, 2));
+    setStatus('Protocol wallet credentials copied to clipboard.');
   };
 
   const handleRevealMnemonic = async () => {
@@ -1201,18 +1233,22 @@ export function App() {
               </article>
 
               <article className="request-card">
-                <h2>Protocol signer secret (Ed25519 seed) (reveal/hide)</h2>
+                <h2>Protocol wallet credentials (Ed25519 + X25519) (reveal/hide)</h2>
                 <div className="form-grid">
                   <input
                     type="password"
-                    placeholder="Re-enter password to reveal protocol signer secret"
+                    placeholder="Re-enter password to reveal wallet protocol credentials"
                     value={secretPassword}
                     onChange={(event) => setSecretPassword(event.target.value)}
                   />
-                  <button className="primary" onClick={handleRevealSecret}>Reveal protocol signer secret</button>
-                  {secretKey ? <button className="ghost" onClick={() => setSecretKey('')}>Hide secret</button> : null}
-                  {secretKey ? <button className="ghost" onClick={handleCopySecret}>Copy secret</button> : null}
-                  {secretKey ? <code className="secret-box">{secretKey}</code> : <p className="meta-text">Hidden</p>}
+                  <button className="primary" onClick={handleRevealSecret}>Reveal wallet protocol credentials</button>
+                  {protocolKeypairs ? <button className="ghost" onClick={() => { setProtocolKeypairs(null); }}>Hide credentials</button> : null}
+                  {protocolKeypairs ? <button className="ghost" onClick={handleCopySecret}>Copy credentials</button> : null}
+                  {protocolKeypairs ? (
+                    <code className="secret-box">{JSON.stringify(protocolKeypairs, null, 2)}</code>
+                  ) : (
+                    <p className="meta-text">Hidden</p>
+                  )}
                 </div>
               </article>
 
