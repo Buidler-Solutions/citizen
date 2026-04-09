@@ -22,16 +22,16 @@ Status: Draft implementation checkpoint checklist for making API submissions flo
 
 ## Checkpoint 1 — Transaction ingress queue (txpool)
 
-- [x] Add shared ingress component (new module or crate, e.g. `crates/txpool`).
+- [ ] Add shared ingress component (new module or crate, e.g. `crates/txpool`).
 - [ ] Define minimal interface:
-  - [x] `enqueue(entry: LedgerEntry) -> EnqueueResult`
-  - [x] `drain(max: usize) -> Vec<LedgerEntry>`
-  - [x] Optional: `len()` for diagnostics.
-- [x] Add deterministic dedupe policy (recommended by `entry_id`).
+  - [ ] `enqueue(entry: LedgerEntry) -> Result<...>`
+  - [ ] `drain(max: usize) -> Vec<LedgerEntry>`
+  - [ ] Optional: `len()` for diagnostics.
+- [ ] Add deterministic dedupe policy (recommended by `entry_id`).
 - [ ] Add unit tests:
-  - [x] enqueue/drain order behavior.
-  - [x] dedupe behavior.
-  - [x] max-batch drain behavior.
+  - [ ] enqueue/drain order behavior.
+  - [ ] dedupe behavior.
+  - [ ] max-batch drain behavior.
 
 ## Checkpoint 2 — API write path migration
 
