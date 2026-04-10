@@ -2070,9 +2070,11 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
                 .namespace_entries(&descriptor.namespace)
                 .unwrap_or_default();
             for entry in entries {
-                if entry.payload_commitment.as_deref() == Some(data_hash.as_str())
-                    || entry.payload_commitment.as_deref() == Some(normalized_data_hash.as_str())
-                {
+                let matched_payload_commitment =
+                    entry.payload_commitment.as_deref() == Some(data_hash.as_str())
+                        || entry.payload_commitment.as_deref()
+                            == Some(normalized_data_hash.as_str());
+                if matched_payload_commitment {
                     matches.push(serde_json::json!({
                         "entry_id": entry.entry_id,
                         "namespace": entry.namespace,
@@ -2117,6 +2119,7 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
                     .and_then(|value| value.as_str());
 
                 if entry.namespace != "consent.receipt"
+                    && !matched_payload_commitment
                     && (payload_data_hash == Some(data_hash.as_str())
                         || payload_data_hash == Some(normalized_data_hash.as_str())
                         || nested_payload_data_hash == Some(data_hash.as_str())
@@ -2143,10 +2146,11 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
                 };
 
                 for entry in block.entries {
-                    if entry.payload_commitment.as_deref() == Some(data_hash.as_str())
-                        || entry.payload_commitment.as_deref()
-                            == Some(normalized_data_hash.as_str())
-                    {
+                    let matched_payload_commitment =
+                        entry.payload_commitment.as_deref() == Some(data_hash.as_str())
+                            || entry.payload_commitment.as_deref()
+                                == Some(normalized_data_hash.as_str());
+                    if matched_payload_commitment {
                         matches.push(serde_json::json!({
                             "entry_id": entry.entry_id,
                             "namespace": entry.namespace,
@@ -2191,6 +2195,7 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
                         .and_then(|value| value.as_str());
 
                     if entry.namespace != "consent.receipt"
+                        && !matched_payload_commitment
                         && (payload_data_hash == Some(data_hash.as_str())
                             || payload_data_hash == Some(normalized_data_hash.as_str())
                             || nested_payload_data_hash == Some(data_hash.as_str())
@@ -9248,6 +9253,84 @@ mod tests {
         assert_eq!(payload["matches"].as_array().map(Vec::len), Some(1));
         assert_eq!(payload["matches"][0]["source"], json!("payload.data_hash"));
         assert_eq!(payload["matches"][0]["namespace"], json!("audit.procurement"));
+    }
+
+    #[tokio::test]
+    async fn payload_data_hash_endpoint_avoids_duplicate_matches_when_commitment_and_payload_match() {
+        let storage = Arc::new(MemoryStorage::new());
+        let ledger = Arc::new(Ledger::new(Arc::clone(&storage), KeyRegistry::new()));
+        ledger.bootstrap_namespaces(vec![NamespaceRuleset {
+            descriptor: NamespaceDescriptor {
+                namespace: "forms.commitment".to_string(),
+                version: 1,
+                rules_hash: "rules-v1".to_string(),
+                governed_by: "governance".to_string(),
+            },
+            writers: BTreeSet::new(),
+            validators: vec![NamespaceRule {
+                name: "require_signature".to_string(),
+                config: json!({}),
+            }],
+        }]);
+        storage
+            .upsert_namespace(NamespaceDescriptor {
+                namespace: "forms.commitment".to_string(),
+                version: 1,
+                rules_hash: "rules-v1".to_string(),
+                governed_by: "governance".to_string(),
+            })
+            .expect("namespace should be tracked");
+
+        let data_hash = "sha256:forms-commitment-overlap";
+        let signer = ValidatorKeypair::generate("did:author:forms".to_string());
+        let mut entry = LedgerEntry {
+            entry_id: Uuid::new_v4(),
+            namespace: "forms.commitment".to_string(),
+            action: "FORM_SUBMITTED".to_string(),
+            object_id: "FORM-OVERLAP-001".to_string(),
+            payload: json!({
+                "data_hash": data_hash,
+                "encrypted_form_url": "interest_submissions://test/FORM-OVERLAP-001"
+            }),
+            privacy_flag: true,
+            privacy_mode: citizen_types::PrivacyMode::Hybrid,
+            payload_commitment: Some(data_hash.to_string()),
+            ciphertext_hex: None,
+            nonce_hex: None,
+            salt_hex: None,
+            kdf_params: None,
+            consent_receipt: None,
+            authorized_readers: vec![],
+            custodian_policy_id: None,
+            field_reader_acls: BTreeMap::new(),
+            key_wrapped_secrets: vec![],
+            revocation_events: vec![],
+            author: "did:author:forms".to_string(),
+            signature: String::new(),
+            timestamp: chrono::Utc::now().timestamp(),
+        };
+        sign_entry_for_tests(&mut entry, &signer);
+        ledger.apply_entry(entry).expect("entry should be accepted");
+
+        let edge = Arc::new(ApiEdgeState::new(
+            ApiEdgeConfig {
+                offchain_encrypted_files_v1_enabled: false,
+                ..ApiEdgeConfig::default()
+            },
+            Arc::new(LocalOffchainObjectStore),
+        ));
+
+        let (status, Json(payload)) = ApiServer::<MemoryStorage>::handle_get_payload_data_hash(
+            ledger,
+            edge,
+            "forms-commitment-overlap".to_string(),
+        )
+        .await;
+
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(payload["data_hash"], json!(data_hash));
+        assert_eq!(payload["matches"].as_array().map(Vec::len), Some(1));
+        assert_eq!(payload["matches"][0]["source"], json!("payload_commitment"));
     }
 
     #[tokio::test]
