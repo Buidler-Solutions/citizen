@@ -162,11 +162,11 @@ function normalizeExplorerHashQueryValue(value: string): string {
   return value.startsWith('sha256:') ? value.slice('sha256:'.length) : value;
 }
 
-function buildExplorerBlockSearchHref(network: NetworkId, receiptHash: string): string {
+function buildExplorerDataHashSearchHref(network: NetworkId, receiptHash: string): string {
   const explorerBase = EXPLORER_BASE_URL_BY_NETWORK[network] ?? EXPLORER_BASE_URL_BY_NETWORK.localnode;
   const normalizedHash = normalizeExplorerHashQueryValue(receiptHash);
-  const query = encodeURIComponent(normalizedHash);
-  return `${explorerBase.replace(/\/$/, '')}/blocks?q=${query}`;
+  const query = encodeURIComponent(`sha256:${normalizedHash}`);
+  return `${explorerBase.replace(/\/$/, '')}/data-hash?q=${query}`;
 }
 
 const NAV_ITEMS: { id: TabId; label: string }[] = [
@@ -1080,7 +1080,7 @@ export function App() {
                         <p className="meta-text">{origin}</p>
                         <ul>
                           {entries.map((entry) => {
-                            const explorerHashHref = buildExplorerBlockSearchHref(state.network, entry.payload.hash);
+                            const explorerHashHref = buildExplorerDataHashSearchHref(state.network, entry.payload.hash);
                             return (
                               <li key={entry.requestId} className="activity-item">
                                 <div>
@@ -1110,7 +1110,7 @@ export function App() {
                       {directSubmitReceipts.map((receipt) => {
                         const receiptHash = receipt.receiptHash;
                         const explorerHref = receiptHash
-                          ? buildExplorerBlockSearchHref(state.network, receiptHash)
+                          ? buildExplorerDataHashSearchHref(state.network, receiptHash)
                           : null;
                         return (
                           <li key={`${receipt.traceId}-${receipt.submittedAt}`} className="activity-item">
@@ -1121,7 +1121,7 @@ export function App() {
                             </div>
                             {explorerHref ? (
                               <a href={explorerHref} target="_blank" rel="noreferrer" className="ghost">
-                                View block matches
+                                View data hash matches
                               </a>
                             ) : (
                               <span className="meta-text">Pending hash</span>

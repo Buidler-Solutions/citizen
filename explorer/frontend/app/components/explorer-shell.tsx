@@ -76,8 +76,26 @@ export function ExplorerShell({ children }: ExplorerShellProps) {
 
     const query = new URLSearchParams();
     const dataHashMatch = /^(data_hash|datahash):(.+)$/i.exec(normalizedQuery);
+    const rawSha256Match = /^([a-f0-9]{64})$/i.exec(normalizedQuery);
+    const legacySha256PrefixedMatch = /^sha256:([a-f0-9]{64})$/i.exec(normalizedQuery);
     if (dataHashMatch) {
-      query.set('q', dataHashMatch[2].trim());
+      const value = dataHashMatch[2].trim();
+      if (/^[a-f0-9]{64}$/i.test(value)) {
+        query.set('q', `sha256:${value}`);
+      } else {
+        query.set('q', value);
+      }
+      router.push(`/data-hash?${query.toString()}`);
+      return;
+    }
+    if (rawSha256Match) {
+      query.set('q', `sha256:${rawSha256Match[1]}`);
+      router.push(`/data-hash?${query.toString()}`);
+      return;
+    }
+    // Backwards compatibility: still accept the older prefixed form.
+    if (legacySha256PrefixedMatch) {
+      query.set('q', `sha256:${legacySha256PrefixedMatch[1]}`);
       router.push(`/data-hash?${query.toString()}`);
       return;
     }
@@ -139,7 +157,7 @@ export function ExplorerShell({ children }: ExplorerShellProps) {
                 type="search"
                 value={searchValue}
                 onChange={(event) => setSearchValue(event.target.value)}
-                placeholder="Search e.g. hash:abc blocks:42 or data_hash:sha256:abc..."
+                placeholder="Search e.g. <64-char hex> blocks:42 or data_hash:<64-char hex>..."
               />
               <button type="submit" className="header-search-button">
                 Search
