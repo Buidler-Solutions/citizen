@@ -1,4 +1,4 @@
-import { Controller, Get, Param } from '@nestjs/common';
+import { BadRequestException, Controller, Get, Param, Query } from '@nestjs/common';
 import { CitizenService } from './citizen.service';
 
 @Controller()
@@ -13,6 +13,14 @@ export class AppController {
   @Get('status')
   async status() {
     return this.citizenService.getStatus();
+  }
+
+  @Get('blocks')
+  async blocks(
+    @Query('cursor') cursor?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.citizenService.getBlocks(cursor, limit);
   }
 
   @Get('blocks/:height')
@@ -43,7 +51,6 @@ export class AppController {
     return this.citizenService.getFileManifest(manifestId);
   }
 
-
   @Get('files/timeline/:manifestId')
   async fileTimeline(@Param('manifestId') manifestId: string) {
     return this.citizenService.getFileTimeline(manifestId);
@@ -55,5 +62,18 @@ export class AppController {
     @Param('namespace') namespace: string,
   ) {
     return this.citizenService.getPayloadFieldRefs(entryId, namespace);
+  }
+
+  @Get('payloads/data-hash/:dataHash')
+  async payloadDataHash(@Param('dataHash') dataHash: string) {
+    return this.citizenService.getPayloadDataHash(decodeURIComponent(dataHash));
+  }
+
+  @Get('data-hash')
+  async payloadDataHashByQuery(@Query('q') dataHash?: string) {
+    if (!dataHash || !dataHash.trim()) {
+      throw new BadRequestException('missing required query parameter: q');
+    }
+    return this.citizenService.getPayloadDataHash(dataHash.trim());
   }
 }

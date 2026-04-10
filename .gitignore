@@ -55,3 +55,11 @@ wallet/sdk/typescript-auth/node_modules/
 citizen-protocol/data/alpha/CURRENT
 citizen-protocol/data/beta/CURRENT
 citizen-protocol/data/gamma/CURRENT
+wallet/backend/data/
+wallet/backend/data/wallet-auth-state.json
+wallet/browser/dist/popup.js
+explorer/frontend/.next
+explorer/frontend/.tmp-tests/app/lib/block-routes.js
+explorer/frontend/.tmp-tests/tests.block-routes.test.js
+explorer/frontend/.tmp-tests/app/lib/blocks.js
+wallet/browser/dist/popup.js

@@ -396,6 +396,17 @@ export class CitizenNodeClient {
     });
   }
 
+  async submitEnvelopeBatch(envelopes) {
+    if (!Array.isArray(envelopes) || envelopes.length === 0) {
+      throw new Error("envelopes must be a non-empty array");
+    }
+
+    return this.#request("/api/v1/envelopes/submit-batch", {
+      method: "POST",
+      body: envelopes
+    });
+  }
+
   async getReceipt(receiptId) {
     if (!receiptId) {
       throw new Error("receiptId is required");

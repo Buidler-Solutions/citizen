@@ -9,7 +9,6 @@ citizen-types = { path = "../types" }
 citizen-ledger = { path = "../ledger" }
 citizen-crypto = { path = "../crypto" }
 citizen-storage = { path = "../storage" }
-citizen-txpool = { path = "../txpool" }
 axum = { workspace = true }
 tokio = { workspace = true }
 serde = { workspace = true }
@@ -20,6 +19,7 @@ thiserror = { workspace = true }
 chrono = { workspace = true }
 uuid = { workspace = true }
 urlencoding = "2.1"
+blake3 = { workspace = true }
 
 [dev-dependencies]
 tower = "0.5"

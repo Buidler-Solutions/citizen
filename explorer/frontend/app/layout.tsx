@@ -1,5 +1,6 @@
 import './globals.css';
 import type { ReactNode } from 'react';
+import { ExplorerShell } from './components/explorer-shell';
 
 export const metadata = {
   title: 'Citizen Explorer',
@@ -9,7 +10,9 @@ export const metadata = {
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body>
+        <ExplorerShell>{children}</ExplorerShell>
+      </body>
     </html>
   );
 }

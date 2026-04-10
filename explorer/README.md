@@ -4,33 +4,22 @@ This folder contains a blockchain explorer application for the Citizen Protocol.
 
 ## Structure
 - `frontend/` - Next.js frontend
-- `backend/` - NestJS API server for fetching Citizen chain data
 - `infra/` - Optional infrastructure (PostgreSQL) for relational storage
 
 ## Goals
 - Fetch canonical data from a Citizen Protocol node/API and present it in a read-only explorer UI.
 - Surface deterministic receipt + finality proof data from canonical API responses.
-- Provide an extensible backend that can cache or index chain data (PostgreSQL optional).
+- Optionally add relational indexing infrastructure for analytics workflows (PostgreSQL optional).
 
 ## Canonical contracts used
-Explorer backend now proxies canonical node contracts (no mock fallback payloads):
+Explorer frontend now calls canonical node/runtime contracts directly:
+- `GET /blocks?cursor=<height>&limit=<n>` -> node/runtime deterministic descending pagination (`items`, `next_cursor`, `has_more`)
 - `GET /blocks/:height` -> node `GET /blocks/:height`
 - `GET /entries/:namespace` -> node `GET /entries/:namespace`
-- `GET /entries/:namespace/wallet-signers/:signerDid` -> explorer index view filtered by `payload.payload_wallet_signature.signer` (with legacy fallback to `payload.wallet_signature.signer`)
-- `GET /receipts/:receiptId` -> node `GET /api/v1/receipts/:receipt_id`
+- `GET /entries/:namespace/wallet-signers/:signerDid` -> node/runtime route when enabled by the current runtime build
+- `GET /receipts/:receiptId` -> node/runtime route
 
 ## Quick start
-
-### Backend
-```bash
-cd backend
-npm install
-npm run start:dev
-```
-
-Environment variables:
-- `CITIZEN_NODE_URL` - base URL to a Citizen node API.
-- `DATABASE_URL` - optional PostgreSQL connection string.
 
 ### Frontend
 ```bash
@@ -39,8 +28,10 @@ npm install
 npm run dev
 ```
 
+The explorer frontend runs on `http://localhost:8885` by default.
+
 Environment variables:
-- `NEXT_PUBLIC_API_BASE_URL` - base URL for the backend API.
+- `NEXT_PUBLIC_NODE_RUNTIME_URL` - base URL for the Citizen node runtime API (defaults to `http://127.0.0.1:8081`).
 - `NEXT_PUBLIC_BLOCK_HEIGHT` - block height to inspect (`1` by default).
 - `NEXT_PUBLIC_NAMESPACE` - namespace to inspect (`governance.vote` by default).
 - `NEXT_PUBLIC_WALLET_SIGNER_DID` - optional signer DID used to query entries by `payload.payload_wallet_signature.signer` (legacy fallback still supported).

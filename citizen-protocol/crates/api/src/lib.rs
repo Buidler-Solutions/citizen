@@ -1,4 +1,4 @@
-use axum::extract::Path;
+use axum::extract::{Path, Query};
 use axum::http::HeaderMap;
 use axum::http::StatusCode;
 use axum::routing::{get, post};
@@ -7,7 +7,6 @@ use chrono::Utc;
 use citizen_crypto::{canonical_json, hash_block_header, sha256_hex};
 use citizen_ledger::Ledger;
 use citizen_storage::LedgerStorage;
-use citizen_txpool::{EnqueueResult, TxPool};
 use citizen_types::{
     Block, BlockHeader, BlockHeight, CommitProof, ConsentPolicyCheck, ConsentReceipt,
     DeterministicReceipt, DidDocument, DidStatus, FinalityProof, LedgerEntry, NamespaceRuleset,
@@ -30,7 +29,6 @@ use uuid::Uuid;
 pub struct ApiServer<S: LedgerStorage + 'static> {
     ledger: Arc<Ledger<S>>,
     edge: Arc<ApiEdgeState>,
-    txpool: Arc<TxPool>,
 }
 
 #[derive(Clone, Debug)]
@@ -40,13 +38,23 @@ pub struct ApiEdgeConfig {
     pub max_write_requests_per_minute: usize,
     pub offchain_encrypted_files_v1_enabled: bool,
     pub require_builder_credit_for_all_writes: bool,
-    pub local_finalize_mode: bool,
     pub clients: BTreeMap<String, ApiClientProfile>,
 }
 
 #[derive(Clone, Debug)]
 pub struct ApiClientProfile {
     pub scopes: BTreeSet<String>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+struct BlocksQueryParams {
+    cursor: Option<BlockHeight>,
+    limit: Option<usize>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+struct DataHashQueryParams {
+    q: Option<String>,
 }
 
 impl ApiClientProfile {
@@ -65,7 +73,6 @@ impl Default for ApiEdgeConfig {
             max_write_requests_per_minute: 120,
             offchain_encrypted_files_v1_enabled: false,
             require_builder_credit_for_all_writes: false,
-            local_finalize_mode: true,
             clients: BTreeMap::new(),
         }
     }
@@ -401,20 +408,7 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
     }
 
     pub fn with_edge_config(ledger: Arc<Ledger<S>>, edge_config: ApiEdgeConfig) -> Self {
-        Self::with_edge_config_and_txpool(ledger, edge_config, Arc::new(TxPool::default()))
-    }
-
-    pub fn with_edge_config_and_txpool(
-        ledger: Arc<Ledger<S>>,
-        edge_config: ApiEdgeConfig,
-        txpool: Arc<TxPool>,
-    ) -> Self {
-        Self::with_edge_config_and_store(
-            ledger,
-            edge_config,
-            Arc::new(LocalOffchainObjectStore),
-            txpool,
-        )
+        Self::with_edge_config_and_store(ledger, edge_config, Arc::new(LocalOffchainObjectStore))
     }
 
     pub fn with_edge_config_and_minio_store(
@@ -427,7 +421,6 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
             ledger,
             edge_config,
             Arc::new(store),
-            Arc::new(TxPool::default()),
         ))
     }
 
@@ -435,12 +428,10 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
         ledger: Arc<Ledger<S>>,
         edge_config: ApiEdgeConfig,
         object_store: Arc<dyn OffchainObjectStore>,
-        txpool: Arc<TxPool>,
     ) -> Self {
         Self {
             ledger,
             edge: Arc::new(ApiEdgeState::new(edge_config, object_store)),
-            txpool,
         }
     }
 
@@ -461,30 +452,32 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
 
     fn router(&self) -> Router {
         let blocks_ledger = Arc::clone(&self.ledger);
+        let blocks_list_ledger = Arc::clone(&self.ledger);
         let namespaces_ledger = Arc::clone(&self.ledger);
         let entries_ledger = Arc::clone(&self.ledger);
         let resolve_did_ledger = Arc::clone(&self.ledger);
         let consent_check_ledger = Arc::clone(&self.ledger);
         let submit_ledger = Arc::clone(&self.ledger);
         let submit_edge = Arc::clone(&self.edge);
-        let submit_txpool = Arc::clone(&self.txpool);
         let submit_envelope_ledger = Arc::clone(&self.ledger);
         let submit_envelope_edge = Arc::clone(&self.edge);
-        let submit_envelope_txpool = Arc::clone(&self.txpool);
+        let submit_envelope_batch_ledger = Arc::clone(&self.ledger);
+        let submit_envelope_batch_edge = Arc::clone(&self.edge);
         let file_intent_ledger = Arc::clone(&self.ledger);
         let file_intent_edge = Arc::clone(&self.edge);
         let file_commit_ledger = Arc::clone(&self.ledger);
         let file_commit_edge = Arc::clone(&self.edge);
-        let file_commit_txpool = Arc::clone(&self.txpool);
         let payload_commit_ledger = Arc::clone(&self.ledger);
         let payload_commit_edge = Arc::clone(&self.edge);
         let payload_fields_edge = Arc::clone(&self.edge);
-        let payload_commit_txpool = Arc::clone(&self.txpool);
+        let payload_data_hash_ledger = Arc::clone(&self.ledger);
+        let payload_data_hash_edge = Arc::clone(&self.edge);
+        let payload_data_hash_query_ledger = Arc::clone(&self.ledger);
+        let payload_data_hash_query_edge = Arc::clone(&self.edge);
         let file_read_ledger = Arc::clone(&self.ledger);
         let file_read_edge = Arc::clone(&self.edge);
         let file_revoke_ledger = Arc::clone(&self.ledger);
         let file_revoke_edge = Arc::clone(&self.edge);
-        let file_revoke_txpool = Arc::clone(&self.txpool);
         let file_manifest_metadata_ledger = Arc::clone(&self.ledger);
         let file_manifest_metadata_edge = Arc::clone(&self.edge);
         let file_alerts_edge = Arc::clone(&self.edge);
@@ -496,6 +489,13 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
         let governance_proposals_ledger = Arc::clone(&self.ledger);
         Router::new()
             .route("/health", get(Self::health))
+            .route(
+                "/blocks",
+                get(move |Query(query): Query<BlocksQueryParams>| {
+                    let ledger = Arc::clone(&blocks_list_ledger);
+                    async move { Self::handle_list_blocks(ledger, query).await }
+                }),
+            )
             .route(
                 "/blocks/:height",
                 get(move |Path(height): Path<BlockHeight>| {
@@ -536,10 +536,7 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
                 post(move |headers: HeaderMap, Json(entry): Json<LedgerEntry>| {
                     let ledger = Arc::clone(&submit_ledger);
                     let edge = Arc::clone(&submit_edge);
-                    let txpool = Arc::clone(&submit_txpool);
-                    async move {
-                        Self::handle_submit_entry(ledger, edge, txpool, headers, entry).await
-                    }
+                    async move { Self::handle_submit_entry(ledger, edge, headers, entry).await }
                 }),
             )
             .route(
@@ -548,10 +545,21 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
                     move |headers: HeaderMap, Json(envelope): Json<SignedEnvelope<LedgerEntry>>| {
                         let ledger = Arc::clone(&submit_envelope_ledger);
                         let edge = Arc::clone(&submit_envelope_edge);
-                        let txpool = Arc::clone(&submit_envelope_txpool);
                         async move {
-                            Self::handle_submit_envelope(ledger, edge, txpool, headers, envelope)
-                                .await
+                            Self::handle_submit_envelope(ledger, edge, headers, envelope).await
+                        }
+                    },
+                ),
+            )
+            .route(
+                "/api/v1/envelopes/submit-batch",
+                post(
+                    move |headers: HeaderMap,
+                          Json(envelopes): Json<Vec<SignedEnvelope<LedgerEntry>>>| {
+                        let ledger = Arc::clone(&submit_envelope_batch_ledger);
+                        let edge = Arc::clone(&submit_envelope_batch_edge);
+                        async move {
+                            Self::handle_submit_envelope_batch(ledger, edge, headers, envelopes).await
                         }
                     },
                 ),
@@ -573,10 +581,7 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
                 post(move |headers: HeaderMap, Json(request): Json<FileCommitRequest>| {
                     let ledger = Arc::clone(&file_commit_ledger);
                     let edge = Arc::clone(&file_commit_edge);
-                    let txpool = Arc::clone(&file_commit_txpool);
-                    async move {
-                        Self::handle_commit_file(ledger, edge, txpool, headers, request).await
-                    }
+                    async move { Self::handle_commit_file(ledger, edge, headers, request).await }
                 }),
             )
             .route(
@@ -585,11 +590,7 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
                     move |headers: HeaderMap, Json(request): Json<PayloadCommitRequest>| {
                         let ledger = Arc::clone(&payload_commit_ledger);
                         let edge = Arc::clone(&payload_fields_edge);
-                        let txpool = Arc::clone(&payload_commit_txpool);
-                        async move {
-                            Self::handle_commit_payload(ledger, edge, txpool, headers, request)
-                                .await
-                        }
+                        async move { Self::handle_commit_payload(ledger, edge, headers, request).await }
                     },
                 ),
             )
@@ -606,11 +607,7 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
                 post(move |headers: HeaderMap, Json(request): Json<FileRevokeRequest>| {
                     let ledger = Arc::clone(&file_revoke_ledger);
                     let edge = Arc::clone(&file_revoke_edge);
-                    let txpool = Arc::clone(&file_revoke_txpool);
-                    async move {
-                        Self::handle_revoke_file_reader(ledger, edge, txpool, headers, request)
-                            .await
-                    }
+                    async move { Self::handle_revoke_file_reader(ledger, edge, headers, request).await }
                 }),
             )
             .route(
@@ -635,6 +632,22 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
                     async move {
                         Self::handle_get_payload_field_refs(edge, entry_id, namespace).await
                     }
+                }),
+            )
+            .route(
+                "/api/v1/payloads/data-hash/:data_hash",
+                get(move |Path(data_hash): Path<String>| {
+                    let ledger = Arc::clone(&payload_data_hash_ledger);
+                    let edge = Arc::clone(&payload_data_hash_edge);
+                    async move { Self::handle_get_payload_data_hash(ledger, edge, data_hash).await }
+                }),
+            )
+            .route(
+                "/data-hash",
+                get(move |Query(query): Query<DataHashQueryParams>| {
+                    let ledger = Arc::clone(&payload_data_hash_query_ledger);
+                    let edge = Arc::clone(&payload_data_hash_query_edge);
+                    async move { Self::handle_get_payload_data_hash_query(ledger, edge, query).await }
                 }),
             )
             .route(
@@ -693,6 +706,78 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
         Json(serde_json::json!({"height": height, "block": block}))
     }
 
+    async fn handle_list_blocks(
+        ledger: Arc<Ledger<S>>,
+        query: BlocksQueryParams,
+    ) -> (StatusCode, Json<serde_json::Value>) {
+        let limit = query.limit.unwrap_or(20);
+        if limit == 0 || limit > 100 {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(
+                    serde_json::json!({"error":"limit must be an integer between 1 and 100"}),
+                ),
+            );
+        }
+
+        let latest_height = ledger.storage().latest_height().unwrap_or(0);
+        let has_any_blocks = ledger
+            .storage()
+            .get_block(latest_height)
+            .unwrap_or(None)
+            .is_some();
+
+        if !has_any_blocks {
+            return (
+                StatusCode::OK,
+                Json(serde_json::json!({
+                    "items": [],
+                    "next_cursor": null,
+                    "has_more": false
+                })),
+            );
+        }
+
+        let mut current_height = std::cmp::min(query.cursor.unwrap_or(latest_height), latest_height);
+        let mut items = Vec::new();
+        let mut scanned = 0usize;
+        let mut exhausted_at_genesis = false;
+
+        while scanned < limit {
+            if let Some(block) = ledger.storage().get_block(current_height).unwrap_or(None) {
+                items.push(serde_json::json!({
+                    "height": current_height,
+                    "header": block.header,
+                    "entry_count": block.entries.len()
+                }));
+                scanned += 1;
+            }
+
+            if current_height == 0 {
+                exhausted_at_genesis = true;
+                break;
+            }
+
+            current_height -= 1;
+        }
+
+        let has_more = !exhausted_at_genesis && current_height <= latest_height;
+        let next_cursor = if has_more {
+            serde_json::Value::from(current_height)
+        } else {
+            serde_json::Value::Null
+        };
+
+        (
+            StatusCode::OK,
+            Json(serde_json::json!({
+                "items": items,
+                "next_cursor": next_cursor,
+                "has_more": has_more
+            })),
+        )
+    }
+
     async fn handle_list_namespaces(ledger: Arc<Ledger<S>>) -> Json<serde_json::Value> {
         let namespaces = ledger.storage().namespace_registry().unwrap_or_default();
         Json(serde_json::json!({"namespaces": namespaces}))
@@ -712,7 +797,6 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
     async fn handle_submit_entry(
         ledger: Arc<Ledger<S>>,
         edge: Arc<ApiEdgeState>,
-        txpool: Arc<TxPool>,
         headers: HeaderMap,
         entry: LedgerEntry,
     ) -> (StatusCode, Json<serde_json::Value>) {
@@ -733,7 +817,7 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
             submitted_at: Utc::now(),
             payload: entry,
         };
-        Self::process_envelope_submission(ledger, edge, txpool, envelope).await
+        Self::process_envelope_submission(ledger, envelope).await
     }
 
     async fn handle_resolve_did(
@@ -777,7 +861,6 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
     async fn handle_submit_envelope(
         ledger: Arc<Ledger<S>>,
         edge: Arc<ApiEdgeState>,
-        txpool: Arc<TxPool>,
         headers: HeaderMap,
         envelope: SignedEnvelope<LedgerEntry>,
     ) -> (StatusCode, Json<serde_json::Value>) {
@@ -793,7 +876,32 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
         ) {
             return response;
         }
-        Self::process_envelope_submission(ledger, edge, txpool, envelope).await
+        Self::process_envelope_submission(ledger, envelope).await
+    }
+
+    async fn handle_submit_envelope_batch(
+        ledger: Arc<Ledger<S>>,
+        edge: Arc<ApiEdgeState>,
+        headers: HeaderMap,
+        envelopes: Vec<SignedEnvelope<LedgerEntry>>,
+    ) -> (StatusCode, Json<serde_json::Value>) {
+        if let Err(response) =
+            Self::authorize_write(Arc::clone(&edge), &headers, "envelopes.submit").await
+        {
+            return response;
+        }
+
+        for envelope in &envelopes {
+            if let Err(response) = Self::authorize_builder_credit_gate(
+                Arc::clone(&edge),
+                Arc::clone(&ledger),
+                &envelope.payload,
+            ) {
+                return response;
+            }
+        }
+
+        Self::process_envelope_batch_submission(ledger, envelopes).await
     }
 
     fn authorize_builder_credit_gate(
@@ -1032,7 +1140,6 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
     async fn handle_commit_file(
         ledger: Arc<Ledger<S>>,
         edge: Arc<ApiEdgeState>,
-        txpool: Arc<TxPool>,
         headers: HeaderMap,
         request: FileCommitRequest,
     ) -> (StatusCode, Json<serde_json::Value>) {
@@ -1183,7 +1290,7 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
         }
 
         let (status, Json(base)) =
-            Self::process_envelope_submission(ledger, edge.clone(), txpool, request.envelope).await;
+            Self::process_envelope_submission(ledger, request.envelope).await;
         if status != StatusCode::ACCEPTED {
             return (status, Json(base));
         }
@@ -1224,7 +1331,6 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
     async fn handle_commit_payload(
         ledger: Arc<Ledger<S>>,
         edge: Arc<ApiEdgeState>,
-        txpool: Arc<TxPool>,
         headers: HeaderMap,
         request: PayloadCommitRequest,
     ) -> (StatusCode, Json<serde_json::Value>) {
@@ -1488,7 +1594,7 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
         }
 
         let (status, Json(base)) =
-            Self::process_envelope_submission(ledger, edge.clone(), txpool, request.envelope).await;
+            Self::process_envelope_submission(ledger, request.envelope).await;
         if status != StatusCode::ACCEPTED {
             return (status, Json(base));
         }
@@ -1692,7 +1798,6 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
     async fn handle_revoke_file_reader(
         ledger: Arc<Ledger<S>>,
         edge: Arc<ApiEdgeState>,
-        txpool: Arc<TxPool>,
         headers: HeaderMap,
         request: FileRevokeRequest,
     ) -> (StatusCode, Json<serde_json::Value>) {
@@ -1777,13 +1882,8 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
             return response;
         }
 
-        let (status, Json(base)) = Self::process_envelope_submission(
-            Arc::clone(&ledger),
-            Arc::clone(&edge),
-            txpool,
-            request.envelope,
-        )
-        .await;
+        let (status, Json(base)) =
+            Self::process_envelope_submission(Arc::clone(&ledger), request.envelope).await;
         if status != StatusCode::ACCEPTED {
             return (status, Json(base));
         }
@@ -1951,6 +2051,217 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
                 "field_refs": field_refs,
             })),
         )
+    }
+
+    async fn handle_get_payload_data_hash(
+        ledger: Arc<Ledger<S>>,
+        edge: Arc<ApiEdgeState>,
+        data_hash: String,
+    ) -> (StatusCode, Json<serde_json::Value>) {
+        let _ = edge;
+
+        let normalized_data_hash = Self::normalize_data_hash(&data_hash);
+        let mut matches = Vec::new();
+        let namespaces = ledger.storage().namespace_registry().unwrap_or_default();
+
+        for descriptor in namespaces {
+            let entries = ledger
+                .storage()
+                .namespace_entries(&descriptor.namespace)
+                .unwrap_or_default();
+            for entry in entries {
+                if entry.payload_commitment.as_deref() == Some(data_hash.as_str())
+                    || entry.payload_commitment.as_deref() == Some(normalized_data_hash.as_str())
+                {
+                    matches.push(serde_json::json!({
+                        "entry_id": entry.entry_id,
+                        "namespace": entry.namespace,
+                        "action": entry.action,
+                        "object_id": entry.object_id,
+                        "timestamp": entry.timestamp,
+                        "source": "payload_commitment",
+                    }));
+                }
+
+                if entry.namespace == "consent.receipt"
+                    && (entry
+                        .payload
+                        .get("data_hash")
+                        .and_then(|value| value.as_str())
+                        == Some(data_hash.as_str())
+                        || entry
+                            .payload
+                            .get("data_hash")
+                            .and_then(|value| value.as_str())
+                            == Some(normalized_data_hash.as_str()))
+                {
+                    matches.push(serde_json::json!({
+                        "entry_id": entry.entry_id,
+                        "namespace": entry.namespace,
+                        "action": entry.action,
+                        "object_id": entry.object_id,
+                        "timestamp": entry.timestamp,
+                        "source": "consent_receipt.data_hash",
+                    }));
+                }
+
+                let payload_data_hash = entry
+                    .payload
+                    .get("data_hash")
+                    .and_then(|value| value.as_str());
+                let nested_payload_data_hash = entry
+                    .payload
+                    .get("payload")
+                    .and_then(|value| value.as_object())
+                    .and_then(|payload| payload.get("data_hash"))
+                    .and_then(|value| value.as_str());
+
+                if entry.namespace != "consent.receipt"
+                    && (payload_data_hash == Some(data_hash.as_str())
+                        || payload_data_hash == Some(normalized_data_hash.as_str())
+                        || nested_payload_data_hash == Some(data_hash.as_str())
+                        || nested_payload_data_hash == Some(normalized_data_hash.as_str()))
+                {
+                    matches.push(serde_json::json!({
+                        "entry_id": entry.entry_id,
+                        "namespace": entry.namespace,
+                        "action": entry.action,
+                        "object_id": entry.object_id,
+                        "timestamp": entry.timestamp,
+                        "source": "payload.data_hash",
+                    }));
+                }
+            }
+        }
+
+        if matches.is_empty() {
+            let latest_height = ledger.storage().latest_height().unwrap_or(0);
+            for height in 0..=latest_height {
+                let block = ledger.storage().get_block(height).unwrap_or(None);
+                let Some(block) = block else {
+                    continue;
+                };
+
+                for entry in block.entries {
+                    if entry.payload_commitment.as_deref() == Some(data_hash.as_str())
+                        || entry.payload_commitment.as_deref()
+                            == Some(normalized_data_hash.as_str())
+                    {
+                        matches.push(serde_json::json!({
+                            "entry_id": entry.entry_id,
+                            "namespace": entry.namespace,
+                            "action": entry.action,
+                            "object_id": entry.object_id,
+                            "timestamp": entry.timestamp,
+                            "source": "payload_commitment",
+                        }));
+                    }
+
+                    if entry.namespace == "consent.receipt"
+                        && (entry
+                            .payload
+                            .get("data_hash")
+                            .and_then(|value| value.as_str())
+                            == Some(data_hash.as_str())
+                            || entry
+                                .payload
+                                .get("data_hash")
+                                .and_then(|value| value.as_str())
+                                == Some(normalized_data_hash.as_str()))
+                    {
+                        matches.push(serde_json::json!({
+                            "entry_id": entry.entry_id,
+                            "namespace": entry.namespace,
+                            "action": entry.action,
+                            "object_id": entry.object_id,
+                            "timestamp": entry.timestamp,
+                            "source": "consent_receipt.data_hash",
+                        }));
+                    }
+
+                    let payload_data_hash = entry
+                        .payload
+                        .get("data_hash")
+                        .and_then(|value| value.as_str());
+                    let nested_payload_data_hash = entry
+                        .payload
+                        .get("payload")
+                        .and_then(|value| value.as_object())
+                        .and_then(|payload| payload.get("data_hash"))
+                        .and_then(|value| value.as_str());
+
+                    if entry.namespace != "consent.receipt"
+                        && (payload_data_hash == Some(data_hash.as_str())
+                            || payload_data_hash == Some(normalized_data_hash.as_str())
+                            || nested_payload_data_hash == Some(data_hash.as_str())
+                            || nested_payload_data_hash
+                                == Some(normalized_data_hash.as_str()))
+                    {
+                        matches.push(serde_json::json!({
+                            "entry_id": entry.entry_id,
+                            "namespace": entry.namespace,
+                            "action": entry.action,
+                            "object_id": entry.object_id,
+                            "timestamp": entry.timestamp,
+                            "source": "payload.data_hash",
+                        }));
+                    }
+                }
+            }
+        }
+
+        if matches.is_empty() {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(serde_json::json!({
+                    "error": "no entries found for data_hash",
+                    "data_hash": normalized_data_hash,
+                })),
+            );
+        }
+
+        (
+            StatusCode::OK,
+            Json(serde_json::json!({
+                "data_hash": normalized_data_hash,
+                "matches": matches,
+            })),
+        )
+    }
+
+    async fn handle_get_payload_data_hash_query(
+        ledger: Arc<Ledger<S>>,
+        edge: Arc<ApiEdgeState>,
+        query: DataHashQueryParams,
+    ) -> (StatusCode, Json<serde_json::Value>) {
+        let Some(raw_hash) = query.q else {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({
+                    "error": "missing required query parameter: q",
+                })),
+            );
+        };
+
+        let data_hash = raw_hash.trim().to_string();
+        if data_hash.is_empty() {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({
+                    "error": "query parameter q cannot be empty",
+                })),
+            );
+        }
+
+        Self::handle_get_payload_data_hash(ledger, edge, data_hash).await
+    }
+
+    fn normalize_data_hash(data_hash: &str) -> String {
+        if data_hash.starts_with("sha256:") {
+            data_hash.to_string()
+        } else {
+            format!("sha256:{data_hash}")
+        }
     }
 
     fn parse_payload_field_policy(ruleset: &NamespaceRuleset) -> Option<PayloadFieldPolicyConfig> {
@@ -2270,8 +2581,6 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
 
     async fn process_envelope_submission(
         ledger: Arc<Ledger<S>>,
-        edge: Arc<ApiEdgeState>,
-        txpool: Arc<TxPool>,
         envelope: SignedEnvelope<LedgerEntry>,
     ) -> (StatusCode, Json<serde_json::Value>) {
         if envelope.signature.is_empty() {
@@ -2306,20 +2615,112 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
 
         let entry_id = entry.entry_id;
         let namespace = entry.namespace.clone();
-        if edge.config.local_finalize_mode {
+        if let Err(err) = ledger.apply_entry(entry.clone()) {
+            return protocol_error_response(err);
+        }
+
+        let offchain_commitments = extract_offchain_commitments(&entry);
+        let finality = match Self::finalize_entry(Arc::clone(&ledger), entry).await {
+            Ok(finality) => finality,
+            Err(err) => return protocol_error_response(err),
+        };
+
+        let receipt = DeterministicReceipt {
+            receipt_id: Uuid::new_v4(),
+            envelope_id: envelope.envelope_id,
+            status: ReceiptStatus::Accepted,
+            validation: ValidationSummary {
+                namespace: namespace.clone(),
+                action,
+                outcome: "namespace rules accepted and finalized".into(),
+                offchain_commitments,
+            },
+            finality: Some(finality),
+            recorded_at: Utc::now(),
+        };
+        if let Err(err) = ledger.storage().store_receipt(receipt.clone()) {
+            return protocol_error_response(err);
+        }
+
+        (
+            StatusCode::ACCEPTED,
+            Json(serde_json::json!({
+                "status": "accepted",
+                "entry_id": entry_id,
+                "namespace": namespace,
+                "receipt": receipt,
+            })),
+        )
+    }
+
+    async fn process_envelope_batch_submission(
+        ledger: Arc<Ledger<S>>,
+        envelopes: Vec<SignedEnvelope<LedgerEntry>>,
+    ) -> (StatusCode, Json<serde_json::Value>) {
+        if envelopes.is_empty() {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({"error":"batch must contain at least one envelope"})),
+            );
+        }
+
+        let mut validated_entries = Vec::with_capacity(envelopes.len());
+        let mut accepted = Vec::with_capacity(envelopes.len());
+        for envelope in envelopes {
+            if envelope.signature.is_empty() {
+                return protocol_error_response(ProtocolError::ValidationFailed(
+                    "missing envelope signature".into(),
+                ));
+            }
+
+            if envelope.signer != envelope.payload.author {
+                return protocol_error_response(ProtocolError::ValidationFailed(
+                    "envelope signer must match payload author".into(),
+                ));
+            }
+
+            if !envelope.payload.signature.is_empty() && envelope.payload.signature != envelope.signature
+            {
+                return protocol_error_response(ProtocolError::ValidationFailed(
+                    "envelope signature must match payload signature when both are present".into(),
+                ));
+            }
+
+            let action = envelope.payload.action.clone();
+            let mut entry = envelope.payload;
+            if entry.signature.is_empty() {
+                entry.signature = envelope.signature.clone();
+            }
+
+            if let Err(err) = ledger.validate_entry_submission(&entry) {
+                return protocol_error_response(err);
+            }
+            accepted.push((
+                entry.entry_id,
+                entry.namespace.clone(),
+                action,
+                envelope.envelope_id,
+                extract_offchain_commitments(&entry),
+            ));
+            validated_entries.push(entry);
+        }
+
+        for entry in &validated_entries {
             if let Err(err) = ledger.apply_entry(entry.clone()) {
                 return protocol_error_response(err);
             }
+        }
 
-            let offchain_commitments = extract_offchain_commitments(&entry);
-            let finality = match Self::finalize_entry(Arc::clone(&ledger), entry).await {
-                Ok(finality) => finality,
-                Err(err) => return protocol_error_response(err),
-            };
+        let finality = match Self::finalize_entries(Arc::clone(&ledger), validated_entries).await {
+            Ok(finality) => finality,
+            Err(err) => return protocol_error_response(err),
+        };
 
+        let mut receipts = Vec::with_capacity(accepted.len());
+        for (entry_id, namespace, action, envelope_id, offchain_commitments) in accepted {
             let receipt = DeterministicReceipt {
                 receipt_id: Uuid::new_v4(),
-                envelope_id: envelope.envelope_id,
+                envelope_id,
                 status: ReceiptStatus::Accepted,
                 validation: ValidationSummary {
                     namespace: namespace.clone(),
@@ -2327,69 +2728,27 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
                     outcome: "namespace rules accepted and finalized".into(),
                     offchain_commitments,
                 },
-                finality: Some(finality),
+                finality: Some(finality.clone()),
                 recorded_at: Utc::now(),
             };
             if let Err(err) = ledger.storage().store_receipt(receipt.clone()) {
                 return protocol_error_response(err);
             }
-
-            return (
-                StatusCode::ACCEPTED,
-                Json(serde_json::json!({
-                    "status": "accepted",
-                    "entry_id": entry_id,
-                    "namespace": namespace,
-                    "receipt": receipt,
-                })),
-            );
+            receipts.push(serde_json::json!({
+                "entry_id": entry_id,
+                "namespace": namespace,
+                "receipt": receipt,
+            }));
         }
 
-        let enqueue_result = txpool.enqueue(entry);
-        let queue_metrics = txpool.metrics_snapshot();
-        match enqueue_result {
-            EnqueueResult::Queued { .. } => (
-                StatusCode::ACCEPTED,
-                Json(serde_json::json!({
-                    "status": "queued",
-                    "entry_id": entry_id,
-                    "namespace": namespace,
-                    "envelope_id": envelope.envelope_id,
-                    "queue_len": queue_metrics.queue_len,
-                    "queue_capacity": queue_metrics.capacity,
-                    "queue_enqueued_total": queue_metrics.enqueued_total,
-                    "queue_drained_total": queue_metrics.drained_total,
-                    "local_finalize_mode": false,
-                })),
-            ),
-            EnqueueResult::Duplicate { .. } => (
-                StatusCode::ACCEPTED,
-                Json(serde_json::json!({
-                    "status": "duplicate",
-                    "entry_id": entry_id,
-                    "namespace": namespace,
-                    "envelope_id": envelope.envelope_id,
-                    "queue_len": queue_metrics.queue_len,
-                    "queue_capacity": queue_metrics.capacity,
-                    "queue_duplicate_reject_total": queue_metrics.enqueue_rejected_duplicate_total,
-                    "local_finalize_mode": false,
-                })),
-            ),
-            EnqueueResult::Full { capacity, .. } => (
-                StatusCode::TOO_MANY_REQUESTS,
-                Json(serde_json::json!({
-                    "error": "transaction queue full",
-                    "status": "queue_full",
-                    "entry_id": entry_id,
-                    "namespace": namespace,
-                    "envelope_id": envelope.envelope_id,
-                    "queue_len": queue_metrics.queue_len,
-                    "queue_capacity": capacity,
-                    "queue_full_reject_total": queue_metrics.enqueue_rejected_full_total,
-                    "local_finalize_mode": false,
-                })),
-            ),
-        }
+        (
+            StatusCode::ACCEPTED,
+            Json(serde_json::json!({
+                "status": "accepted",
+                "batch_size": receipts.len(),
+                "receipts": receipts,
+            })),
+        )
     }
 
     async fn handle_get_receipt(
@@ -2621,6 +2980,18 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
         ledger: Arc<Ledger<S>>,
         entry: LedgerEntry,
     ) -> Result<FinalityProof, ProtocolError> {
+        Self::finalize_entries(ledger, vec![entry]).await
+    }
+
+    async fn finalize_entries(
+        ledger: Arc<Ledger<S>>,
+        entries: Vec<LedgerEntry>,
+    ) -> Result<FinalityProof, ProtocolError> {
+        if entries.is_empty() {
+            return Err(ProtocolError::ValidationFailed(
+                "cannot finalize empty entry batch".into(),
+            ));
+        }
         let storage = ledger.storage();
         let latest_height = storage.latest_height()?;
         let next_height = latest_height.saturating_add(1);
@@ -2637,16 +3008,17 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
             aggregated_signature: "local-dev-finality".to_string(),
             participant_ids: BTreeSet::new(),
         };
+        let entry_root = compute_entry_root(&entries);
         let block = Block {
             header: BlockHeader {
                 height: next_height,
                 prev_hash,
-                entry_root: format!("entry:{}", entry.entry_id),
+                entry_root,
                 proposer: "local-validator".to_string(),
                 timestamp: Utc::now().timestamp(),
                 commit_proof: commit_proof.clone(),
             },
-            entries: vec![entry],
+            entries,
         };
         storage.store_block(block.clone())?;
 
@@ -2884,6 +3256,27 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
     }
 }
 
+fn compute_entry_root(entries: &[LedgerEntry]) -> String {
+    if entries.is_empty() {
+        return "EMPTY".to_string();
+    }
+
+    if entries.len() == 1 {
+        return format!("entry:{}", entries[0].entry_id);
+    }
+
+    let mut hasher = blake3::Hasher::new();
+    for entry in entries {
+        hasher.update(entry.entry_id.as_bytes());
+        hasher.update(entry.namespace.as_bytes());
+        hasher.update(entry.action.as_bytes());
+        hasher.update(entry.object_id.as_bytes());
+        hasher.update(entry.signature.as_bytes());
+        hasher.update(&entry.timestamp.to_be_bytes());
+    }
+    hasher.finalize().to_hex().to_string()
+}
+
 fn extract_offchain_commitments(entry: &LedgerEntry) -> Option<OffchainCommitmentSummary> {
     let payload_commitment = entry.payload_commitment.clone()?;
 
@@ -2941,16 +3334,21 @@ fn protocol_error_response(err: ProtocolError) -> (StatusCode, Json<serde_json::
 
 #[cfg(test)]
 mod tests {
-    use super::{ApiClientProfile, ApiEdgeConfig, ApiServer, MinioOffchainObjectStoreConfig};
+    use super::{
+        ApiClientProfile, ApiEdgeConfig, ApiEdgeState, ApiServer, DataHashQueryParams,
+        LocalOffchainObjectStore,
+        MinioOffchainObjectStoreConfig,
+    };
     use axum::body::{to_bytes, Body};
     use axum::http::{Request, StatusCode};
+    use axum::Json;
     use chrono::Utc;
     use citizen_crypto::{sign_message, verifying_key_to_string, KeyRegistry, ValidatorKeypair};
     use citizen_ledger::Ledger;
-    use citizen_storage::MemoryStorage;
-    use citizen_txpool::TxPool;
+    use citizen_storage::{LedgerStorage, MemoryStorage};
     use citizen_types::{
-        LedgerEntry, NamespaceDescriptor, NamespaceRule, NamespaceRuleset, SignedEnvelope,
+        Block, BlockHeader, CommitProof, LedgerEntry, NamespaceDescriptor, NamespaceRule,
+        NamespaceRuleset, SignedEnvelope,
     };
     use serde_json::{json, Value};
     use std::collections::BTreeMap;
@@ -3524,7 +3922,7 @@ mod tests {
             object_id: "PROC-001".to_string(),
             payload: json!({"event":"BID_OPENED"}),
             privacy_flag: false,
-            privacy_mode: citizen_types::PrivacyMode::None,
+            privacy_mode: citizen_types::PrivacyMode::Hybrid,
             payload_commitment: None,
             ciphertext_hex: None,
             nonce_hex: None,
@@ -3641,6 +4039,69 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn batch_envelope_submission_commits_multiple_entries_in_single_block() {
+        let app = build_server().router();
+        let envelope_a = test_envelope();
+        let envelope_b = test_envelope();
+
+        let batch_submit = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/envelopes/submit-batch")
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        serde_json::to_vec(&vec![envelope_a.clone(), envelope_b.clone()])
+                            .expect("serialize envelopes"),
+                    ))
+                    .expect("request"),
+            )
+            .await
+            .expect("submit response");
+
+        assert_eq!(batch_submit.status(), StatusCode::ACCEPTED);
+        let batch_body = axum::body::to_bytes(batch_submit.into_body(), usize::MAX)
+            .await
+            .expect("batch bytes");
+        let batch_json: Value = serde_json::from_slice(&batch_body).expect("batch json");
+        assert_eq!(batch_json["status"], "accepted");
+        assert_eq!(batch_json["batch_size"], 2);
+        assert_eq!(batch_json["receipts"].as_array().map(|items| items.len()), Some(2));
+        assert_eq!(
+            batch_json["receipts"][0]["receipt"]["finality"]["block_height"],
+            1
+        );
+        assert_eq!(
+            batch_json["receipts"][1]["receipt"]["finality"]["block_height"],
+            1
+        );
+
+        let block_response = app
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri("/blocks/1")
+                    .body(Body::empty())
+                    .expect("request"),
+            )
+            .await
+            .expect("block response");
+
+        assert_eq!(block_response.status(), StatusCode::OK);
+        let block_body = axum::body::to_bytes(block_response.into_body(), usize::MAX)
+            .await
+            .expect("block bytes");
+        let block_json: Value = serde_json::from_slice(&block_body).expect("block json");
+        assert_eq!(
+            block_json["block"]["entries"]
+                .as_array()
+                .map(|entries| entries.len()),
+            Some(2)
+        );
+    }
+
+    #[tokio::test]
     async fn legacy_submit_entry_routes_through_envelope_receipt_flow() {
         let app = build_server().router();
         let envelope = test_envelope();
@@ -3698,176 +4159,6 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn submit_entry_queues_when_local_finalize_mode_disabled() {
-        let txpool = Arc::new(TxPool::default());
-        let server = {
-            let storage = Arc::new(MemoryStorage::new());
-            let ledger = Arc::new(Ledger::new(storage, KeyRegistry::new()));
-            ledger.bootstrap_namespaces(vec![NamespaceRuleset {
-                descriptor: NamespaceDescriptor {
-                    namespace: "audit.procurement".to_string(),
-                    version: 1,
-                    rules_hash: "rules-v1".to_string(),
-                    governed_by: "governance".to_string(),
-                },
-                writers: BTreeSet::new(),
-                validators: vec![NamespaceRule {
-                    name: "require_signature".to_string(),
-                    config: json!({}),
-                }],
-            }]);
-            ApiServer::with_edge_config_and_txpool(
-                ledger,
-                ApiEdgeConfig {
-                    local_finalize_mode: false,
-                    ..ApiEdgeConfig::default()
-                },
-                Arc::clone(&txpool),
-            )
-        };
-        let app = server.router();
-        let envelope = test_envelope();
-        let entry = envelope.payload;
-
-        let submit = app
-            .oneshot(
-                Request::builder()
-                    .method("POST")
-                    .uri("/api/v1/entries/submit")
-                    .header("content-type", "application/json")
-                    .body(Body::from(
-                        serde_json::to_vec(&entry).expect("serialize entry"),
-                    ))
-                    .expect("request"),
-            )
-            .await
-            .expect("submit response");
-
-        assert_eq!(submit.status(), StatusCode::ACCEPTED);
-        let submit_body = axum::body::to_bytes(submit.into_body(), usize::MAX)
-            .await
-            .expect("submit bytes");
-        let submit_json: Value = serde_json::from_slice(&submit_body).expect("submit json");
-        assert_eq!(submit_json["status"], "queued");
-        assert_eq!(submit_json["local_finalize_mode"], false);
-        assert_eq!(submit_json["queue_len"], 1);
-        assert_eq!(submit_json["queue_capacity"], 10_000);
-        assert_eq!(submit_json["queue_enqueued_total"], 1);
-        assert_eq!(submit_json["queue_drained_total"], 0);
-        assert!(submit_json["receipt"].is_null());
-        assert_eq!(txpool.len(), 1);
-    }
-
-    #[tokio::test]
-    async fn invalid_entry_is_rejected_before_queueing() {
-        let txpool = Arc::new(TxPool::default());
-        let server = {
-            let storage = Arc::new(MemoryStorage::new());
-            let ledger = Arc::new(Ledger::new(storage, KeyRegistry::new()));
-            ledger.bootstrap_namespaces(vec![NamespaceRuleset {
-                descriptor: NamespaceDescriptor {
-                    namespace: "audit.procurement".to_string(),
-                    version: 1,
-                    rules_hash: "rules-v1".to_string(),
-                    governed_by: "governance".to_string(),
-                },
-                writers: BTreeSet::new(),
-                validators: vec![NamespaceRule {
-                    name: "require_signature".to_string(),
-                    config: json!({}),
-                }],
-            }]);
-            ApiServer::with_edge_config_and_txpool(
-                ledger,
-                ApiEdgeConfig {
-                    local_finalize_mode: false,
-                    ..ApiEdgeConfig::default()
-                },
-                Arc::clone(&txpool),
-            )
-        };
-        let app = server.router();
-        let envelope = test_envelope();
-        let mut entry = envelope.payload;
-        entry.signature.clear();
-
-        let submit = app
-            .oneshot(
-                Request::builder()
-                    .method("POST")
-                    .uri("/api/v1/entries/submit")
-                    .header("content-type", "application/json")
-                    .body(Body::from(
-                        serde_json::to_vec(&entry).expect("serialize entry"),
-                    ))
-                    .expect("request"),
-            )
-            .await
-            .expect("submit response");
-
-        assert_eq!(submit.status(), StatusCode::BAD_REQUEST);
-        assert_eq!(txpool.len(), 0);
-    }
-
-    #[tokio::test]
-    async fn submit_entry_rejected_when_queue_is_full() {
-        let txpool = Arc::new(TxPool::with_capacity(0));
-        let server = {
-            let storage = Arc::new(MemoryStorage::new());
-            let ledger = Arc::new(Ledger::new(storage, KeyRegistry::new()));
-            ledger.bootstrap_namespaces(vec![NamespaceRuleset {
-                descriptor: NamespaceDescriptor {
-                    namespace: "audit.procurement".to_string(),
-                    version: 1,
-                    rules_hash: "rules-v1".to_string(),
-                    governed_by: "governance".to_string(),
-                },
-                writers: BTreeSet::new(),
-                validators: vec![NamespaceRule {
-                    name: "require_signature".to_string(),
-                    config: json!({}),
-                }],
-            }]);
-            ApiServer::with_edge_config_and_txpool(
-                ledger,
-                ApiEdgeConfig {
-                    local_finalize_mode: false,
-                    ..ApiEdgeConfig::default()
-                },
-                Arc::clone(&txpool),
-            )
-        };
-        let app = server.router();
-        let envelope = test_envelope();
-        let entry = envelope.payload;
-
-        let submit = app
-            .oneshot(
-                Request::builder()
-                    .method("POST")
-                    .uri("/api/v1/entries/submit")
-                    .header("content-type", "application/json")
-                    .body(Body::from(
-                        serde_json::to_vec(&entry).expect("serialize entry"),
-                    ))
-                    .expect("request"),
-            )
-            .await
-            .expect("submit response");
-
-        assert_eq!(submit.status(), StatusCode::TOO_MANY_REQUESTS);
-        let submit_body = axum::body::to_bytes(submit.into_body(), usize::MAX)
-            .await
-            .expect("submit bytes");
-        let submit_json: Value = serde_json::from_slice(&submit_body).expect("submit json");
-        assert_eq!(submit_json["status"], "queue_full");
-        assert_eq!(submit_json["queue_len"], 0);
-        assert_eq!(submit_json["queue_capacity"], 0);
-        assert_eq!(submit_json["queue_full_reject_total"], 1);
-        assert_eq!(txpool.len(), 0);
-    }
-
-    #[tokio::test]
     async fn resolves_did_from_identity_namespace() {
         let grant_keys = grant_approver_keys(&[
             "grant:ops-1",
@@ -3885,7 +4176,7 @@ mod tests {
             object_id: "did:ledger:alice".to_string(),
             payload: json!({"claims_hash":"0xabc"}),
             privacy_flag: false,
-            privacy_mode: citizen_types::PrivacyMode::None,
+            privacy_mode: citizen_types::PrivacyMode::Hybrid,
             payload_commitment: None,
             ciphertext_hex: None,
             nonce_hex: None,
@@ -4627,7 +4918,6 @@ mod tests {
             max_write_requests_per_minute: 1,
             offchain_encrypted_files_v1_enabled: true,
             require_builder_credit_for_all_writes: false,
-            local_finalize_mode: true,
             clients: BTreeMap::new(),
         })
         .router();
@@ -4680,7 +4970,6 @@ mod tests {
             max_write_requests_per_minute: 10,
             offchain_encrypted_files_v1_enabled: true,
             require_builder_credit_for_all_writes: false,
-            local_finalize_mode: true,
             clients,
         })
         .router();
@@ -4710,7 +4999,6 @@ mod tests {
             max_write_requests_per_minute: 10,
             offchain_encrypted_files_v1_enabled: true,
             require_builder_credit_for_all_writes: true,
-            local_finalize_mode: true,
             clients: BTreeMap::new(),
         })
         .router();
@@ -4740,7 +5028,6 @@ mod tests {
             max_write_requests_per_minute: 10,
             offchain_encrypted_files_v1_enabled: true,
             require_builder_credit_for_all_writes: true,
-            local_finalize_mode: true,
             clients: BTreeMap::new(),
         })
         .router();
@@ -4846,7 +5133,6 @@ mod tests {
             max_write_requests_per_minute: 10,
             offchain_encrypted_files_v1_enabled: true,
             require_builder_credit_for_all_writes: false,
-            local_finalize_mode: true,
             clients,
         })
         .router();
@@ -4882,7 +5168,6 @@ mod tests {
             max_write_requests_per_minute: 1,
             offchain_encrypted_files_v1_enabled: true,
             require_builder_credit_for_all_writes: false,
-            local_finalize_mode: true,
             clients,
         })
         .router();
@@ -4935,7 +5220,6 @@ mod tests {
             max_write_requests_per_minute: 10,
             offchain_encrypted_files_v1_enabled: true,
             require_builder_credit_for_all_writes: false,
-            local_finalize_mode: true,
             clients,
         });
 
@@ -4980,7 +5264,6 @@ mod tests {
             max_write_requests_per_minute: 10,
             offchain_encrypted_files_v1_enabled: false,
             require_builder_credit_for_all_writes: false,
-            local_finalize_mode: true,
             clients: BTreeMap::new(),
         })
         .router();
@@ -5188,7 +5471,7 @@ mod tests {
             submitted_at: chrono::Utc::now(),
             payload: consent_entry,
         };
-        let _ = app
+        let _consent_response = app
             .clone()
             .oneshot(
                 Request::builder()
@@ -5433,7 +5716,7 @@ mod tests {
             payload: consent_entry,
         };
 
-        let _ = app
+        let _consent_response = app
             .clone()
             .oneshot(
                 Request::builder()
@@ -5591,7 +5874,7 @@ mod tests {
             submitted_at: chrono::Utc::now(),
             payload: consent_entry,
         };
-        let _ = app
+        let _consent_response = app
             .clone()
             .oneshot(
                 Request::builder()
@@ -8726,6 +9009,319 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn payload_data_hash_endpoint_returns_ledger_matches_for_encrypted_data() {
+        let storage = Arc::new(MemoryStorage::new());
+        let ledger = Arc::new(Ledger::new(Arc::clone(&storage), KeyRegistry::new()));
+        ledger.bootstrap_namespaces(vec![NamespaceRuleset {
+            descriptor: NamespaceDescriptor {
+                namespace: "audit.procurement".to_string(),
+                version: 1,
+                rules_hash: "rules-v1".to_string(),
+                governed_by: "governance".to_string(),
+            },
+            writers: BTreeSet::new(),
+            validators: vec![NamespaceRule {
+                name: "require_signature".to_string(),
+                config: json!({}),
+            }],
+        }]);
+        ledger.bootstrap_namespaces(vec![NamespaceRuleset {
+            descriptor: NamespaceDescriptor {
+                namespace: "consent.receipt".to_string(),
+                version: 1,
+                rules_hash: "consent-v1".to_string(),
+                governed_by: "governance".to_string(),
+            },
+            writers: BTreeSet::new(),
+            validators: vec![NamespaceRule {
+                name: "require_signature".to_string(),
+                config: json!({}),
+            }],
+        }]);
+        storage
+            .upsert_namespace(NamespaceDescriptor {
+                namespace: "audit.procurement".to_string(),
+                version: 1,
+                rules_hash: "rules-v1".to_string(),
+                governed_by: "governance".to_string(),
+            })
+            .expect("audit namespace should be tracked");
+        storage
+            .upsert_namespace(NamespaceDescriptor {
+                namespace: "consent.receipt".to_string(),
+                version: 1,
+                rules_hash: "consent-v1".to_string(),
+                governed_by: "governance".to_string(),
+            })
+            .expect("consent namespace should be tracked");
+
+        let now = chrono::Utc::now().timestamp();
+        let data_hash = "sha256:lookup-data-hash";
+
+        let consent_signer = ValidatorKeypair::generate("did:citizen:holder-1".to_string());
+        let mut consent_entry = LedgerEntry {
+            entry_id: Uuid::new_v4(),
+            namespace: "consent.receipt".to_string(),
+            action: "CONSENT_GRANTED".to_string(),
+            object_id: "did:citizen:holder-1".to_string(),
+            payload: json!({
+                "data_hash": data_hash,
+                "policy_ref": "policy:offchain:v1",
+                "expires_at": now + 3_600
+            }),
+            privacy_flag: false,
+            privacy_mode: citizen_types::PrivacyMode::None,
+            payload_commitment: None,
+            ciphertext_hex: None,
+            nonce_hex: None,
+            salt_hex: None,
+            kdf_params: None,
+            consent_receipt: None,
+            authorized_readers: vec![],
+            custodian_policy_id: None,
+            field_reader_acls: BTreeMap::new(),
+            key_wrapped_secrets: vec![],
+            revocation_events: vec![],
+            author: "did:citizen:holder-1".to_string(),
+            signature: String::new(),
+            timestamp: now,
+        };
+        sign_entry_for_tests(&mut consent_entry, &consent_signer);
+        ledger
+            .apply_entry(consent_entry)
+            .expect("consent entry should be accepted");
+
+        let audit_signer = ValidatorKeypair::generate("did:author:encrypted".to_string());
+        let mut audit_entry = LedgerEntry {
+            entry_id: Uuid::new_v4(),
+            namespace: "audit.procurement".to_string(),
+            action: "ENCRYPTED_AUDIT_RECORD".to_string(),
+            object_id: "PROC-DATA-HASH-LOOKUP".to_string(),
+            payload: json!({"record_type": "procurement_notice"}),
+            privacy_flag: false,
+            privacy_mode: citizen_types::PrivacyMode::None,
+            payload_commitment: Some(data_hash.to_string()),
+            ciphertext_hex: None,
+            nonce_hex: None,
+            salt_hex: None,
+            kdf_params: None,
+            consent_receipt: None,
+            authorized_readers: vec![],
+            custodian_policy_id: None,
+            field_reader_acls: BTreeMap::new(),
+            key_wrapped_secrets: vec![],
+            revocation_events: vec![],
+            author: "did:author:encrypted".to_string(),
+            signature: String::new(),
+            timestamp: now,
+        };
+        sign_entry_for_tests(&mut audit_entry, &audit_signer);
+        ledger
+            .apply_entry(audit_entry)
+            .expect("audit entry should be accepted");
+
+        let edge = Arc::new(ApiEdgeState::new(
+            ApiEdgeConfig {
+                offchain_encrypted_files_v1_enabled: true,
+                ..ApiEdgeConfig::default()
+            },
+            Arc::new(LocalOffchainObjectStore),
+        ));
+
+        let (status, Json(payload)) =
+            ApiServer::<MemoryStorage>::handle_get_payload_data_hash(
+                Arc::clone(&ledger),
+                edge,
+                data_hash.to_string(),
+            )
+            .await;
+
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(payload["data_hash"], json!(data_hash));
+        assert_eq!(payload["matches"].as_array().map(Vec::len), Some(2));
+
+        let sources = payload["matches"]
+            .as_array()
+            .expect("matches array")
+            .iter()
+            .filter_map(|match_row| match_row.get("source").and_then(|value| value.as_str()))
+            .collect::<Vec<_>>();
+        assert!(sources.contains(&"consent_receipt.data_hash"));
+        assert!(sources.contains(&"payload_commitment"));
+    }
+
+    #[tokio::test]
+    async fn payload_data_hash_query_route_requires_q_parameter() {
+        let ledger = Arc::new(Ledger::new(Arc::new(MemoryStorage::new()), KeyRegistry::new()));
+        let edge = Arc::new(ApiEdgeState::new(
+            ApiEdgeConfig {
+                offchain_encrypted_files_v1_enabled: true,
+                ..ApiEdgeConfig::default()
+            },
+            Arc::new(LocalOffchainObjectStore),
+        ));
+
+        let (status, Json(payload)) = ApiServer::<MemoryStorage>::handle_get_payload_data_hash_query(
+            ledger,
+            edge,
+            DataHashQueryParams { q: None },
+        )
+        .await;
+
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+        assert_eq!(payload["error"], json!("missing required query parameter: q"));
+    }
+
+    #[tokio::test]
+    async fn payload_data_hash_endpoint_matches_payload_data_hash_for_on_chain_encrypted_forms() {
+        let storage = Arc::new(MemoryStorage::new());
+        let ledger = Arc::new(Ledger::new(Arc::clone(&storage), KeyRegistry::new()));
+        ledger.bootstrap_namespaces(vec![NamespaceRuleset {
+            descriptor: NamespaceDescriptor {
+                namespace: "audit.procurement".to_string(),
+                version: 1,
+                rules_hash: "rules-v1".to_string(),
+                governed_by: "governance".to_string(),
+            },
+            writers: BTreeSet::new(),
+            validators: vec![NamespaceRule {
+                name: "require_signature".to_string(),
+                config: json!({}),
+            }],
+        }]);
+        storage
+            .upsert_namespace(NamespaceDescriptor {
+                namespace: "audit.procurement".to_string(),
+                version: 1,
+                rules_hash: "rules-v1".to_string(),
+                governed_by: "governance".to_string(),
+            })
+            .expect("namespace should be tracked");
+
+        let signer = ValidatorKeypair::generate("did:author:forms".to_string());
+        let mut entry = LedgerEntry {
+            entry_id: Uuid::new_v4(),
+            namespace: "audit.procurement".to_string(),
+            action: "FORM_SUBMITTED".to_string(),
+            object_id: "FORM-001".to_string(),
+            payload: json!({
+                "data_hash": "sha256:form-sensitive-onchain",
+                "encrypted_fields": ["ssn", "medical_record"]
+            }),
+            privacy_flag: true,
+            privacy_mode: citizen_types::PrivacyMode::Hybrid,
+            payload_commitment: None,
+            ciphertext_hex: None,
+            nonce_hex: None,
+            salt_hex: None,
+            kdf_params: None,
+            consent_receipt: None,
+            authorized_readers: vec![],
+            custodian_policy_id: None,
+            field_reader_acls: BTreeMap::new(),
+            key_wrapped_secrets: vec![],
+            revocation_events: vec![],
+            author: "did:author:forms".to_string(),
+            signature: String::new(),
+            timestamp: chrono::Utc::now().timestamp(),
+        };
+        sign_entry_for_tests(&mut entry, &signer);
+        ledger.apply_entry(entry).expect("entry should be accepted");
+
+        let edge = Arc::new(ApiEdgeState::new(
+            ApiEdgeConfig {
+                offchain_encrypted_files_v1_enabled: false,
+                ..ApiEdgeConfig::default()
+            },
+            Arc::new(LocalOffchainObjectStore),
+        ));
+
+        let (status, Json(payload)) = ApiServer::<MemoryStorage>::handle_get_payload_data_hash(
+            ledger,
+            edge,
+            "form-sensitive-onchain".to_string(),
+        )
+        .await;
+
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(payload["data_hash"], json!("sha256:form-sensitive-onchain"));
+        assert_eq!(payload["matches"].as_array().map(Vec::len), Some(1));
+        assert_eq!(payload["matches"][0]["source"], json!("payload.data_hash"));
+        assert_eq!(payload["matches"][0]["namespace"], json!("audit.procurement"));
+    }
+
+    #[tokio::test]
+    async fn payload_data_hash_lookup_falls_back_to_block_scan_when_namespace_registry_is_empty() {
+        let storage = Arc::new(MemoryStorage::new());
+        let ledger = Arc::new(Ledger::new(Arc::clone(&storage), KeyRegistry::new()));
+
+        let entry = LedgerEntry {
+            entry_id: Uuid::new_v4(),
+            namespace: "forms.secure".to_string(),
+            action: "FORM_SUBMITTED".to_string(),
+            object_id: "FORM-BLOCK-ONLY-001".to_string(),
+            payload: json!({
+                "data_hash": "sha256:block-scan-data-hash"
+            }),
+            privacy_flag: true,
+            privacy_mode: citizen_types::PrivacyMode::Hybrid,
+            payload_commitment: None,
+            ciphertext_hex: None,
+            nonce_hex: None,
+            salt_hex: None,
+            kdf_params: None,
+            consent_receipt: None,
+            authorized_readers: vec![],
+            custodian_policy_id: None,
+            field_reader_acls: BTreeMap::new(),
+            key_wrapped_secrets: vec![],
+            revocation_events: vec![],
+            author: "did:author:forms".to_string(),
+            signature: "sig-block-only".to_string(),
+            timestamp: chrono::Utc::now().timestamp(),
+        };
+
+        storage
+            .store_block(Block {
+                header: BlockHeader {
+                    height: 0,
+                    prev_hash: "genesis".to_string(),
+                    entry_root: "entry-root-0".to_string(),
+                    proposer: "local-validator".to_string(),
+                    timestamp: chrono::Utc::now().timestamp(),
+                    commit_proof: CommitProof {
+                        aggregated_signature: "sig-finality".to_string(),
+                        participant_ids: BTreeSet::new(),
+                    },
+                },
+                entries: vec![entry],
+            })
+            .expect("block should be stored");
+
+        let edge = Arc::new(ApiEdgeState::new(
+            ApiEdgeConfig {
+                offchain_encrypted_files_v1_enabled: false,
+                ..ApiEdgeConfig::default()
+            },
+            Arc::new(LocalOffchainObjectStore),
+        ));
+
+        let (status, Json(payload)) = ApiServer::<MemoryStorage>::handle_get_payload_data_hash(
+            ledger,
+            edge,
+            "block-scan-data-hash".to_string(),
+        )
+        .await;
+
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(payload["data_hash"], json!("sha256:block-scan-data-hash"));
+        assert_eq!(payload["matches"].as_array().map(Vec::len), Some(1));
+        assert_eq!(payload["matches"][0]["source"], json!("payload.data_hash"));
+        assert_eq!(payload["matches"][0]["namespace"], json!("forms.secure"));
+    }
+
+
+    #[tokio::test]
     async fn payload_commit_rejects_non_payload_commit_action() {
         let app = build_server().router();
         let now = chrono::Utc::now().timestamp();
@@ -9455,7 +10051,6 @@ mod tests {
             max_write_requests_per_minute: 10,
             offchain_encrypted_files_v1_enabled: true,
             require_builder_credit_for_all_writes: false,
-            local_finalize_mode: true,
             clients,
         })
         .router();
@@ -9501,7 +10096,6 @@ mod tests {
             max_write_requests_per_minute: 10,
             offchain_encrypted_files_v1_enabled: true,
             require_builder_credit_for_all_writes: false,
-            local_finalize_mode: true,
             clients,
         })
         .router();

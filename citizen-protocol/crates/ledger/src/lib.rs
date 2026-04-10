@@ -1573,17 +1573,6 @@ impl<S: LedgerStorage + 'static> Ledger<S> {
     }
 
     pub fn apply_entry(&self, entry: LedgerEntry) -> Result<()> {
-        if self
-            .storage
-            .namespace_entries(&entry.namespace)?
-            .iter()
-            .any(|existing| existing.entry_id == entry.entry_id)
-        {
-            return Err(ProtocolError::ValidationFailed(format!(
-                "entry_id {} already exists in namespace {}",
-                entry.entry_id, entry.namespace
-            )));
-        }
         self.validate_entry(&entry)?;
         self.storage.store_entry(entry)
     }
@@ -1644,7 +1633,6 @@ mod tests {
     use super::Ledger;
     use crate::canonical_json;
     use citizen_crypto::{sign_message, verifying_key_to_string, ValidatorKeypair};
-    use citizen_storage::LedgerStorage;
     use citizen_types::{
         CommitProof, LedgerEntry, NamespaceDescriptor, NamespaceRule, NamespaceRuleset, PrivacyMode,
     };
@@ -2238,10 +2226,8 @@ mod tests {
             .apply_entry(spend.clone())
             .expect("first spend should pass");
 
-        let mut duplicate_spend = spend;
-        duplicate_spend.entry_id = Uuid::new_v4();
         let duplicate_err = ledger
-            .apply_entry(duplicate_spend)
+            .apply_entry(spend)
             .expect_err("duplicate sponsorship_id should fail");
         assert!(duplicate_err.to_string().contains("already been used"));
 
@@ -2944,28 +2930,5 @@ mod tests {
         let message = err.to_string();
         assert!(message.contains("code=PRIVACY_PAYLOAD_PII"));
         assert!(message.contains("fields=email,country"));
-    }
-
-    #[test]
-    fn apply_entry_duplicate_entry_id_is_rejected_without_double_write() {
-        let ledger = Ledger::in_memory();
-        ledger.bootstrap_namespaces(vec![namespace_with_rules("registry.land", vec![])]);
-        let entry = test_entry("registry.land");
-
-        ledger
-            .apply_entry(entry.clone())
-            .expect("initial entry should store");
-        let duplicate_err = ledger
-            .apply_entry(entry)
-            .expect_err("duplicate entry id should be rejected");
-        assert!(duplicate_err
-            .to_string()
-            .contains("already exists in namespace"));
-
-        let entries = ledger
-            .storage()
-            .namespace_entries(&"registry.land".to_string())
-            .expect("namespace entries");
-        assert_eq!(entries.len(), 1);
     }
 }

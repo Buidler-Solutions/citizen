@@ -1,0 +1,25 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "outDir": ".tmp-tests",
+    "rootDir": ".",
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "target": "es2022",
+    "declaration": false,
+    "sourceMap": false,
+    "types": ["node"],
+    "jsx": "preserve"
+  },
+  "include": [
+    "tests.format.test.ts",
+    "tests.blocks-list-state.test.ts",
+    "tests.block-routes.test.ts",
+    "tests.blocks-fallback.test.ts",
+    "app/lib/format.ts",
+    "app/lib/blocks-list-state.ts",
+    "app/lib/blocks.ts",
+    "app/lib/block-routes.ts"
+  ]
+}

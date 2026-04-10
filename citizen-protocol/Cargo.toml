@@ -8,7 +8,6 @@ members = [
     "crates/network",
     "crates/storage",
     "crates/api",
-    "crates/txpool",
     "crates/node",
     "crates/simulation",
     "crates/wallet",
