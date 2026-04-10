@@ -456,6 +456,8 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
         let submit_edge = Arc::clone(&self.edge);
         let submit_envelope_ledger = Arc::clone(&self.ledger);
         let submit_envelope_edge = Arc::clone(&self.edge);
+        let submit_envelope_batch_ledger = Arc::clone(&self.ledger);
+        let submit_envelope_batch_edge = Arc::clone(&self.edge);
         let file_intent_ledger = Arc::clone(&self.ledger);
         let file_intent_edge = Arc::clone(&self.edge);
         let file_commit_ledger = Arc::clone(&self.ledger);
@@ -536,6 +538,19 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
                         let edge = Arc::clone(&submit_envelope_edge);
                         async move {
                             Self::handle_submit_envelope(ledger, edge, headers, envelope).await
+                        }
+                    },
+                ),
+            )
+            .route(
+                "/api/v1/envelopes/submit-batch",
+                post(
+                    move |headers: HeaderMap,
+                          Json(envelopes): Json<Vec<SignedEnvelope<LedgerEntry>>>| {
+                        let ledger = Arc::clone(&submit_envelope_batch_ledger);
+                        let edge = Arc::clone(&submit_envelope_batch_edge);
+                        async move {
+                            Self::handle_submit_envelope_batch(ledger, edge, headers, envelopes).await
                         }
                     },
                 ),
@@ -837,6 +852,31 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
             return response;
         }
         Self::process_envelope_submission(ledger, envelope).await
+    }
+
+    async fn handle_submit_envelope_batch(
+        ledger: Arc<Ledger<S>>,
+        edge: Arc<ApiEdgeState>,
+        headers: HeaderMap,
+        envelopes: Vec<SignedEnvelope<LedgerEntry>>,
+    ) -> (StatusCode, Json<serde_json::Value>) {
+        if let Err(response) =
+            Self::authorize_write(Arc::clone(&edge), &headers, "envelopes.submit").await
+        {
+            return response;
+        }
+
+        for envelope in &envelopes {
+            if let Err(response) = Self::authorize_builder_credit_gate(
+                Arc::clone(&edge),
+                Arc::clone(&ledger),
+                &envelope.payload,
+            ) {
+                return response;
+            }
+        }
+
+        Self::process_envelope_batch_submission(ledger, envelopes).await
     }
 
     fn authorize_builder_credit_gate(
@@ -2377,6 +2417,104 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
         )
     }
 
+    async fn process_envelope_batch_submission(
+        ledger: Arc<Ledger<S>>,
+        envelopes: Vec<SignedEnvelope<LedgerEntry>>,
+    ) -> (StatusCode, Json<serde_json::Value>) {
+        if envelopes.is_empty() {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({"error":"batch must contain at least one envelope"})),
+            );
+        }
+
+        let mut validated_entries = Vec::with_capacity(envelopes.len());
+        let mut accepted = Vec::with_capacity(envelopes.len());
+        for envelope in envelopes {
+            if envelope.signature.is_empty() {
+                return protocol_error_response(ProtocolError::ValidationFailed(
+                    "missing envelope signature".into(),
+                ));
+            }
+
+            if envelope.signer != envelope.payload.author {
+                return protocol_error_response(ProtocolError::ValidationFailed(
+                    "envelope signer must match payload author".into(),
+                ));
+            }
+
+            if !envelope.payload.signature.is_empty() && envelope.payload.signature != envelope.signature
+            {
+                return protocol_error_response(ProtocolError::ValidationFailed(
+                    "envelope signature must match payload signature when both are present".into(),
+                ));
+            }
+
+            let action = envelope.payload.action.clone();
+            let mut entry = envelope.payload;
+            if entry.signature.is_empty() {
+                entry.signature = envelope.signature.clone();
+            }
+
+            if let Err(err) = ledger.validate_entry_submission(&entry) {
+                return protocol_error_response(err);
+            }
+            accepted.push((
+                entry.entry_id,
+                entry.namespace.clone(),
+                action,
+                envelope.envelope_id,
+                extract_offchain_commitments(&entry),
+            ));
+            validated_entries.push(entry);
+        }
+
+        for entry in &validated_entries {
+            if let Err(err) = ledger.apply_entry(entry.clone()) {
+                return protocol_error_response(err);
+            }
+        }
+
+        let finality = match Self::finalize_entries(Arc::clone(&ledger), validated_entries).await {
+            Ok(finality) => finality,
+            Err(err) => return protocol_error_response(err),
+        };
+
+        let mut receipts = Vec::with_capacity(accepted.len());
+        for (entry_id, namespace, action, envelope_id, offchain_commitments) in accepted {
+            let receipt = DeterministicReceipt {
+                receipt_id: Uuid::new_v4(),
+                envelope_id,
+                status: ReceiptStatus::Accepted,
+                validation: ValidationSummary {
+                    namespace: namespace.clone(),
+                    action,
+                    outcome: "namespace rules accepted and finalized".into(),
+                    offchain_commitments,
+                },
+                finality: Some(finality.clone()),
+                recorded_at: Utc::now(),
+            };
+            if let Err(err) = ledger.storage().store_receipt(receipt.clone()) {
+                return protocol_error_response(err);
+            }
+            receipts.push(serde_json::json!({
+                "entry_id": entry_id,
+                "namespace": namespace,
+                "receipt": receipt,
+            }));
+        }
+
+        (
+            StatusCode::ACCEPTED,
+            Json(serde_json::json!({
+                "status": "accepted",
+                "batch_size": receipts.len(),
+                "receipts": receipts,
+            })),
+        )
+    }
+
     async fn handle_get_receipt(
         ledger: Arc<Ledger<S>>,
         receipt_id: Uuid,
@@ -2606,6 +2744,18 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
         ledger: Arc<Ledger<S>>,
         entry: LedgerEntry,
     ) -> Result<FinalityProof, ProtocolError> {
+        Self::finalize_entries(ledger, vec![entry]).await
+    }
+
+    async fn finalize_entries(
+        ledger: Arc<Ledger<S>>,
+        entries: Vec<LedgerEntry>,
+    ) -> Result<FinalityProof, ProtocolError> {
+        if entries.is_empty() {
+            return Err(ProtocolError::ValidationFailed(
+                "cannot finalize empty entry batch".into(),
+            ));
+        }
         let storage = ledger.storage();
         let latest_height = storage.latest_height()?;
         let next_height = latest_height.saturating_add(1);
@@ -2622,16 +2772,17 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
             aggregated_signature: "local-dev-finality".to_string(),
             participant_ids: BTreeSet::new(),
         };
+        let entry_root = compute_entry_root(&entries);
         let block = Block {
             header: BlockHeader {
                 height: next_height,
                 prev_hash,
-                entry_root: format!("entry:{}", entry.entry_id),
+                entry_root,
                 proposer: "local-validator".to_string(),
                 timestamp: Utc::now().timestamp(),
                 commit_proof: commit_proof.clone(),
             },
-            entries: vec![entry],
+            entries,
         };
         storage.store_block(block.clone())?;
 
@@ -2867,6 +3018,27 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
             alerts.drain(0..overflow);
         }
     }
+}
+
+fn compute_entry_root(entries: &[LedgerEntry]) -> String {
+    if entries.is_empty() {
+        return "EMPTY".to_string();
+    }
+
+    if entries.len() == 1 {
+        return format!("entry:{}", entries[0].entry_id);
+    }
+
+    let mut hasher = blake3::Hasher::new();
+    for entry in entries {
+        hasher.update(entry.entry_id.as_bytes());
+        hasher.update(entry.namespace.as_bytes());
+        hasher.update(entry.action.as_bytes());
+        hasher.update(entry.object_id.as_bytes());
+        hasher.update(entry.signature.as_bytes());
+        hasher.update(&entry.timestamp.to_be_bytes());
+    }
+    hasher.finalize().to_hex().to_string()
 }
 
 fn extract_offchain_commitments(entry: &LedgerEntry) -> Option<OffchainCommitmentSummary> {
@@ -3622,6 +3794,69 @@ mod tests {
             "local-dev-finality"
         );
         assert_eq!(receipt_json["receipt"]["finality"]["block_height"], 1);
+    }
+
+    #[tokio::test]
+    async fn batch_envelope_submission_commits_multiple_entries_in_single_block() {
+        let app = build_server().router();
+        let envelope_a = test_envelope();
+        let envelope_b = test_envelope();
+
+        let batch_submit = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/envelopes/submit-batch")
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        serde_json::to_vec(&vec![envelope_a.clone(), envelope_b.clone()])
+                            .expect("serialize envelopes"),
+                    ))
+                    .expect("request"),
+            )
+            .await
+            .expect("submit response");
+
+        assert_eq!(batch_submit.status(), StatusCode::ACCEPTED);
+        let batch_body = axum::body::to_bytes(batch_submit.into_body(), usize::MAX)
+            .await
+            .expect("batch bytes");
+        let batch_json: Value = serde_json::from_slice(&batch_body).expect("batch json");
+        assert_eq!(batch_json["status"], "accepted");
+        assert_eq!(batch_json["batch_size"], 2);
+        assert_eq!(batch_json["receipts"].as_array().map(|items| items.len()), Some(2));
+        assert_eq!(
+            batch_json["receipts"][0]["receipt"]["finality"]["block_height"],
+            1
+        );
+        assert_eq!(
+            batch_json["receipts"][1]["receipt"]["finality"]["block_height"],
+            1
+        );
+
+        let block_response = app
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri("/blocks/1")
+                    .body(Body::empty())
+                    .expect("request"),
+            )
+            .await
+            .expect("block response");
+
+        assert_eq!(block_response.status(), StatusCode::OK);
+        let block_body = axum::body::to_bytes(block_response.into_body(), usize::MAX)
+            .await
+            .expect("block bytes");
+        let block_json: Value = serde_json::from_slice(&block_body).expect("block json");
+        assert_eq!(
+            block_json["block"]["entries"]
+                .as_array()
+                .map(|entries| entries.len()),
+            Some(2)
+        );
     }
 
     #[tokio::test]

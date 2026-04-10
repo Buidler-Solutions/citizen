@@ -220,6 +220,63 @@ test("submitWithBrowserWallet requests account and signs through wallet provider
   assert.equal(providerCalls.filter((call) => call.method === "personal_sign").length, 2);
 });
 
+test("submitEnvelopeBatch posts array payload to batch endpoint", async () => {
+  let capturedRequest;
+  const fetchImpl = async (url, init) => {
+    capturedRequest = { url, init };
+    return new Response(
+      JSON.stringify({
+        status: "accepted",
+        batch_size: 2,
+        receipts: [{ entry_id: "e1" }, { entry_id: "e2" }]
+      }),
+      { status: 202, headers: { "content-type": "application/json" } }
+    );
+  };
+
+  const client = new CitizenNodeClient({
+    baseUrl: "http://127.0.0.1:8080",
+    fetchImpl
+  });
+
+  const envelopeA = {
+    envelope_id: "11111111-1111-1111-1111-111111111111",
+    signer: "did:ledger:alice",
+    signature: "sig-a",
+    submitted_at: new Date().toISOString(),
+    payload: {
+      entry_id: "22222222-2222-2222-2222-222222222222",
+      namespace: "audit.procurement",
+      action: "RECORD_EVENT",
+      object_id: "PO-1",
+      payload: { event: "OPENED" },
+      author: "did:ledger:alice",
+      signature: "sig-a",
+      timestamp: Math.floor(Date.now() / 1000)
+    }
+  };
+  const envelopeB = {
+    ...envelopeA,
+    envelope_id: "33333333-3333-3333-3333-333333333333",
+    signature: "sig-b",
+    payload: {
+      ...envelopeA.payload,
+      entry_id: "44444444-4444-4444-4444-444444444444",
+      object_id: "PO-2",
+      signature: "sig-b"
+    }
+  };
+
+  const result = await client.submitEnvelopeBatch([envelopeA, envelopeB]);
+  assert.equal(result.batch_size, 2);
+  assert.equal(capturedRequest.url, "http://127.0.0.1:8080/api/v1/envelopes/submit-batch");
+  assert.equal(capturedRequest.init.method, "POST");
+
+  const body = JSON.parse(capturedRequest.init.body);
+  assert.equal(Array.isArray(body), true);
+  assert.equal(body.length, 2);
+});
+
 test("BrowserWalletSigner accepts explicit account", async () => {
   const signer = new BrowserWalletSigner({
     account: "0xdef456",

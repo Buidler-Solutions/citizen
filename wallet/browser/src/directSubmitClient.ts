@@ -45,6 +45,15 @@ export type CitizenNetworkSubmitRequest = {
   fetchImpl?: typeof fetch;
 };
 
+export type CitizenNetworkBatchSubmitRequest = {
+  apiBaseUrl: string;
+  allowlistedApiBaseUrls: readonly string[];
+  envelopes: SignedEnvelope[];
+  consentToShareFullPayload: boolean;
+  apiKey?: string;
+  fetchImpl?: typeof fetch;
+};
+
 export type DirectSubmitResponse = {
   traceId: string;
   idempotencyKey: string;
@@ -52,6 +61,20 @@ export type DirectSubmitResponse = {
   latencyMs: number;
   receiptId: string | null;
   receiptHash: string | null;
+};
+
+export type DirectBatchSubmitResponse = {
+  traceId: string;
+  idempotencyKey: string;
+  status: number;
+  latencyMs: number;
+  batchSize: number;
+  receipts: Array<{
+    entryId: string | null;
+    namespace: string | null;
+    receiptId: string | null;
+    receiptHash: string | null;
+  }>;
 };
 
 export type ReceiptLookupRequest = {
@@ -70,7 +93,40 @@ export type CitizenReceiptLookupRequest = {
 
 const ALLOWED_PROTOCOLS = new Set(['https:', 'http:']);
 const CITIZEN_SUBMIT_ENVELOPE_PATH = '/api/v1/envelopes/submit';
+const CITIZEN_SUBMIT_ENVELOPE_BATCH_PATH = '/api/v1/envelopes/submit-batch';
 const CITIZEN_RECEIPT_PATH_PREFIX = '/api/v1/receipts/';
+
+function extractReceiptFromSubmissionPayload(payload: unknown): {
+  receiptId: string | null;
+  receiptHash: string | null;
+} {
+  const asRecord = (value: unknown): Record<string, unknown> | null =>
+    typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : null;
+
+  const root = asRecord(payload);
+  if (!root) {
+    return { receiptId: null, receiptHash: null };
+  }
+
+  const directReceipt = asRecord(root.receipt);
+  if (directReceipt) {
+    const finality = asRecord(directReceipt.finality);
+    return {
+      receiptId: typeof directReceipt.receipt_id === 'string' ? directReceipt.receipt_id : null,
+      receiptHash: typeof finality?.block_hash === 'string' ? finality.block_hash : null,
+    };
+  }
+
+  const receipts = Array.isArray(root.receipts) ? root.receipts : [];
+  const first = asRecord(receipts[0]);
+  const firstReceipt = first ? asRecord(first.receipt) : null;
+  const finality = firstReceipt ? asRecord(firstReceipt.finality) : null;
+
+  return {
+    receiptId: typeof firstReceipt?.receipt_id === 'string' ? firstReceipt.receipt_id : null,
+    receiptHash: typeof finality?.block_hash === 'string' ? finality.block_hash : null,
+  };
+}
 
 function normalizeDestination(urlValue: string): string {
   const parsed = new URL(urlValue);
@@ -172,6 +228,18 @@ async function deriveNetworkSubmitIdempotencyKey(envelope: SignedEnvelope): Prom
   return `network:${hex}`;
 }
 
+async function deriveNetworkBatchSubmitIdempotencyKey(envelopes: SignedEnvelope[]): Promise<string> {
+  const material = envelopes
+    .map((envelope) => `${envelope.envelope_id}|${envelope.signature}|${envelope.payload.signature}`)
+    .join('||');
+  const encoded = new TextEncoder().encode(`citizen_wallet_network_batch_submit_v1|${material}`);
+  const digest = await crypto.subtle.digest('SHA-256', encoded);
+  const hex = Array.from(new Uint8Array(digest))
+    .map((value) => value.toString(16).padStart(2, '0'))
+    .join('');
+  return `network-batch:${hex}`;
+}
+
 export async function submitSignedArtifact(
   request: DirectSubmitRequest,
 ): Promise<DirectSubmitResponse> {
@@ -250,9 +318,7 @@ export async function submitEnvelopeToCitizenNetwork(
 
   const latencyMs = Date.now() - startedAt;
   const payload = await response.json().catch(() => ({} as Record<string, unknown>));
-  const receipt = (payload as { receipt?: { receipt_id?: string; finality?: { block_hash?: string } } }).receipt;
-  const receiptId = typeof receipt?.receipt_id === 'string' ? receipt.receipt_id : null;
-  const receiptHash = typeof receipt?.finality?.block_hash === 'string' ? receipt.finality.block_hash : null;
+  const { receiptId, receiptHash } = extractReceiptFromSubmissionPayload(payload);
 
   if (!response.ok) {
     throw new Error(`Citizen envelope submit failed with status ${response.status} (trace_id=${traceId}).`);
@@ -265,6 +331,69 @@ export async function submitEnvelopeToCitizenNetwork(
     latencyMs,
     receiptId,
     receiptHash,
+  };
+}
+
+export async function submitEnvelopesToCitizenNetworkBatch(
+  request: CitizenNetworkBatchSubmitRequest,
+): Promise<DirectBatchSubmitResponse> {
+  if (!request.consentToShareFullPayload) {
+    throw new Error('Full-payload submission requires explicit user consent.');
+  }
+  if (!isAllowlistedApiBaseUrl(request.apiBaseUrl, request.allowlistedApiBaseUrls)) {
+    throw new Error('Citizen API base URL is not allowlisted for wallet direct submit.');
+  }
+  if (!Array.isArray(request.envelopes) || request.envelopes.length === 0) {
+    throw new Error('Batch submit requires at least one envelope.');
+  }
+
+  const url = buildApiUrl(request.apiBaseUrl, CITIZEN_SUBMIT_ENVELOPE_BATCH_PATH);
+  const fetchImpl = request.fetchImpl ?? fetch;
+  const traceId = crypto.randomUUID();
+  const idempotencyKey = await deriveNetworkBatchSubmitIdempotencyKey(request.envelopes);
+  const startedAt = Date.now();
+  const response = await fetchImpl(url, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      'x-citizen-wallet-trace-id': traceId,
+      'x-idempotency-key': idempotencyKey,
+      ...(request.apiKey ? { 'x-api-key': request.apiKey } : {}),
+    },
+    body: JSON.stringify(request.envelopes),
+  });
+
+  const latencyMs = Date.now() - startedAt;
+  const payload = await response.json().catch(() => ({} as Record<string, unknown>));
+  const root = typeof payload === 'object' && payload !== null ? (payload as Record<string, unknown>) : {};
+  const receiptsRaw = Array.isArray(root.receipts) ? root.receipts : [];
+  const receipts = receiptsRaw.map((value) => {
+    const item = typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : {};
+    const receipt = typeof item.receipt === 'object' && item.receipt !== null
+      ? (item.receipt as Record<string, unknown>)
+      : {};
+    const finality = typeof receipt.finality === 'object' && receipt.finality !== null
+      ? (receipt.finality as Record<string, unknown>)
+      : {};
+    return {
+      entryId: typeof item.entry_id === 'string' ? item.entry_id : null,
+      namespace: typeof item.namespace === 'string' ? item.namespace : null,
+      receiptId: typeof receipt.receipt_id === 'string' ? receipt.receipt_id : null,
+      receiptHash: typeof finality.block_hash === 'string' ? finality.block_hash : null,
+    };
+  });
+
+  if (!response.ok) {
+    throw new Error(`Citizen batch envelope submit failed with status ${response.status} (trace_id=${traceId}).`);
+  }
+
+  return {
+    traceId,
+    idempotencyKey,
+    status: response.status,
+    latencyMs,
+    batchSize: Number.isInteger(root.batch_size) ? (root.batch_size as number) : receipts.length,
+    receipts,
   };
 }
 
