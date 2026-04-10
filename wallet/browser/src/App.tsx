@@ -141,6 +141,7 @@ type TabId = 'activity' | 'compose' | 'vault' | 'security' | 'profile';
 
 type NetworkId = 'mainnet' | 'futurenet' | 'testnet' | 'localnode';
 type MnemonicWordCount = 12 | 24;
+type NetworkLiveness = Record<NetworkId, boolean>;
 
 function detectMnemonicWordCount(phrase: string): MnemonicWordCount | null {
   const words = phrase.trim().split(/\s+/).filter(Boolean).length;
@@ -293,6 +294,12 @@ export function App() {
   const [needsPasswordSetup, setNeedsPasswordSetup] = useState(false);
   const [locked, setLocked] = useState(false);
   const [status, setStatus] = useState('');
+  const [networkLiveness, setNetworkLiveness] = useState<NetworkLiveness>({
+    mainnet: true,
+    futurenet: true,
+    testnet: true,
+    localnode: true,
+  });
   const [secretPassword, setSecretPassword] = useState('');
   const [protocolKeypairs, setProtocolKeypairs] = useState<ProtocolKeypairsExport | null>(null);
   const [mnemonicPassword, setMnemonicPassword] = useState('');
@@ -348,6 +355,16 @@ export function App() {
       const network = selectedNetwork.ok
         ? (selectedNetwork.result as NetworkId)
         : 'mainnet';
+      const livenessResponse = await callWallet('wallet_getNetworkLiveness');
+      const liveNetworks = livenessResponse.ok && livenessResponse.result && typeof livenessResponse.result === 'object'
+        ? livenessResponse.result as NetworkLiveness
+        : null;
+      if (liveNetworks) {
+        setNetworkLiveness(liveNetworks);
+        if (!liveNetworks[network]) {
+          setStatus(`Selected network (${network}) is offline. Switch to a live network to continue transactions.`);
+        }
+      }
 
       const profileDraft = stored[PROFILE_KEY] as Partial<ProfileDetails> | undefined;
       if (profileDraft) {
@@ -507,6 +524,16 @@ export function App() {
     return new Map<string, DirectSubmitReceipt>(pairs);
   }, [visibleDirectSubmitReceipts]);
   const approvalUiEnabled = isApprovalUiEnabled(APPROVAL_UI_ROLLOUT_STAGE);
+  const selectedNetworkIsLive = networkLiveness[state.network];
+  const modalNetworkOptions = useMemo(
+    () =>
+      NETWORK_OPTIONS.filter((option) => networkLiveness[option.id] || option.id === state.network),
+    [networkLiveness, state.network],
+  );
+
+  const handleNetworkUnavailable = (message?: string) => {
+    setStatus(message ?? 'Selected network is offline. Switch to a live network to continue.');
+  };
 
   const handlePasswordSubmit = async () => {
     setStatus('');
@@ -681,6 +708,10 @@ export function App() {
     }
     const result = await callWallet('ctzn_signCitizenTx', [{ message: composeMessage }]);
     if (!result.ok || !result.result || typeof result.result !== 'object') {
+      if (result.error?.includes('ERR_NETWORK_UNAVAILABLE')) {
+        handleNetworkUnavailable(result.error);
+        return;
+      }
       setStatus(result.error ?? 'Unable to sign composed transaction payload.');
       return;
     }
@@ -737,6 +768,10 @@ export function App() {
 
   const handleApproveDappRequest = async (requestId: string) => {
     const response = await callWallet('wallet_approveDappRequest', [requestId]);
+    if (!response.ok && response.error?.includes('ERR_NETWORK_UNAVAILABLE')) {
+      handleNetworkUnavailable(response.error);
+      return;
+    }
     setStatus(response.ok ? 'Request approved and ready for signing.' : response.error ?? 'Unable to approve request.');
     await refreshState();
   };
@@ -778,6 +813,10 @@ export function App() {
       consentShareSigningPayload,
     ]);
     if (!response.ok) {
+      if (response.error?.includes('ERR_NETWORK_UNAVAILABLE')) {
+        handleNetworkUnavailable(response.error);
+        return;
+      }
       setStatus(response.error ?? 'Direct submit failed.');
       return;
     }
@@ -795,6 +834,10 @@ export function App() {
     }
     setStatus('Default direct submit destination updated.');
     await refreshState();
+  };
+
+  const handleSelectLiveNetwork = async (network: NetworkId) => {
+    await handleNetworkChange(network);
   };
 
   const handleCopySignerDid = async () => {
@@ -995,6 +1038,34 @@ export function App() {
               Logout
             </button>
           </nav>
+        ) : null}
+        {!selectedNetworkIsLive ? (
+          <div className="network-modal-backdrop" role="presentation">
+            <article className="network-modal" role="dialog" aria-modal="true" aria-label="Switch to live network">
+              <h2>Network unavailable</h2>
+              <p className="meta-text">
+                The currently selected network is offline. Choose a live network below to continue.
+              </p>
+              <div className="form-grid">
+                {modalNetworkOptions.length > 0 ? (
+                  modalNetworkOptions.map((option) => (
+                    <button
+                      key={option.id}
+                      className={networkLiveness[option.id] ? 'primary' : 'ghost'}
+                      disabled={!networkLiveness[option.id]}
+                      onClick={() => void handleSelectLiveNetwork(option.id)}
+                    >
+                      {networkLiveness[option.id]
+                        ? `Switch to ${option.label}`
+                        : `${option.label} (offline)`}
+                    </button>
+                  ))
+                ) : (
+                  <p className="meta-text">No active network is reachable right now.</p>
+                )}
+              </div>
+            </article>
+          </div>
         ) : null}
 
         <div className="wallet-scroll">
