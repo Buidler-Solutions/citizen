@@ -22,8 +22,10 @@ import {
   isEncryptedJsonEnvelope,
 } from './sensitiveStorage';
 import {
+  submitEnvelopesToCitizenNetworkBatch,
   submitSignedArtifact,
   type DirectSubmitResponse,
+  type SignedEnvelope,
   type SignedSubmissionArtifact,
 } from './directSubmitClient';
 
@@ -137,6 +139,7 @@ const STRICT_PROTOCOL_MODE = true;
 const DIRECT_SUBMIT_ALLOWLIST: readonly string[] = [
   'http://127.0.0.1:8081/api/v1/direct-submit',
 ];
+const CITIZEN_API_BASE_ALLOWLIST: readonly string[] = ['http://127.0.0.1:8081'];
 
 type DirectSubmitReceipt = {
   requestId: string;
@@ -1092,6 +1095,128 @@ async function directSubmitLatestSignedArtifact(
   }
 }
 
+function normalizeEntryPayloadForEnvelope(
+  requestPayload: unknown,
+  signedArtifact: SignedSubmissionArtifact,
+): SignedEnvelope | null {
+  if (typeof requestPayload !== 'object' || requestPayload === null) {
+    return null;
+  }
+  const payload = requestPayload as Record<string, unknown>;
+  const namespace = typeof payload.namespace === 'string' ? payload.namespace : null;
+  const action =
+    typeof payload.action === 'string'
+      ? payload.action
+      : typeof payload.operation === 'string'
+        ? payload.operation
+        : null;
+  const objectId =
+    typeof payload.object_id === 'string'
+      ? payload.object_id
+      : typeof payload.objectId === 'string'
+        ? payload.objectId
+        : null;
+  if (!namespace || !action || !objectId) {
+    return null;
+  }
+
+  const now = Math.floor(Date.now() / 1000);
+  const innerPayload =
+    typeof payload.payload === 'object' && payload.payload !== null
+      ? (payload.payload as Record<string, unknown>)
+      : {};
+
+  return {
+    envelope_id:
+      typeof payload.envelope_id === 'string'
+        ? payload.envelope_id
+        : typeof payload.envelopeId === 'string'
+          ? payload.envelopeId
+          : crypto.randomUUID(),
+    signer: signedArtifact.signerDid,
+    signature: signedArtifact.signature,
+    submitted_at: new Date().toISOString(),
+    payload: {
+      entry_id:
+        typeof payload.entry_id === 'string'
+          ? payload.entry_id
+          : typeof payload.entryId === 'string'
+            ? payload.entryId
+            : crypto.randomUUID(),
+      namespace,
+      action,
+      object_id: objectId,
+      payload: innerPayload,
+      author: signedArtifact.signerDid,
+      timestamp: typeof payload.timestamp === 'number' ? payload.timestamp : now,
+      signature: signedArtifact.signature,
+    },
+  };
+}
+
+async function directSubmitSignedBatchToCitizenNetwork(
+  apiBaseUrl: string,
+  consentToShareFullPayload: boolean,
+  requestIds?: string[],
+): Promise<WalletResponse> {
+  const requests = await getPendingDappRequests();
+  const signedRequests = requests.filter((entry) => entry.state === 'signed');
+  const selectedRequests = Array.isArray(requestIds) && requestIds.length > 0
+    ? signedRequests.filter((entry) => requestIds.includes(entry.requestId))
+    : signedRequests;
+
+  if (selectedRequests.length === 0) {
+    return walletError('ERR_NO_SIGNED_ARTIFACT', 'No signed requests are available for batch submit.');
+  }
+
+  const envelopes: SignedEnvelope[] = [];
+  for (const request of selectedRequests) {
+    const signed = await createSignedCitizenResult(request.envelope);
+    if (!signed.ok) {
+      return signed;
+    }
+    const signedArtifact = asSignedSubmissionArtifact(signed.result ?? null);
+    if (!signedArtifact) {
+      return walletError('ERR_NO_SIGNED_ARTIFACT', 'Unable to reconstruct signed artifact.');
+    }
+    const envelope = normalizeEntryPayloadForEnvelope(request.envelope.payload, signedArtifact);
+    if (!envelope) {
+      return walletError(
+        'ERR_MALFORMED_REQUEST',
+        `Signed request ${request.requestId} is missing namespace/action/object_id fields required for runtime submit.`,
+      );
+    }
+    envelopes.push(envelope);
+  }
+
+  try {
+    const response = await submitEnvelopesToCitizenNetworkBatch({
+      apiBaseUrl,
+      allowlistedApiBaseUrls: CITIZEN_API_BASE_ALLOWLIST,
+      envelopes,
+      consentToShareFullPayload,
+    });
+
+    const submittedAt = new Date().toISOString();
+    for (const receipt of response.receipts) {
+      await appendDirectSubmitReceipt({
+        requestId: receipt.entryId ?? 'unknown',
+        destinationUrl: apiBaseUrl,
+        traceId: response.traceId,
+        status: response.status,
+        latencyMs: response.latencyMs,
+        receiptId: receipt.receiptId,
+        receiptHash: receipt.receiptHash,
+        submittedAt,
+      });
+    }
+    return { ok: true, result: response };
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : 'Unknown direct submit batch error.';
+    return walletError('ERR_DIRECT_SUBMIT_UNAVAILABLE', reason);
+  }
+}
+
 async function enqueueDappSigningRequest(
   rawPayload: unknown,
   request: WalletRequest,
@@ -1489,6 +1614,7 @@ async function handleWalletRequest(
       result: {
         defaultDestination: await getDirectSubmitDefaultDestination(),
         allowlistedDestinations: DIRECT_SUBMIT_ALLOWLIST,
+        allowlistedApiBaseUrls: CITIZEN_API_BASE_ALLOWLIST,
       },
     };
   }
@@ -1530,6 +1656,30 @@ async function handleWalletRequest(
       );
     }
     return directSubmitLatestSignedArtifact(destinationUrl, consentToShareSigningPayload === true);
+  }
+
+  if (request.method === 'wallet_directSubmitSignedBatchToCitizenNetwork') {
+    if (!isUiRequest) {
+      return walletError('ERR_UNAUTHORIZED', 'Unauthorized wallet method.');
+    }
+    const [apiBaseUrl, consentToShareFullPayload, requestIds] = request.params ?? [];
+    if (typeof apiBaseUrl !== 'string' || apiBaseUrl.trim().length === 0) {
+      return walletError(
+        'ERR_MALFORMED_REQUEST',
+        'wallet_directSubmitSignedBatchToCitizenNetwork requires API base URL.',
+      );
+    }
+    if (!CITIZEN_API_BASE_ALLOWLIST.includes(apiBaseUrl)) {
+      return walletError('ERR_DESTINATION_NOT_ALLOWLISTED', 'API base URL is not allowlisted.');
+    }
+    const selectedRequestIds = Array.isArray(requestIds)
+      ? requestIds.filter((value): value is string => typeof value === 'string')
+      : undefined;
+    return directSubmitSignedBatchToCitizenNetwork(
+      apiBaseUrl,
+      consentToShareFullPayload === true,
+      selectedRequestIds,
+    );
   }
 
   if (request.method === 'wallet_setOriginPermission') {

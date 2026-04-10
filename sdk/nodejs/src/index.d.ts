@@ -141,6 +141,7 @@ export class CitizenNodeClient {
   signEntry(entry: LedgerEntry, signer: Signer): Promise<LedgerEntry>;
   wrapEnvelope(args: { entry: LedgerEntry; signer: Signer; submittedAt?: string }): Promise<SignedEnvelope>;
   submitEnvelope(envelope: SignedEnvelope): Promise<unknown>;
+  submitEnvelopeBatch(envelopes: SignedEnvelope[]): Promise<unknown>;
   getReceipt(receiptId: string): Promise<unknown>;
   waitForReceipt(
     receiptId: string,

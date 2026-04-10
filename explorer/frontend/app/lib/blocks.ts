@@ -65,7 +65,7 @@ export type BlockPageResult =
 type BlocksEnvelope = {
   source?: string;
   data?: BlocksPageResponse['data'];
-  items?: BlockSummary[];
+  items?: unknown[];
   next_cursor?: string | null;
   has_more?: boolean;
 };
@@ -90,26 +90,109 @@ function normalizeBlocksPageResponse(
   const topLevelItems = envelope.items;
 
   if (nested && Array.isArray(nested.items)) {
+    const normalizedItems = normalizeBlockSummaryItems(nested.items as unknown[]);
+    const normalizedNextCursor =
+      typeof nested.next_cursor === 'string' || nested.next_cursor === null ? nested.next_cursor : null;
+    const normalizedHasMore =
+      typeof nested.has_more === 'boolean' ? nested.has_more : normalizedNextCursor !== null;
     return {
       source: typeof envelope.source === 'string' ? envelope.source : `${sourceBase.replace(/\/$/, '')}/blocks`,
-      data: nested,
+      data: {
+        items: normalizedItems,
+        next_cursor: normalizedNextCursor,
+        has_more: normalizedHasMore,
+      },
     };
   }
 
   if (Array.isArray(topLevelItems)) {
+    const normalizedItems = normalizeBlockSummaryItems(topLevelItems);
+    const normalizedNextCursor =
+      typeof envelope.next_cursor === 'string' || envelope.next_cursor === null ? envelope.next_cursor : null;
+    const normalizedHasMore =
+      typeof envelope.has_more === 'boolean' ? envelope.has_more : normalizedNextCursor !== null;
     return {
       source: typeof envelope.source === 'string' ? envelope.source : `${sourceBase.replace(/\/$/, '')}/blocks`,
       data: {
-        items: topLevelItems,
-        next_cursor: typeof envelope.next_cursor === 'string' || envelope.next_cursor === null
-          ? envelope.next_cursor
-          : null,
-        has_more: Boolean(envelope.has_more),
+        items: normalizedItems,
+        next_cursor: normalizedNextCursor,
+        has_more: normalizedHasMore,
       },
     };
   }
 
   return null;
+}
+
+function normalizeBlockSummaryItems(rawItems: unknown[]): BlockSummary[] {
+  return rawItems
+    .map((item) => normalizeBlockSummaryItem(item))
+    .filter((item): item is BlockSummary => item !== null);
+}
+
+function normalizeBlockSummaryItem(raw: unknown): BlockSummary | null {
+  if (!raw || typeof raw !== 'object') {
+    return null;
+  }
+
+  const value = raw as Record<string, unknown>;
+  const block = value.block && typeof value.block === 'object'
+    ? (value.block as Record<string, unknown>)
+    : null;
+  const headerCandidate = value.header && typeof value.header === 'object'
+    ? (value.header as Record<string, unknown>)
+    : block?.header && typeof block.header === 'object'
+      ? (block.header as Record<string, unknown>)
+      : null;
+  const commitProofCandidate = headerCandidate?.commit_proof && typeof headerCandidate.commit_proof === 'object'
+    ? (headerCandidate.commit_proof as Record<string, unknown>)
+    : null;
+
+  const height =
+    typeof value.height === 'number'
+      ? value.height
+      : typeof headerCandidate?.height === 'number'
+        ? headerCandidate.height
+        : null;
+  const timestamp = typeof headerCandidate?.timestamp === 'number' ? headerCandidate.timestamp : null;
+  const proposer = typeof headerCandidate?.proposer === 'string' ? headerCandidate.proposer : null;
+  const prevHash = typeof headerCandidate?.prev_hash === 'string' ? headerCandidate.prev_hash : null;
+  const entryRoot = typeof headerCandidate?.entry_root === 'string' ? headerCandidate.entry_root : null;
+  const aggregatedSignature = typeof commitProofCandidate?.aggregated_signature === 'string'
+    ? commitProofCandidate.aggregated_signature
+    : null;
+  const entryCount =
+    typeof value.entry_count === 'number'
+      ? value.entry_count
+      : Array.isArray(block?.entries)
+        ? block.entries.length
+        : null;
+
+  if (
+    height === null ||
+    timestamp === null ||
+    proposer === null ||
+    prevHash === null ||
+    entryRoot === null ||
+    aggregatedSignature === null ||
+    entryCount === null
+  ) {
+    return null;
+  }
+
+  return {
+    height,
+    header: {
+      timestamp,
+      proposer,
+      prev_hash: prevHash,
+      entry_root: entryRoot,
+      commit_proof: {
+        aggregated_signature: aggregatedSignature,
+      },
+    },
+    entry_count: entryCount,
+  };
 }
 
 function normalizeBlockDetailResponse(
@@ -409,7 +492,15 @@ async function fetchNodeBlock(height: number): Promise<NodeBlockLookup | null> {
       return null;
     }
 
-    return (await response.json()) as NodeBlockLookup;
+    const payload = await response.json();
+    const normalized = normalizeBlockDetailResponse(payload, nodeRuntimeBase, height);
+    if (!normalized) {
+      return null;
+    }
+    return {
+      height: normalized.data.height,
+      block: normalized.data.block,
+    };
   } catch {
     return null;
   }
