@@ -87,6 +87,7 @@ type WalletProvider = {
 };
 
 type CitizenPayloadSignature = {
+  requestId?: string;
   signer?: string;
   verifyingKey?: string;
   signature?: string;
@@ -102,6 +103,7 @@ type WalletEncryptionReader = {
 };
 
 type SignedSubmissionEnvelope = {
+  walletRequestId: string;
   payload: {
     fullName: string;
     institution: string;
@@ -602,6 +604,7 @@ export function InterestForm() {
 
       if (
         !signResult
+        || typeof signResult.requestId !== 'string'
         || typeof signResult.signer !== 'string'
         || typeof signResult.verifyingKey !== 'string'
         || typeof signResult.signature !== 'string'
@@ -618,6 +621,7 @@ export function InterestForm() {
       }
 
       const signedEnvelope: SignedSubmissionEnvelope = {
+        walletRequestId: signResult.requestId,
         payload,
         walletSignerDid: signResult.signer,
         walletVerifyingKey: signResult.verifyingKey,
@@ -694,6 +698,23 @@ export function InterestForm() {
       }
       const submitted = await response.json().catch(() => null) as SubmissionCreateResponse | null;
       const receiptHash = submitted?.walletPayloadHash ?? envelopeToSubmit.walletPayloadHash;
+      let walletConfirmationSynced = false;
+      const providerCandidate = window as typeof window & { citizen?: WalletProvider; ctzn?: WalletProvider };
+      const provider = providerCandidate.citizen ?? providerCandidate.ctzn;
+      if (provider && typeof provider.request === 'function') {
+        try {
+          await provider.request({
+            method: 'ctzn_confirmCitizenTxSubmission',
+            params: [{
+              requestId: envelopeToSubmit.walletRequestId,
+              receiptHash,
+            }],
+          });
+          walletConfirmationSynced = true;
+        } catch {
+          walletConfirmationSynced = false;
+        }
+      }
 
       const selectedRole = selectedRoleOption?.label ?? roleId;
       const thankYouMessage = selectedRoleOption?.thankYouNote ?? '';
@@ -701,7 +722,11 @@ export function InterestForm() {
       setSubmittedThankYouNote(thankYouMessage);
       setSubmittedRole(selectedRole);
       setSubmissionReceiptHash(receiptHash);
-      setStatus('');
+      setStatus(
+        walletConfirmationSynced
+          ? ''
+          : 'Submission saved, but wallet activity sync did not complete. Keep the extension open and retry.',
+      );
       setRoleId(null);
       setSignedSubmission(null);
       setStepIndex(0);
