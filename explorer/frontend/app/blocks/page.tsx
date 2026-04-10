@@ -11,6 +11,7 @@ export default async function BlocksPage({
 }) {
   const resolvedParams = await searchParams;
   const cursor = cursorFromSearchParams(resolvedParams);
+  const searchQuery = typeof resolvedParams.q === 'string' ? resolvedParams.q : '';
 
   const result = await fetchBlocksPage(cursor);
 
@@ -30,7 +31,11 @@ export default async function BlocksPage({
           <p className="subtitle">{result.message}</p>
         </section>
       ) : (
-        <BlocksListClient initialPayload={result.payload} initialCursor={cursor} />
+        <BlocksListClient
+          initialPayload={result.payload}
+          initialCursor={cursor}
+          searchQuery={searchQuery}
+        />
       )}
     </>
   );

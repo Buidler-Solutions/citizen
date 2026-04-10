@@ -1,8 +1,8 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { usePathname, useRouter } from 'next/navigation';
+import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react';
 
 type ExplorerShellProps = {
   children: ReactNode;
@@ -15,8 +15,10 @@ const navItems = [
 
 export function ExplorerShell({ children }: ExplorerShellProps) {
   const pathname = usePathname();
+  const router = useRouter();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [isDark, setIsDark] = useState(true);
+  const [searchValue, setSearchValue] = useState('');
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -52,6 +54,29 @@ export function ExplorerShell({ children }: ExplorerShellProps) {
 
   const themeClass = isDark ? 'theme-dark' : 'theme-light';
   const activePath = useMemo(() => pathname ?? '/', [pathname]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    const params = new URLSearchParams(window.location.search);
+    const activeQuery = params.get('q') ?? '';
+    setSearchValue(activeQuery);
+  }, [pathname]);
+
+  const onSearchSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+
+    const normalizedQuery = searchValue.trim();
+    if (!normalizedQuery) {
+      return;
+    }
+
+    const query = new URLSearchParams();
+    query.set('q', normalizedQuery);
+    router.push(`/blocks?${query.toString()}`);
+  };
 
   return (
     <main className={`explorer-shell ${themeClass} ${sidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
@@ -95,7 +120,25 @@ export function ExplorerShell({ children }: ExplorerShellProps) {
 
       <section className="dashboard-content">
         <header className="top-bar">
-          <div className="search-shell">Citizen Protocol Explorer</div>
+          <div className="top-bar-search">
+            <div className="search-shell">Citizen Protocol Explorer</div>
+            <form className="header-search-form" onSubmit={onSearchSubmit}>
+              <label className="sr-only" htmlFor="top-bar-search-query">
+                Search query
+              </label>
+              <input
+                id="top-bar-search-query"
+                className="header-search-input"
+                type="search"
+                value={searchValue}
+                onChange={(event) => setSearchValue(event.target.value)}
+                placeholder="Search e.g. hash:abc blocks:42 signer:node-1 reader:did namespace:citizen.*"
+              />
+              <button type="submit" className="header-search-button">
+                Search
+              </button>
+            </form>
+          </div>
           <button type="button" className="wallet-button">WALLET CONNECT</button>
         </header>
         {children}

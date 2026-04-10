@@ -8,12 +8,17 @@ import {
   fetchBlocksPage,
 } from '../lib/blocks';
 import { shortHash, toReadableDate } from '../lib/format';
-import { dedupeByHeight, mergePaginatedBlocks, sortByHeightDesc } from '../lib/blocks-list-state';
+import {
+  mergePaginatedBlocks,
+  mergeWithInitialBlocksState,
+  sortByHeightDesc,
+} from '../lib/blocks-list-state';
 import { blockDetailHref } from '../lib/block-routes';
 
 type BlocksListClientProps = {
   initialPayload: BlocksPageResponse;
   initialCursor?: string;
+  searchQuery?: string;
 };
 
 type StoredBlocksState = {
@@ -29,6 +34,7 @@ const storageKey = 'citizen.explorer.blocks.state.v1';
 export default function BlocksListClient({
   initialPayload,
   initialCursor,
+  searchQuery,
 }: BlocksListClientProps) {
   const currentCursor = initialCursor ?? '';
   const [items, setItems] = useState<BlockSummary[]>(initialPayload.data.items);
@@ -55,9 +61,22 @@ export default function BlocksListClient({
         return;
       }
 
-      setItems(dedupeByHeight(stored.items));
-      setNextCursor(stored.nextCursor);
-      setHasMore(stored.hasMore);
+      const merged = mergeWithInitialBlocksState(
+        {
+          items: initialPayload.data.items,
+          nextCursor: initialPayload.data.next_cursor,
+          hasMore: initialPayload.data.has_more,
+        },
+        {
+          items: stored.items,
+          nextCursor: stored.nextCursor,
+          hasMore: stored.hasMore,
+        },
+      );
+
+      setItems(merged.items);
+      setNextCursor(merged.nextCursor);
+      setHasMore(merged.hasMore);
 
       window.requestAnimationFrame(() => {
         window.scrollTo({ top: stored.scrollY, behavior: 'auto' });
@@ -65,7 +84,7 @@ export default function BlocksListClient({
     } catch {
       // ignore state restoration failures
     }
-  }, [currentCursor]);
+  }, [currentCursor, initialPayload.data.has_more, initialPayload.data.items, initialPayload.data.next_cursor]);
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -109,7 +128,11 @@ export default function BlocksListClient({
 
   const detailHrefFor = useCallback((height: number) => blockDetailHref(height), []);
 
-  const orderedItems = useMemo(() => sortByHeightDesc(items), [items]);
+  const filteredItems = useMemo(
+    () => filterBlocksBySearch(items, searchQuery),
+    [items, searchQuery],
+  );
+  const orderedItems = useMemo(() => sortByHeightDesc(filteredItems), [filteredItems]);
 
   const onLoadMore = useCallback(async () => {
     if (!hasMore || !nextCursor || isLoadingMore) {
@@ -137,8 +160,12 @@ export default function BlocksListClient({
     <>
       {orderedItems.length === 0 ? (
         <section className="card">
-          <h2>No blocks yet</h2>
-          <p className="subtitle">The node runtime returned an empty block list.</p>
+          <h2>{searchQuery?.trim() ? 'No blocks matched your search' : 'No blocks yet'}</h2>
+          <p className="subtitle">
+            {searchQuery?.trim()
+              ? 'Try hash:, blocks:, signer:, reader:, or namespace: keywords with a different value.'
+              : 'The node runtime returned an empty block list.'}
+          </p>
         </section>
       ) : (
         <section className="block-list">
@@ -204,4 +231,75 @@ export default function BlocksListClient({
       ) : null}
     </>
   );
+}
+
+type SearchToken = {
+  key: 'hash' | 'blocks' | 'signer' | 'reader' | 'namespace' | 'any';
+  value: string;
+};
+
+function filterBlocksBySearch(items: BlockSummary[], rawQuery?: string): BlockSummary[] {
+  const query = rawQuery?.trim();
+  if (!query) {
+    return items;
+  }
+
+  const tokens = parseSearchTokens(query);
+  if (tokens.length === 0) {
+    return items;
+  }
+
+  return items.filter((item) => tokens.every((token) => matchesToken(item, token)));
+}
+
+function parseSearchTokens(query: string): SearchToken[] {
+  const parts = query
+    .split(/\s+/)
+    .map((part) => part.trim())
+    .filter((part) => part.length > 0);
+
+  return parts.map((part) => {
+    const match = /^(hash|blocks|signer|reader|namespace):(.+)$/i.exec(part);
+    if (!match) {
+      return { key: 'any', value: part.toLowerCase() };
+    }
+
+    return {
+      key: match[1].toLowerCase() as SearchToken['key'],
+      value: match[2].toLowerCase(),
+    };
+  });
+}
+
+function matchesToken(item: BlockSummary, token: SearchToken): boolean {
+  const hashFields = [
+    item.header.prev_hash,
+    item.header.entry_root,
+    item.header.commit_proof.aggregated_signature,
+  ]
+    .filter(Boolean)
+    .map((value) => value.toLowerCase());
+  const searchableBlob = [
+    item.height.toString(),
+    item.header.proposer,
+    ...hashFields,
+  ]
+    .join(' ')
+    .toLowerCase();
+
+  switch (token.key) {
+    case 'hash':
+      return hashFields.some((value) => value.includes(token.value));
+    case 'blocks':
+      return item.height.toString().includes(token.value);
+    case 'signer':
+      return item.header.proposer.toLowerCase().includes(token.value);
+    case 'reader':
+    case 'namespace':
+      return searchableBlob.includes(token.value);
+    case 'any':
+      return searchableBlob.includes(token.value);
+    default:
+      return false;
+  }
 }
