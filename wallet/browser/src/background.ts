@@ -143,6 +143,10 @@ const CITIZEN_API_BASE_ALLOWLIST: readonly string[] = ['http://127.0.0.1:8081'];
 
 type DirectSubmitReceipt = {
   requestId: string;
+  payloadHash: string | null;
+  walletId: string;
+  signerDid: string;
+  networkId: NetworkId;
   destinationUrl: string;
   traceId: string;
   status: number;
@@ -178,6 +182,12 @@ const NETWORKS = {
 } as const;
 
 type NetworkId = keyof typeof NETWORKS;
+const NETWORK_HEALTHCHECK_URL_BY_NETWORK: Record<NetworkId, string> = {
+  mainnet: 'https://api.citizenprotocol.io/health',
+  futurenet: 'https://futurenet-api.citizenprotocol.io/health',
+  testnet: 'https://testnet-api.citizenprotocol.io/health',
+  localnode: 'http://127.0.0.1:8081/health',
+};
 
 type StoredProtocolSigner = {
   keyId: string;
@@ -224,6 +234,24 @@ async function getSelectedNetwork(): Promise<NetworkId> {
 
 async function setSelectedNetwork(network: NetworkId): Promise<void> {
   await chrome.storage.local.set({ [NETWORK_KEY]: network });
+}
+
+async function isSelectedNetworkAlive(networkId: NetworkId): Promise<boolean> {
+  const healthUrl = NETWORK_HEALTHCHECK_URL_BY_NETWORK[networkId];
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 3_000);
+  try {
+    const response = await fetch(healthUrl, {
+      method: 'GET',
+      signal: controller.signal,
+      cache: 'no-store',
+    });
+    return response.ok;
+  } catch {
+    return false;
+  } finally {
+    clearTimeout(timeoutId);
+  }
 }
 
 async function sha256Hex(input: string): Promise<string> {
@@ -301,6 +329,54 @@ async function appendDirectSubmitReceipt(receipt: DirectSubmitReceipt): Promise<
     DIRECT_SUBMIT_RECEIPTS_KEY,
     [receipt, ...existing].slice(0, MAX_DIRECT_SUBMIT_RECEIPTS),
   );
+}
+
+async function confirmSubmittedRequestFromBuilderApp(
+  requestId: string,
+  receiptHash: string,
+  origin: string | undefined,
+): Promise<WalletResponse> {
+  if (!requestId.trim()) {
+    return walletError('ERR_MALFORMED_REQUEST', 'requestId is required for submission confirmation.');
+  }
+  if (!/^sha256:[a-f0-9]{64}$/iu.test(receiptHash.trim())) {
+    return walletError('ERR_MALFORMED_REQUEST', 'receiptHash must be sha256:<64-hex>.');
+  }
+  const requests = await getPendingDappRequests();
+  const entry = requests.find((candidate) => candidate.requestId === requestId);
+  if (!entry) {
+    return walletError('ERR_REQUEST_NOT_FOUND', 'Cannot confirm unknown signed request.');
+  }
+  if (entry.state !== 'signed') {
+    return walletError('ERR_REQUEST_NOT_SIGNED', 'Only signed requests can be marked as submitted.');
+  }
+  if (origin && entry.envelope.origin !== origin) {
+    return walletError('ERR_ORIGIN_MISMATCH', 'Submission confirmation origin does not match signer origin.');
+  }
+
+  await appendDirectSubmitReceipt({
+    requestId: entry.requestId,
+    payloadHash: entry.envelope.payloadHash,
+    walletId: entry.walletId,
+    signerDid: entry.signerDid,
+    networkId: entry.networkId,
+    destinationUrl: origin ?? 'unknown',
+    traceId: `builder-confirmation:${entry.requestId}`,
+    status: 200,
+    latencyMs: 0,
+    receiptId: null,
+    receiptHash: receiptHash.trim(),
+    submittedAt: new Date().toISOString(),
+  });
+
+  return {
+    ok: true,
+    result: {
+      requestId: entry.requestId,
+      receiptHash: receiptHash.trim(),
+      source: 'builder_app_confirmation',
+    },
+  };
 }
 
 async function getDirectSubmitDefaultDestination(): Promise<string> {
@@ -1063,6 +1139,18 @@ async function directSubmitLatestSignedArtifact(
   destinationUrl: string,
   consentToShareSigningPayload: boolean,
 ): Promise<WalletResponse> {
+  const activeWallet = await getActiveWalletRecord();
+  if (!activeWallet) {
+    return walletError('ERR_WALLET_NOT_CONFIGURED', 'No active wallet is configured for direct submit.');
+  }
+  const signerDid = (await getOrCreateProtocolSigner(activeWallet)).did;
+  const networkId = await getSelectedNetwork();
+  if (!(await isSelectedNetworkAlive(networkId))) {
+    return walletError(
+      'ERR_NETWORK_UNAVAILABLE',
+      `Selected network (${networkId}) is unreachable. Bring it online before signing/submitting.`,
+    );
+  }
   const signedArtifact = await getLatestSignedCitizenArtifact();
   if (!signedArtifact) {
     return walletError('ERR_NO_SIGNED_ARTIFACT', 'No signed request artifact is available for direct submit.');
@@ -1077,6 +1165,10 @@ async function directSubmitLatestSignedArtifact(
     });
     await appendDirectSubmitReceipt({
       requestId: signedArtifact.requestId ?? 'unknown',
+      payloadHash: signedArtifact.payloadHash,
+      walletId: activeWallet.id,
+      signerDid,
+      networkId,
       destinationUrl,
       traceId: response.traceId,
       status: response.status,
@@ -1163,6 +1255,12 @@ async function directSubmitSignedBatchToCitizenNetwork(
   consentToShareFullPayload: boolean,
   requestIds?: string[],
 ): Promise<WalletResponse> {
+  const activeWallet = await getActiveWalletRecord();
+  if (!activeWallet) {
+    return walletError('ERR_WALLET_NOT_CONFIGURED', 'No active wallet is configured for direct submit.');
+  }
+  const signerDid = (await getOrCreateProtocolSigner(activeWallet)).did;
+  const networkId = await getSelectedNetwork();
   const requests = await getPendingDappRequests();
   const signedRequests = requests.filter((entry) => entry.state === 'signed');
   const selectedRequests = Array.isArray(requestIds) && requestIds.length > 0
@@ -1205,6 +1303,10 @@ async function directSubmitSignedBatchToCitizenNetwork(
     for (const receipt of response.receipts) {
       await appendDirectSubmitReceipt({
         requestId: receipt.entryId ?? 'unknown',
+        payloadHash: null,
+        walletId: activeWallet.id,
+        signerDid,
+        networkId,
         destinationUrl: apiBaseUrl,
         traceId: response.traceId,
         status: response.status,
@@ -1247,10 +1349,22 @@ async function enqueueDappSigningRequest(
     tabUrl: sender.url ?? sender.tab?.url ?? null,
     payload: rawPayload,
   });
+  const activeWallet = await getActiveWalletRecord();
+  if (!activeWallet) {
+    return walletError(
+      'ERR_WALLET_NOT_CONFIGURED',
+      'Wallet is not configured. Open the extension side panel to create or import a wallet first.',
+    );
+  }
+  const signerDid = (await getOrCreateProtocolSigner(activeWallet)).did;
+  const networkId = await getSelectedNetwork();
   const now = new Date().toISOString();
   const pendingEntry: PendingDappSigningRequest = {
     requestId: envelope.requestId,
     envelope,
+    walletId: activeWallet.id,
+    signerDid,
+    networkId,
     state: 'pending',
     createdAt: now,
     updatedAt: now,
@@ -1290,6 +1404,9 @@ async function serializePendingDappRequestsForUi() {
       canonicalJson: entry.envelope.canonicalPayload,
       hash: entry.envelope.payloadHash,
     },
+    walletId: entry.walletId,
+    signerDid: entry.signerDid,
+    networkId: entry.networkId,
     createdAt: entry.envelope.createdAt,
     expiresAt: entry.envelope.expiresAt,
     riskFlags: entry.envelope.riskFlags,
@@ -1301,6 +1418,13 @@ async function serializePendingDappRequestsForUi() {
 async function approvePendingDappRequest(requestId: string): Promise<WalletResponse> {
   await cleanupRetainedDappRequests();
   await expireStaleDappRequests();
+  const selectedNetwork = await getSelectedNetwork();
+  if (!(await isSelectedNetworkAlive(selectedNetwork))) {
+    return walletError(
+      'ERR_NETWORK_UNAVAILABLE',
+      `Selected network (${selectedNetwork}) is unreachable. Wallet signing is blocked until it is online.`,
+    );
+  }
   const requests = await getPendingDappRequests();
   const entry = requests.find((candidate) => candidate.requestId === requestId);
   if (!entry) {
@@ -1974,6 +2098,23 @@ async function handleWalletRequest(
         return walletError('ERR_ORIGIN_BLOCKED', 'This origin is blocked in wallet permissions.');
       }
       return enqueueDappSigningRequest(payload, request, sender);
+    }
+    case 'ctzn_confirmCitizenTxSubmission': {
+      const [payload] = request.params ?? [];
+      if (typeof payload !== 'object' || payload === null) {
+        return walletError(
+          'ERR_MALFORMED_REQUEST',
+          'ctzn_confirmCitizenTxSubmission requires { requestId, receiptHash }.',
+        );
+      }
+      const { requestId, receiptHash } = payload as { requestId?: unknown; receiptHash?: unknown };
+      if (typeof requestId !== 'string' || typeof receiptHash !== 'string') {
+        return walletError(
+          'ERR_MALFORMED_REQUEST',
+          'ctzn_confirmCitizenTxSubmission requires string requestId and receiptHash.',
+        );
+      }
+      return confirmSubmittedRequestFromBuilderApp(requestId, receiptHash, request.origin);
     }
     case 'ctzn_signAuthChallenge': {
       const [message] = request.params ?? [];

@@ -51,6 +51,9 @@ type PendingDappRequest = {
     canonicalJson: string;
     hash: string;
   };
+  walletId: string;
+  signerDid: string;
+  networkId: NetworkId;
   createdAt: string;
   expiresAt: string;
   riskFlags: string[];
@@ -75,6 +78,10 @@ type DirectSubmitConfig = {
 
 type DirectSubmitReceipt = {
   requestId: string;
+  payloadHash: string | null;
+  walletId: string;
+  signerDid: string;
+  networkId: NetworkId;
   destinationUrl: string;
   traceId: string;
   status: number;
@@ -187,6 +194,7 @@ const STORAGE_KEY = 'citizen.browser.wallet.v1';
 const LAST_REQUEST_KEY = 'citizen.browser.wallet.last_request.v1';
 const PROFILE_KEY = 'citizen.browser.wallet.profile.v1';
 const DAPP_PENDING_REQUESTS_KEY = 'citizen.browser.wallet.dapp_pending_requests.v1';
+const DIRECT_SUBMIT_RECEIPTS_KEY = 'citizen.browser.wallet.direct_submit_receipts.v1';
 
 const APPROVAL_UI_ROLLOUT_STAGE = getApprovalUiRolloutStageFromEnv();
 const CREDENTIAL_REVEAL_TTL_MS = 60_000;
@@ -442,7 +450,7 @@ export function App() {
       if (areaName !== 'local') {
         return;
       }
-      if (!changes[DAPP_PENDING_REQUESTS_KEY]) {
+      if (!changes[DAPP_PENDING_REQUESTS_KEY] && !changes[DIRECT_SUBMIT_RECEIPTS_KEY]) {
         return;
       }
       void refreshState();
@@ -458,18 +466,46 @@ export function App() {
     () => pendingDappRequests.filter((entry) => entry.state === 'pending'),
     [pendingDappRequests],
   );
+  const activeWallet = useMemo(
+    () => vaultWallets.find((wallet) => wallet.isActive) ?? null,
+    [vaultWallets],
+  );
+  const activeSignerDid = activeWallet?.signerDid ?? null;
   const signedRequests = useMemo(
     () => pendingDappRequests.filter((entry) => entry.state === 'signed'),
     [pendingDappRequests],
   );
-  const groupedSignedRequests = useMemo(
-    () =>
-      signedRequests.reduce<Record<string, PendingDappRequest[]>>((groups, entry) => {
-        groups[entry.origin.origin] = [...(groups[entry.origin.origin] ?? []), entry];
-        return groups;
-      }, {}),
-    [signedRequests],
+  const currentNetworkSignedRequests = useMemo(
+    () => signedRequests.filter((entry) => entry.networkId === state.network),
+    [signedRequests, state.network],
   );
+  const visibleSignedRequests = useMemo(
+    () =>
+      currentNetworkSignedRequests.filter(
+        (entry) => !activeSignerDid || entry.signerDid === activeSignerDid,
+      ),
+    [activeSignerDid, currentNetworkSignedRequests],
+  );
+  const visibleDirectSubmitReceipts = useMemo(
+    () =>
+      directSubmitReceipts.filter(
+        (receipt) => receipt.networkId === state.network
+          && (!activeSignerDid || receipt.signerDid === activeSignerDid),
+      ),
+    [activeSignerDid, directSubmitReceipts, state.network],
+  );
+  const latestReceiptByRequestId = useMemo(() => {
+    const pairs = visibleDirectSubmitReceipts
+      .filter((receipt) => receipt.requestId.length > 0)
+      .map((receipt) => [receipt.requestId, receipt] as const);
+    return new Map<string, DirectSubmitReceipt>(pairs);
+  }, [visibleDirectSubmitReceipts]);
+  const latestReceiptByPayloadHash = useMemo(() => {
+    const pairs = visibleDirectSubmitReceipts
+      .filter((receipt) => typeof receipt.payloadHash === 'string' && receipt.payloadHash.length > 0)
+      .map((receipt) => [receipt.payloadHash as string, receipt] as const);
+    return new Map<string, DirectSubmitReceipt>(pairs);
+  }, [visibleDirectSubmitReceipts]);
   const approvalUiEnabled = isApprovalUiEnabled(APPROVAL_UI_ROLLOUT_STAGE);
 
   const handlePasswordSubmit = async () => {
@@ -1071,43 +1107,50 @@ export function App() {
               <article className="request-card">
                 <h2>Signed transaction activity</h2>
                 <p className="meta-text">
-                  Signed requests available: {signedRequests.length}
+                  Signed requests for {activeWallet?.name ?? 'active wallet'} on {NETWORK_OPTIONS.find((network) => network.id === state.network)?.label ?? state.network}: {visibleSignedRequests.length}
                 </p>
-                {signedRequests.length > 0 ? (
+                {visibleSignedRequests.length > 0 ? (
                   <div className="signed-selection-list">
-                    {Object.entries(groupedSignedRequests).map(([origin, entries]) => (
-                      <div key={origin} className="signed-selection-group">
-                        <p className="meta-text">{origin}</p>
-                        <ul>
-                          {entries.map((entry) => {
-                            const explorerHashHref = buildExplorerDataHashSearchHref(state.network, entry.payload.hash);
-                            return (
-                              <li key={entry.requestId} className="activity-item">
-                                <div>
-                                  <strong>{mask(entry.payload.hash)}</strong>
-                                  <p className="meta-text">{new Date(entry.createdAt).toLocaleString()}</p>
-                                </div>
-                                <a href={explorerHashHref} target="_blank" rel="noreferrer" className="ghost">
-                                  Open hash in explorer
+                    <ul>
+                      {visibleSignedRequests.map((entry) => {
+                        const receipt = latestReceiptByRequestId.get(entry.requestId)
+                          ?? latestReceiptByPayloadHash.get(entry.payload.hash);
+                        const committedHash = receipt?.receiptHash ?? null;
+                        const explorerHashHref = committedHash
+                          ? buildExplorerDataHashSearchHref(state.network, committedHash)
+                          : null;
+                        return (
+                          <li key={entry.requestId} className="activity-item">
+                            <div>
+                              {explorerHashHref ? (
+                                <a href={explorerHashHref} target="_blank" rel="noreferrer">
+                                  <strong>{mask(committedHash ?? '')}</strong>
                                 </a>
-                              </li>
-                            );
-                          })}
-                        </ul>
-                      </div>
-                    ))}
+                              ) : (
+                                <strong>{mask(entry.payload.hash)}</strong>
+                              )}
+                              <p className="meta-text">{new Date(entry.createdAt).toLocaleString()}</p>
+                              <p className="meta-text">{entry.origin.origin}</p>
+                              <p className="meta-text">
+                                Status: {receipt ? 'success' : 'waiting for builder submission confirmation'}
+                              </p>
+                            </div>
+                          </li>
+                        );
+                      })}
+                    </ul>
                   </div>
                 ) : (
                   <p className="meta-text">No signed requests yet.</p>
                 )}
-                {directSubmitReceipts.length > 0 ? (
+                {visibleDirectSubmitReceipts.length > 0 ? (
                   <>
                     <h3>Commitment receipt hash lookups</h3>
                     <p className="meta-text">
                       Open matching blocks in Citizen Explorer using the hashed commitment receipt.
                     </p>
                     <ul>
-                      {directSubmitReceipts.map((receipt) => {
+                      {visibleDirectSubmitReceipts.map((receipt) => {
                         const receiptHash = receipt.receiptHash;
                         const explorerHref = receiptHash
                           ? buildExplorerDataHashSearchHref(state.network, receiptHash)
@@ -1117,15 +1160,14 @@ export function App() {
                             <div>
                               <strong>{receipt.receiptId ?? mask(receipt.requestId)}</strong>
                               <p className="meta-text">{new Date(receipt.submittedAt).toLocaleString()}</p>
-                              <p className="meta-text">{mask(receiptHash ?? 'No receipt hash')}</p>
+                              {explorerHref ? (
+                                <a href={explorerHref} target="_blank" rel="noreferrer" className="meta-text">
+                                  {mask(receiptHash ?? '')}
+                                </a>
+                              ) : (
+                                <p className="meta-text">Pending hash</p>
+                              )}
                             </div>
-                            {explorerHref ? (
-                              <a href={explorerHref} target="_blank" rel="noreferrer" className="ghost">
-                                View data hash matches
-                              </a>
-                            ) : (
-                              <span className="meta-text">Pending hash</span>
-                            )}
                           </li>
                         );
                       })}

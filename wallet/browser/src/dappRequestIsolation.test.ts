@@ -31,6 +31,9 @@ function fixtureRequest(state: PendingDappSigningRequest['state']): PendingDappS
   return {
     requestId: '11111111-1111-1111-1111-111111111111',
     envelope: fixtureEnvelope(),
+    walletId: 'wallet-1',
+    signerDid: 'did:citizen:wallet:1',
+    networkId: 'localnode',
     state,
     createdAt: '2026-02-01T10:00:00.000Z',
     updatedAt: '2026-02-01T10:00:00.000Z',
