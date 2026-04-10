@@ -103,6 +103,31 @@ body {
   background: rgba(8, 16, 38, 0.98);
 }
 
+.network-modal-backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background: rgba(2, 8, 24, 0.78);
+}
+
+.network-modal {
+  width: 100%;
+  border-radius: 12px;
+  border: 1px solid #3d5ea5;
+  background: #121f3f;
+  padding: 0.85rem;
+  box-shadow: 0 12px 28px rgba(4, 10, 30, 0.6);
+}
+
+.network-modal h2 {
+  margin: 0 0 0.6rem;
+  font-size: 0.88rem;
+}
+
 .menu-action {
   margin-top: auto;
 }

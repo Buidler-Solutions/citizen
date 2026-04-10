@@ -137,9 +137,17 @@ const DAPP_REQUEST_CONCURRENCY_MODE = 'single_active';
 const MAX_DIRECT_SUBMIT_RECEIPTS = 100;
 const STRICT_PROTOCOL_MODE = true;
 const DIRECT_SUBMIT_ALLOWLIST: readonly string[] = [
-  'http://127.0.0.1:8081/api/v1/direct-submit',
+  'https://mainnet.ctzn.space/api/v1/direct-submit',
+  'https://futurenet.ctzn.space/api/v1/direct-submit',
+  'https://testnet.ctzn.space/api/v1/direct-submit',
+  'http://localhost:8081/api/v1/direct-submit',
 ];
-const CITIZEN_API_BASE_ALLOWLIST: readonly string[] = ['http://127.0.0.1:8081'];
+const CITIZEN_API_BASE_ALLOWLIST: readonly string[] = [
+  'https://mainnet.ctzn.space',
+  'https://futurenet.ctzn.space',
+  'https://testnet.ctzn.space',
+  'http://localhost:8081',
+];
 
 type DirectSubmitReceipt = {
   requestId: string;
@@ -183,10 +191,10 @@ const NETWORKS = {
 
 type NetworkId = keyof typeof NETWORKS;
 const NETWORK_HEALTHCHECK_URL_BY_NETWORK: Record<NetworkId, string> = {
-  mainnet: 'https://api.citizenprotocol.io/health',
-  futurenet: 'https://futurenet-api.citizenprotocol.io/health',
-  testnet: 'https://testnet-api.citizenprotocol.io/health',
-  localnode: 'http://127.0.0.1:8081/health',
+  mainnet: 'https://mainnet.ctzn.space/health',
+  futurenet: 'https://futurenet.ctzn.space/health',
+  testnet: 'https://testnet.ctzn.space/health',
+  localnode: 'http://localhost:8081/health',
 };
 
 type StoredProtocolSigner = {
@@ -252,6 +260,13 @@ async function isSelectedNetworkAlive(networkId: NetworkId): Promise<boolean> {
   } finally {
     clearTimeout(timeoutId);
   }
+}
+
+async function getNetworkLivenessByNetwork(): Promise<Record<NetworkId, boolean>> {
+  const livenessEntries = await Promise.all(
+    (Object.keys(NETWORKS) as NetworkId[]).map(async (networkId) => [networkId, await isSelectedNetworkAlive(networkId)] as const),
+  );
+  return Object.fromEntries(livenessEntries) as Record<NetworkId, boolean>;
 }
 
 async function sha256Hex(input: string): Promise<string> {
@@ -1980,6 +1995,13 @@ async function handleWalletRequest(
 
   if (request.method === 'wallet_getNetwork') {
     return { ok: true, result: await getSelectedNetwork() };
+  }
+
+  if (request.method === 'wallet_getNetworkLiveness') {
+    if (!isUiRequest) {
+      return { ok: false, error: 'Unauthorized wallet method.' };
+    }
+    return { ok: true, result: await getNetworkLivenessByNetwork() };
   }
 
   if (request.method === 'wallet_setNetwork') {
