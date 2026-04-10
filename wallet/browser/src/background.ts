@@ -1,4 +1,6 @@
 import { HDNodeWallet, Mnemonic, Wallet } from 'ethers';
+import { x25519 } from '@noble/curves/ed25519';
+import { chacha20Poly1305Decrypt } from './chacha20poly1305';
 import {
   DAPP_SIGNING_METHOD,
   type DappSigningRequestEnvelope,
@@ -61,6 +63,14 @@ type WalletResponse =
       ok: false;
       error: string;
     };
+
+type HybridDecryptInput = {
+  authorPublicKeyHex: string;
+  ciphertextHex: string;
+  nonceHex: string;
+  wrappedDekHex: string;
+};
+
 
 type WalletSigner = {
   address: string;
@@ -1097,6 +1107,117 @@ async function getCitizenKeyMaterial(walletId: string): Promise<{
       createdAt: reader.createdAt,
     },
   };
+}
+
+function normalizeHybridDecryptInput(payload: unknown): HybridDecryptInput | null {
+  if (!payload || typeof payload !== 'object') {
+    return null;
+  }
+  const candidate = payload as Record<string, unknown>;
+  const authorPublicKeyHex = candidate.authorPublicKeyHex;
+  const ciphertextHex = candidate.ciphertextHex;
+  const nonceHex = candidate.nonceHex;
+  const wrappedDekHex = candidate.wrappedDekHex;
+  if (
+    typeof authorPublicKeyHex !== 'string'
+    || typeof ciphertextHex !== 'string'
+    || typeof nonceHex !== 'string'
+    || typeof wrappedDekHex !== 'string'
+  ) {
+    return null;
+  }
+  return {
+    authorPublicKeyHex: authorPublicKeyHex.trim(),
+    ciphertextHex: ciphertextHex.trim(),
+    nonceHex: nonceHex.trim(),
+    wrappedDekHex: wrappedDekHex.trim(),
+  };
+}
+
+async function decryptOwnedTransactionCiphertext(payload: unknown): Promise<WalletResponse> {
+  const activeWalletRecord = await getActiveWalletRecord();
+  if (!activeWalletRecord) {
+    return walletError('ERR_WALLET_NOT_CONFIGURED', 'No active wallet is configured.');
+  }
+  const decryptInput = normalizeHybridDecryptInput(payload);
+  if (!decryptInput) {
+    return walletError(
+      'ERR_MALFORMED_REQUEST',
+      'wallet_decryptOwnedTransactionCiphertext requires { authorPublicKeyHex, wrappedDekHex, nonceHex, ciphertextHex }.',
+    );
+  }
+
+  try {
+    const readerSecret = await resolveProtocolSecretForWallet(activeWalletRecord);
+    if (readerSecret.length !== 32) {
+      return walletError('ERR_DECRYPT_FAILED', 'Reader key is invalid for X25519 decryption.');
+    }
+
+    const authorPublicKey = fromHex(decryptInput.authorPublicKeyHex);
+    if (authorPublicKey.length !== 32) {
+      return walletError('ERR_DECRYPT_FAILED', 'authorPublicKeyHex must be 32 bytes.');
+    }
+
+    const sharedSecret = x25519.getSharedSecret(readerSecret, authorPublicKey);
+    const wrapKeyBytes = await crypto.subtle.digest('SHA-256', sharedSecret);
+    const wrapKey = new Uint8Array(wrapKeyBytes);
+
+    const wrappedDek = fromHex(decryptInput.wrappedDekHex);
+    if (wrappedDek.length <= 12) {
+      return walletError('ERR_DECRYPT_FAILED', 'wrappedDekHex must include nonce + ciphertext.');
+    }
+
+    const tryWrappedDekNonceLengths = [12, 24].filter((nonceLen) => wrappedDek.length > nonceLen + 16);
+    let dekBytes: Uint8Array | null = null;
+    for (const nonceLen of tryWrappedDekNonceLengths) {
+      const wrappedDekNonce = wrappedDek.slice(0, nonceLen);
+      const wrappedDekCiphertext = wrappedDek.slice(nonceLen);
+      if (nonceLen === 12) {
+        const unwrapped = chacha20Poly1305Decrypt(wrapKey, wrappedDekNonce, wrappedDekCiphertext);
+        if (unwrapped) {
+          dekBytes = unwrapped;
+          break;
+        }
+      }
+    }
+    if (!dekBytes) {
+      return walletError('ERR_DECRYPT_FAILED', 'Unable to unwrap transaction DEK with provided reader key/material.');
+    }
+    if (dekBytes.length !== 32) {
+      return walletError('ERR_DECRYPT_FAILED', 'Unable to unwrap transaction DEK for this wallet.');
+    }
+
+    const payloadNonce = fromHex(decryptInput.nonceHex);
+    if (payloadNonce.length !== 12 && payloadNonce.length !== 24) {
+      return walletError('ERR_DECRYPT_FAILED', 'nonceHex must be 12 or 24 bytes.');
+    }
+    const payloadCiphertext = fromHex(decryptInput.ciphertextHex);
+    if (payloadNonce.length !== 12) {
+      return walletError('ERR_DECRYPT_FAILED', 'Only 12-byte ChaCha20-Poly1305 nonce is currently supported in browser decrypt.');
+    }
+    const plaintextBytes = chacha20Poly1305Decrypt(dekBytes, payloadNonce, payloadCiphertext);
+    if (!plaintextBytes) {
+      return walletError('ERR_DECRYPT_FAILED', 'Payload decryption failed (invalid key, nonce, or tag).');
+    }
+
+    const plaintext = new TextDecoder().decode(plaintextBytes);
+    return {
+      ok: true,
+      result: {
+        plaintext,
+        plaintextJson: (() => {
+          try {
+            return JSON.parse(plaintext);
+          } catch {
+            return null;
+          }
+        })(),
+      },
+    };
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : 'Unknown decrypt failure.';
+    return walletError('ERR_DECRYPT_FAILED', `Unable to decrypt ciphertext: ${reason}`);
+  }
 }
 
 function asSignedSubmissionArtifact(value: unknown): SignedSubmissionArtifact | null {
@@ -2144,6 +2265,13 @@ async function handleWalletRequest(
         return walletError('ERR_MALFORMED_REQUEST', 'ctzn_signAuthChallenge requires a non-empty challenge message.');
       }
       return createAuthChallengeSignatureResult(message);
+    }
+    case 'wallet_decryptOwnedTransactionCiphertext': {
+      if (!isUiRequest) {
+        return walletError('ERR_UNAUTHORIZED', 'wallet_decryptOwnedTransactionCiphertext is UI-only.');
+      }
+      const [payload] = request.params ?? [];
+      return decryptOwnedTransactionCiphertext(payload);
     }
     default:
       return walletError('ERR_UNSUPPORTED_METHOD', `Unsupported method: ${request.method}`);
