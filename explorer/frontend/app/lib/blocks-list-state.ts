@@ -22,3 +22,20 @@ export function mergePaginatedBlocks(
 ): BlockSummary[] {
   return dedupeByHeight([...existing, ...incoming]);
 }
+
+type BlocksPaginationState = {
+  items: BlockSummary[];
+  nextCursor: string | null;
+  hasMore: boolean;
+};
+
+export function mergeWithInitialBlocksState(
+  initial: BlocksPaginationState,
+  restored: BlocksPaginationState,
+): BlocksPaginationState {
+  return {
+    items: mergePaginatedBlocks(initial.items, restored.items),
+    nextCursor: restored.nextCursor ?? initial.nextCursor,
+    hasMore: initial.hasMore || restored.hasMore,
+  };
+}

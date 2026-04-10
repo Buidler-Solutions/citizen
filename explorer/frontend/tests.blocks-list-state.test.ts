@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import type { BlockSummary } from './app/lib/blocks';
 import {
   dedupeByHeight,
+  mergeWithInitialBlocksState,
   mergePaginatedBlocks,
   sortByHeightDesc,
 } from './app/lib/blocks-list-state';
@@ -56,4 +57,26 @@ test('sortByHeightDesc returns blocks in descending height order', () => {
     sorted.map((item) => item.height),
     [8, 5, 3],
   );
+});
+
+test('mergeWithInitialBlocksState preserves initial blocks while restoring cached pagination state', () => {
+  const merged = mergeWithInitialBlocksState(
+    {
+      items: [makeBlock(3), makeBlock(2), makeBlock(1)],
+      nextCursor: '0',
+      hasMore: true,
+    },
+    {
+      items: [makeBlock(2), makeBlock(1)],
+      nextCursor: null,
+      hasMore: false,
+    },
+  );
+
+  assert.deepEqual(
+    merged.items.map((item) => item.height),
+    [3, 2, 1],
+  );
+  assert.equal(merged.nextCursor, '0');
+  assert.equal(merged.hasMore, true);
 });
