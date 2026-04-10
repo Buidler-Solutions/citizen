@@ -1,4 +1,4 @@
-import { Controller, Get, Param, Query } from '@nestjs/common';
+import { BadRequestException, Controller, Get, Param, Query } from '@nestjs/common';
 import { CitizenService } from './citizen.service';
 
 @Controller()
@@ -62,5 +62,18 @@ export class AppController {
     @Param('namespace') namespace: string,
   ) {
     return this.citizenService.getPayloadFieldRefs(entryId, namespace);
+  }
+
+  @Get('payloads/data-hash/:dataHash')
+  async payloadDataHash(@Param('dataHash') dataHash: string) {
+    return this.citizenService.getPayloadDataHash(decodeURIComponent(dataHash));
+  }
+
+  @Get('data-hash')
+  async payloadDataHashByQuery(@Query('q') dataHash?: string) {
+    if (!dataHash || !dataHash.trim()) {
+      throw new BadRequestException('missing required query parameter: q');
+    }
+    return this.citizenService.getPayloadDataHash(dataHash.trim());
   }
 }

@@ -52,6 +52,11 @@ struct BlocksQueryParams {
     limit: Option<usize>,
 }
 
+#[derive(Clone, Debug, Deserialize)]
+struct DataHashQueryParams {
+    q: Option<String>,
+}
+
 impl ApiClientProfile {
     pub fn with_scopes(scopes: impl IntoIterator<Item = impl Into<String>>) -> Self {
         Self {
@@ -465,6 +470,10 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
         let payload_commit_ledger = Arc::clone(&self.ledger);
         let payload_commit_edge = Arc::clone(&self.edge);
         let payload_fields_edge = Arc::clone(&self.edge);
+        let payload_data_hash_ledger = Arc::clone(&self.ledger);
+        let payload_data_hash_edge = Arc::clone(&self.edge);
+        let payload_data_hash_query_ledger = Arc::clone(&self.ledger);
+        let payload_data_hash_query_edge = Arc::clone(&self.edge);
         let file_read_ledger = Arc::clone(&self.ledger);
         let file_read_edge = Arc::clone(&self.edge);
         let file_revoke_ledger = Arc::clone(&self.ledger);
@@ -623,6 +632,22 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
                     async move {
                         Self::handle_get_payload_field_refs(edge, entry_id, namespace).await
                     }
+                }),
+            )
+            .route(
+                "/api/v1/payloads/data-hash/:data_hash",
+                get(move |Path(data_hash): Path<String>| {
+                    let ledger = Arc::clone(&payload_data_hash_ledger);
+                    let edge = Arc::clone(&payload_data_hash_edge);
+                    async move { Self::handle_get_payload_data_hash(ledger, edge, data_hash).await }
+                }),
+            )
+            .route(
+                "/data-hash",
+                get(move |Query(query): Query<DataHashQueryParams>| {
+                    let ledger = Arc::clone(&payload_data_hash_query_ledger);
+                    let edge = Arc::clone(&payload_data_hash_query_edge);
+                    async move { Self::handle_get_payload_data_hash_query(ledger, edge, query).await }
                 }),
             )
             .route(
@@ -2028,6 +2053,217 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
         )
     }
 
+    async fn handle_get_payload_data_hash(
+        ledger: Arc<Ledger<S>>,
+        edge: Arc<ApiEdgeState>,
+        data_hash: String,
+    ) -> (StatusCode, Json<serde_json::Value>) {
+        let _ = edge;
+
+        let normalized_data_hash = Self::normalize_data_hash(&data_hash);
+        let mut matches = Vec::new();
+        let namespaces = ledger.storage().namespace_registry().unwrap_or_default();
+
+        for descriptor in namespaces {
+            let entries = ledger
+                .storage()
+                .namespace_entries(&descriptor.namespace)
+                .unwrap_or_default();
+            for entry in entries {
+                if entry.payload_commitment.as_deref() == Some(data_hash.as_str())
+                    || entry.payload_commitment.as_deref() == Some(normalized_data_hash.as_str())
+                {
+                    matches.push(serde_json::json!({
+                        "entry_id": entry.entry_id,
+                        "namespace": entry.namespace,
+                        "action": entry.action,
+                        "object_id": entry.object_id,
+                        "timestamp": entry.timestamp,
+                        "source": "payload_commitment",
+                    }));
+                }
+
+                if entry.namespace == "consent.receipt"
+                    && (entry
+                        .payload
+                        .get("data_hash")
+                        .and_then(|value| value.as_str())
+                        == Some(data_hash.as_str())
+                        || entry
+                            .payload
+                            .get("data_hash")
+                            .and_then(|value| value.as_str())
+                            == Some(normalized_data_hash.as_str()))
+                {
+                    matches.push(serde_json::json!({
+                        "entry_id": entry.entry_id,
+                        "namespace": entry.namespace,
+                        "action": entry.action,
+                        "object_id": entry.object_id,
+                        "timestamp": entry.timestamp,
+                        "source": "consent_receipt.data_hash",
+                    }));
+                }
+
+                let payload_data_hash = entry
+                    .payload
+                    .get("data_hash")
+                    .and_then(|value| value.as_str());
+                let nested_payload_data_hash = entry
+                    .payload
+                    .get("payload")
+                    .and_then(|value| value.as_object())
+                    .and_then(|payload| payload.get("data_hash"))
+                    .and_then(|value| value.as_str());
+
+                if entry.namespace != "consent.receipt"
+                    && (payload_data_hash == Some(data_hash.as_str())
+                        || payload_data_hash == Some(normalized_data_hash.as_str())
+                        || nested_payload_data_hash == Some(data_hash.as_str())
+                        || nested_payload_data_hash == Some(normalized_data_hash.as_str()))
+                {
+                    matches.push(serde_json::json!({
+                        "entry_id": entry.entry_id,
+                        "namespace": entry.namespace,
+                        "action": entry.action,
+                        "object_id": entry.object_id,
+                        "timestamp": entry.timestamp,
+                        "source": "payload.data_hash",
+                    }));
+                }
+            }
+        }
+
+        if matches.is_empty() {
+            let latest_height = ledger.storage().latest_height().unwrap_or(0);
+            for height in 0..=latest_height {
+                let block = ledger.storage().get_block(height).unwrap_or(None);
+                let Some(block) = block else {
+                    continue;
+                };
+
+                for entry in block.entries {
+                    if entry.payload_commitment.as_deref() == Some(data_hash.as_str())
+                        || entry.payload_commitment.as_deref()
+                            == Some(normalized_data_hash.as_str())
+                    {
+                        matches.push(serde_json::json!({
+                            "entry_id": entry.entry_id,
+                            "namespace": entry.namespace,
+                            "action": entry.action,
+                            "object_id": entry.object_id,
+                            "timestamp": entry.timestamp,
+                            "source": "payload_commitment",
+                        }));
+                    }
+
+                    if entry.namespace == "consent.receipt"
+                        && (entry
+                            .payload
+                            .get("data_hash")
+                            .and_then(|value| value.as_str())
+                            == Some(data_hash.as_str())
+                            || entry
+                                .payload
+                                .get("data_hash")
+                                .and_then(|value| value.as_str())
+                                == Some(normalized_data_hash.as_str()))
+                    {
+                        matches.push(serde_json::json!({
+                            "entry_id": entry.entry_id,
+                            "namespace": entry.namespace,
+                            "action": entry.action,
+                            "object_id": entry.object_id,
+                            "timestamp": entry.timestamp,
+                            "source": "consent_receipt.data_hash",
+                        }));
+                    }
+
+                    let payload_data_hash = entry
+                        .payload
+                        .get("data_hash")
+                        .and_then(|value| value.as_str());
+                    let nested_payload_data_hash = entry
+                        .payload
+                        .get("payload")
+                        .and_then(|value| value.as_object())
+                        .and_then(|payload| payload.get("data_hash"))
+                        .and_then(|value| value.as_str());
+
+                    if entry.namespace != "consent.receipt"
+                        && (payload_data_hash == Some(data_hash.as_str())
+                            || payload_data_hash == Some(normalized_data_hash.as_str())
+                            || nested_payload_data_hash == Some(data_hash.as_str())
+                            || nested_payload_data_hash
+                                == Some(normalized_data_hash.as_str()))
+                    {
+                        matches.push(serde_json::json!({
+                            "entry_id": entry.entry_id,
+                            "namespace": entry.namespace,
+                            "action": entry.action,
+                            "object_id": entry.object_id,
+                            "timestamp": entry.timestamp,
+                            "source": "payload.data_hash",
+                        }));
+                    }
+                }
+            }
+        }
+
+        if matches.is_empty() {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(serde_json::json!({
+                    "error": "no entries found for data_hash",
+                    "data_hash": normalized_data_hash,
+                })),
+            );
+        }
+
+        (
+            StatusCode::OK,
+            Json(serde_json::json!({
+                "data_hash": normalized_data_hash,
+                "matches": matches,
+            })),
+        )
+    }
+
+    async fn handle_get_payload_data_hash_query(
+        ledger: Arc<Ledger<S>>,
+        edge: Arc<ApiEdgeState>,
+        query: DataHashQueryParams,
+    ) -> (StatusCode, Json<serde_json::Value>) {
+        let Some(raw_hash) = query.q else {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({
+                    "error": "missing required query parameter: q",
+                })),
+            );
+        };
+
+        let data_hash = raw_hash.trim().to_string();
+        if data_hash.is_empty() {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({
+                    "error": "query parameter q cannot be empty",
+                })),
+            );
+        }
+
+        Self::handle_get_payload_data_hash(ledger, edge, data_hash).await
+    }
+
+    fn normalize_data_hash(data_hash: &str) -> String {
+        if data_hash.starts_with("sha256:") {
+            data_hash.to_string()
+        } else {
+            format!("sha256:{data_hash}")
+        }
+    }
+
     fn parse_payload_field_policy(ruleset: &NamespaceRuleset) -> Option<PayloadFieldPolicyConfig> {
         let config = ruleset
             .validators
@@ -3098,15 +3334,21 @@ fn protocol_error_response(err: ProtocolError) -> (StatusCode, Json<serde_json::
 
 #[cfg(test)]
 mod tests {
-    use super::{ApiClientProfile, ApiEdgeConfig, ApiServer, MinioOffchainObjectStoreConfig};
+    use super::{
+        ApiClientProfile, ApiEdgeConfig, ApiEdgeState, ApiServer, DataHashQueryParams,
+        LocalOffchainObjectStore,
+        MinioOffchainObjectStoreConfig,
+    };
     use axum::body::{to_bytes, Body};
     use axum::http::{Request, StatusCode};
+    use axum::Json;
     use chrono::Utc;
     use citizen_crypto::{sign_message, verifying_key_to_string, KeyRegistry, ValidatorKeypair};
     use citizen_ledger::Ledger;
-    use citizen_storage::MemoryStorage;
+    use citizen_storage::{LedgerStorage, MemoryStorage};
     use citizen_types::{
-        LedgerEntry, NamespaceDescriptor, NamespaceRule, NamespaceRuleset, SignedEnvelope,
+        Block, BlockHeader, CommitProof, LedgerEntry, NamespaceDescriptor, NamespaceRule,
+        NamespaceRuleset, SignedEnvelope,
     };
     use serde_json::{json, Value};
     use std::collections::BTreeMap;
@@ -3680,7 +3922,7 @@ mod tests {
             object_id: "PROC-001".to_string(),
             payload: json!({"event":"BID_OPENED"}),
             privacy_flag: false,
-            privacy_mode: citizen_types::PrivacyMode::None,
+            privacy_mode: citizen_types::PrivacyMode::Hybrid,
             payload_commitment: None,
             ciphertext_hex: None,
             nonce_hex: None,
@@ -3934,7 +4176,7 @@ mod tests {
             object_id: "did:ledger:alice".to_string(),
             payload: json!({"claims_hash":"0xabc"}),
             privacy_flag: false,
-            privacy_mode: citizen_types::PrivacyMode::None,
+            privacy_mode: citizen_types::PrivacyMode::Hybrid,
             payload_commitment: None,
             ciphertext_hex: None,
             nonce_hex: None,
@@ -5229,7 +5471,7 @@ mod tests {
             submitted_at: chrono::Utc::now(),
             payload: consent_entry,
         };
-        let _ = app
+        let _consent_response = app
             .clone()
             .oneshot(
                 Request::builder()
@@ -5474,7 +5716,7 @@ mod tests {
             payload: consent_entry,
         };
 
-        let _ = app
+        let _consent_response = app
             .clone()
             .oneshot(
                 Request::builder()
@@ -5632,7 +5874,7 @@ mod tests {
             submitted_at: chrono::Utc::now(),
             payload: consent_entry,
         };
-        let _ = app
+        let _consent_response = app
             .clone()
             .oneshot(
                 Request::builder()
@@ -8765,6 +9007,319 @@ mod tests {
         );
         assert_eq!(payload["field_refs"][1]["field_path"], json!("payload.ssn"));
     }
+
+    #[tokio::test]
+    async fn payload_data_hash_endpoint_returns_ledger_matches_for_encrypted_data() {
+        let storage = Arc::new(MemoryStorage::new());
+        let ledger = Arc::new(Ledger::new(Arc::clone(&storage), KeyRegistry::new()));
+        ledger.bootstrap_namespaces(vec![NamespaceRuleset {
+            descriptor: NamespaceDescriptor {
+                namespace: "audit.procurement".to_string(),
+                version: 1,
+                rules_hash: "rules-v1".to_string(),
+                governed_by: "governance".to_string(),
+            },
+            writers: BTreeSet::new(),
+            validators: vec![NamespaceRule {
+                name: "require_signature".to_string(),
+                config: json!({}),
+            }],
+        }]);
+        ledger.bootstrap_namespaces(vec![NamespaceRuleset {
+            descriptor: NamespaceDescriptor {
+                namespace: "consent.receipt".to_string(),
+                version: 1,
+                rules_hash: "consent-v1".to_string(),
+                governed_by: "governance".to_string(),
+            },
+            writers: BTreeSet::new(),
+            validators: vec![NamespaceRule {
+                name: "require_signature".to_string(),
+                config: json!({}),
+            }],
+        }]);
+        storage
+            .upsert_namespace(NamespaceDescriptor {
+                namespace: "audit.procurement".to_string(),
+                version: 1,
+                rules_hash: "rules-v1".to_string(),
+                governed_by: "governance".to_string(),
+            })
+            .expect("audit namespace should be tracked");
+        storage
+            .upsert_namespace(NamespaceDescriptor {
+                namespace: "consent.receipt".to_string(),
+                version: 1,
+                rules_hash: "consent-v1".to_string(),
+                governed_by: "governance".to_string(),
+            })
+            .expect("consent namespace should be tracked");
+
+        let now = chrono::Utc::now().timestamp();
+        let data_hash = "sha256:lookup-data-hash";
+
+        let consent_signer = ValidatorKeypair::generate("did:citizen:holder-1".to_string());
+        let mut consent_entry = LedgerEntry {
+            entry_id: Uuid::new_v4(),
+            namespace: "consent.receipt".to_string(),
+            action: "CONSENT_GRANTED".to_string(),
+            object_id: "did:citizen:holder-1".to_string(),
+            payload: json!({
+                "data_hash": data_hash,
+                "policy_ref": "policy:offchain:v1",
+                "expires_at": now + 3_600
+            }),
+            privacy_flag: false,
+            privacy_mode: citizen_types::PrivacyMode::None,
+            payload_commitment: None,
+            ciphertext_hex: None,
+            nonce_hex: None,
+            salt_hex: None,
+            kdf_params: None,
+            consent_receipt: None,
+            authorized_readers: vec![],
+            custodian_policy_id: None,
+            field_reader_acls: BTreeMap::new(),
+            key_wrapped_secrets: vec![],
+            revocation_events: vec![],
+            author: "did:citizen:holder-1".to_string(),
+            signature: String::new(),
+            timestamp: now,
+        };
+        sign_entry_for_tests(&mut consent_entry, &consent_signer);
+        ledger
+            .apply_entry(consent_entry)
+            .expect("consent entry should be accepted");
+
+        let audit_signer = ValidatorKeypair::generate("did:author:encrypted".to_string());
+        let mut audit_entry = LedgerEntry {
+            entry_id: Uuid::new_v4(),
+            namespace: "audit.procurement".to_string(),
+            action: "ENCRYPTED_AUDIT_RECORD".to_string(),
+            object_id: "PROC-DATA-HASH-LOOKUP".to_string(),
+            payload: json!({"record_type": "procurement_notice"}),
+            privacy_flag: false,
+            privacy_mode: citizen_types::PrivacyMode::None,
+            payload_commitment: Some(data_hash.to_string()),
+            ciphertext_hex: None,
+            nonce_hex: None,
+            salt_hex: None,
+            kdf_params: None,
+            consent_receipt: None,
+            authorized_readers: vec![],
+            custodian_policy_id: None,
+            field_reader_acls: BTreeMap::new(),
+            key_wrapped_secrets: vec![],
+            revocation_events: vec![],
+            author: "did:author:encrypted".to_string(),
+            signature: String::new(),
+            timestamp: now,
+        };
+        sign_entry_for_tests(&mut audit_entry, &audit_signer);
+        ledger
+            .apply_entry(audit_entry)
+            .expect("audit entry should be accepted");
+
+        let edge = Arc::new(ApiEdgeState::new(
+            ApiEdgeConfig {
+                offchain_encrypted_files_v1_enabled: true,
+                ..ApiEdgeConfig::default()
+            },
+            Arc::new(LocalOffchainObjectStore),
+        ));
+
+        let (status, Json(payload)) =
+            ApiServer::<MemoryStorage>::handle_get_payload_data_hash(
+                Arc::clone(&ledger),
+                edge,
+                data_hash.to_string(),
+            )
+            .await;
+
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(payload["data_hash"], json!(data_hash));
+        assert_eq!(payload["matches"].as_array().map(Vec::len), Some(2));
+
+        let sources = payload["matches"]
+            .as_array()
+            .expect("matches array")
+            .iter()
+            .filter_map(|match_row| match_row.get("source").and_then(|value| value.as_str()))
+            .collect::<Vec<_>>();
+        assert!(sources.contains(&"consent_receipt.data_hash"));
+        assert!(sources.contains(&"payload_commitment"));
+    }
+
+    #[tokio::test]
+    async fn payload_data_hash_query_route_requires_q_parameter() {
+        let ledger = Arc::new(Ledger::new(Arc::new(MemoryStorage::new()), KeyRegistry::new()));
+        let edge = Arc::new(ApiEdgeState::new(
+            ApiEdgeConfig {
+                offchain_encrypted_files_v1_enabled: true,
+                ..ApiEdgeConfig::default()
+            },
+            Arc::new(LocalOffchainObjectStore),
+        ));
+
+        let (status, Json(payload)) = ApiServer::<MemoryStorage>::handle_get_payload_data_hash_query(
+            ledger,
+            edge,
+            DataHashQueryParams { q: None },
+        )
+        .await;
+
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+        assert_eq!(payload["error"], json!("missing required query parameter: q"));
+    }
+
+    #[tokio::test]
+    async fn payload_data_hash_endpoint_matches_payload_data_hash_for_on_chain_encrypted_forms() {
+        let storage = Arc::new(MemoryStorage::new());
+        let ledger = Arc::new(Ledger::new(Arc::clone(&storage), KeyRegistry::new()));
+        ledger.bootstrap_namespaces(vec![NamespaceRuleset {
+            descriptor: NamespaceDescriptor {
+                namespace: "audit.procurement".to_string(),
+                version: 1,
+                rules_hash: "rules-v1".to_string(),
+                governed_by: "governance".to_string(),
+            },
+            writers: BTreeSet::new(),
+            validators: vec![NamespaceRule {
+                name: "require_signature".to_string(),
+                config: json!({}),
+            }],
+        }]);
+        storage
+            .upsert_namespace(NamespaceDescriptor {
+                namespace: "audit.procurement".to_string(),
+                version: 1,
+                rules_hash: "rules-v1".to_string(),
+                governed_by: "governance".to_string(),
+            })
+            .expect("namespace should be tracked");
+
+        let signer = ValidatorKeypair::generate("did:author:forms".to_string());
+        let mut entry = LedgerEntry {
+            entry_id: Uuid::new_v4(),
+            namespace: "audit.procurement".to_string(),
+            action: "FORM_SUBMITTED".to_string(),
+            object_id: "FORM-001".to_string(),
+            payload: json!({
+                "data_hash": "sha256:form-sensitive-onchain",
+                "encrypted_fields": ["ssn", "medical_record"]
+            }),
+            privacy_flag: true,
+            privacy_mode: citizen_types::PrivacyMode::Hybrid,
+            payload_commitment: None,
+            ciphertext_hex: None,
+            nonce_hex: None,
+            salt_hex: None,
+            kdf_params: None,
+            consent_receipt: None,
+            authorized_readers: vec![],
+            custodian_policy_id: None,
+            field_reader_acls: BTreeMap::new(),
+            key_wrapped_secrets: vec![],
+            revocation_events: vec![],
+            author: "did:author:forms".to_string(),
+            signature: String::new(),
+            timestamp: chrono::Utc::now().timestamp(),
+        };
+        sign_entry_for_tests(&mut entry, &signer);
+        ledger.apply_entry(entry).expect("entry should be accepted");
+
+        let edge = Arc::new(ApiEdgeState::new(
+            ApiEdgeConfig {
+                offchain_encrypted_files_v1_enabled: false,
+                ..ApiEdgeConfig::default()
+            },
+            Arc::new(LocalOffchainObjectStore),
+        ));
+
+        let (status, Json(payload)) = ApiServer::<MemoryStorage>::handle_get_payload_data_hash(
+            ledger,
+            edge,
+            "form-sensitive-onchain".to_string(),
+        )
+        .await;
+
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(payload["data_hash"], json!("sha256:form-sensitive-onchain"));
+        assert_eq!(payload["matches"].as_array().map(Vec::len), Some(1));
+        assert_eq!(payload["matches"][0]["source"], json!("payload.data_hash"));
+        assert_eq!(payload["matches"][0]["namespace"], json!("audit.procurement"));
+    }
+
+    #[tokio::test]
+    async fn payload_data_hash_lookup_falls_back_to_block_scan_when_namespace_registry_is_empty() {
+        let storage = Arc::new(MemoryStorage::new());
+        let ledger = Arc::new(Ledger::new(Arc::clone(&storage), KeyRegistry::new()));
+
+        let entry = LedgerEntry {
+            entry_id: Uuid::new_v4(),
+            namespace: "forms.secure".to_string(),
+            action: "FORM_SUBMITTED".to_string(),
+            object_id: "FORM-BLOCK-ONLY-001".to_string(),
+            payload: json!({
+                "data_hash": "sha256:block-scan-data-hash"
+            }),
+            privacy_flag: true,
+            privacy_mode: citizen_types::PrivacyMode::Hybrid,
+            payload_commitment: None,
+            ciphertext_hex: None,
+            nonce_hex: None,
+            salt_hex: None,
+            kdf_params: None,
+            consent_receipt: None,
+            authorized_readers: vec![],
+            custodian_policy_id: None,
+            field_reader_acls: BTreeMap::new(),
+            key_wrapped_secrets: vec![],
+            revocation_events: vec![],
+            author: "did:author:forms".to_string(),
+            signature: "sig-block-only".to_string(),
+            timestamp: chrono::Utc::now().timestamp(),
+        };
+
+        storage
+            .store_block(Block {
+                header: BlockHeader {
+                    height: 0,
+                    prev_hash: "genesis".to_string(),
+                    entry_root: "entry-root-0".to_string(),
+                    proposer: "local-validator".to_string(),
+                    timestamp: chrono::Utc::now().timestamp(),
+                    commit_proof: CommitProof {
+                        aggregated_signature: "sig-finality".to_string(),
+                        participant_ids: BTreeSet::new(),
+                    },
+                },
+                entries: vec![entry],
+            })
+            .expect("block should be stored");
+
+        let edge = Arc::new(ApiEdgeState::new(
+            ApiEdgeConfig {
+                offchain_encrypted_files_v1_enabled: false,
+                ..ApiEdgeConfig::default()
+            },
+            Arc::new(LocalOffchainObjectStore),
+        ));
+
+        let (status, Json(payload)) = ApiServer::<MemoryStorage>::handle_get_payload_data_hash(
+            ledger,
+            edge,
+            "block-scan-data-hash".to_string(),
+        )
+        .await;
+
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(payload["data_hash"], json!("sha256:block-scan-data-hash"));
+        assert_eq!(payload["matches"].as_array().map(Vec::len), Some(1));
+        assert_eq!(payload["matches"][0]["source"], json!("payload.data_hash"));
+        assert_eq!(payload["matches"][0]["namespace"], json!("forms.secure"));
+    }
+
 
     #[tokio::test]
     async fn payload_commit_rejects_non_payload_commit_action() {

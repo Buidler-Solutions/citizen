@@ -11,6 +11,7 @@ type ExplorerShellProps = {
 const navItems = [
   { icon: '⌂', label: 'Dashboard', href: '/' },
   { icon: '◈', label: 'Blocks', href: '/blocks' },
+  { icon: '⌗', label: 'Data Hash', href: '/data-hash' },
 ];
 
 export function ExplorerShell({ children }: ExplorerShellProps) {
@@ -74,6 +75,12 @@ export function ExplorerShell({ children }: ExplorerShellProps) {
     }
 
     const query = new URLSearchParams();
+    const dataHashMatch = /^(data_hash|datahash):(.+)$/i.exec(normalizedQuery);
+    if (dataHashMatch) {
+      query.set('q', dataHashMatch[2].trim());
+      router.push(`/data-hash?${query.toString()}`);
+      return;
+    }
     query.set('q', normalizedQuery);
     router.push(`/blocks?${query.toString()}`);
   };
@@ -132,7 +139,7 @@ export function ExplorerShell({ children }: ExplorerShellProps) {
                 type="search"
                 value={searchValue}
                 onChange={(event) => setSearchValue(event.target.value)}
-                placeholder="Search e.g. hash:abc blocks:42 signer:node-1 reader:did namespace:citizen.*"
+                placeholder="Search e.g. hash:abc blocks:42 or data_hash:sha256:abc..."
               />
               <button type="submit" className="header-search-button">
                 Search
