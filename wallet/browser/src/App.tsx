@@ -218,7 +218,16 @@ function renderPayloadSummary(canonicalJson: string): Array<{ label: string; val
 }
 
 async function callWallet(method: string, params?: unknown[]): Promise<WalletResponse> {
-  return chrome.runtime.sendMessage({ method, params }) as Promise<WalletResponse>;
+  try {
+    const response = await chrome.runtime.sendMessage({ method, params }) as WalletResponse | undefined;
+    if (!response) {
+      return { ok: false, error: 'No response from wallet background service.' };
+    }
+    return response;
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : 'Unknown extension messaging error.';
+    return { ok: false, error: `Wallet communication error: ${reason}` };
+  }
 }
 
 export function App() {
@@ -238,8 +247,6 @@ export function App() {
   const [confirmDirectSubmitDestination, setConfirmDirectSubmitDestination] = useState(false);
   const [consentShareSigningPayload, setConsentShareSigningPayload] = useState(false);
   const [directSubmitReceipts, setDirectSubmitReceipts] = useState<DirectSubmitReceipt[]>([]);
-  const [signedOriginFilter, setSignedOriginFilter] = useState('all');
-  const [selectedSignedRequestIds, setSelectedSignedRequestIds] = useState<string[]>([]);
   const [profile, setProfile] = useState<ProfileDetails>({
     fullName: '',
     email: '',
@@ -436,43 +443,15 @@ export function App() {
     () => pendingDappRequests.filter((entry) => entry.state === 'signed'),
     [pendingDappRequests],
   );
-  const signedOrigins = useMemo(
-    () => Array.from(new Set(signedRequests.map((entry) => entry.origin.origin))).sort((left, right) => left.localeCompare(right)),
-    [signedRequests],
-  );
-  const filteredSignedRequests = useMemo(
+  const groupedSignedRequests = useMemo(
     () =>
-      signedOriginFilter === 'all'
-        ? signedRequests
-        : signedRequests.filter((entry) => entry.origin.origin === signedOriginFilter),
-    [signedOriginFilter, signedRequests],
-  );
-  const groupedFilteredSignedRequests = useMemo(
-    () =>
-      filteredSignedRequests.reduce<Record<string, PendingDappRequest[]>>((groups, entry) => {
+      signedRequests.reduce<Record<string, PendingDappRequest[]>>((groups, entry) => {
         groups[entry.origin.origin] = [...(groups[entry.origin.origin] ?? []), entry];
         return groups;
       }, {}),
-    [filteredSignedRequests],
+    [signedRequests],
   );
   const approvalUiEnabled = isApprovalUiEnabled(APPROVAL_UI_ROLLOUT_STAGE);
-
-  useEffect(() => {
-    if (signedOriginFilter !== 'all' && !signedOrigins.includes(signedOriginFilter)) {
-      setSignedOriginFilter('all');
-    }
-  }, [signedOriginFilter, signedOrigins]);
-
-  useEffect(() => {
-    const signedRequestIdSet = new Set(signedRequests.map((entry) => entry.requestId));
-    setSelectedSignedRequestIds((current) => {
-      const valid = current.filter((requestId) => signedRequestIdSet.has(requestId));
-      if (valid.length > 0 || signedRequests.length === 0) {
-        return valid;
-      }
-      return signedRequests.map((entry) => entry.requestId);
-    });
-  }, [signedRequests]);
 
   const handlePasswordSubmit = async () => {
     setStatus('');
@@ -751,43 +730,6 @@ export function App() {
     setConfirmDirectSubmitDestination(false);
     setConsentShareSigningPayload(false);
     await refreshState();
-  };
-
-  const handleBatchSubmitSignedToCitizenNetwork = async () => {
-    if (selectedSignedRequestIds.length === 0) {
-      setStatus('Select at least one signed request for batch submit.');
-      return;
-    }
-    const apiBaseUrl = directSubmitConfig?.allowlistedApiBaseUrls?.[0] ?? 'http://127.0.0.1:8081';
-    const response = await callWallet('wallet_directSubmitSignedBatchToCitizenNetwork', [
-      apiBaseUrl,
-      true,
-      selectedSignedRequestIds,
-    ]);
-    if (!response.ok) {
-      setStatus(response.error ?? 'Batch submit failed.');
-      return;
-    }
-    setStatus(`Batch submit accepted for ${selectedSignedRequestIds.length} signed request(s).`);
-    await refreshState();
-  };
-
-  const toggleSignedRequestSelection = (requestId: string) => {
-    setSelectedSignedRequestIds((current) =>
-      current.includes(requestId) ? current.filter((entry) => entry !== requestId) : [...current, requestId],
-    );
-  };
-
-  const handleSelectAllFilteredSigned = () => {
-    const filteredIds = filteredSignedRequests.map((entry) => entry.requestId);
-    setSelectedSignedRequestIds((current) =>
-      Array.from(new Set([...current, ...filteredIds])),
-    );
-  };
-
-  const handleClearFilteredSignedSelection = () => {
-    const filteredIdSet = new Set(filteredSignedRequests.map((entry) => entry.requestId));
-    setSelectedSignedRequestIds((current) => current.filter((requestId) => !filteredIdSet.has(requestId)));
   };
 
   const handleSetDefaultDirectSubmitDestination = async () => {
@@ -1110,61 +1052,17 @@ export function App() {
               <article className="request-card">
                 <h2>Signed transaction activity</h2>
                 <p className="meta-text">
-                  Signed requests ready for batch submit: {signedRequests.length}
+                  Signed requests available: {signedRequests.length}
                 </p>
-                <p className="meta-text">
-                  Selected for next batch: {selectedSignedRequestIds.length}
-                </p>
-                <div className="form-grid">
-                  <label className="meta-text" htmlFor="signed-origin-filter">
-                    Filter by dApp origin
-                  </label>
-                  <select
-                    id="signed-origin-filter"
-                    value={signedOriginFilter}
-                    onChange={(event) => setSignedOriginFilter(event.target.value)}
-                  >
-                    <option value="all">All origins</option>
-                    {signedOrigins.map((origin) => (
-                      <option key={origin} value={origin}>
-                        {origin}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="button-row">
-                  <button className="ghost" onClick={handleSelectAllFilteredSigned}>
-                    Select all shown
-                  </button>
-                  <button className="ghost" onClick={handleClearFilteredSignedSelection}>
-                    Clear shown
-                  </button>
-                </div>
-                <div className="button-row">
-                  <button
-                    className="primary"
-                    onClick={handleBatchSubmitSignedToCitizenNetwork}
-                    disabled={selectedSignedRequestIds.length === 0}
-                  >
-                    Submit signed batch to Citizen runtime
-                  </button>
-                </div>
-                {filteredSignedRequests.length > 0 ? (
+                {signedRequests.length > 0 ? (
                   <div className="signed-selection-list">
-                    {Object.entries(groupedFilteredSignedRequests).map(([origin, entries]) => (
+                    {Object.entries(groupedSignedRequests).map(([origin, entries]) => (
                       <div key={origin} className="signed-selection-group">
                         <p className="meta-text">{origin}</p>
                         <ul>
                           {entries.map((entry) => (
                             <li key={entry.requestId} className="activity-item">
-                              <label className="checkbox-row">
-                                <input
-                                  type="checkbox"
-                                  checked={selectedSignedRequestIds.includes(entry.requestId)}
-                                  onChange={() => toggleSignedRequestSelection(entry.requestId)}
-                                />
-                                <span>{mask(entry.requestId)}</span>
-                              </label>
+                              <span>{mask(entry.requestId)}</span>
                               <span>{new Date(entry.createdAt).toLocaleString()}</span>
                             </li>
                           ))}
@@ -1173,7 +1071,7 @@ export function App() {
                     ))}
                   </div>
                 ) : (
-                  <p className="meta-text">No signed requests match this origin filter.</p>
+                  <p className="meta-text">No signed requests yet.</p>
                 )}
                 {activity.length > 0 ? (
                   <ul>
