@@ -7,6 +7,9 @@ export type DappRequestState = 'pending' | 'approved' | 'rejected' | 'expired' |
 export type PendingDappSigningRequest = {
   requestId: string;
   envelope: DappSigningRequestEnvelope;
+  walletId: string;
+  signerDid: string;
+  networkId: 'mainnet' | 'futurenet' | 'testnet' | 'localnode';
   state: DappRequestState;
   createdAt: string;
   updatedAt: string;

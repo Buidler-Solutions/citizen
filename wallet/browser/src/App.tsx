@@ -51,6 +51,9 @@ type PendingDappRequest = {
     canonicalJson: string;
     hash: string;
   };
+  walletId: string;
+  signerDid: string;
+  networkId: NetworkId;
   createdAt: string;
   expiresAt: string;
   riskFlags: string[];
@@ -70,10 +73,15 @@ type OriginPermission = {
 type DirectSubmitConfig = {
   defaultDestination: string;
   allowlistedDestinations: readonly string[];
+  allowlistedApiBaseUrls?: readonly string[];
 };
 
 type DirectSubmitReceipt = {
   requestId: string;
+  payloadHash: string | null;
+  walletId: string;
+  signerDid: string;
+  networkId: NetworkId;
   destinationUrl: string;
   traceId: string;
   status: number;
@@ -94,6 +102,19 @@ type ProtocolKeyMaterial = {
     publicKeyHex: string;
     algorithm: string;
   };
+};
+
+type ProtocolKeypairsExport = {
+  signer_did: string;
+  signer_algorithm: string;
+  signer_ed25519_public_key_hex: string;
+  signer_ed25519_private_key_hex: string;
+  reader_did: string;
+  reader_algorithm: string;
+  reader_x25519_public_key_hex: string;
+  reader_x25519_private_key_hex: string;
+  mnemonic_phrase: string | null;
+  derivation_path: string | null;
 };
 
 
@@ -120,6 +141,7 @@ type TabId = 'activity' | 'compose' | 'vault' | 'security' | 'profile';
 
 type NetworkId = 'mainnet' | 'futurenet' | 'testnet' | 'localnode';
 type MnemonicWordCount = 12 | 24;
+type NetworkLiveness = Record<NetworkId, boolean>;
 
 function detectMnemonicWordCount(phrase: string): MnemonicWordCount | null {
   const words = phrase.trim().split(/\s+/).filter(Boolean).length;
@@ -135,6 +157,25 @@ const NETWORK_OPTIONS: { id: NetworkId; label: string }[] = [
   { id: 'testnet', label: 'Testnet' },
   { id: 'localnode', label: 'Local Node' },
 ];
+
+
+const EXPLORER_BASE_URL_BY_NETWORK: Record<NetworkId, string> = {
+  mainnet: 'https://explorer.citizenprotocol.io',
+  futurenet: 'https://futurenet-explorer.citizenprotocol.io',
+  testnet: 'https://testnet-explorer.citizenprotocol.io',
+  localnode: 'http://localhost:8885',
+};
+
+function normalizeExplorerHashQueryValue(value: string): string {
+  return value.startsWith('sha256:') ? value.slice('sha256:'.length) : value;
+}
+
+function buildExplorerDataHashSearchHref(network: NetworkId, receiptHash: string): string {
+  const explorerBase = EXPLORER_BASE_URL_BY_NETWORK[network] ?? EXPLORER_BASE_URL_BY_NETWORK.localnode;
+  const normalizedHash = normalizeExplorerHashQueryValue(receiptHash);
+  const query = encodeURIComponent(`sha256:${normalizedHash}`);
+  return `${explorerBase.replace(/\/$/, '')}/data-hash?q=${query}`;
+}
 
 const NAV_ITEMS: { id: TabId; label: string }[] = [
   { id: 'activity', label: 'Activity' },
@@ -154,8 +195,10 @@ const STORAGE_KEY = 'citizen.browser.wallet.v1';
 const LAST_REQUEST_KEY = 'citizen.browser.wallet.last_request.v1';
 const PROFILE_KEY = 'citizen.browser.wallet.profile.v1';
 const DAPP_PENDING_REQUESTS_KEY = 'citizen.browser.wallet.dapp_pending_requests.v1';
+const DIRECT_SUBMIT_RECEIPTS_KEY = 'citizen.browser.wallet.direct_submit_receipts.v1';
 
 const APPROVAL_UI_ROLLOUT_STAGE = getApprovalUiRolloutStageFromEnv();
+const CREDENTIAL_REVEAL_TTL_MS = 60_000;
 
 function rolloutLabel(stage: ApprovalUiRolloutStage): string {
   if (stage === 'general') {
@@ -203,7 +246,16 @@ function renderPayloadSummary(canonicalJson: string): Array<{ label: string; val
 }
 
 async function callWallet(method: string, params?: unknown[]): Promise<WalletResponse> {
-  return chrome.runtime.sendMessage({ method, params }) as Promise<WalletResponse>;
+  try {
+    const response = await chrome.runtime.sendMessage({ method, params }) as WalletResponse | undefined;
+    if (!response) {
+      return { ok: false, error: 'No response from wallet background service.' };
+    }
+    return response;
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : 'Unknown extension messaging error.';
+    return { ok: false, error: `Wallet communication error: ${reason}` };
+  }
 }
 
 export function App() {
@@ -242,8 +294,14 @@ export function App() {
   const [needsPasswordSetup, setNeedsPasswordSetup] = useState(false);
   const [locked, setLocked] = useState(false);
   const [status, setStatus] = useState('');
+  const [networkLiveness, setNetworkLiveness] = useState<NetworkLiveness>({
+    mainnet: true,
+    futurenet: true,
+    testnet: true,
+    localnode: true,
+  });
   const [secretPassword, setSecretPassword] = useState('');
-  const [secretKey, setSecretKey] = useState('');
+  const [protocolKeypairs, setProtocolKeypairs] = useState<ProtocolKeypairsExport | null>(null);
   const [mnemonicPassword, setMnemonicPassword] = useState('');
   const [mnemonicPhrase, setMnemonicPhrase] = useState('');
   const [importMnemonicPhrase, setImportMnemonicPhrase] = useState('');
@@ -297,6 +355,16 @@ export function App() {
       const network = selectedNetwork.ok
         ? (selectedNetwork.result as NetworkId)
         : 'mainnet';
+      const livenessResponse = await callWallet('wallet_getNetworkLiveness');
+      const liveNetworks = livenessResponse.ok && livenessResponse.result && typeof livenessResponse.result === 'object'
+        ? livenessResponse.result as NetworkLiveness
+        : null;
+      if (liveNetworks) {
+        setNetworkLiveness(liveNetworks);
+        if (!liveNetworks[network]) {
+          setStatus(`Selected network (${network}) is offline. Switch to a live network to continue transactions.`);
+        }
+      }
 
       const profileDraft = stored[PROFILE_KEY] as Partial<ProfileDetails> | undefined;
       if (profileDraft) {
@@ -352,7 +420,7 @@ export function App() {
           lastRequest: lastRequest ?? null,
         });
         if (!isUnlocked) {
-          setSecretKey('');
+          setProtocolKeypairs(null);
           setComposeSignature('');
         }
         return;
@@ -377,11 +445,29 @@ export function App() {
   }, [refreshState]);
 
   useEffect(() => {
+    if (activeTab !== 'security' && protocolKeypairs) {
+      setProtocolKeypairs(null);
+      setSecretPassword('');
+    }
+  }, [activeTab, protocolKeypairs]);
+
+  useEffect(() => {
+    if (!protocolKeypairs) {
+      return;
+    }
+    const timeoutId = window.setTimeout(() => {
+      setProtocolKeypairs(null);
+      setStatus('Protocol wallet credentials auto-hidden after 60 seconds.');
+    }, CREDENTIAL_REVEAL_TTL_MS);
+    return () => window.clearTimeout(timeoutId);
+  }, [protocolKeypairs]);
+
+  useEffect(() => {
     const handleStorageChange: Parameters<typeof chrome.storage.onChanged.addListener>[0] = (changes, areaName) => {
       if (areaName !== 'local') {
         return;
       }
-      if (!changes[DAPP_PENDING_REQUESTS_KEY]) {
+      if (!changes[DAPP_PENDING_REQUESTS_KEY] && !changes[DIRECT_SUBMIT_RECEIPTS_KEY]) {
         return;
       }
       void refreshState();
@@ -397,7 +483,57 @@ export function App() {
     () => pendingDappRequests.filter((entry) => entry.state === 'pending'),
     [pendingDappRequests],
   );
+  const activeWallet = useMemo(
+    () => vaultWallets.find((wallet) => wallet.isActive) ?? null,
+    [vaultWallets],
+  );
+  const activeSignerDid = activeWallet?.signerDid ?? null;
+  const signedRequests = useMemo(
+    () => pendingDappRequests.filter((entry) => entry.state === 'signed'),
+    [pendingDappRequests],
+  );
+  const currentNetworkSignedRequests = useMemo(
+    () => signedRequests.filter((entry) => entry.networkId === state.network),
+    [signedRequests, state.network],
+  );
+  const visibleSignedRequests = useMemo(
+    () =>
+      currentNetworkSignedRequests.filter(
+        (entry) => !activeSignerDid || entry.signerDid === activeSignerDid,
+      ),
+    [activeSignerDid, currentNetworkSignedRequests],
+  );
+  const visibleDirectSubmitReceipts = useMemo(
+    () =>
+      directSubmitReceipts.filter(
+        (receipt) => receipt.networkId === state.network
+          && (!activeSignerDid || receipt.signerDid === activeSignerDid),
+      ),
+    [activeSignerDid, directSubmitReceipts, state.network],
+  );
+  const latestReceiptByRequestId = useMemo(() => {
+    const pairs = visibleDirectSubmitReceipts
+      .filter((receipt) => receipt.requestId.length > 0)
+      .map((receipt) => [receipt.requestId, receipt] as const);
+    return new Map<string, DirectSubmitReceipt>(pairs);
+  }, [visibleDirectSubmitReceipts]);
+  const latestReceiptByPayloadHash = useMemo(() => {
+    const pairs = visibleDirectSubmitReceipts
+      .filter((receipt) => typeof receipt.payloadHash === 'string' && receipt.payloadHash.length > 0)
+      .map((receipt) => [receipt.payloadHash as string, receipt] as const);
+    return new Map<string, DirectSubmitReceipt>(pairs);
+  }, [visibleDirectSubmitReceipts]);
   const approvalUiEnabled = isApprovalUiEnabled(APPROVAL_UI_ROLLOUT_STAGE);
+  const selectedNetworkIsLive = networkLiveness[state.network];
+  const modalNetworkOptions = useMemo(
+    () =>
+      NETWORK_OPTIONS.filter((option) => networkLiveness[option.id] || option.id === state.network),
+    [networkLiveness, state.network],
+  );
+
+  const handleNetworkUnavailable = (message?: string) => {
+    setStatus(message ?? 'Selected network is offline. Switch to a live network to continue.');
+  };
 
   const handlePasswordSubmit = async () => {
     setStatus('');
@@ -439,7 +575,7 @@ export function App() {
     const result = await callWallet('wallet_lock');
     setStatus(result.ok ? 'Wallet locked.' : result.error ?? 'Failed to lock wallet.');
     setMenuOpen(false);
-    setSecretKey('');
+    setProtocolKeypairs(null);
     setSecretPassword('');
     setComposeSignature('');
     await refreshState();
@@ -448,27 +584,27 @@ export function App() {
   const handleRevealSecret = async () => {
     setStatus('');
     if (!secretPassword) {
-      setStatus('Enter password to view protocol signer secret.');
+      setStatus('Enter password to view wallet protocol credentials.');
       return;
     }
 
-    const result = await callWallet('wallet_exportProtocolSignerSecret', [secretPassword]);
-    if (!result.ok || typeof result.result !== 'string') {
-      setStatus(result.error ?? 'Unable to reveal protocol signer secret.');
+    const result = await callWallet('wallet_exportProtocolKeypairs', [secretPassword]);
+    if (!result.ok || typeof result.result !== 'object' || result.result === null) {
+      setStatus(result.error ?? 'Unable to reveal wallet protocol credentials.');
       return;
     }
 
-    setSecretKey(result.result);
+    setProtocolKeypairs(result.result as ProtocolKeypairsExport);
     setSecretPassword('');
-    setStatus('Protocol signer secret revealed. Keep it private and rotate if exposed.');
+    setStatus('Protocol wallet credentials revealed. Keep them private and rotate if exposed.');
   };
 
   const handleCopySecret = async () => {
-    if (!secretKey) {
+    if (!protocolKeypairs) {
       return;
     }
-    await navigator.clipboard.writeText(secretKey);
-    setStatus('Protocol signer secret copied to clipboard.');
+    await navigator.clipboard.writeText(JSON.stringify(protocolKeypairs, null, 2));
+    setStatus('Protocol wallet credentials copied to clipboard.');
   };
 
   const handleRevealMnemonic = async () => {
@@ -572,6 +708,10 @@ export function App() {
     }
     const result = await callWallet('ctzn_signCitizenTx', [{ message: composeMessage }]);
     if (!result.ok || !result.result || typeof result.result !== 'object') {
+      if (result.error?.includes('ERR_NETWORK_UNAVAILABLE')) {
+        handleNetworkUnavailable(result.error);
+        return;
+      }
       setStatus(result.error ?? 'Unable to sign composed transaction payload.');
       return;
     }
@@ -628,6 +768,10 @@ export function App() {
 
   const handleApproveDappRequest = async (requestId: string) => {
     const response = await callWallet('wallet_approveDappRequest', [requestId]);
+    if (!response.ok && response.error?.includes('ERR_NETWORK_UNAVAILABLE')) {
+      handleNetworkUnavailable(response.error);
+      return;
+    }
     setStatus(response.ok ? 'Request approved and ready for signing.' : response.error ?? 'Unable to approve request.');
     await refreshState();
   };
@@ -669,6 +813,10 @@ export function App() {
       consentShareSigningPayload,
     ]);
     if (!response.ok) {
+      if (response.error?.includes('ERR_NETWORK_UNAVAILABLE')) {
+        handleNetworkUnavailable(response.error);
+        return;
+      }
       setStatus(response.error ?? 'Direct submit failed.');
       return;
     }
@@ -688,6 +836,10 @@ export function App() {
     await refreshState();
   };
 
+  const handleSelectLiveNetwork = async (network: NetworkId) => {
+    await handleNetworkChange(network);
+  };
+
   const handleCopySignerDid = async () => {
     const signerDid = protocolKeyMaterial?.signer.did;
     if (!signerDid || signerDid === 'Unavailable') {
@@ -696,6 +848,16 @@ export function App() {
     }
     await navigator.clipboard.writeText(signerDid);
     setStatus('Signer DID copied to clipboard.');
+  };
+
+  const handleCopyReaderDid = async () => {
+    const readerDid = protocolKeyMaterial?.reader.readerDid;
+    if (!readerDid || readerDid === 'Unavailable') {
+      setStatus('Reader DID is unavailable to copy.');
+      return;
+    }
+    await navigator.clipboard.writeText(readerDid);
+    setStatus('Reader DID copied to clipboard.');
   };
 
   if (isLoading) {
@@ -827,7 +989,6 @@ export function App() {
             </select>
           </div>
           <p className="network-pill">citizen-{state.network}</p>
-          <p className="network-pill">Approval UI rollout: {rolloutLabel(APPROVAL_UI_ROLLOUT_STAGE)}</p>
           {protocolKeyMaterial ? (
             <div className="top-address-row">
               <p className="top-address" title={protocolKeyMaterial.signer.did}>
@@ -848,6 +1009,14 @@ export function App() {
               <p className="top-address" title={protocolKeyMaterial.reader.readerDid}>
                 Reader (X25519): {mask(protocolKeyMaterial.reader.readerDid)}
               </p>
+              <button
+                className="copy-address-button"
+                onClick={() => void handleCopyReaderDid()}
+                aria-label="Copy reader DID to clipboard"
+                title="Copy reader DID"
+              >
+                📋
+              </button>
             </div>
           ) : null}
         </header>
@@ -869,6 +1038,34 @@ export function App() {
               Logout
             </button>
           </nav>
+        ) : null}
+        {!selectedNetworkIsLive ? (
+          <div className="network-modal-backdrop" role="presentation">
+            <article className="network-modal" role="dialog" aria-modal="true" aria-label="Switch to live network">
+              <h2>Network unavailable</h2>
+              <p className="meta-text">
+                The currently selected network is offline. Choose a live network below to continue.
+              </p>
+              <div className="form-grid">
+                {modalNetworkOptions.length > 0 ? (
+                  modalNetworkOptions.map((option) => (
+                    <button
+                      key={option.id}
+                      className={networkLiveness[option.id] ? 'primary' : 'ghost'}
+                      disabled={!networkLiveness[option.id]}
+                      onClick={() => void handleSelectLiveNetwork(option.id)}
+                    >
+                      {networkLiveness[option.id]
+                        ? `Switch to ${option.label}`
+                        : `${option.label} (offline)`}
+                    </button>
+                  ))
+                ) : (
+                  <p className="meta-text">No active network is reachable right now.</p>
+                )}
+              </div>
+            </article>
+          </div>
         ) : null}
 
         <div className="wallet-scroll">
@@ -979,95 +1176,75 @@ export function App() {
               ) : null}
 
               <article className="request-card">
-                <h2>Approval rollout metrics</h2>
-                <p className="meta-text">Tracked from request audit events for this wallet profile and rollout stage.</p>
-                {approvalMetrics ? (
-                  <dl>
-                    <div><dt>Total decided requests</dt><dd>{approvalMetrics.totalRequests}</dd></div>
-                    <div><dt>Approval rate</dt><dd>{(approvalMetrics.approvalRate * 100).toFixed(1)}%</dd></div>
-                    <div><dt>Rejection rate</dt><dd>{(approvalMetrics.rejectionRate * 100).toFixed(1)}%</dd></div>
-                    <div><dt>Timeout rate</dt><dd>{(approvalMetrics.timeoutRate * 100).toFixed(1)}%</dd></div>
-                    <div>
-                      <dt>Relay/direct submit failure rate</dt>
-                      <dd>{approvalMetrics.relayDirectSubmitFailureRate === null ? 'n/a in wallet-only telemetry' : `${(approvalMetrics.relayDirectSubmitFailureRate * 100).toFixed(1)}%`}</dd>
-                    </div>
-                  </dl>
-                ) : (
-                  <p className="meta-text">No approval metrics captured yet.</p>
-                )}
-              </article>
-
-              <article className="request-card">
-                <h2>Create transaction</h2>
-                <p className="meta-text">Quick CTA to start composing and signing a new transaction payload.</p>
-                <button className="primary" onClick={() => setActiveTab('compose')}>Open Compose tab</button>
-              </article>
-
-              <article className="request-card">
-                <h2>Wallet direct submit (Model 2 preview)</h2>
+                <h2>Signed transaction activity</h2>
                 <p className="meta-text">
-                  Direct submit sends signed metadata by default. Canonical payload bytes are only shared when you
-                  explicitly opt in for this submit.
+                  Signed requests for {activeWallet?.name ?? 'active wallet'} on {NETWORK_OPTIONS.find((network) => network.id === state.network)?.label ?? state.network}: {visibleSignedRequests.length}
                 </p>
-                <div className="form-grid">
-                  <label htmlFor="direct-submit-destination">Destination endpoint</label>
-                  <select
-                    id="direct-submit-destination"
-                    value={directSubmitDestination}
-                    onChange={(event) => setDirectSubmitDestination(event.target.value)}
-                  >
-                    {(directSubmitConfig?.allowlistedDestinations ?? []).map((destination) => (
-                      <option key={destination} value={destination}>{destination}</option>
-                    ))}
-                  </select>
-                  <label className="checkbox-row">
-                    <input
-                      type="checkbox"
-                      checked={confirmDirectSubmitDestination}
-                      onChange={(event) => setConfirmDirectSubmitDestination(event.target.checked)}
-                    />
-                    <span>I confirm this destination endpoint for this submit.</span>
-                  </label>
-                  <label className="checkbox-row">
-                    <input
-                      type="checkbox"
-                      checked={consentShareSigningPayload}
-                      onChange={(event) => setConsentShareSigningPayload(event.target.checked)}
-                    />
-                    <span>I consent to share canonical signing payload text with this endpoint.</span>
-                  </label>
-                  <div className="button-row">
-                    <button className="primary" onClick={handleDirectSubmitLatestSigned}>
-                      Submit latest signed artifact
-                    </button>
-                    <button className="ghost" onClick={handleSetDefaultDirectSubmitDestination}>
-                      Save as default
-                    </button>
-                  </div>
-                </div>
-                {directSubmitReceipts.length > 0 ? (
-                  <>
-                    <h3>Stored direct submit receipts</h3>
+                {visibleSignedRequests.length > 0 ? (
+                  <div className="signed-selection-list">
                     <ul>
-                      {directSubmitReceipts.map((receipt) => (
-                        <li key={`${receipt.traceId}-${receipt.submittedAt}`} className="activity-item">
-                          <div>
-                            <strong>{receipt.receiptId ?? 'pending receipt id'}</strong>
-                            <p className="meta-text">{receipt.destinationUrl}</p>
-                            <p className="meta-text">trace {receipt.traceId}</p>
-                          </div>
-                          <span>{new Date(receipt.submittedAt).toLocaleString()}</span>
-                        </li>
-                      ))}
+                      {visibleSignedRequests.map((entry) => {
+                        const receipt = latestReceiptByRequestId.get(entry.requestId)
+                          ?? latestReceiptByPayloadHash.get(entry.payload.hash);
+                        const committedHash = receipt?.receiptHash ?? null;
+                        const explorerHashHref = committedHash
+                          ? buildExplorerDataHashSearchHref(state.network, committedHash)
+                          : null;
+                        return (
+                          <li key={entry.requestId} className="activity-item">
+                            <div>
+                              {explorerHashHref ? (
+                                <a href={explorerHashHref} target="_blank" rel="noreferrer">
+                                  <strong>{mask(committedHash ?? '')}</strong>
+                                </a>
+                              ) : (
+                                <strong>{mask(entry.payload.hash)}</strong>
+                              )}
+                              <p className="meta-text">{new Date(entry.createdAt).toLocaleString()}</p>
+                              <p className="meta-text">{entry.origin.origin}</p>
+                              <p className="meta-text">
+                                Status: {receipt ? 'success' : 'waiting for builder submission confirmation'}
+                              </p>
+                            </div>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </div>
+                ) : (
+                  <p className="meta-text">No signed requests yet.</p>
+                )}
+                {visibleDirectSubmitReceipts.length > 0 ? (
+                  <>
+                    <h3>Commitment receipt hash lookups</h3>
+                    <p className="meta-text">
+                      Open matching blocks in Citizen Explorer using the hashed commitment receipt.
+                    </p>
+                    <ul>
+                      {visibleDirectSubmitReceipts.map((receipt) => {
+                        const receiptHash = receipt.receiptHash;
+                        const explorerHref = receiptHash
+                          ? buildExplorerDataHashSearchHref(state.network, receiptHash)
+                          : null;
+                        return (
+                          <li key={`${receipt.traceId}-${receipt.submittedAt}`} className="activity-item">
+                            <div>
+                              <strong>{receipt.receiptId ?? mask(receipt.requestId)}</strong>
+                              <p className="meta-text">{new Date(receipt.submittedAt).toLocaleString()}</p>
+                              {explorerHref ? (
+                                <a href={explorerHref} target="_blank" rel="noreferrer" className="meta-text">
+                                  {mask(receiptHash ?? '')}
+                                </a>
+                              ) : (
+                                <p className="meta-text">Pending hash</p>
+                              )}
+                            </div>
+                          </li>
+                        );
+                      })}
                     </ul>
                   </>
-                ) : (
-                  <p className="meta-text">No direct submit receipts stored yet.</p>
-                )}
-              </article>
-
-              <article className="request-card">
-                <h2>Signed transaction activity</h2>
+                ) : null}
                 {activity.length > 0 ? (
                   <ul>
                     {activity.map((entry) => (
@@ -1201,18 +1378,22 @@ export function App() {
               </article>
 
               <article className="request-card">
-                <h2>Protocol signer secret (Ed25519 seed) (reveal/hide)</h2>
+                <h2>Protocol wallet credentials (Ed25519 + X25519) (reveal/hide)</h2>
                 <div className="form-grid">
                   <input
                     type="password"
-                    placeholder="Re-enter password to reveal protocol signer secret"
+                    placeholder="Re-enter password to reveal wallet protocol credentials"
                     value={secretPassword}
                     onChange={(event) => setSecretPassword(event.target.value)}
                   />
-                  <button className="primary" onClick={handleRevealSecret}>Reveal protocol signer secret</button>
-                  {secretKey ? <button className="ghost" onClick={() => setSecretKey('')}>Hide secret</button> : null}
-                  {secretKey ? <button className="ghost" onClick={handleCopySecret}>Copy secret</button> : null}
-                  {secretKey ? <code className="secret-box">{secretKey}</code> : <p className="meta-text">Hidden</p>}
+                  <button className="primary" onClick={handleRevealSecret}>Reveal wallet protocol credentials</button>
+                  {protocolKeypairs ? <button className="ghost" onClick={() => { setProtocolKeypairs(null); }}>Hide credentials</button> : null}
+                  {protocolKeypairs ? <button className="ghost" onClick={handleCopySecret}>Copy credentials</button> : null}
+                  {protocolKeypairs ? (
+                    <code className="secret-box">{JSON.stringify(protocolKeypairs, null, 2)}</code>
+                  ) : (
+                    <p className="meta-text">Hidden</p>
+                  )}
                 </div>
               </article>
 

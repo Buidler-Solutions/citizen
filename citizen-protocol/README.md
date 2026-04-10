@@ -149,6 +149,8 @@ cargo test -p citizen-wallet privacy_mode_hybrid_ -- --nocapture
 
    For a production-like real-runtime integration checklist where demo blog, wallet, and explorer all target the same node runtime, use `docs/REAL_NODE_RUNTIME_RUNBOOK.md`.
 
+   For batch envelope submit walkthroughs (single-request multi-envelope commit + verification), use `docs/BATCH_ENVELOPE_SUBMISSION_RUNBOOK.md`.
+
 5. When promoting deployments beyond a single host, use the staged network
    manifests:
 

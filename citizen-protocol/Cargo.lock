@@ -640,11 +640,11 @@ name = "citizen-api"
 version = "0.1.0"
 dependencies = [
  "axum",
+ "blake3",
  "chrono",
  "citizen-crypto",
  "citizen-ledger",
  "citizen-storage",
- "citizen-txpool",
  "citizen-types",
  "hex",
  "serde",
@@ -669,7 +669,6 @@ dependencies = [
  "citizen-ledger",
  "citizen-network",
  "citizen-storage",
- "citizen-txpool",
  "citizen-types",
  "ed25519-dalek",
  "hex",
@@ -771,7 +770,6 @@ dependencies = [
  "citizen-ledger",
  "citizen-network",
  "citizen-storage",
- "citizen-txpool",
  "citizen-types",
  "ed25519-dalek",
  "hex",
@@ -795,7 +793,6 @@ dependencies = [
  "citizen-ledger",
  "citizen-network",
  "citizen-storage",
- "citizen-txpool",
  "citizen-types",
  "parking_lot",
  "rand 0.8.5",
@@ -822,16 +819,6 @@ dependencies = [
  "serde_json",
  "tempfile",
  "thiserror 1.0.69",
- "uuid",
-]
-
-[[package]]
-name = "citizen-txpool"
-version = "0.1.0"
-dependencies = [
- "citizen-types",
- "parking_lot",
- "serde_json",
  "uuid",
 ]
 

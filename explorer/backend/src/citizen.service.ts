@@ -1,26 +1,40 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 
 type ApiSource<T> = {
   source: string;
   data: T;
 };
 
+type BlockHeader = {
+  height: number;
+  prev_hash: string;
+  entry_root: string;
+  proposer: string;
+  timestamp: number;
+  commit_proof: {
+    aggregated_signature: string;
+    participant_ids: string[];
+  };
+};
+
+type BlockData = {
+  header: BlockHeader;
+  entries: unknown[];
+};
+
 type BlockLookup = {
   height: number;
-  block: {
-    header: {
-      height: number;
-      prev_hash: string;
-      entry_root: string;
-      proposer: string;
-      timestamp: number;
-      commit_proof: {
-        aggregated_signature: string;
-        participant_ids: string[];
-      };
-    };
-    entries: unknown[];
-  } | null;
+  block: BlockData | null;
+};
+
+type BlocksPageResponse = {
+  items: Array<{
+    height: number;
+    header: BlockHeader;
+    entry_count: number;
+  }>;
+  next_cursor: string | null;
+  has_more: boolean;
 };
 
 type NamespaceEntries = {
@@ -56,7 +70,6 @@ type WalletSignerEntries = {
   entries: WalletSignerEntry[];
 };
 
-
 type FileManifestMetadata = {
   manifest_id: string;
   namespace: string;
@@ -80,8 +93,6 @@ type FileTimelineResponse = {
   }>;
 };
 
-
-
 type PayloadFieldRefs = {
   entry_id: string;
   namespace: string;
@@ -92,7 +103,6 @@ type PayloadFieldRefs = {
     payload_commitment: string;
   }>;
 };
-
 
 type ReceiptLookup = {
   receipt: {
@@ -118,12 +128,68 @@ type ReceiptLookup = {
 
 @Injectable()
 export class CitizenService {
-  private readonly baseUrl = process.env.CITIZEN_NODE_URL ?? 'http://localhost:8080';
+  private readonly baseUrl = process.env.CITIZEN_NODE_URL ?? 'http://127.0.0.1:8081';
 
   async getStatus() {
     return {
       node: this.baseUrl,
       timestamp: Date.now(),
+    };
+  }
+
+  async getBlocks(cursor?: string, limitRaw?: string): Promise<ApiSource<BlocksPageResponse>> {
+    const limit = this.parseLimit(limitRaw);
+    const requestedStartHeight = this.parseCursor(cursor);
+    const latestHeight = await this.findLatestHeight();
+
+    if (latestHeight < 0) {
+      return {
+        source: `${this.baseUrl.replace(/\/$/, '')}/blocks/:height`,
+        data: {
+          items: [],
+          next_cursor: null,
+          has_more: false,
+        },
+      };
+    }
+
+    const startHeight = requestedStartHeight === null ? latestHeight : Math.min(requestedStartHeight, latestHeight);
+
+    if (startHeight < 0) {
+      return {
+        source: `${this.baseUrl.replace(/\/$/, '')}/blocks/:height`,
+        data: {
+          items: [],
+          next_cursor: null,
+          has_more: false,
+        },
+      };
+    }
+
+    const items: BlocksPageResponse['items'] = [];
+    let nextHeight = startHeight;
+
+    while (nextHeight >= 0 && items.length < limit) {
+      const lookup = await this.fetchBlockOrNull(nextHeight);
+      if (lookup?.block) {
+        items.push({
+          height: lookup.height,
+          header: lookup.block.header,
+          entry_count: lookup.block.entries.length,
+        });
+      }
+      nextHeight -= 1;
+    }
+
+    const hasMore = nextHeight >= 0;
+
+    return {
+      source: `${this.baseUrl.replace(/\/$/, '')}/blocks/:height`,
+      data: {
+        items,
+        next_cursor: hasMore ? String(nextHeight) : null,
+        has_more: hasMore,
+      },
     };
   }
 
@@ -175,12 +241,10 @@ export class CitizenService {
     return this.fetchJson<ReceiptLookup>(endpoint);
   }
 
-
   async getPayloadFieldRefs(entryId: string, namespace: string): Promise<ApiSource<PayloadFieldRefs>> {
     const endpoint = `${this.baseUrl.replace(/\/$/, '')}/api/v1/payloads/fields/${encodeURIComponent(entryId)}/${encodeURIComponent(namespace)}`;
     return this.fetchJson<PayloadFieldRefs>(endpoint);
   }
-
 
   async getFileManifest(manifestId: string): Promise<ApiSource<FileManifestMetadata>> {
     const endpoint = `${this.baseUrl.replace(/\/$/, '')}/api/v1/files/manifests/${manifestId}`;
@@ -247,6 +311,86 @@ export class CitizenService {
         events,
       },
     };
+  }
+
+  private parseLimit(limitRaw?: string): number {
+    if (limitRaw === undefined) {
+      return 20;
+    }
+
+    const parsed = Number(limitRaw);
+    if (!Number.isInteger(parsed) || parsed <= 0 || parsed > 100) {
+      throw new BadRequestException('limit must be an integer between 1 and 100');
+    }
+
+    return parsed;
+  }
+
+  private parseCursor(cursor?: string): number | null {
+    if (!cursor) {
+      return null;
+    }
+
+    const parsed = Number(cursor);
+    if (!Number.isInteger(parsed) || parsed < 0) {
+      throw new BadRequestException('cursor must be a non-negative integer block height');
+    }
+
+    return parsed;
+  }
+
+  private async findLatestHeight(): Promise<number> {
+    const heightZeroBlock = await this.fetchBlockOrNull(0);
+    const heightOneBlock = await this.fetchBlockOrNull(1);
+
+    if (!heightZeroBlock?.block && !heightOneBlock?.block) {
+      return -1;
+    }
+
+    let lowerBound = heightOneBlock?.block ? 1 : 0;
+    let upperBound = lowerBound;
+
+    while (true) {
+      const candidate = Math.max(upperBound * 2, upperBound + 1);
+      const block = await this.fetchBlockOrNull(candidate);
+      if (!block?.block) {
+        upperBound = candidate;
+        break;
+      }
+
+      lowerBound = candidate;
+      upperBound = candidate;
+    }
+
+    let left = lowerBound;
+    let right = upperBound;
+
+    while (left + 1 < right) {
+      const mid = Math.floor((left + right) / 2);
+      const block = await this.fetchBlockOrNull(mid);
+      if (block?.block) {
+        left = mid;
+      } else {
+        right = mid;
+      }
+    }
+
+    return left;
+  }
+
+  private async fetchBlockOrNull(height: number): Promise<BlockLookup | null> {
+    const endpoint = `${this.baseUrl.replace(/\/$/, '')}/blocks/${height}`;
+    const response = await fetch(endpoint);
+
+    if (response.status === 404) {
+      return null;
+    }
+
+    if (!response.ok) {
+      throw new Error(`Citizen node responded with ${response.status} for ${endpoint}`);
+    }
+
+    return (await response.json()) as BlockLookup;
   }
 
   private async fetchJson<T>(endpoint: string): Promise<ApiSource<T>> {

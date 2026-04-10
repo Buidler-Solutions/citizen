@@ -2,8 +2,6 @@
 
 Status: Draft implementation checkpoint checklist for making API submissions flow through consensus so Alpha/Beta/Gamma converge on the same committed ledger state.
 
-Last updated: 2026-04-08 (localnet cert-verification wiring updated so validator peers no longer trust only self-generated cert roots).
-
 ## Objective
 
 - Replace node-local API finalization with consensus-driven block inclusion.
@@ -16,58 +14,58 @@ Last updated: 2026-04-08 (localnet cert-verification wiring updated so validator
 
 ## Checkpoint 0 — Baseline confirmation (pre-change)
 
-- [x] Confirm current API submit path applies entries and finalizes locally.
+- [ ] Confirm current API submit path applies entries and finalizes locally.
 - [ ] Confirm consensus `collect_entries()` is placeholder/empty.
-- [x] Capture baseline localnet evidence where submit-to-alpha is not visible on beta/gamma.
-  - [x] Save curl output for Alpha/Beta/Gamma namespace reads.
-  - [x] Save validator logs and block heights.
+- [ ] Capture baseline localnet evidence where submit-to-alpha is not visible on beta/gamma.
+  - [ ] Save curl output for Alpha/Beta/Gamma namespace reads.
+  - [ ] Save validator logs and block heights.
 
 ## Checkpoint 1 — Transaction ingress queue (txpool)
 
-- [x] Add shared ingress component (new module or crate, e.g. `crates/txpool`).
-- [x] Define minimal interface:
-  - [x] `enqueue(entry: LedgerEntry) -> EnqueueResult`
-  - [x] `drain(max: usize) -> Vec<LedgerEntry>`
-  - [x] Optional: `len()` for diagnostics.
-- [x] Add deterministic dedupe policy (recommended by `entry_id`).
-- [x] Add unit tests:
-  - [x] enqueue/drain order behavior.
-  - [x] dedupe behavior.
-  - [x] max-batch drain behavior.
+- [ ] Add shared ingress component (new module or crate, e.g. `crates/txpool`).
+- [ ] Define minimal interface:
+  - [ ] `enqueue(entry: LedgerEntry) -> Result<...>`
+  - [ ] `drain(max: usize) -> Vec<LedgerEntry>`
+  - [ ] Optional: `len()` for diagnostics.
+- [ ] Add deterministic dedupe policy (recommended by `entry_id`).
+- [ ] Add unit tests:
+  - [ ] enqueue/drain order behavior.
+  - [ ] dedupe behavior.
+  - [ ] max-batch drain behavior.
 
 ## Checkpoint 2 — API write path migration
 
-- [x] Update `/api/v1/entries/submit` and `/api/v1/envelopes/submit` flow:
-  - [x] Keep auth and builder-credit checks.
-  - [x] Keep envelope and namespace validation before queueing.
-  - [x] Enqueue instead of immediate `ledger.apply_entry` + local block finalization.
-- [x] Return explicit queued response contract (`202 Accepted`).
-  - [x] Include queue/entry identifiers needed for tracing.
-- [x] Preserve compatibility mode:
-  - [x] Introduce config flag (e.g. `api_local_finalize_mode`) defaulting to current safe behavior for migration window.
-  - [x] Document intended default flip date/release.
-- [x] Add API tests:
-  - [x] valid entry accepted and queued.
-  - [x] invalid entry rejected pre-queue.
-  - [x] auth/scope/rate-limit behavior unchanged.
+- [ ] Update `/api/v1/entries/submit` and `/api/v1/envelopes/submit` flow:
+  - [ ] Keep auth and builder-credit checks.
+  - [ ] Keep envelope and namespace validation before queueing.
+  - [ ] Enqueue instead of immediate `ledger.apply_entry` + local block finalization.
+- [ ] Return explicit queued response contract (`202 Accepted`).
+  - [ ] Include queue/entry identifiers needed for tracing.
+- [ ] Preserve compatibility mode:
+  - [ ] Introduce config flag (e.g. `api_local_finalize_mode`) defaulting to current safe behavior for migration window.
+  - [ ] Document intended default flip date/release.
+- [ ] Add API tests:
+  - [ ] valid entry accepted and queued.
+  - [ ] invalid entry rejected pre-queue.
+  - [ ] auth/scope/rate-limit behavior unchanged.
 
 ## Checkpoint 3 — Consensus integration
 
-- [x] Extend `ConsensusEngine` to receive shared txpool handle.
-- [x] Implement `collect_entries()` to drain txpool using `max_entries_per_block`.
-- [x] Ensure proposer includes drained entries in proposal entry root.
-- [x] Keep commit/finality path unchanged (`finalize_block` + `ledger.apply_block`).
-- [x] Add/adjust consensus tests:
-  - [x] proposal with non-empty entries.
-  - [x] commit applies entries once.
-  - [x] repeated commit/replay does not double-apply.
+- [ ] Extend `ConsensusEngine` to receive shared txpool handle.
+- [ ] Implement `collect_entries()` to drain txpool using `max_entries_per_block`.
+- [ ] Ensure proposer includes drained entries in proposal entry root.
+- [ ] Keep commit/finality path unchanged (`finalize_block` + `ledger.apply_block`).
+- [ ] Add/adjust consensus tests:
+  - [ ] proposal with non-empty entries.
+  - [ ] commit applies entries once.
+  - [ ] repeated commit/replay does not double-apply.
 
 ## Checkpoint 4 — Node/runtime wiring
 
-- [x] In node bootstrap, instantiate one shared txpool per node process.
-- [x] Pass txpool to both API server and consensus engine.
-- [x] Verify observer mode remains read-only and does not enqueue writes.
-- [x] Add startup logging fields for mode/queue diagnostics.
+- [ ] In node bootstrap, instantiate one shared txpool per node process.
+- [ ] Pass txpool to both API server and consensus engine.
+- [ ] Verify observer mode remains read-only and does not enqueue writes.
+- [ ] Add startup logging fields for mode/queue diagnostics.
 
 ## Checkpoint 5 — Localnet convergence validation
 
@@ -83,54 +81,18 @@ Last updated: 2026-04-08 (localnet cert-verification wiring updated so validator
 
 ## Checkpoint 6 — Failure/operability checks
 
-- [x] Queue overflow strategy defined and tested.
-- [x] Restart semantics documented (in-memory queue loss vs persistence).
-- [x] Duplicate submissions across nodes handled deterministically.
-- [x] Metrics added (queue length, enqueue/dequeue rates, rejected duplicates).
-- [x] Alerting hooks documented for stuck queue / zero-throughput conditions.
-
-### Checkpoint 6 implementation notes
-
-- `citizen-txpool` now enforces bounded capacity via `TxPool::with_capacity(capacity)` and returns `EnqueueResult::Full { .. }` when the queue is saturated.
-- API submission handlers map queue saturation to `429 Too Many Requests` with `status: "queue_full"` and queue capacity diagnostics.
-- Coverage added in txpool + API tests for saturation behavior.
-- `citizen-txpool` now maintains counters for `enqueued_total`, `drained_total`, `enqueue_rejected_duplicate_total`, and `enqueue_rejected_full_total`, exposed via `metrics_snapshot()`.
-- API queued/duplicate/full responses now include queue telemetry fields (`queue_len`, `queue_capacity`, and relevant counters) for operator diagnostics.
-- `citizen-ledger::Ledger::apply_entry` now rejects repeated `entry_id` submissions in the same namespace before persistence, so duplicate submissions racing across validators converge on deterministic duplicate rejection rather than double-write behavior.
-- Coverage added in ledger tests to assert duplicate `entry_id` submissions are rejected and do not create additional stored entries.
-- Localnet runbook now documents queue-health alerting hooks for stuck queue / zero-throughput conditions tied to txpool telemetry counters.
-
-## Checkpoint 5 implementation notes (in progress)
-
-- Localnet validator configs now set `api_local_finalize_mode = false` for Alpha/Beta/Gamma so default `scripts/run_localnet.sh` launches exercise consensus-backed ingestion semantics without extra manual edits.
-- Added scripted evidence harness at `scripts/capture_api_consensus_sync_evidence.sh` to launch the three-validator localnet, submit to Alpha, assert Beta/Gamma visibility, verify height parity, and write timestamped artifacts under `docs/artifacts/`.
-- Evidence harnesses now support operational overrides: `NODE_BIN` (reuse prebuilt binary), `CARGO_BUILD_TIMEOUT_SECONDS`, `LOCALNET_STARTUP_TIMEOUT_SECONDS`, and `POST_SUBMIT_WAIT_SECONDS` to make long-running/locked build environments fail fast and remain tunable.
-- Remaining Checkpoint 5 evidence capture (curl artifacts/log snapshots/block-height parity) is still pending a full localnet validation run in the implementation PR context using the new harness.
-- First post-wiring convergence capture was executed on **2026-04-08** using `docs/artifacts/api-consensus-sync-localnet-20260408T103440Z.md`; this run confirmed queue-backed `202 Accepted` submission semantics but did **not** converge because inter-validator consensus sessions failed with repeated peer-certificate handshake errors (`invalid peer certificate: BadSignature`) across Alpha/Beta/Gamma logs.
-- The prior localnet peer-certificate mismatch was the blocker for the “entry appears on Alpha/Beta/Gamma” and block-height parity checks; those checks now need a fresh evidence rerun after the transport fix.
-- Updated `citizen-network` QUIC client wiring to use the protocol admission handshake as the trust boundary (instead of each node trusting only its own ephemeral self-signed cert), removing the known `BadSignature` transport blocker for localnet consensus sync runs.
-- Follow-up still required: rerun `scripts/capture_api_consensus_sync_evidence.sh` and attach fresh artifacts proving Beta/Gamma convergence + height parity under the new transport wiring.
-
-## Checkpoint 0 implementation notes
-
-- Added scripted baseline harness at `scripts/capture_api_consensus_sync_baseline_evidence.sh` to run Alpha/Beta/Gamma with temporary `api_local_finalize_mode = true` overlays, submit to Alpha, and capture divergence artifacts under `docs/artifacts/`.
-- The baseline harness asserts the expected pre-change behavior (`alpha_contains=true`, `beta_contains=false`, `gamma_contains=false`) and emits API snapshots/log tails needed for the historical comparison checkpoint.
-- Baseline harness supports the same runtime overrides as the convergence harness (`NODE_BIN`, build/startup/wait timeout env vars) so local and CI runs can tune execution deterministically.
-- Baseline divergence evidence was captured on **2026-04-08** in `docs/artifacts/api-consensus-sync-baseline-20260408T103357Z.md`, including submit response payloads, namespace snapshots for Alpha/Beta/Gamma, block-height checks, and validator log tails.
+- [ ] Queue overflow strategy defined and tested.
+- [ ] Restart semantics documented (in-memory queue loss vs persistence).
+- [ ] Duplicate submissions across nodes handled deterministically.
+- [ ] Metrics added (queue length, enqueue/dequeue rates, rejected duplicates).
+- [ ] Alerting hooks documented for stuck queue / zero-throughput conditions.
 
 ## Checkpoint 7 — Documentation + rollout
 
-- [x] Update localnet/runbook docs to describe consensus-backed ingestion path.
-- [x] Document compatibility flag and migration guidance.
-- [x] Add operator note: manifest/admission secures peers but does not replace ingestion/consensus wiring.
-- [x] Add release note entry for API submission semantics change.
-
-### Checkpoint 7 implementation notes
-
-- Added localnet runbook guidance for `api_local_finalize_mode` migration and the consensus-backed ingestion path (`202` queued response, `429 queue_full` on saturation).
-- Added explicit operator note that manifest/admission peer security is necessary but not sufficient for API write convergence; ingestion/consensus wiring must still be enabled.
-- Added restart semantics guidance clarifying current in-memory txpool loss on restart, durable committed state behavior, and idempotent client retry expectations.
-- Added operator-facing release-note entry for v0.4.0 migration planning: API writes are queue-first in consensus-backed mode and converge through consensus finality instead of node-local immediate finalization.
+- [ ] Update localnet/runbook docs to describe consensus-backed ingestion path.
+- [ ] Document compatibility flag and migration guidance.
+- [ ] Add operator note: manifest/admission secures peers but does not replace ingestion/consensus wiring.
+- [ ] Add release note entry for API submission semantics change.
 
 ## Acceptance Criteria (definition of done)
 
@@ -149,10 +111,3 @@ Last updated: 2026-04-08 (localnet cert-verification wiring updated so validator
 5. Flip localnet configs to consensus-backed mode and validate convergence.
 6. Update runbooks and remove legacy path (or schedule removal).
 
-## Migration note (compatibility flag default)
-
-- `api_local_finalize_mode` remains `true` by default during the migration window.
-- Intended default flip target: **release v0.4.0 (target date: 2026-06-30)**, gated by:
-  - completion of Checkpoint 5 localnet convergence evidence,
-  - completion of Checkpoint 6 operability checks,
-  - runbook rollout updates in Checkpoint 7.

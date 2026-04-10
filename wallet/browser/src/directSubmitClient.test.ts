@@ -5,6 +5,7 @@ import {
   fetchSubmissionReceipt,
   isAllowlistedApiBaseUrl,
   isAllowlistedDestination,
+  submitEnvelopesToCitizenNetworkBatch,
   submitEnvelopeToCitizenNetwork,
   submitSignedArtifact,
   type SignedEnvelope,
@@ -198,6 +199,107 @@ describe('directSubmitClient', () => {
     expect(init.method).toBe('POST');
     expect((init.headers as Record<string, string>)['x-api-key']).toBe('builder-ingest-key');
     expect((init.headers as Record<string, string>)['x-idempotency-key']).toBe(response.idempotencyKey);
+  });
+
+  it('extracts receipt identifiers when runtime returns batch-style response shape', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 202,
+      json: async () => ({
+        status: 'accepted',
+        batch_size: 2,
+        receipts: [
+          {
+            entry_id: 'entry-1',
+            receipt: {
+              receipt_id: 'receipt-batch-1',
+              finality: {
+                block_hash: 'batch-block-hash-1',
+              },
+            },
+          },
+        ],
+      }),
+    } as Response);
+
+    const response = await submitEnvelopeToCitizenNetwork({
+      apiBaseUrl: 'http://127.0.0.1:8081',
+      allowlistedApiBaseUrls: ['http://127.0.0.1:8081'],
+      envelope,
+      consentToShareFullPayload: true,
+      fetchImpl: fetchMock,
+    });
+
+    expect(response.receiptId).toBe('receipt-batch-1');
+    expect(response.receiptHash).toBe('batch-block-hash-1');
+  });
+
+  it('submits envelope arrays to batch endpoint and returns per-entry receipt metadata', async () => {
+    const envelopeB: SignedEnvelope = {
+      ...envelope,
+      envelope_id: '55555555-5555-5555-5555-555555555555',
+      payload: {
+        ...envelope.payload,
+        entry_id: '66666666-6666-6666-6666-666666666666',
+      },
+      signature: 'ed25519:base64sig-2',
+    };
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 202,
+      json: async () => ({
+        status: 'accepted',
+        batch_size: 2,
+        receipts: [
+          {
+            entry_id: '22222222-2222-2222-2222-222222222222',
+            namespace: 'onboarding.interest',
+            receipt: {
+              receipt_id: 'receipt-batch-a',
+              finality: { block_hash: 'block-hash-a' },
+            },
+          },
+          {
+            entry_id: '66666666-6666-6666-6666-666666666666',
+            namespace: 'onboarding.interest',
+            receipt: {
+              receipt_id: 'receipt-batch-b',
+              finality: { block_hash: 'block-hash-a' },
+            },
+          },
+        ],
+      }),
+    } as Response);
+
+    const response = await submitEnvelopesToCitizenNetworkBatch({
+      apiBaseUrl: 'http://127.0.0.1:8081',
+      allowlistedApiBaseUrls: ['http://127.0.0.1:8081'],
+      envelopes: [envelope, envelopeB],
+      consentToShareFullPayload: true,
+      fetchImpl: fetchMock,
+    });
+
+    expect(response.batchSize).toBe(2);
+    expect(response.receipts.length).toBe(2);
+    expect(response.receipts[0].receiptId).toBe('receipt-batch-a');
+    expect(response.receipts[1].receiptId).toBe('receipt-batch-b');
+    expect(response.idempotencyKey.startsWith('network-batch:')).toBe(true);
+
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('http://127.0.0.1:8081/api/v1/envelopes/submit-batch');
+    expect(init.method).toBe('POST');
+  });
+
+  it('rejects empty envelope arrays for batch submit', async () => {
+    await expect(
+      submitEnvelopesToCitizenNetworkBatch({
+        apiBaseUrl: 'http://127.0.0.1:8081',
+        allowlistedApiBaseUrls: ['http://127.0.0.1:8081'],
+        envelopes: [],
+        consentToShareFullPayload: true,
+        fetchImpl: vi.fn(),
+      }),
+    ).rejects.toThrow('at least one envelope');
   });
 
   it('blocks full envelope submit without explicit consent', async () => {
