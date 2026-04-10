@@ -1115,7 +1115,11 @@ function normalizeEntryPayloadForEnvelope(
       ? payload.object_id
       : typeof payload.objectId === 'string'
         ? payload.objectId
-        : null;
+        : typeof payload.entry_id === 'string'
+          ? payload.entry_id
+          : typeof payload.entryId === 'string'
+            ? payload.entryId
+            : signedArtifact.requestId ?? signedArtifact.payloadHash;
   if (!namespace || !action || !objectId) {
     return null;
   }
@@ -1662,23 +1666,9 @@ async function handleWalletRequest(
     if (!isUiRequest) {
       return walletError('ERR_UNAUTHORIZED', 'Unauthorized wallet method.');
     }
-    const [apiBaseUrl, consentToShareFullPayload, requestIds] = request.params ?? [];
-    if (typeof apiBaseUrl !== 'string' || apiBaseUrl.trim().length === 0) {
-      return walletError(
-        'ERR_MALFORMED_REQUEST',
-        'wallet_directSubmitSignedBatchToCitizenNetwork requires API base URL.',
-      );
-    }
-    if (!CITIZEN_API_BASE_ALLOWLIST.includes(apiBaseUrl)) {
-      return walletError('ERR_DESTINATION_NOT_ALLOWLISTED', 'API base URL is not allowlisted.');
-    }
-    const selectedRequestIds = Array.isArray(requestIds)
-      ? requestIds.filter((value): value is string => typeof value === 'string')
-      : undefined;
-    return directSubmitSignedBatchToCitizenNetwork(
-      apiBaseUrl,
-      consentToShareFullPayload === true,
-      selectedRequestIds,
+    return walletError(
+      'ERR_FEATURE_DISABLED',
+      'Batch submit to Citizen runtime is temporarily disabled in the browser extension.',
     );
   }
 
