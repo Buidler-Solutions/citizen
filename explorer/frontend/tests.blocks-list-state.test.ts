@@ -12,6 +12,7 @@ function makeBlock(height: number): BlockSummary {
   return {
     height,
     entry_count: 1,
+    entry_ids: [`entry-${height}`],
     header: {
       timestamp: 1710000000 + height,
       proposer: `proposer-${height}`,

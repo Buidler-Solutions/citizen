@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { fetchDataHashLookup } from '../lib/data-hash';
 import { toReadableDate } from '../lib/format';
 
@@ -57,7 +58,9 @@ export default async function DataHashPage({
               <div className="stack">
                 <div className="row">
                   <span className="label">Entry ID</span>
-                  <span className="mono">{match.entry_id}</span>
+                  <Link href={`/blocks?q=${encodeURIComponent(match.entry_id)}`} className="mono">
+                    {match.entry_id}
+                  </Link>
                 </div>
                 <div className="row">
                   <span className="label">Action</span>

@@ -1,5 +1,4 @@
-const explorerApiBase =
-  process.env.NEXT_PUBLIC_API_BASE_URL ??
+const ledgerApiBase =
   process.env.NEXT_PUBLIC_NODE_RUNTIME_URL ??
   'http://127.0.0.1:8081';
 
@@ -28,7 +27,7 @@ export async function fetchDataHashLookup(dataHash: string): Promise<DataHashLoo
     return { ok: false, message: 'Enter a data hash to query.' };
   }
 
-  const endpoint = `${explorerApiBase.replace(/\/$/, '')}/data-hash?q=${encodeURIComponent(normalized)}`;
+  const endpoint = `${ledgerApiBase.replace(/\/$/, '')}/api/v1/payloads/data-hash/${encodeURIComponent(normalized)}`;
 
   try {
     const response = await fetch(endpoint, { cache: 'no-store' });
@@ -60,10 +59,7 @@ export async function fetchDataHashLookup(dataHash: string): Promise<DataHashLoo
     return {
       ok: true,
       payload: {
-        source:
-          envelope && typeof envelope.source === 'string'
-            ? envelope.source
-            : endpoint,
+        source: envelope && typeof envelope.source === 'string' ? envelope.source : endpoint,
         data: nested,
       },
     };

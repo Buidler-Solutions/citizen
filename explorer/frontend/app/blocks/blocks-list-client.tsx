@@ -282,6 +282,7 @@ function matchesToken(item: BlockSummary, token: SearchToken): boolean {
   const searchableBlob = [
     item.height.toString(),
     item.header.proposer,
+    ...item.entry_ids,
     ...hashFields,
   ]
     .join(' ')

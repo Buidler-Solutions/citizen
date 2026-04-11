@@ -14,6 +14,7 @@ export type BlockSummary = {
     commit_proof: CommitProof;
   };
   entry_count: number;
+  entry_ids: string[];
 };
 
 export type BlocksPageResponse = {
@@ -167,6 +168,7 @@ function normalizeBlockSummaryItem(raw: unknown): BlockSummary | null {
       : Array.isArray(block?.entries)
         ? block.entries.length
         : null;
+  const entryIds = extractEntryIds(block?.entries);
 
   if (
     height === null ||
@@ -192,7 +194,25 @@ function normalizeBlockSummaryItem(raw: unknown): BlockSummary | null {
       },
     },
     entry_count: entryCount,
+    entry_ids: entryIds,
   };
+}
+
+function extractEntryIds(entries: unknown): string[] {
+  if (!Array.isArray(entries)) {
+    return [];
+  }
+
+  return entries
+    .map((entry) => {
+      if (!entry || typeof entry !== 'object') {
+        return null;
+      }
+
+      const entryId = (entry as { entry_id?: unknown }).entry_id;
+      return typeof entryId === 'string' && entryId.trim().length > 0 ? entryId : null;
+    })
+    .filter((entryId): entryId is string => entryId !== null);
 }
 
 function normalizeBlockDetailResponse(
@@ -405,6 +425,7 @@ async function fetchBlocksPageFromNode(
         height: lookup.height,
         header: lookup.block.header,
         entry_count: lookup.block.entries.length,
+        entry_ids: extractEntryIds(lookup.block.entries),
       });
     }
 
