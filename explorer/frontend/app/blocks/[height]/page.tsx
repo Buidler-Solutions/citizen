@@ -201,6 +201,7 @@ export default async function BlockDetailPage({
             const nonceHex = asString(entryRecord?.nonce_hex);
             const grantedAt = asNumber(consentReceiptRecord?.granted_at);
             const expiresAt = asNumber(consentReceiptRecord?.expires_at);
+            const rawEntryJson = renderRecord(entry);
 
             return (
               <article key={`${block.header.height}-entry-${index}`} className="panel-card">
@@ -416,7 +417,15 @@ export default async function BlockDetailPage({
 
                 <details>
                   <summary>Raw entry JSON</summary>
-                  <pre className="mono">{renderRecord(entry)}</pre>
+                  <div className="row">
+                    <span className="label">Clipboard</span>
+                    <CopyableHash
+                      label={`entry ${index + 1} raw entry json`}
+                      value={rawEntryJson}
+                      preview="Copy full JSON payload"
+                    />
+                  </div>
+                  <pre className="mono">{rawEntryJson}</pre>
                 </details>
               </article>
             );
