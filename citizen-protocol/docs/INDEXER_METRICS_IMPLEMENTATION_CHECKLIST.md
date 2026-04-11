@@ -1,6 +1,7 @@
 # Indexer Metrics Implementation Checklist (TPS + Block Weight + Entry Weight)
 
 Status: implementation checklist for adding canonical analytics via an indexer while keeping protocol runtime deterministic and lean.
+Last updated: 2026-04-11 (started implementation with Checkpoint 0 and Checkpoint 1 design artifacts).
 
 ## Goals
 
@@ -15,39 +16,41 @@ Status: implementation checklist for adding canonical analytics via an indexer w
 
 ## Checkpoint 0 — Definitions and contracts (must lock first)
 
-- [ ] Finalize canonical metric definitions:
-  - [ ] **TPS** = total committed entries in a fixed time window / window duration.
-  - [ ] **Block weight** = canonical serialized byte size of a block (define serialization format).
-  - [ ] **Entry weight** = canonical serialized byte size of an entry (same serialization family).
-- [ ] Publish definition doc with examples and edge cases:
-  - [ ] empty blocks,
-  - [ ] blocks with mixed entry types,
-  - [ ] privacy/encrypted payload entries,
-  - [ ] malformed historical payload fallback handling.
-- [ ] Decide and document rounding/precision:
-  - [ ] integer bytes for weights,
-  - [ ] decimal precision for TPS,
-  - [ ] stable ordering for deterministic recomputation.
+- [x] Finalize canonical metric definitions:
+  - [x] **TPS** = total committed entries in a fixed time window / window duration.
+  - [x] **Block weight** = canonical serialized byte size of a block (define serialization format).
+  - [x] **Entry weight** = canonical serialized byte size of an entry (same serialization family).
+- [x] Publish definition doc with examples and edge cases:
+  - [x] empty blocks,
+  - [x] blocks with mixed entry types,
+  - [x] privacy/encrypted payload entries,
+  - [x] malformed historical payload fallback handling.
+- [x] Decide and document rounding/precision:
+  - [x] integer bytes for weights,
+  - [x] decimal precision for TPS,
+  - [x] stable ordering for deterministic recomputation.
 
 Deliverable: signed-off metric-spec markdown in `citizen-protocol/docs/`.
+Implementation artifact: `citizen-protocol/docs/INDEXER_METRICS_SPEC.md`.
 
 ---
 
 ## Checkpoint 1 — Event ingestion design
 
-- [ ] Define indexer input source:
-  - [ ] pull from canonical node API (`/blocks`, `/blocks/:height`) and replay forward.
-  - [ ] optional future direct event stream path.
-- [ ] Define cursor/replay strategy:
-  - [ ] persistent last-indexed height,
-  - [ ] safe restart from cursor,
-  - [ ] replay idempotency guarantees.
-- [ ] Handle canonical chain continuity checks:
-  - [ ] `prev_hash` continuity validation,
-  - [ ] policy for gap detection and recovery.
-- [ ] Define reorg/consistency policy (if applicable to environment).
+- [x] Define indexer input source:
+  - [x] pull from canonical node API (`/blocks`, `/blocks/:height`) and replay forward.
+  - [x] optional future direct event stream path.
+- [x] Define cursor/replay strategy:
+  - [x] persistent last-indexed height,
+  - [x] safe restart from cursor,
+  - [x] replay idempotency guarantees.
+- [x] Handle canonical chain continuity checks:
+  - [x] `prev_hash` continuity validation,
+  - [x] policy for gap detection and recovery.
+- [x] Define reorg/consistency policy (if applicable to environment).
 
 Deliverable: ingestion architecture note + replay state machine diagram.
+Implementation artifact: `citizen-protocol/docs/INDEXER_METRICS_INGESTION_ARCHITECTURE_NOTE.md`.
 
 ---
 
