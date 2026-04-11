@@ -12,6 +12,7 @@ members = [
     "crates/simulation",
     "crates/wallet",
     "wallet/cli",
+    "tools/validator-keygen",
 ]
 resolver = "2"
 

@@ -119,6 +119,10 @@ h1 {
   margin-bottom: 6px;
 }
 
+.row > :last-child {
+  min-width: 0;
+}
+
 .row:last-child {
   margin-bottom: 0;
 }
@@ -279,6 +283,8 @@ h1 {
   display: inline-flex;
   align-items: center;
   gap: 8px;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .copy-button {
@@ -487,6 +493,7 @@ h1 {
   align-items: center;
   gap: 6px;
   min-width: 0;
+  max-width: 100%;
 }
 
 .header-search-input,
@@ -501,6 +508,7 @@ h1 {
 .header-search-input {
   height: 34px;
   padding: 0 10px;
+  width: 100%;
 }
 
 .header-search-input {
@@ -806,5 +814,50 @@ pre.mono {
   .header-search-input {
     min-width: 0;
     flex: 1 1 220px;
+  }
+
+  .wallet-button {
+    width: 100%;
+  }
+}
+
+@media (max-width: 640px) {
+  .brand-row strong {
+    font-size: 28px;
+  }
+
+  .left-nav-links {
+    grid-template-columns: 1fr;
+  }
+
+  .search-shell {
+    display: none;
+  }
+
+  .copy-inline {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    justify-items: start;
+  }
+
+  .row {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .mono {
+    max-width: 100%;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+
+  .list-card li {
+    grid-template-columns: 1fr;
+    justify-items: start;
+  }
+
+  .list-meta {
+    text-align: left;
   }
 }

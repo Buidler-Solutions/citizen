@@ -137,7 +137,7 @@ type ProfileDetails = {
   kycVerified: boolean;
 };
 
-type TabId = 'activity' | 'compose' | 'vault' | 'security' | 'profile';
+type TabId = 'activity' | 'decrypt' | 'compose' | 'vault' | 'security' | 'profile';
 
 type NetworkId = 'mainnet' | 'futurenet' | 'testnet' | 'localnode';
 type MnemonicWordCount = 12 | 24;
@@ -179,6 +179,7 @@ function buildExplorerDataHashSearchHref(network: NetworkId, receiptHash: string
 
 const NAV_ITEMS: { id: TabId; label: string }[] = [
   { id: 'activity', label: 'Activity' },
+  { id: 'decrypt', label: 'Decrypt' },
   { id: 'compose', label: 'Compose' },
   { id: 'vault', label: 'Vault' },
   { id: 'security', label: 'Security' },
@@ -284,6 +285,12 @@ export function App() {
   });
   const [composeMessage, setComposeMessage] = useState('Authorize Citizen transaction payload v1');
   const [composeSignature, setComposeSignature] = useState('');
+  const [decryptAuthorPublicKeyHex, setDecryptAuthorPublicKeyHex] = useState('');
+  const [decryptWrappedDekHex, setDecryptWrappedDekHex] = useState('');
+  const [decryptNonceHex, setDecryptNonceHex] = useState('');
+  const [decryptCiphertextHex, setDecryptCiphertextHex] = useState('');
+  const [decryptTransactionJson, setDecryptTransactionJson] = useState('');
+  const [decryptedPayload, setDecryptedPayload] = useState('');
   const [protocolKeyMaterial, setProtocolKeyMaterial] = useState<ProtocolKeyMaterial | null>(null);
   const [state, setState] = useState<WalletState>({
     account: 'Not initialized',
@@ -719,6 +726,71 @@ export function App() {
     setComposeSignature(payload.signature ?? '');
     setStatus('Composed payload signed successfully.');
     await refreshState();
+  };
+
+  const handleDecryptWithReaderKey = async () => {
+    setStatus('');
+    setDecryptedPayload('');
+    if (!decryptAuthorPublicKeyHex.trim() || !decryptWrappedDekHex.trim() || !decryptNonceHex.trim() || !decryptCiphertextHex.trim()) {
+      setStatus('Provide author public key, wrapped DEK, nonce, and ciphertext.');
+      return;
+    }
+    const result = await callWallet('wallet_decryptOwnedTransactionCiphertext', [{
+      authorPublicKeyHex: decryptAuthorPublicKeyHex,
+      wrappedDekHex: decryptWrappedDekHex,
+      nonceHex: decryptNonceHex,
+      ciphertextHex: decryptCiphertextHex,
+    }]);
+    if (!result.ok || !result.result || typeof result.result !== 'object') {
+      setStatus(result.error ?? 'Unable to decrypt ciphertext for this wallet.');
+      return;
+    }
+    const payload = result.result as { plaintext?: string; plaintextJson?: unknown };
+    if (payload.plaintextJson) {
+      setDecryptedPayload(JSON.stringify(payload.plaintextJson, null, 2));
+    } else {
+      setDecryptedPayload(payload.plaintext ?? '');
+    }
+    setStatus('Ciphertext decrypted with active wallet reader key.');
+  };
+
+  const handlePrefillDecryptFromTransaction = () => {
+    setStatus('');
+    if (!decryptTransactionJson.trim()) {
+      setStatus('Paste the transaction JSON first.');
+      return;
+    }
+    try {
+      const parsed = JSON.parse(decryptTransactionJson) as Record<string, unknown>;
+      const payload = (parsed.payload && typeof parsed.payload === 'object')
+        ? parsed.payload as Record<string, unknown>
+        : {};
+      const wrappedSecrets = Array.isArray(parsed.key_wrapped_secrets)
+        ? parsed.key_wrapped_secrets as Array<Record<string, unknown>>
+        : [];
+      const activeReaderDid = protocolKeyMaterial?.reader.readerDid;
+      const matchingWrap = wrappedSecrets.find((entry) => typeof entry.reader_id === 'string' && entry.reader_id === activeReaderDid)
+        ?? wrappedSecrets.find((entry) => typeof entry.wrapped_dek === 'string');
+      const authorPublicKeyHex = typeof payload.hybrid_author_x25519_public_key === 'string'
+        ? payload.hybrid_author_x25519_public_key
+        : typeof payload.author_public_key === 'string'
+          ? payload.author_public_key
+          : '';
+      const wrappedDekHex = typeof matchingWrap?.wrapped_dek === 'string' ? matchingWrap.wrapped_dek : '';
+      const nonceHex = typeof parsed.nonce_hex === 'string' ? parsed.nonce_hex : '';
+      const ciphertextHex = typeof parsed.ciphertext_hex === 'string' ? parsed.ciphertext_hex : '';
+      setDecryptAuthorPublicKeyHex(authorPublicKeyHex);
+      setDecryptWrappedDekHex(wrappedDekHex);
+      setDecryptNonceHex(nonceHex);
+      setDecryptCiphertextHex(ciphertextHex);
+      if (!authorPublicKeyHex || !wrappedDekHex || !nonceHex || !ciphertextHex) {
+        setStatus('Loaded JSON, but some decrypt fields are missing. Confirm payload/key_wrapped_secrets fields.');
+        return;
+      }
+      setStatus('Decrypt fields loaded from transaction JSON.');
+    } catch (error) {
+      setStatus(error instanceof Error ? `Invalid transaction JSON: ${error.message}` : 'Invalid transaction JSON.');
+    }
   };
 
   const handleBuildGrantDraft = () => {
@@ -1310,6 +1382,54 @@ export function App() {
                 </div>
               </article>
             </>
+          ) : null}
+
+          {activeTab === 'decrypt' ? (
+            <article className="request-card">
+              <h2>Decrypt transaction ciphertext</h2>
+              <p className="meta-text">
+                Decrypt a hybrid encrypted transaction payload using the active wallet reader key.
+              </p>
+              <div className="form-grid">
+                <textarea
+                  rows={6}
+                  value={decryptTransactionJson}
+                  onChange={(event) => setDecryptTransactionJson(event.target.value)}
+                  placeholder="Paste full transaction JSON (optional prefill)"
+                />
+                <button className="ghost" onClick={handlePrefillDecryptFromTransaction}>
+                  Load fields from JSON
+                </button>
+                <input
+                  type="text"
+                  value={decryptAuthorPublicKeyHex}
+                  onChange={(event) => setDecryptAuthorPublicKeyHex(event.target.value)}
+                  placeholder="authorPublicKeyHex (32-byte hex)"
+                />
+                <input
+                  type="text"
+                  value={decryptWrappedDekHex}
+                  onChange={(event) => setDecryptWrappedDekHex(event.target.value)}
+                  placeholder="wrappedDekHex (nonce+ciphertext hex)"
+                />
+                <input
+                  type="text"
+                  value={decryptNonceHex}
+                  onChange={(event) => setDecryptNonceHex(event.target.value)}
+                  placeholder="nonceHex (24-byte XChaCha nonce)"
+                />
+                <textarea
+                  rows={5}
+                  value={decryptCiphertextHex}
+                  onChange={(event) => setDecryptCiphertextHex(event.target.value)}
+                  placeholder="ciphertextHex"
+                />
+                <button className="primary" onClick={handleDecryptWithReaderKey}>Decrypt</button>
+                {decryptedPayload ? (
+                  <textarea readOnly rows={8} value={decryptedPayload} aria-label="Decrypted payload" />
+                ) : null}
+              </div>
+            </article>
           ) : null}
 
           {activeTab === 'vault' ? (
