@@ -8,6 +8,10 @@ Date: 2026-03-27
    - `encrypt_offchain_file_reader_to_writer` encrypts file chunks with `ChaCha20Poly1305`.
    - Key material is derived from passphrase using Argon2id.
    - Metadata persisted for verification includes `salt_hex`, `nonce_prefix_hex`, `kdf_params`, and `ciphertext_hash`.
+   - For reader-key workflows, `encrypt_offchain_file_reader_to_writer_hybrid` /
+     `decrypt_offchain_file_reader_to_writer_hybrid` now support ACL + DEK
+     wrapping per authorized reader DID (X25519-based key wrapping), removing
+     the need to share a passphrase for hybrid attachment access.
 
 2. **Hybrid DEK wrapping for authorized readers** exists in `citizen-protocol/crates/wallet/src/privacy.rs`.
    - DEKs are generated client-side.
@@ -17,6 +21,10 @@ Date: 2026-03-27
    - `/api/v1/files/intents` enforces namespace policy and issues object-store upload intents.
    - `/api/v1/files/commit` and `/api/v1/payloads/commit` validate ciphertext/object refs + canonical commitments.
    - Payload-commit endpoint rejects plaintext in fields that must be off-chain encrypted.
+   - `/api/v1/payloads/commit` supports optional `linked_manifest_ids` to bind
+     encrypted field `blob_ref`s to previously committed file manifests.
+   - `/api/v1/files/commit` manifest validation now enforces canonical digest
+     formatting (`sha256:<64 hex>`) for `ciphertext_hash` and `payload_commitment`.
 
 4. **Ledger enforces encrypted-entry constraints and consent binding** in `citizen-protocol/crates/ledger/src/lib.rs`.
    - Encrypted entries require ciphertext/nonce/payload commitment.

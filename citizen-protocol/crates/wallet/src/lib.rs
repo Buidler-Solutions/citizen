@@ -796,6 +796,15 @@ pub struct EncryptedFileMetadata {
     pub ciphertext_hash: String,
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct HybridEncryptedFileMetadata {
+    pub nonce_prefix_hex: String,
+    pub chunk_size_bytes: u32,
+    pub ciphertext_hash: String,
+    pub author_public_key_hex: String,
+    pub key_wrapped_secrets: Vec<KeyWrap>,
+}
+
 const OFFCHAIN_FILE_CHUNK_SIZE_BYTES: usize = 64 * 1024;
 
 pub fn encrypt_offchain_file_reader_to_writer<R: Read, W: Write>(
@@ -955,6 +964,179 @@ pub fn decrypt_offchain_file_reader_to_writer<R: Read, W: Write>(
         ));
     }
 
+    Ok(())
+}
+
+pub fn encrypt_offchain_file_reader_to_writer_hybrid<R: Read, W: Write>(
+    reader: &mut R,
+    writer: &mut W,
+    author_keypair: &WalletKeypair,
+    authorized_readers: &[String],
+    reader_public_keys: &BTreeMap<String, String>,
+    context_id: &str,
+) -> Result<HybridEncryptedFileMetadata> {
+    let mut nonce_prefix = [0u8; 4];
+    OsRng.fill_bytes(&mut nonce_prefix);
+    let mut hasher = Sha256::new();
+    let dek = privacy::generate_dek();
+    let cipher = ChaCha20Poly1305::new(Key::from_slice(&dek));
+    let mut chunk = vec![0_u8; OFFCHAIN_FILE_CHUNK_SIZE_BYTES];
+    let mut index: u64 = 0;
+
+    loop {
+        let read = reader.read(&mut chunk).map_err(|err| {
+            ProtocolError::crypto(format!("failed to read plaintext file: {err}"))
+        })?;
+        if read == 0 {
+            break;
+        }
+
+        let nonce = chunk_nonce(&nonce_prefix, index);
+        let aad = index.to_be_bytes();
+        let ciphertext = cipher
+            .encrypt(
+                Nonce::from_slice(&nonce),
+                chacha20poly1305::aead::Payload {
+                    msg: &chunk[..read],
+                    aad: &aad,
+                },
+            )
+            .map_err(|err| ProtocolError::crypto(format!("failed to encrypt file chunk: {err}")))?;
+
+        let frame_len = (ciphertext.len() as u32).to_be_bytes();
+        writer
+            .write_all(&frame_len)
+            .and_then(|_| writer.write_all(&ciphertext))
+            .map_err(|err| ProtocolError::crypto(format!("failed to write ciphertext: {err}")))?;
+        hasher.update(frame_len);
+        hasher.update(&ciphertext);
+        index = index
+            .checked_add(1)
+            .ok_or_else(|| ProtocolError::crypto("file chunk counter overflow".to_string()))?;
+    }
+
+    let mut wrapped = Vec::new();
+    let author_secret = x25519_secret_from_wallet(author_keypair);
+    for reader_id in authorized_readers {
+        let reader_key_hex = reader_public_keys.get(reader_id).ok_or_else(|| {
+            ProtocolError::ValidationFailed(format!(
+                "missing reader public key for authorized reader `{reader_id}`"
+            ))
+        })?;
+        let reader_pubkey = parse_x25519_public_key(reader_key_hex)?;
+        let wrapped_dek = privacy::wrap_dek_for_reader(
+            &dek,
+            &author_secret,
+            &reader_pubkey,
+            &format!("{context_id}:{reader_id}"),
+        )?;
+        wrapped.push(KeyWrap {
+            reader_id: reader_id.clone(),
+            wrapped_dek,
+            wrap_algorithm: "x25519-xchacha20poly1305".to_string(),
+        });
+    }
+    if wrapped.is_empty() {
+        return Err(ProtocolError::ValidationFailed(
+            "hybrid off-chain file mode requires at least one authorized reader".into(),
+        ));
+    }
+
+    let author_public_key_hex =
+        hex::encode(X25519PublicKey::from(&x25519_secret_from_wallet(author_keypair)).as_bytes());
+    Ok(HybridEncryptedFileMetadata {
+        nonce_prefix_hex: hex::encode(nonce_prefix),
+        chunk_size_bytes: OFFCHAIN_FILE_CHUNK_SIZE_BYTES as u32,
+        ciphertext_hash: format!("sha256:{}", hex::encode(hasher.finalize())),
+        author_public_key_hex,
+        key_wrapped_secrets: wrapped,
+    })
+}
+
+pub fn decrypt_offchain_file_reader_to_writer_hybrid<R: Read, W: Write>(
+    reader: &mut R,
+    writer: &mut W,
+    metadata: &HybridEncryptedFileMetadata,
+    caller_did: &str,
+    caller_private_key_hex: &str,
+) -> Result<()> {
+    if metadata.chunk_size_bytes as usize != OFFCHAIN_FILE_CHUNK_SIZE_BYTES {
+        return Err(ProtocolError::crypto(format!(
+            "unsupported file chunk size: {}",
+            metadata.chunk_size_bytes
+        )));
+    }
+    let key_wrap = metadata
+        .key_wrapped_secrets
+        .iter()
+        .find(|wrap| wrap.reader_id == caller_did)
+        .ok_or_else(|| {
+            ProtocolError::ValidationFailed("no DEK wrap found for caller DID".into())
+        })?;
+    if !is_supported_hybrid_wrap_algorithm(&key_wrap.wrap_algorithm) {
+        return Err(ProtocolError::ValidationFailed(
+            "unsupported DEK wrap algorithm".into(),
+        ));
+    }
+    let caller_secret = parse_x25519_secret_key(caller_private_key_hex)?;
+    assert_caller_key_matches_did(caller_did, &caller_secret)?;
+    let author_pubkey = parse_x25519_public_key(&metadata.author_public_key_hex)?;
+    let dek =
+        privacy::unwrap_dek_for_reader(&key_wrap.wrapped_dek, &caller_secret, &author_pubkey)?;
+
+    let cipher = ChaCha20Poly1305::new(Key::from_slice(&dek));
+    let nonce_prefix: [u8; 4] = hex::decode(&metadata.nonce_prefix_hex)
+        .map_err(|err| ProtocolError::crypto(format!("invalid nonce prefix hex: {err}")))?
+        .try_into()
+        .map_err(|_| ProtocolError::crypto("nonce prefix must be 4 bytes".to_string()))?;
+    let mut hasher = Sha256::new();
+    let mut index = 0_u64;
+
+    loop {
+        let mut frame_len = [0_u8; 4];
+        match reader.read_exact(&mut frame_len) {
+            Ok(()) => {}
+            Err(err) if err.kind() == std::io::ErrorKind::UnexpectedEof => break,
+            Err(err) => {
+                return Err(ProtocolError::crypto(format!(
+                    "failed to read ciphertext frame length: {err}"
+                )))
+            }
+        }
+        let len = u32::from_be_bytes(frame_len) as usize;
+        let mut ciphertext = vec![0_u8; len];
+        reader.read_exact(&mut ciphertext).map_err(|err| {
+            ProtocolError::crypto(format!("failed to read ciphertext frame payload: {err}"))
+        })?;
+
+        hasher.update(frame_len);
+        hasher.update(&ciphertext);
+
+        let nonce = chunk_nonce(&nonce_prefix, index);
+        let aad = index.to_be_bytes();
+        let plaintext = cipher
+            .decrypt(
+                Nonce::from_slice(&nonce),
+                chacha20poly1305::aead::Payload {
+                    msg: &ciphertext,
+                    aad: &aad,
+                },
+            )
+            .map_err(|err| ProtocolError::crypto(format!("failed to decrypt file chunk: {err}")))?;
+        writer.write_all(&plaintext).map_err(|err| {
+            ProtocolError::crypto(format!("failed to write plaintext chunk: {err}"))
+        })?;
+        index = index
+            .checked_add(1)
+            .ok_or_else(|| ProtocolError::crypto("file chunk counter overflow".to_string()))?;
+    }
+
+    let observed_hash = format!("sha256:{}", hex::encode(hasher.finalize()));
+    if observed_hash != metadata.ciphertext_hash {
+        return Err(ProtocolError::ValidationFailed(
+            "off-chain ciphertext hash mismatch".into(),
+        ));
+    }
     Ok(())
 }
 
@@ -2544,7 +2726,10 @@ mod tests {
         let authorized_public = X25519PublicKey::from(&authorized_secret);
         let impostor_secret = StaticSecret::from([32u8; 32]);
 
-        let authorized_did = format!("did:key:x25519:{}", hex::encode(authorized_public.as_bytes()));
+        let authorized_did = format!(
+            "did:key:x25519:{}",
+            hex::encode(authorized_public.as_bytes())
+        );
 
         let mut reader_public_keys = BTreeMap::new();
         reader_public_keys.insert(
@@ -2881,6 +3066,78 @@ mod tests {
         )
         .expect_err("wrong passphrase must fail decrypt");
         assert!(err.to_string().contains("failed to decrypt file chunk"));
+    }
+
+    #[test]
+    fn encrypts_and_decrypts_offchain_file_stream_with_hybrid_reader_keys() {
+        let author = WalletKeypair::generate();
+        let reader_secret = StaticSecret::from([42u8; 32]);
+        let reader_public = X25519PublicKey::from(&reader_secret);
+        let reader_did = format!("did:key:x25519:{}", hex::encode(reader_public.as_bytes()));
+        let mut reader_public_keys = BTreeMap::new();
+        reader_public_keys.insert(reader_did.clone(), hex::encode(reader_public.as_bytes()));
+
+        let plaintext = b"hybrid offchain attachment ciphertext".to_vec();
+        let mut plaintext_reader = Cursor::new(plaintext.clone());
+        let mut ciphertext = Vec::new();
+        let metadata = encrypt_offchain_file_reader_to_writer_hybrid(
+            &mut plaintext_reader,
+            &mut ciphertext,
+            &author,
+            std::slice::from_ref(&reader_did),
+            &reader_public_keys,
+            "offchain-file-1",
+        )
+        .expect("encrypt hybrid offchain file");
+        assert_eq!(metadata.key_wrapped_secrets.len(), 1);
+
+        let mut ciphertext_reader = Cursor::new(ciphertext);
+        let mut decrypted = Vec::new();
+        decrypt_offchain_file_reader_to_writer_hybrid(
+            &mut ciphertext_reader,
+            &mut decrypted,
+            &metadata,
+            &reader_did,
+            &hex::encode(reader_secret.to_bytes()),
+        )
+        .expect("decrypt hybrid offchain file");
+        assert_eq!(decrypted, plaintext);
+    }
+
+    #[test]
+    fn hybrid_offchain_file_stream_rejects_non_granted_reader() {
+        let author = WalletKeypair::generate();
+        let granted_secret = StaticSecret::from([9u8; 32]);
+        let granted_public = X25519PublicKey::from(&granted_secret);
+        let granted_did = format!("did:key:x25519:{}", hex::encode(granted_public.as_bytes()));
+        let mut reader_public_keys = BTreeMap::new();
+        reader_public_keys.insert(granted_did.clone(), hex::encode(granted_public.as_bytes()));
+        let mut plaintext_reader = Cursor::new(b"hybrid file".to_vec());
+        let mut ciphertext = Vec::new();
+        let metadata = encrypt_offchain_file_reader_to_writer_hybrid(
+            &mut plaintext_reader,
+            &mut ciphertext,
+            &author,
+            std::slice::from_ref(&granted_did),
+            &reader_public_keys,
+            "offchain-file-2",
+        )
+        .expect("encrypt hybrid offchain file");
+
+        let denied_secret = StaticSecret::from([10u8; 32]);
+        let denied_public = X25519PublicKey::from(&denied_secret);
+        let denied_did = format!("did:key:x25519:{}", hex::encode(denied_public.as_bytes()));
+        let mut ciphertext_reader = Cursor::new(ciphertext);
+        let mut decrypted = Vec::new();
+        let err = decrypt_offchain_file_reader_to_writer_hybrid(
+            &mut ciphertext_reader,
+            &mut decrypted,
+            &metadata,
+            &denied_did,
+            &hex::encode(denied_secret.to_bytes()),
+        )
+        .expect_err("non-granted reader must fail");
+        assert!(err.to_string().contains("no DEK wrap found for caller DID"));
     }
 
     struct PatternReader {
