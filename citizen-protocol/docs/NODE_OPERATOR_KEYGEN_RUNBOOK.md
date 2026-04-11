@@ -54,6 +54,25 @@ python3 --version
 
 ## 4) Generate validator node key material (Ed25519)
 
+## 4A) Generate validator node key material with standalone Rust devtool
+
+From `citizen-protocol/` using the dedicated tooling crate (separate from node runtime binaries):
+
+```bash
+cargo run -p citizen-validator-keygen -- --validator-id validator-alpha --output-json ./validator-alpha-keys.json
+```
+
+The command prints:
+
+- `public_key_hex` (for `validator_allowlist[].public_key`)
+- `signing_key_hex` (for node `signing_key_hex`)
+
+And optionally writes JSON at `--output-json` (owner-only permissions on Unix).
+
+> Keep `signing_key_hex` secret and never commit generated key files.
+
+---
+
 Generate a validator private key PEM:
 
 ```bash
