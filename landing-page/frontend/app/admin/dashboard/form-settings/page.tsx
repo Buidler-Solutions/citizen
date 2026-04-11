@@ -19,10 +19,11 @@ interface RoleOption {
 interface FormSettingsResponse {
   title: string;
   subtitle: string;
+  attachmentMode: 'optional' | 'required';
   roles: RoleOption[];
 }
 
-type FormSettingsPayload = Pick<FormSettingsResponse, 'title' | 'subtitle' | 'roles'>;
+type FormSettingsPayload = Pick<FormSettingsResponse, 'title' | 'subtitle' | 'attachmentMode' | 'roles'>;
 
 const DEFAULT_ROLES: RoleOption[] = [
   {
@@ -51,6 +52,7 @@ const DEFAULT_ROLES: RoleOption[] = [
 const DEFAULT_SETTINGS: FormSettingsResponse = {
   title: 'Build Public Truth with Citizen',
   subtitle: 'Validator · Builder · Observer onboarding',
+  attachmentMode: 'optional',
   roles: DEFAULT_ROLES,
 };
 
@@ -97,6 +99,7 @@ export default function FormSettingsPage() {
             ...prev,
             title: settingsData.title ?? prev.title,
             subtitle: settingsData.subtitle ?? prev.subtitle,
+            attachmentMode: settingsData.attachmentMode === 'required' ? 'required' : 'optional',
             roles: Array.isArray(settingsData.roles) && settingsData.roles.length > 0
               ? settingsData.roles
               : prev.roles,
@@ -133,6 +136,7 @@ export default function FormSettingsPage() {
       const payload: FormSettingsPayload = {
         title: settings.title,
         subtitle: settings.subtitle,
+        attachmentMode: settings.attachmentMode,
         roles: settings.roles.map((role, index) => ({
           ...role,
           id: sanitizeRoleId(role.id || role.label || `role-${index + 1}`),
@@ -336,6 +340,21 @@ export default function FormSettingsPage() {
                   value={settings.subtitle}
                   onChange={(e) => setSettings((prev) => ({ ...prev, subtitle: e.target.value }))}
                 />
+              </div>
+              <div className="grid gap-2 md:max-w-xs">
+                <Label htmlFor="attachmentMode">Attachment Mode</Label>
+                <select
+                  id="attachmentMode"
+                  className="h-10 rounded-md border border-slate-300 px-3 text-sm"
+                  value={settings.attachmentMode}
+                  onChange={(event) => {
+                    const value = event.target.value === 'required' ? 'required' : 'optional';
+                    setSettings((prev) => ({ ...prev, attachmentMode: value }));
+                  }}
+                >
+                  <option value="optional">Optional</option>
+                  <option value="required">Required</option>
+                </select>
               </div>
 
             </div>
