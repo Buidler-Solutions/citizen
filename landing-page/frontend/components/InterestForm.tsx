@@ -1,6 +1,6 @@
 'use client';
 
-import { CSSProperties, FormEvent, ReactNode, useEffect, useMemo, useRef, useState } from 'react';
+import { CSSProperties, ChangeEvent, FormEvent, ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { AsciinemaModal } from '@/components/AsciinemaModal';
 import { ensureGsap } from '@/lib/gsapLoader';
 
@@ -33,6 +33,7 @@ interface RoleOption {
 interface PublicFormSettings {
   title: string;
   subtitle: string;
+  attachmentMode: 'optional' | 'required';
   roles: RoleOption[];
   campaignCards: CampaignCard[];
 }
@@ -111,6 +112,10 @@ type SignedSubmissionEnvelope = {
     country: string;
     role: string;
     missionNeed: string;
+    attachmentName?: string;
+    attachmentMimeType?: string;
+    attachmentSha256?: string;
+    attachmentBase64?: string;
   };
   walletSignerDid: string;
   walletVerifyingKey: string;
@@ -257,6 +262,7 @@ const DEFAULT_ROLES: RoleOption[] = [
 const DEFAULT_SETTINGS: PublicFormSettings = {
   title: 'Build Public Truth with Citizen',
   subtitle: 'Validator · Builder · Observer onboarding',
+  attachmentMode: 'optional',
   roles: DEFAULT_ROLES,
   campaignCards: DEFAULT_CAMPAIGN_CARDS,
 };
@@ -327,6 +333,7 @@ export function InterestForm() {
   const [formValues, setFormValues] = useState<Record<string, string>>({
     fullName: '', institution: '', email: '', country: '', missionNeed: '',
   });
+  const [attachment, setAttachment] = useState<{ name: string; mimeType: string; sha256: string; base64: string } | null>(null);
   const [submittedThankYouNote, setSubmittedThankYouNote] = useState('');
   const [submittedRole, setSubmittedRole] = useState<string | null>(null);
   const [isAsciinemaOpen, setIsAsciinemaOpen] = useState(false);
@@ -366,6 +373,7 @@ export function InterestForm() {
         setSettings((prev) => ({
           title: data.title ?? prev.title,
           subtitle: data.subtitle ?? prev.subtitle,
+          attachmentMode: data.attachmentMode === 'required' ? 'required' : 'optional',
           campaignCards: Array.isArray(data.campaignCards)
             ? data.campaignCards.map((card, index) => ({
               weight: card.weight ?? index + 1,
@@ -564,6 +572,12 @@ export function InterestForm() {
     country: formValues.country.trim(),
     role: roleId ?? '',
     missionNeed: formValues.missionNeed.trim(),
+    ...(attachment ? {
+      attachmentName: attachment.name,
+      attachmentMimeType: attachment.mimeType,
+      attachmentSha256: attachment.sha256,
+      attachmentBase64: attachment.base64,
+    } : {}),
   });
 
   const signSubmission = async (): Promise<SignedSubmissionEnvelope | null> => {
@@ -573,6 +587,10 @@ export function InterestForm() {
     }
 
     const payload = buildPayload();
+    if (settings.attachmentMode === 'required' && !payload.attachmentBase64) {
+      setStatus('Please attach a file before signing this submission.');
+      return null;
+    }
 
     const protocolSigningPayload = {
       schema_version: '1.0.0',
@@ -681,9 +699,17 @@ export function InterestForm() {
           walletSignatureScope: envelopeToSubmit.walletSignatureScope,
           walletReaderDid: envelopeToSubmit.walletReaderDid,
           walletReaderX25519PublicKey: envelopeToSubmit.walletReaderX25519PublicKey,
+          attachmentName: envelopeToSubmit.payload.attachmentName,
+          attachmentMimeType: envelopeToSubmit.payload.attachmentMimeType,
+          attachmentSha256: envelopeToSubmit.payload.attachmentSha256,
+          attachmentBase64: envelopeToSubmit.payload.attachmentBase64,
         }),
       });
       if (!response.ok) {
+        if (response.status === 413) {
+          setStatus('Attachment payload is too large for current backend limits. Use a smaller file or increase backend MAX_REQUEST_BODY_SIZE.');
+          return;
+        }
         if (response.status === 409) {
           setStatus('This email already submitted the form. Please use a different email.');
           return;
@@ -729,6 +755,7 @@ export function InterestForm() {
       );
       setRoleId(null);
       setSignedSubmission(null);
+      setAttachment(null);
       setStepIndex(0);
       setMotionDirection('forward');
       setFormValues({ fullName: '', institution: '', email: '', country: '', missionNeed: '' });
@@ -750,6 +777,36 @@ export function InterestForm() {
       return;
     }
     await signSubmission();
+  };
+
+  const onAttachmentChange = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) {
+      setAttachment(null);
+      setSignedSubmission(null);
+      return;
+    }
+    if (file.size > 150 * 1024) {
+      setStatus('Attachment must be 150KB or smaller for wallet-signed simulation flow.');
+      event.target.value = '';
+      return;
+    }
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    const hashBuffer = await crypto.subtle.digest('SHA-256', bytes);
+    const hashHex = Array.from(new Uint8Array(hashBuffer)).map((value) => value.toString(16).padStart(2, '0')).join('');
+    let binary = '';
+    bytes.forEach((value) => {
+      binary += String.fromCharCode(value);
+    });
+    const base64 = btoa(binary);
+    setAttachment({
+      name: file.name,
+      mimeType: file.type || 'application/octet-stream',
+      sha256: `sha256:${hashHex}`,
+      base64,
+    });
+    setSignedSubmission(null);
+    setStatus('');
   };
 
 
@@ -963,6 +1020,18 @@ export function InterestForm() {
           </div>
           {stepIndex === totalSteps - 1 ? (
             <div data-stage-item className="rounded-xl border border-cyan-300/40 bg-cyan-500/10 p-4 text-sm text-cyan-100">
+              <p className="m-0 mb-2 font-semibold">Attachment option ({settings.attachmentMode})</p>
+              <input
+                type="file"
+                className="mb-2 block w-full cursor-pointer rounded-lg border border-cyan-200/30 bg-slate-900/40 p-2 text-xs text-cyan-100"
+                onChange={onAttachmentChange}
+                required={settings.attachmentMode === 'required'}
+              />
+              {attachment ? (
+                <p className="mb-2 mt-0 text-xs text-cyan-200">
+                  Attached: {attachment.name} · {attachment.mimeType} · {attachment.sha256}
+                </p>
+              ) : null}
               <p className="m-0 font-semibold">Submission consent</p>
               <p className="mb-2 mt-1">
                 {signedSubmissionContract?.consent.backendPersistence

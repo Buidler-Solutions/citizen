@@ -27,6 +27,9 @@ export class FormSettings {
   @Column({ length: 260, default: 'Validator · Builder · Observer onboarding' })
   subtitle!: string;
 
+  @Column({ length: 20, default: 'optional' })
+  attachmentMode!: 'optional' | 'required';
+
   @Column({ length: 255, default: '', nullable: false })
   siteLogoUrl!: string;
 

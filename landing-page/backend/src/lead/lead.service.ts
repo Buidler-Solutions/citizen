@@ -81,6 +81,8 @@ const DEFAULT_ROLE_OPTIONS = [
   },
 ];
 
+type AttachmentMode = 'optional' | 'required';
+
 @Injectable()
 export class LeadService {
   private readonly logger = new Logger(LeadService.name);
@@ -112,6 +114,7 @@ export class LeadService {
 
     const formSettings = await this.getFormSettings();
     const normalizedRole = this.normalizeRole(payload.role, formSettings);
+    this.assertAttachmentSettings(payload, formSettings.attachmentMode);
     this.assertWalletSignedPayload(payload, normalizedRole);
 
     await this.relaySignedSubmissionToCitizenNetwork(payload, normalizedRole);
@@ -121,6 +124,9 @@ export class LeadService {
       email: normalizedEmail,
       role: normalizedRole,
       missionNeed: payload.missionNeed.trim(),
+      attachmentName: payload.attachmentName?.trim() || null,
+      attachmentMimeType: payload.attachmentMimeType?.trim() || null,
+      attachmentSha256: payload.attachmentSha256?.trim() || null,
       walletAlgorithm: payload.walletAlgorithm.toLowerCase(),
     });
 
@@ -173,6 +179,10 @@ export class LeadService {
   }
 
   private assertWalletSignedPayload(payload: CreateLeadDto, normalizedRole: string): void {
+    const trimmedAttachmentName = payload.attachmentName?.trim();
+    const trimmedAttachmentMimeType = payload.attachmentMimeType?.trim();
+    const trimmedAttachmentSha256 = payload.attachmentSha256?.trim();
+    const trimmedAttachmentBase64 = payload.attachmentBase64?.trim();
     const expectedPayload = {
       schema_version: '1.0.0',
       namespace: 'onboarding.interest',
@@ -185,6 +195,10 @@ export class LeadService {
         country: payload.country.trim(),
         role: normalizedRole,
         missionNeed: payload.missionNeed.trim(),
+        ...(trimmedAttachmentName ? { attachmentName: trimmedAttachmentName } : {}),
+        ...(trimmedAttachmentMimeType ? { attachmentMimeType: trimmedAttachmentMimeType } : {}),
+        ...(trimmedAttachmentSha256 ? { attachmentSha256: trimmedAttachmentSha256 } : {}),
+        ...(trimmedAttachmentBase64 ? { attachmentBase64: trimmedAttachmentBase64 } : {}),
       },
       submitted_at: undefined,
     };
@@ -228,6 +242,40 @@ export class LeadService {
 
     if (!this.verifyWalletSignature(payload.walletVerifyingKey, signatureMessage, payload.walletSignature)) {
       throw new BadRequestException(`walletSignature verification failed for ${signatureScope}.`);
+    }
+  }
+
+  private assertAttachmentSettings(payload: CreateLeadDto, attachmentMode: AttachmentMode): void {
+    const attachmentBase64 = payload.attachmentBase64?.trim() ?? '';
+    const hasAttachment = attachmentBase64.length > 0;
+    if (attachmentMode === 'required' && !hasAttachment) {
+      throw new BadRequestException('Attachment is required for this onboarding form configuration.');
+    }
+    if (!hasAttachment) {
+      return;
+    }
+
+    const attachmentSha256 = payload.attachmentSha256?.trim() ?? '';
+    const attachmentName = payload.attachmentName?.trim() ?? '';
+    const attachmentMimeType = payload.attachmentMimeType?.trim() ?? '';
+    if (!attachmentSha256 || !/^sha256:[a-f0-9]{64}$/i.test(attachmentSha256)) {
+      throw new BadRequestException('attachmentSha256 must be provided as sha256:<64-hex> when attachmentBase64 is present.');
+    }
+    if (!attachmentName) {
+      throw new BadRequestException('attachmentName is required when attachmentBase64 is present.');
+    }
+    if (!attachmentMimeType) {
+      throw new BadRequestException('attachmentMimeType is required when attachmentBase64 is present.');
+    }
+    if (!/^[a-z0-9][a-z0-9.+-]*\/[a-z0-9][a-z0-9.+-]*$/i.test(attachmentMimeType)) {
+      throw new BadRequestException('attachmentMimeType must be a valid MIME type when attachmentBase64 is present.');
+    }
+    if (!/^[a-z0-9+/=]+$/i.test(attachmentBase64)) {
+      throw new BadRequestException('attachmentBase64 must be a valid base64 string.');
+    }
+    const computedHash = createHash('sha256').update(Buffer.from(attachmentBase64, 'base64')).digest('hex');
+    if (attachmentSha256.toLowerCase() !== `sha256:${computedHash}`) {
+      throw new BadRequestException('attachmentSha256 does not match attachmentBase64.');
     }
   }
 
@@ -1187,6 +1235,11 @@ export class LeadService {
       existing.siteLogoUrl = (existing.siteLogoUrl ?? '').trim();
       existing.siteLogoAlt = this.normalizeBrandText(existing.siteLogoAlt);
       existing.siteName = this.normalizeBrandText(existing.siteName);
+      const normalizedAttachmentMode: AttachmentMode = existing.attachmentMode === 'required' ? 'required' : 'optional';
+      if (existing.attachmentMode !== normalizedAttachmentMode) {
+        existing.attachmentMode = normalizedAttachmentMode;
+        needsSave = true;
+      }
 
       if (!Array.isArray(existing.campaignCards) || existing.campaignCards.length === 0) {
         existing.campaignCards = DEFAULT_CAMPAIGN_CARDS;
@@ -1210,6 +1263,7 @@ export class LeadService {
       siteLogoUrl: '',
       siteLogoAlt: 'Citizen',
       siteName: 'Citizen',
+      attachmentMode: 'optional',
       campaignCards: DEFAULT_CAMPAIGN_CARDS,
       roles: DEFAULT_ROLE_OPTIONS,
     });
@@ -1282,6 +1336,10 @@ export class LeadService {
 
     if (payload.subtitle !== undefined) {
       current.subtitle = payload.subtitle.trim();
+    }
+
+    if (payload.attachmentMode !== undefined) {
+      current.attachmentMode = payload.attachmentMode;
     }
 
     if (payload.siteLogoUrl !== undefined) {

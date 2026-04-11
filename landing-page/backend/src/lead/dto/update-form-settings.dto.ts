@@ -1,6 +1,7 @@
 import {
   ArrayMaxSize,
   IsArray,
+  IsIn,
   IsInt,
   IsOptional,
   Min,
@@ -70,6 +71,10 @@ export class UpdateFormSettingsDto {
   @MinLength(2)
   @MaxLength(260)
   subtitle?: string;
+
+  @IsOptional()
+  @IsIn(['optional', 'required'])
+  attachmentMode?: 'optional' | 'required';
 
   @IsOptional()
   @IsString()

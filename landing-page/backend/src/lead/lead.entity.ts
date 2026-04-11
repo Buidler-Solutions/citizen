@@ -23,6 +23,15 @@ export class LeadInterest {
   @Column({ type: 'text' })
   missionNeed!: string;
 
+  @Column({ type: 'varchar', length: 220, nullable: true })
+  attachmentName!: string | null;
+
+  @Column({ type: 'varchar', length: 120, nullable: true })
+  attachmentMimeType!: string | null;
+
+  @Column({ type: 'varchar', length: 80, nullable: true })
+  attachmentSha256!: string | null;
+
   @Column({ type: 'varchar', length: 120, nullable: true })
   walletSignerDid!: string | null;
 

@@ -91,6 +91,13 @@ type DirectSubmitReceipt = {
   submittedAt: string;
 };
 
+type DecryptedAttachment = {
+  base64: string;
+  name: string;
+  mimeType: string;
+  sha256?: string;
+};
+
 type ProtocolKeyMaterial = {
   signer: {
     did: string;
@@ -291,6 +298,7 @@ export function App() {
   const [decryptCiphertextHex, setDecryptCiphertextHex] = useState('');
   const [decryptTransactionJson, setDecryptTransactionJson] = useState('');
   const [decryptedPayload, setDecryptedPayload] = useState('');
+  const [decryptedAttachment, setDecryptedAttachment] = useState<DecryptedAttachment | null>(null);
   const [protocolKeyMaterial, setProtocolKeyMaterial] = useState<ProtocolKeyMaterial | null>(null);
   const [state, setState] = useState<WalletState>({
     account: 'Not initialized',
@@ -731,6 +739,7 @@ export function App() {
   const handleDecryptWithReaderKey = async () => {
     setStatus('');
     setDecryptedPayload('');
+    setDecryptedAttachment(null);
     if (!decryptAuthorPublicKeyHex.trim() || !decryptWrappedDekHex.trim() || !decryptNonceHex.trim() || !decryptCiphertextHex.trim()) {
       setStatus('Provide author public key, wrapped DEK, nonce, and ciphertext.');
       return;
@@ -746,12 +755,71 @@ export function App() {
       return;
     }
     const payload = result.result as { plaintext?: string; plaintextJson?: unknown };
+    const extractAttachment = (value: unknown): DecryptedAttachment | null => {
+      if (!value || typeof value !== 'object') {
+        return null;
+      }
+      const root = value as Record<string, unknown>;
+      const source = root.payload && typeof root.payload === 'object'
+        ? root.payload as Record<string, unknown>
+        : root;
+      const base64 = typeof source.attachmentBase64 === 'string' ? source.attachmentBase64.trim() : '';
+      if (!base64) {
+        return null;
+      }
+      const name = typeof source.attachmentName === 'string' && source.attachmentName.trim()
+        ? source.attachmentName.trim()
+        : 'attachment.bin';
+      const mimeType = typeof source.attachmentMimeType === 'string' && source.attachmentMimeType.trim()
+        ? source.attachmentMimeType.trim()
+        : 'application/octet-stream';
+      const sha256 = typeof source.attachmentSha256 === 'string' ? source.attachmentSha256.trim() : undefined;
+      return {
+        base64,
+        name,
+        mimeType,
+        sha256,
+      };
+    };
     if (payload.plaintextJson) {
       setDecryptedPayload(JSON.stringify(payload.plaintextJson, null, 2));
+      setDecryptedAttachment(extractAttachment(payload.plaintextJson));
     } else {
       setDecryptedPayload(payload.plaintext ?? '');
+      try {
+        const parsed = payload.plaintext ? JSON.parse(payload.plaintext) as unknown : null;
+        setDecryptedAttachment(extractAttachment(parsed));
+      } catch {
+        setDecryptedAttachment(null);
+      }
     }
     setStatus('Ciphertext decrypted with active wallet reader key.');
+  };
+
+  const handleDownloadDecryptedAttachment = () => {
+    if (!decryptedAttachment) {
+      setStatus('No attachment payload found in decrypted content.');
+      return;
+    }
+    try {
+      const raw = atob(decryptedAttachment.base64);
+      const bytes = new Uint8Array(raw.length);
+      for (let index = 0; index < raw.length; index += 1) {
+        bytes[index] = raw.charCodeAt(index);
+      }
+      const blob = new Blob([bytes], { type: decryptedAttachment.mimeType });
+      const href = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = href;
+      anchor.download = decryptedAttachment.name;
+      document.body.appendChild(anchor);
+      anchor.click();
+      document.body.removeChild(anchor);
+      URL.revokeObjectURL(href);
+      setStatus(`Attachment downloaded${decryptedAttachment.sha256 ? ` (${decryptedAttachment.sha256})` : ''}.`);
+    } catch (error) {
+      setStatus(error instanceof Error ? `Unable to download attachment: ${error.message}` : 'Unable to download attachment.');
+    }
   };
 
   const handlePrefillDecryptFromTransaction = () => {
@@ -1203,15 +1271,6 @@ export function App() {
                       <p className="meta-text">
                         What will be shared: only the canonical payload hash and signature are returned to this dApp.
                       </p>
-                      <h3>Payload preview</h3>
-                      <dl>
-                        {renderPayloadSummary(entry.payload.canonicalJson).map((section) => (
-                          <div key={`${entry.requestId}-${section.label}`}>
-                            <dt>{section.label}</dt>
-                            <dd>{section.value}</dd>
-                          </div>
-                        ))}
-                      </dl>
                       <div className="button-row">
                         <button className="primary" onClick={() => handleApproveDappRequest(entry.requestId)}>
                           Approve and sign
@@ -1241,6 +1300,15 @@ export function App() {
                           {showRawPayloadByRequest[entry.requestId] ? 'Hide raw payload' : 'Show raw payload'}
                         </button>
                       </div>
+                      <h3>Payload preview</h3>
+                      <dl>
+                        {renderPayloadSummary(entry.payload.canonicalJson).map((section) => (
+                          <div key={`${entry.requestId}-${section.label}`}>
+                            <dt>{section.label}</dt>
+                            <dd>{section.value}</dd>
+                          </div>
+                        ))}
+                      </dl>
                       {showRawPayloadByRequest[entry.requestId] ? <pre className="raw-payload">{entry.payload.canonicalJson}</pre> : null}
                     </div>
                   ))}
@@ -1425,6 +1493,11 @@ export function App() {
                   placeholder="ciphertextHex"
                 />
                 <button className="primary" onClick={handleDecryptWithReaderKey}>Decrypt</button>
+                {decryptedAttachment ? (
+                  <button className="ghost" onClick={handleDownloadDecryptedAttachment}>
+                    Download decrypted attachment ({decryptedAttachment.name})
+                  </button>
+                ) : null}
                 {decryptedPayload ? (
                   <textarea readOnly rows={8} value={decryptedPayload} aria-label="Decrypted payload" />
                 ) : null}

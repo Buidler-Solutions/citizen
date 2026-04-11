@@ -11,6 +11,14 @@ const parseCorsOrigins = (): string[] => (process.env.CORS_ORIGIN?.split(',') ??
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
+  const maxRequestBodySize = process.env.MAX_REQUEST_BODY_SIZE ?? '1mb';
+  const expressParsers = require('express') as {
+    json: (options: { limit: string }) => unknown;
+    urlencoded: (options: { extended: boolean; limit: string }) => unknown;
+  };
+
+  app.use(expressParsers.json({ limit: maxRequestBodySize }));
+  app.use(expressParsers.urlencoded({ extended: true, limit: maxRequestBodySize }));
 
   const uploadsRoot = join(process.cwd(), 'uploads');
   const castsRoot = join(uploadsRoot, 'casts');
