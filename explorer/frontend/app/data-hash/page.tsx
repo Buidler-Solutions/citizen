@@ -41,7 +41,7 @@ export default async function DataHashPage({
         <section className="block-list">
           <article className="block-card">
             <div className="block-card-header">
-              <h2>{result.payload.data.data_hash}</h2>
+              <h2 className="mono-wrap">{result.payload.data.data_hash}</h2>
               <span className="status-chip ok">
                 {result.payload.data.matches.length} match{result.payload.data.matches.length === 1 ? '' : 'es'}
               </span>
@@ -58,7 +58,7 @@ export default async function DataHashPage({
               <div className="stack">
                 <div className="row">
                   <span className="label">Entry ID</span>
-                  <Link href={`/blocks?q=${encodeURIComponent(match.entry_id)}`} className="mono">
+                  <Link href={`/blocks?q=${encodeURIComponent(match.entry_id)}`} className="mono mono-wrap">
                     {match.entry_id}
                   </Link>
                 </div>
@@ -68,7 +68,7 @@ export default async function DataHashPage({
                 </div>
                 <div className="row">
                   <span className="label">Object</span>
-                  <span>{match.object_id}</span>
+                  <span className="mono-wrap">{match.object_id}</span>
                 </div>
                 <div className="row">
                   <span className="label">Timestamp</span>
