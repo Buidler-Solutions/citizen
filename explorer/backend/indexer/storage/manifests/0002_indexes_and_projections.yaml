@@ -1,15 +1,34 @@
-revision: 2
-name: indexes_and_projections
-applies_to: indexer-metrics
-secondary_indexes:
-  - indexed_blocks.committed_at_desc
-  - indexed_entries.block_height
-  - indexed_entries.committed_at_desc
-  - indexed_entries.namespace+committed_at_desc
-  - metric_windows.window_name+window_start_desc
-compatibility:
-  requires_revision: 1
-backfill:
-  required: false
-  notes:
-    - Secondary indexes can be rebuilt from canonical indexed entity keys.
+revision: 0002
+title: Secondary lookups and projection contract
+status: active
+depends_on: 0001
+secondary_lookups:
+  indexed_blocks:
+    - committed_at_desc
+    - block_height_desc
+  indexed_entries:
+    - block_height_desc
+    - committed_at_desc
+    - namespace_then_committed_at_desc
+  metric_windows:
+    - window_name_then_window_start_desc
+cursor_projection:
+  key: cursor/latest
+  fields:
+    - last_indexed_height:i64
+    - last_indexed_block_hash:string?
+    - degraded:bool
+    - last_error:string?
+    - retry_count:u32
+    - updated_at:utc_millis?
+recovery_contract:
+  continuity_fault:
+    action: halt_and_alert
+  duplicate_identical_payload:
+    action: no_op
+  duplicate_conflicting_payload:
+    action: halt_and_alert
+retention:
+  indexed_blocks_seconds_env: INDEXER_BLOCK_RETENTION_SECONDS
+  indexed_entries_seconds_env: INDEXER_ENTRY_RETENTION_SECONDS
+  metric_windows_seconds_env: INDEXER_WINDOW_RETENTION_SECONDS

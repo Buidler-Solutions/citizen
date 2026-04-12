@@ -1,7 +1,7 @@
 # Indexer Metrics Data Model and Storage Schema (Checkpoint 2)
 
 Status: storage-model design artifact for canonical indexer metrics persistence.
-Last updated: 2026-04-12.
+Last updated: 2026-04-12 (manifests + JSON snapshot adapter landed in explorer backend).
 
 ## Scope
 
@@ -160,8 +160,18 @@ Rules:
 - `metric_windows` is derived and recomputable.
 - retention/compaction is allowed only if the retained range still supports deterministic recomputation for advertised metrics.
 
-## Open implementation tasks
+## Implementation progress
 
-1. Land concrete storage manifests and backend adapter implementation in explorer/indexer service.
-2. Bind runtime models/codecs for deterministic serialization.
-3. Add replay/integration tests asserting idempotency and continuity-fault behavior.
+Completed:
+
+1. Concrete storage manifests landed at:
+   - `explorer/backend/indexer/storage/manifests/0001_entities_baseline.yaml`
+   - `explorer/backend/indexer/storage/manifests/0002_indexes_and_projections.yaml`
+2. Snapshot-backed storage adapter landed at:
+   - `explorer/backend/src/indexer/metrics-storage.service.ts`
+   - wired into `explorer/backend/src/indexer/indexer-metrics.service.ts` for state restore/persist.
+
+Remaining:
+
+1. Bind runtime models/codecs for deterministic serialization.
+2. Add replay/integration tests asserting idempotency and continuity-fault behavior.

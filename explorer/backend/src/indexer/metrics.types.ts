@@ -218,3 +218,24 @@ export type VerificationEvidenceBundle = {
   tps_window_checksums_sha256: Record<MetricWindowName, string>;
   summary: IndexerSummary;
 };
+
+export type IndexerMetricsSnapshot = {
+  cursor: CursorState;
+  indexed_blocks: IndexedBlock[];
+  indexed_entries: IndexedEntry[];
+  metric_windows: Record<MetricWindowName, MetricWindow[]>;
+  poison_blocks: Array<{
+    height: number;
+    reason: string;
+    detected_at: number;
+  }>;
+  latest_committed_at: number | null;
+  late_entries_accepted: number;
+  failed_block_count: number;
+  retry_count_total: number;
+  fetch_attempt_total: number;
+  successful_block_count: number;
+  consecutive_lag_polls: number;
+  block_processing_latencies_ms: number[];
+  aggregation_latencies_ms: number[];
+};
