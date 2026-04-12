@@ -1,7 +1,7 @@
 # Indexer Metrics Implementation Checklist (TPS + Block Weight + Entry Weight)
 
 Status: implementation checklist for adding canonical analytics via an indexer while keeping protocol runtime deterministic and lean.
-Last updated: 2026-04-11 (started implementation with Checkpoint 0 and Checkpoint 1 design artifacts).
+Last updated: 2026-04-12 (Checkpoint 2 revised to storage-engine-agnostic/non-relational contract).
 
 ## Goals
 
@@ -56,19 +56,20 @@ Implementation artifact: `citizen-protocol/docs/INDEXER_METRICS_INGESTION_ARCHIT
 
 ## Checkpoint 2 — Data model and storage schema
 
-- [ ] Create core tables/collections:
-  - [ ] `indexed_blocks` (height, hash/entry_root, proposer, timestamp, entry_count, block_weight_bytes)
-  - [ ] `indexed_entries` (entry_id, block_height, namespace, action, timestamp, entry_weight_bytes)
-  - [ ] `metric_windows` (window_name, window_start, window_end, tps, entries_committed)
-- [ ] Add indexes for query workloads:
-  - [ ] by `block_height`,
-  - [ ] by `timestamp`,
-  - [ ] by `namespace`,
-  - [ ] by `entry_id`.
-- [ ] Add uniqueness constraints to ensure idempotent writes.
-- [ ] Add migration/versioning strategy for schema changes.
+- [x] Create core entities/collections:
+  - [x] `indexed_blocks` (height, hash/entry_root, proposer, timestamp, entry_count, block_weight_bytes)
+  - [x] `indexed_entries` (entry_id, block_height, namespace, action, timestamp, entry_weight_bytes)
+  - [x] `metric_windows` (window_name, window_start, window_end, tps, entries_committed)
+- [x] Add lookup/index strategy for query workloads:
+  - [x] by `block_height`,
+  - [x] by `timestamp`,
+  - [x] by `namespace`,
+  - [x] by `entry_id`.
+- [x] Add uniqueness constraints to ensure idempotent writes.
+- [x] Add migration/versioning strategy for storage evolution.
 
-Deliverable: migration files + schema documentation.
+Deliverable: storage manifests/migrations + schema documentation.
+Implementation artifact: `citizen-protocol/docs/INDEXER_METRICS_DATA_MODEL_AND_SCHEMA.md` (storage-engine-agnostic schema contract complete; backend adapter/manifests pending implementation).
 
 ---
 
