@@ -127,7 +127,7 @@ This checklist captures the implementation checkpoints for upgrading Citizen fro
 - [x] Reject mutated drafts after first signature.
 - [ ] Enforce signature scope and anti-replay binding (request ID/timestamps where applicable).
 - [x] Enforce signer uniqueness in threshold count.
-- [ ] Record auditable signer metadata in receipts/logs.
+- [x] Record auditable signer metadata in receipts/logs.
 
 ---
 

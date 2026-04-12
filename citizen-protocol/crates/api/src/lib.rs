@@ -12,8 +12,8 @@ use citizen_storage::LedgerStorage;
 use citizen_types::{
     Block, BlockHeader, BlockHeight, CommitProof, ConsentPolicyCheck, ConsentReceipt,
     DeterministicReceipt, DidDocument, DidStatus, FinalityProof, LedgerEntry, NamespaceRuleset,
-    OffchainCommitmentSummary, PayloadFieldCommitmentSummary, ProtocolError, ReceiptStatus,
-    SignedEnvelope, ValidationSummary,
+    MultisigValidationSummary, OffchainCommitmentSummary, PayloadFieldCommitmentSummary,
+    ProtocolError, ReceiptStatus, SignedEnvelope, ValidationSummary,
 };
 use ed25519_dalek::Signature;
 use serde::{Deserialize, Serialize};
@@ -2701,10 +2701,11 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
         ledger: Arc<Ledger<S>>,
         envelope: SignedEnvelope<LedgerEntry>,
     ) -> (StatusCode, Json<serde_json::Value>) {
-        let (entry, outcome) = match validate_envelope_signatures(&envelope) {
+        let validation = match validate_envelope_signatures(&envelope) {
             Ok(validated) => validated,
             Err(err) => return protocol_error_response(err),
         };
+        let entry = validation.entry;
         let action = entry.action.clone();
 
         if let Err(err) = ledger.validate_entry_submission(&entry) {
@@ -2730,8 +2731,9 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
             validation: ValidationSummary {
                 namespace: namespace.clone(),
                 action,
-                outcome,
+                outcome: validation.outcome,
                 offchain_commitments,
+                multisig: validation.multisig,
             },
             finality: Some(finality),
             recorded_at: Utc::now(),
@@ -2766,10 +2768,11 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
         let mut accepted = Vec::with_capacity(envelopes.len());
         for envelope in envelopes {
             let envelope_id = envelope.envelope_id;
-            let (entry, outcome) = match validate_envelope_signatures(&envelope) {
+            let validation = match validate_envelope_signatures(&envelope) {
                 Ok(validated) => validated,
                 Err(err) => return protocol_error_response(err),
             };
+            let entry = validation.entry;
             let action = entry.action.clone();
 
             if let Err(err) = ledger.validate_entry_submission(&entry) {
@@ -2781,7 +2784,8 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
                 action,
                 envelope_id,
                 extract_offchain_commitments(&entry),
-                outcome,
+                validation.outcome,
+                validation.multisig,
             ));
             validated_entries.push(entry);
         }
@@ -2798,7 +2802,7 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
         };
 
         let mut receipts = Vec::with_capacity(accepted.len());
-        for (entry_id, namespace, action, envelope_id, offchain_commitments, outcome) in accepted {
+        for (entry_id, namespace, action, envelope_id, offchain_commitments, outcome, multisig) in accepted {
             let receipt = DeterministicReceipt {
                 receipt_id: Uuid::new_v4(),
                 envelope_id,
@@ -2808,6 +2812,7 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
                     action,
                     outcome,
                     offchain_commitments,
+                    multisig,
                 },
                 finality: Some(finality.clone()),
                 recorded_at: Utc::now(),
@@ -5125,6 +5130,15 @@ mod tests {
             .as_str()
             .expect("outcome");
         assert!(outcome.contains("multisig scope=canonical_payload_v1"));
+        assert_eq!(
+            payload["receipt"]["validation"]["multisig"]["signature_scope"],
+            "canonical_payload_v1"
+        );
+        assert_eq!(payload["receipt"]["validation"]["multisig"]["threshold"], 2);
+        let signers = payload["receipt"]["validation"]["multisig"]["signers"]
+            .as_array()
+            .expect("multisig signers");
+        assert_eq!(signers.len(), 2);
     }
 
     #[tokio::test]
@@ -10677,9 +10691,15 @@ fn verify_signer_signature(
     Ok(())
 }
 
+struct EnvelopeValidationResult {
+    entry: LedgerEntry,
+    outcome: String,
+    multisig: Option<MultisigValidationSummary>,
+}
+
 fn validate_envelope_signatures(
     envelope: &SignedEnvelope<LedgerEntry>,
-) -> Result<(LedgerEntry, String), ProtocolError> {
+) -> Result<EnvelopeValidationResult, ProtocolError> {
     if envelope.signature.is_empty() {
         return Err(ProtocolError::ValidationFailed(
             "missing envelope signature".into(),
@@ -10704,7 +10724,11 @@ fn validate_envelope_signatures(
         if entry.signature.is_empty() {
             entry.signature = envelope.signature.clone();
         }
-        return Ok((entry, "namespace rules accepted and finalized".to_string()));
+        return Ok(EnvelopeValidationResult {
+            entry,
+            outcome: "namespace rules accepted and finalized".to_string(),
+            multisig: None,
+        });
     }
 
     let policy = envelope.multisig_policy.as_ref().ok_or_else(|| {
@@ -10783,12 +10807,17 @@ fn validate_envelope_signatures(
     if entry.signature.is_empty() {
         entry.signature = envelope.signature.clone();
     }
-    Ok((
+    Ok(EnvelopeValidationResult {
         entry,
-        format!(
-                "namespace rules accepted and finalized (multisig scope={signature_scope}, threshold={}, signers={})",
-                policy.threshold,
-                signed_by.join(",")
-            ),
-        ))
+        outcome: format!(
+            "namespace rules accepted and finalized (multisig scope={signature_scope}, threshold={}, signers={})",
+            policy.threshold,
+            signed_by.join(",")
+        ),
+        multisig: Some(MultisigValidationSummary {
+            signature_scope: signature_scope.to_string(),
+            threshold: policy.threshold,
+            signers: signed_by,
+        }),
+    })
 }
