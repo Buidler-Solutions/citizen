@@ -95,6 +95,7 @@ export type FormCommitmentOperation = {
   };
 };
 
+export const OFFCHAIN_ATTACHMENT_ALLOWED_MIME_TYPES: readonly string[];
 export function canonicalizeJson(value: unknown): string;
 export function sha256DigestHex(input: string | Uint8Array): Promise<string>;
 export function signCitizenPayloadWithWallet(args: { payload: unknown; provider?: WalletProvider }): Promise<CitizenPayloadSignature>;
