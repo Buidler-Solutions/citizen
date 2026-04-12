@@ -125,6 +125,20 @@ Recommended namespace rule blocks:
         "ENCRYPTED_FILE_REVOKE"
       ],
       "max_file_size_bytes": 104857600,
+      "allowed_mime_types": [
+        "audio/mpeg",
+        "audio/wav",
+        "video/mp4",
+        "video/webm",
+        "application/pdf",
+        "application/msword",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "application/vnd.ms-excel",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "image/jpeg",
+        "image/png",
+        "image/webp"
+      ],
       "allowed_encryption_modes": ["passphrase_file", "hybrid_file_acl_dek"],
       "required_consent_policy_ref": "consent.policy.encrypted-files.v1"
     }
@@ -148,6 +162,10 @@ Notes:
 
 - `offchain_encrypted_file_policy.allowed_actions` controls which
   `ENCRYPTED_FILE_*` actions are accepted by nodes for the namespace.
+- `offchain_encrypted_file_policy.allowed_mime_types` should be treated as the
+  canonical allowlist by wallet/SDK surfaces so builders get pre-submit
+  validation for attachments (audio/video/docs/sheets/images) before API
+  rejection.
 - `offchain_encrypted_payload_field_policy.offchain_encrypted_fields` declares
   required field paths that must be supplied as encrypted off-chain refs (never
   plaintext in payload).

@@ -3548,7 +3548,21 @@ mod tests {
                         let mut policy = json!({
                             "enabled": true,
                             "max_file_size_bytes": 10_485_760,
-                            "allowed_mime_types": ["application/pdf", "application/json"],
+                            "allowed_mime_types": [
+                                "audio/mpeg",
+                                "audio/wav",
+                                "video/mp4",
+                                "video/webm",
+                                "application/json",
+                                "application/pdf",
+                                "application/msword",
+                                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                                "application/vnd.ms-excel",
+                                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                                "image/jpeg",
+                                "image/png",
+                                "image/webp"
+                            ],
                             "allowed_encryption_modes": ["passphrase", "hybrid-acl"],
                             "allowed_actions": allowed_file_actions
                         });
@@ -3725,7 +3739,21 @@ mod tests {
                         let mut policy = json!({
                             "enabled": true,
                             "max_file_size_bytes": 10_485_760,
-                            "allowed_mime_types": ["application/pdf", "application/json"],
+                            "allowed_mime_types": [
+                                "audio/mpeg",
+                                "audio/wav",
+                                "video/mp4",
+                                "video/webm",
+                                "application/json",
+                                "application/pdf",
+                                "application/msword",
+                                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                                "application/vnd.ms-excel",
+                                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                                "image/jpeg",
+                                "image/png",
+                                "image/webp"
+                            ],
                             "allowed_encryption_modes": ["passphrase", "hybrid-acl"],
                             "allowed_actions": allowed_file_actions
                         });
@@ -4034,7 +4062,7 @@ mod tests {
             object_id: "PROC-001".to_string(),
             payload: json!({"event":"BID_OPENED"}),
             privacy_flag: false,
-            privacy_mode: citizen_types::PrivacyMode::Hybrid,
+            privacy_mode: citizen_types::PrivacyMode::None,
             payload_commitment: None,
             ciphertext_hex: None,
             nonce_hex: None,
