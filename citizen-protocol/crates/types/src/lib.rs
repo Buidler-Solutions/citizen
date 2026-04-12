@@ -289,8 +289,29 @@ pub struct SignedEnvelope<T> {
     pub envelope_id: Uuid,
     pub signer: String,
     pub signature: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub signature_scope: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub co_signatures: Vec<EnvelopeCoSignature>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub multisig_policy: Option<EnvelopeMultisigPolicy>,
     pub submitted_at: DateTime<Utc>,
     pub payload: T,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct EnvelopeCoSignature {
+    pub signer: String,
+    pub signature: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct EnvelopeMultisigPolicy {
+    pub threshold: u16,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub allowed_signers: Vec<String>,
+    #[serde(default)]
+    pub require_author_signature: bool,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
@@ -432,4 +453,93 @@ pub struct NetworkModel {
     pub cross_region_rtt_ms: (u64, u64),
     pub jitter_ms: u64,
     pub packet_loss: f64,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{EnvelopeCoSignature, EnvelopeMultisigPolicy, SignedEnvelope};
+    use chrono::{TimeZone, Utc};
+    use serde_json::json;
+    use uuid::Uuid;
+
+    #[test]
+    fn signed_envelope_legacy_decode_encode_parity() {
+        let raw = json!({
+            "envelope_id": "8f6ad2f0-a0a5-45f8-9360-992f20b25889",
+            "signer": "did:citizen:alice",
+            "signature": "sig:alice",
+            "submitted_at": "2026-01-01T00:00:00Z",
+            "payload": {
+                "value": "legacy"
+            }
+        });
+
+        let decoded: SignedEnvelope<serde_json::Value> =
+            serde_json::from_value(raw.clone()).expect("legacy envelope should decode");
+
+        assert!(decoded.signature_scope.is_none());
+        assert!(decoded.co_signatures.is_empty());
+        assert!(decoded.multisig_policy.is_none());
+
+        let encoded = serde_json::to_value(decoded).expect("legacy envelope should encode");
+        assert_eq!(encoded, raw);
+    }
+
+    #[test]
+    fn signed_envelope_multisig_decode_encode_parity() {
+        let envelope = SignedEnvelope {
+            envelope_id: Uuid::parse_str("8f6ad2f0-a0a5-45f8-9360-992f20b25889")
+                .expect("valid uuid"),
+            signer: "did:citizen:alice".to_string(),
+            signature: "sig:alice".to_string(),
+            signature_scope: Some("canonical_payload_v1".to_string()),
+            co_signatures: vec![EnvelopeCoSignature {
+                signer: "did:citizen:bob".to_string(),
+                signature: "sig:bob".to_string(),
+            }],
+            multisig_policy: Some(EnvelopeMultisigPolicy {
+                threshold: 2,
+                allowed_signers: vec![
+                    "did:citizen:alice".to_string(),
+                    "did:citizen:bob".to_string(),
+                ],
+                require_author_signature: true,
+            }),
+            submitted_at: Utc
+                .with_ymd_and_hms(2026, 1, 1, 0, 0, 0)
+                .single()
+                .expect("valid timestamp"),
+            payload: json!({
+                "value": "multisig"
+            }),
+        };
+
+        let encoded = serde_json::to_value(&envelope).expect("multisig envelope should encode");
+        let decoded: SignedEnvelope<serde_json::Value> =
+            serde_json::from_value(encoded.clone()).expect("multisig envelope should decode");
+
+        assert_eq!(decoded, envelope);
+        assert_eq!(
+            encoded,
+            json!({
+                "envelope_id": "8f6ad2f0-a0a5-45f8-9360-992f20b25889",
+                "signer": "did:citizen:alice",
+                "signature": "sig:alice",
+                "signature_scope": "canonical_payload_v1",
+                "co_signatures": [{
+                    "signer": "did:citizen:bob",
+                    "signature": "sig:bob"
+                }],
+                "multisig_policy": {
+                    "threshold": 2,
+                    "allowed_signers": ["did:citizen:alice", "did:citizen:bob"],
+                    "require_author_signature": true
+                },
+                "submitted_at": "2026-01-01T00:00:00Z",
+                "payload": {
+                    "value": "multisig"
+                }
+            })
+        );
+    }
 }

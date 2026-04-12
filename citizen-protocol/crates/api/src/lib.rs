@@ -817,6 +817,9 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
             envelope_id: Uuid::new_v4(),
             signer: entry.author.clone(),
             signature: entry.signature.clone(),
+            signature_scope: None,
+            co_signatures: Vec::new(),
+            multisig_policy: None,
             submitted_at: Utc::now(),
             payload: entry,
         };
@@ -4083,6 +4086,9 @@ mod tests {
             envelope_id: Uuid::new_v4(),
             signer: payload.author.clone(),
             signature: payload.signature.clone(),
+            signature_scope: None,
+            co_signatures: Vec::new(),
+            multisig_policy: None,
             submitted_at: chrono::Utc::now(),
             payload,
         }
@@ -5521,6 +5527,9 @@ mod tests {
             envelope_id: Uuid::new_v4(),
             signer: consent_entry.author.clone(),
             signature: consent_entry.signature.clone(),
+            signature_scope: None,
+            co_signatures: Vec::new(),
+            multisig_policy: None,
             submitted_at: chrono::Utc::now(),
             payload: consent_entry,
         };
@@ -5619,6 +5628,9 @@ mod tests {
             envelope_id: Uuid::new_v4(),
             signer: consent_entry.author.clone(),
             signature: consent_entry.signature.clone(),
+            signature_scope: None,
+            co_signatures: Vec::new(),
+            multisig_policy: None,
             submitted_at: chrono::Utc::now(),
             payload: consent_entry,
         };
@@ -5707,6 +5719,9 @@ mod tests {
             envelope_id: Uuid::new_v4(),
             signer: "did:author:a".to_string(),
             signature: entry.signature.clone(),
+            signature_scope: None,
+            co_signatures: Vec::new(),
+            multisig_policy: None,
             submitted_at: chrono::Utc::now(),
             payload: entry,
         };
@@ -5863,6 +5878,9 @@ mod tests {
             envelope_id: Uuid::new_v4(),
             signer: consent_entry.author.clone(),
             signature: consent_entry.signature.clone(),
+            signature_scope: None,
+            co_signatures: Vec::new(),
+            multisig_policy: None,
             submitted_at: chrono::Utc::now(),
             payload: consent_entry,
         };
@@ -5949,6 +5967,9 @@ mod tests {
             envelope_id: Uuid::new_v4(),
             signer: "did:author:a".to_string(),
             signature: "sig-file-2".to_string(),
+            signature_scope: None,
+            co_signatures: Vec::new(),
+            multisig_policy: None,
             submitted_at: chrono::Utc::now(),
             payload: entry,
         };
@@ -6022,6 +6043,9 @@ mod tests {
             envelope_id: Uuid::new_v4(),
             signer: consent_entry.author.clone(),
             signature: consent_entry.signature.clone(),
+            signature_scope: None,
+            co_signatures: Vec::new(),
+            multisig_policy: None,
             submitted_at: chrono::Utc::now(),
             payload: consent_entry,
         };
@@ -6067,6 +6091,9 @@ mod tests {
             envelope_id: Uuid::new_v4(),
             signer: "did:author:a".to_string(),
             signature: "sig-payload-1".to_string(),
+            signature_scope: None,
+            co_signatures: Vec::new(),
+            multisig_policy: None,
             submitted_at: chrono::Utc::now(),
             payload: entry,
         };
@@ -6150,6 +6177,9 @@ mod tests {
             envelope_id: Uuid::new_v4(),
             signer: consent_entry.author.clone(),
             signature: consent_entry.signature.clone(),
+            signature_scope: None,
+            co_signatures: Vec::new(),
+            multisig_policy: None,
             submitted_at: chrono::Utc::now(),
             payload: consent_entry,
         };
@@ -6195,6 +6225,9 @@ mod tests {
             envelope_id: Uuid::new_v4(),
             signer: "did:author:a".to_string(),
             signature: "sig-payload-2".to_string(),
+            signature_scope: None,
+            co_signatures: Vec::new(),
+            multisig_policy: None,
             submitted_at: chrono::Utc::now(),
             payload: entry,
         };
@@ -6293,6 +6326,9 @@ mod tests {
             envelope_id: Uuid::new_v4(),
             signer: consent_entry.author.clone(),
             signature: consent_entry.signature.clone(),
+            signature_scope: None,
+            co_signatures: Vec::new(),
+            multisig_policy: None,
             submitted_at: chrono::Utc::now(),
             payload: consent_entry,
         };
@@ -6338,6 +6374,9 @@ mod tests {
             envelope_id: Uuid::new_v4(),
             signer: "did:author:a".to_string(),
             signature: "sig-payload-extra".to_string(),
+            signature_scope: None,
+            co_signatures: Vec::new(),
+            multisig_policy: None,
             submitted_at: chrono::Utc::now(),
             payload: entry,
         };
@@ -6463,6 +6502,9 @@ mod tests {
             envelope_id: Uuid::new_v4(),
             signer: consent_entry.author.clone(),
             signature: consent_entry.signature.clone(),
+            signature_scope: None,
+            co_signatures: Vec::new(),
+            multisig_policy: None,
             submitted_at: chrono::Utc::now(),
             payload: consent_entry,
         };
@@ -6594,6 +6636,9 @@ mod tests {
             envelope_id: Uuid::new_v4(),
             signer: consent_entry.author.clone(),
             signature: consent_entry.signature.clone(),
+            signature_scope: None,
+            co_signatures: Vec::new(),
+            multisig_policy: None,
             submitted_at: chrono::Utc::now(),
             payload: consent_entry,
         };
@@ -6748,6 +6793,9 @@ mod tests {
             envelope_id: Uuid::new_v4(),
             signer: consent_entry.author.clone(),
             signature: consent_entry.signature.clone(),
+            signature_scope: None,
+            co_signatures: Vec::new(),
+            multisig_policy: None,
             submitted_at: chrono::Utc::now(),
             payload: consent_entry,
         };
@@ -6895,6 +6943,9 @@ mod tests {
             envelope_id: Uuid::new_v4(),
             signer: consent_entry.author.clone(),
             signature: consent_entry.signature.clone(),
+            signature_scope: None,
+            co_signatures: Vec::new(),
+            multisig_policy: None,
             submitted_at: chrono::Utc::now(),
             payload: consent_entry,
         };
@@ -6940,6 +6991,9 @@ mod tests {
             envelope_id: Uuid::new_v4(),
             signer: "did:author:a".to_string(),
             signature: "sig-payload-3".to_string(),
+            signature_scope: None,
+            co_signatures: Vec::new(),
+            multisig_policy: None,
             submitted_at: chrono::Utc::now(),
             payload: entry,
         };
@@ -7041,6 +7095,9 @@ mod tests {
             envelope_id: Uuid::new_v4(),
             signer: consent_entry.author.clone(),
             signature: consent_entry.signature.clone(),
+            signature_scope: None,
+            co_signatures: Vec::new(),
+            multisig_policy: None,
             submitted_at: chrono::Utc::now(),
             payload: consent_entry,
         };
@@ -7099,6 +7156,9 @@ mod tests {
             envelope_id: Uuid::new_v4(),
             signer: "did:author:a".to_string(),
             signature: "sig-invalid-action".to_string(),
+            signature_scope: None,
+            co_signatures: Vec::new(),
+            multisig_policy: None,
             submitted_at: chrono::Utc::now(),
             payload: LedgerEntry {
                 entry_id: Uuid::new_v4(),
@@ -7221,6 +7281,9 @@ mod tests {
             envelope_id: Uuid::new_v4(),
             signer: "did:citizen:holder-1".to_string(),
             signature: consent_entry.signature.clone(),
+            signature_scope: None,
+            co_signatures: Vec::new(),
+            multisig_policy: None,
             submitted_at: chrono::Utc::now(),
             payload: consent_entry,
         };
@@ -7279,6 +7342,9 @@ mod tests {
             envelope_id: Uuid::new_v4(),
             signer: "did:author:a".to_string(),
             signature: "sig-share-allowed".to_string(),
+            signature_scope: None,
+            co_signatures: Vec::new(),
+            multisig_policy: None,
             submitted_at: chrono::Utc::now(),
             payload: LedgerEntry {
                 entry_id: Uuid::new_v4(),
@@ -7363,6 +7429,9 @@ mod tests {
             envelope_id: Uuid::new_v4(),
             signer: "did:citizen:holder-1".to_string(),
             signature: "sig-consent-read-ok".to_string(),
+            signature_scope: None,
+            co_signatures: Vec::new(),
+            multisig_policy: None,
             submitted_at: chrono::Utc::now(),
             payload: LedgerEntry {
                 entry_id: Uuid::new_v4(),
@@ -9598,6 +9667,9 @@ mod tests {
             envelope_id: Uuid::new_v4(),
             signer: consent_entry.author.clone(),
             signature: consent_entry.signature.clone(),
+            signature_scope: None,
+            co_signatures: Vec::new(),
+            multisig_policy: None,
             submitted_at: chrono::Utc::now(),
             payload: consent_entry,
         };
@@ -9741,6 +9813,9 @@ mod tests {
             envelope_id: Uuid::new_v4(),
             signer: consent_entry.author.clone(),
             signature: consent_entry.signature.clone(),
+            signature_scope: None,
+            co_signatures: Vec::new(),
+            multisig_policy: None,
             submitted_at: chrono::Utc::now(),
             payload: consent_entry,
         };
@@ -9852,6 +9927,9 @@ mod tests {
             envelope_id: Uuid::new_v4(),
             signer: consent_entry.author.clone(),
             signature: consent_entry.signature.clone(),
+            signature_scope: None,
+            co_signatures: Vec::new(),
+            multisig_policy: None,
             submitted_at: chrono::Utc::now(),
             payload: consent_entry,
         };
@@ -10009,6 +10087,9 @@ mod tests {
             envelope_id: Uuid::new_v4(),
             signer: consent_entry.author.clone(),
             signature: consent_entry.signature.clone(),
+            signature_scope: None,
+            co_signatures: Vec::new(),
+            multisig_policy: None,
             submitted_at: chrono::Utc::now(),
             payload: consent_entry,
         };
@@ -10165,6 +10246,9 @@ mod tests {
             envelope_id: Uuid::new_v4(),
             signer: consent_entry.author.clone(),
             signature: consent_entry.signature.clone(),
+            signature_scope: None,
+            co_signatures: Vec::new(),
+            multisig_policy: None,
             submitted_at: chrono::Utc::now(),
             payload: consent_entry,
         };
