@@ -20,6 +20,9 @@ export class IndexerMetricsAccessService {
   private readonly oncallRunbook =
     process.env.INDEXER_METRICS_ONCALL_RUNBOOK ??
     'citizen-protocol/docs/INDEXER_METRICS_ROLLOUT_COMPLETION.md';
+  private readonly releaseNotesChecklist =
+    process.env.INDEXER_METRICS_RELEASE_NOTES_CHECKLIST ??
+    'citizen-protocol/docs/INDEXER_METRICS_ROLLOUT_COMPLETION.md#4-release-notes-checklist-indexer-metrics';
   private readonly rateLimitBuckets = new Map<string, RateLimitBucket>();
 
   getAccessPolicySnapshot(): {
@@ -27,12 +30,14 @@ export class IndexerMetricsAccessService {
     metrics_auth_required: boolean;
     metrics_rate_limit_rpm: number;
     oncall_runbook: string;
+    release_notes_checklist: string;
   } {
     return {
       profile: this.deploymentProfile,
       metrics_auth_required: this.authRequired,
       metrics_rate_limit_rpm: this.rateLimitPerMinute,
       oncall_runbook: this.oncallRunbook,
+      release_notes_checklist: this.releaseNotesChecklist,
     };
   }
 

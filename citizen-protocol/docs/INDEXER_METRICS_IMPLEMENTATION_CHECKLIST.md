@@ -200,7 +200,7 @@ Implementation artifact: `explorer/backend/src/app.controller.ts` + `explorer/ba
 
 ## Checkpoint 10 — Rollout and governance alignment
 
-- [ ] Stage rollout:
+- [x] Stage rollout:
   - [x] localnet,
   - [x] shared dev/test environment,
   - [x] production candidate.
