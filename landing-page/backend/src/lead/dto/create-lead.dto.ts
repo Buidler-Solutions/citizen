@@ -47,7 +47,6 @@ export class CreateLeadDto {
 
   @IsOptional()
   @IsString()
-  @MaxLength(280000)
   attachmentBase64?: string;
 
   @IsString()
@@ -68,7 +67,6 @@ export class CreateLeadDto {
   walletPayloadHash!: string;
 
   @IsString()
-  @MaxLength(300000)
   walletSigningPayload!: string;
 
   @IsString()

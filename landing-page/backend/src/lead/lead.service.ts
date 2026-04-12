@@ -35,6 +35,8 @@ const DEFAULT_CAMPAIGN_CARDS = [
 const DEFAULT_RELAY_MAX_ATTEMPTS = 3;
 const DEFAULT_RELAY_RETRY_BACKOFF_MS = 250;
 const MAX_RELAY_RETRY_BACKOFF_MS = 5000;
+const MAX_ONBOARDING_ATTACHMENT_BYTES = 10 * 1024 * 1024;
+const MAX_WALLET_SIGNING_PAYLOAD_CHARS = 17_000_000;
 const DEFAULT_RUNTIME_NAMESPACE = 'forms.commitment';
 const DEFAULT_RUNTIME_ACTION = 'SUBMIT_ONBOARDING_INTEREST';
 const DEFAULT_RUNTIME_AUTHOR = 'forms.commitment';
@@ -203,6 +205,10 @@ export class LeadService {
       submitted_at: undefined,
     };
 
+    if (payload.walletSigningPayload.length > MAX_WALLET_SIGNING_PAYLOAD_CHARS) {
+      throw new BadRequestException('walletSigningPayload exceeds the maximum supported size for onboarding submissions.');
+    }
+
     let parsed: Record<string, unknown>;
     try {
       parsed = JSON.parse(payload.walletSigningPayload) as Record<string, unknown>;
@@ -273,7 +279,11 @@ export class LeadService {
     if (!/^[a-z0-9+/=]+$/i.test(attachmentBase64)) {
       throw new BadRequestException('attachmentBase64 must be a valid base64 string.');
     }
-    const computedHash = createHash('sha256').update(Buffer.from(attachmentBase64, 'base64')).digest('hex');
+    const attachmentBuffer = Buffer.from(attachmentBase64, 'base64');
+    if (attachmentBuffer.length > MAX_ONBOARDING_ATTACHMENT_BYTES) {
+      throw new BadRequestException('attachmentBase64 exceeds the 10MB maximum attachment size.');
+    }
+    const computedHash = createHash('sha256').update(attachmentBuffer).digest('hex');
     if (attachmentSha256.toLowerCase() !== `sha256:${computedHash}`) {
       throw new BadRequestException('attachmentSha256 does not match attachmentBase64.');
     }

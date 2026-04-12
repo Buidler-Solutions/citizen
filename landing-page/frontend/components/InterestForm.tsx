@@ -786,8 +786,8 @@ export function InterestForm() {
       setSignedSubmission(null);
       return;
     }
-    if (file.size > 150 * 1024) {
-      setStatus('Attachment must be 150KB or smaller for wallet-signed simulation flow.');
+    if (file.size > 10 * 1024 * 1024) {
+      setStatus('Attachment must be 10MB or smaller for wallet-signed simulation flow.');
       event.target.value = '';
       return;
     }
