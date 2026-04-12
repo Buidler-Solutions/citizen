@@ -1,4 +1,5 @@
 import { HttpException, HttpStatus, Injectable, UnauthorizedException } from '@nestjs/common';
+import { IndexerDeploymentProfile } from './metrics.types';
 
 type RateLimitBucket = {
   windowStartedAtMs: number;
@@ -7,10 +8,33 @@ type RateLimitBucket = {
 
 @Injectable()
 export class IndexerMetricsAccessService {
-  private readonly authRequired = (process.env.INDEXER_METRICS_AUTH_REQUIRED ?? 'false') === 'true';
+  private readonly deploymentProfile = this.resolveDeploymentProfile();
+  private readonly authRequired =
+    (process.env.INDEXER_METRICS_AUTH_REQUIRED ??
+      String(this.profileDefaults(this.deploymentProfile).authRequired)) === 'true';
   private readonly apiKey = process.env.INDEXER_METRICS_API_KEY?.trim() ?? '';
-  private readonly rateLimitPerMinute = Number(process.env.INDEXER_METRICS_RATE_LIMIT_RPM ?? '0');
+  private readonly rateLimitPerMinute = Number(
+    process.env.INDEXER_METRICS_RATE_LIMIT_RPM ??
+      String(this.profileDefaults(this.deploymentProfile).rateLimitPerMinute),
+  );
+  private readonly oncallRunbook =
+    process.env.INDEXER_METRICS_ONCALL_RUNBOOK ??
+    'citizen-protocol/docs/INDEXER_METRICS_ROLLOUT_COMPLETION.md';
   private readonly rateLimitBuckets = new Map<string, RateLimitBucket>();
+
+  getAccessPolicySnapshot(): {
+    profile: IndexerDeploymentProfile;
+    metrics_auth_required: boolean;
+    metrics_rate_limit_rpm: number;
+    oncall_runbook: string;
+  } {
+    return {
+      profile: this.deploymentProfile,
+      metrics_auth_required: this.authRequired,
+      metrics_rate_limit_rpm: this.rateLimitPerMinute,
+      oncall_runbook: this.oncallRunbook,
+    };
+  }
 
   enforce(headers: Record<string, string | string[] | undefined>, clientIp: string | undefined): void {
     const clientKey = this.resolveClientKey(headers, clientIp);
@@ -76,5 +100,26 @@ export class IndexerMetricsAccessService {
       return raw[0]?.trim() || undefined;
     }
     return raw?.trim() || undefined;
+  }
+
+  private resolveDeploymentProfile(): IndexerDeploymentProfile {
+    const raw = (process.env.INDEXER_METRICS_DEPLOYMENT_PROFILE ?? 'localnet').trim().toLowerCase();
+    if (raw === 'localnet' || raw === 'shared-dev' || raw === 'production-candidate') {
+      return raw;
+    }
+    return 'localnet';
+  }
+
+  private profileDefaults(profile: IndexerDeploymentProfile): {
+    authRequired: boolean;
+    rateLimitPerMinute: number;
+  } {
+    if (profile === 'shared-dev') {
+      return { authRequired: true, rateLimitPerMinute: 120 };
+    }
+    if (profile === 'production-candidate') {
+      return { authRequired: true, rateLimitPerMinute: 60 };
+    }
+    return { authRequired: false, rateLimitPerMinute: 0 };
   }
 }

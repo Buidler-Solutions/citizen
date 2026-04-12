@@ -82,6 +82,22 @@ let AppController = class AppController {
         this.indexerMetricsAccessService.enforce(headers ?? {}, req?.ip);
         return this.indexerMetricsService.queryTps(this.parseWindow(window), this.optionalInteger(from, 'from'), this.optionalInteger(to, 'to'), cursor, this.optionalInteger(limit, 'limit'));
     }
+    async metricsBackfill(body, headers, req) {
+        this.indexerMetricsAccessService.enforce(headers ?? {}, req?.ip);
+        return this.indexerMetricsService.backfill(body?.from_height ?? 0, body?.to_height);
+    }
+    async metricsVerifySamples(sampleCount, seed, headers, req) {
+        this.indexerMetricsAccessService.enforce(headers ?? {}, req?.ip);
+        return this.indexerMetricsService.verifySampledHeights(this.optionalInteger(sampleCount, 'sample_count') ?? 10, this.optionalInteger(seed, 'seed') ?? 1337);
+    }
+    async metricsVerifyTps(window, from, to, headers, req) {
+        this.indexerMetricsAccessService.enforce(headers ?? {}, req?.ip);
+        return this.indexerMetricsService.crossCheckTps(this.parseWindow(window), this.optionalInteger(from, 'from'), this.optionalInteger(to, 'to'));
+    }
+    async metricsVerifyEvidence(headers, req) {
+        this.indexerMetricsAccessService.enforce(headers ?? {}, req?.ip);
+        return this.indexerMetricsService.buildEvidenceBundle();
+    }
     parseWindow(window) {
         const value = window ?? '60s';
         if (value === '10s' || value === '60s' || value === '5m' || value === '1h') {
@@ -251,6 +267,44 @@ __decorate([
     __metadata("design:paramtypes", [String, String, String, String, String, Object, Object]),
     __metadata("design:returntype", Promise)
 ], AppController.prototype, "metricsTps", null);
+__decorate([
+    (0, common_1.Post)('metrics/backfill'),
+    __param(0, (0, common_1.Body)()),
+    __param(1, (0, common_1.Headers)()),
+    __param(2, (0, common_1.Req)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, Object, Object]),
+    __metadata("design:returntype", Promise)
+], AppController.prototype, "metricsBackfill", null);
+__decorate([
+    (0, common_1.Get)('metrics/verify/samples'),
+    __param(0, (0, common_1.Query)('sample_count')),
+    __param(1, (0, common_1.Query)('seed')),
+    __param(2, (0, common_1.Headers)()),
+    __param(3, (0, common_1.Req)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String, Object, Object]),
+    __metadata("design:returntype", Promise)
+], AppController.prototype, "metricsVerifySamples", null);
+__decorate([
+    (0, common_1.Get)('metrics/verify/tps'),
+    __param(0, (0, common_1.Query)('window')),
+    __param(1, (0, common_1.Query)('from')),
+    __param(2, (0, common_1.Query)('to')),
+    __param(3, (0, common_1.Headers)()),
+    __param(4, (0, common_1.Req)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String, String, Object, Object]),
+    __metadata("design:returntype", Promise)
+], AppController.prototype, "metricsVerifyTps", null);
+__decorate([
+    (0, common_1.Get)('metrics/verify/evidence'),
+    __param(0, (0, common_1.Headers)()),
+    __param(1, (0, common_1.Req)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, Object]),
+    __metadata("design:returntype", Promise)
+], AppController.prototype, "metricsVerifyEvidence", null);
 exports.AppController = AppController = __decorate([
     (0, common_1.Controller)(),
     __metadata("design:paramtypes", [citizen_service_1.CitizenService,

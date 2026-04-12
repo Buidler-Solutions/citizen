@@ -48,6 +48,8 @@ Backend environment variables:
 - `INDEXER_METRICS_AUTH_REQUIRED` - when `true`, metrics endpoints require API key auth (defaults to `false`).
 - `INDEXER_METRICS_API_KEY` - shared secret accepted via `x-indexer-api-key` or `Authorization: Bearer <key>` when auth is enabled.
 - `INDEXER_METRICS_RATE_LIMIT_RPM` - max metrics requests/minute per caller key/IP (`0` disables rate limiting; default `0`).
+- `INDEXER_METRICS_DEPLOYMENT_PROFILE` - deployment posture preset (`localnet`, `shared-dev`, `production-candidate`; defaults to `localnet`) that sets auth/rate-limit defaults when explicit env overrides are absent.
+- `INDEXER_METRICS_ONCALL_RUNBOOK` - optional runbook reference surfaced in summary payload (defaults to `citizen-protocol/docs/INDEXER_METRICS_ROLLOUT_COMPLETION.md`).
 
 Indexer metrics endpoints:
 - `GET /metrics/summary`
@@ -61,6 +63,10 @@ Indexer metrics endpoints:
 - `GET /metrics/verify/evidence`
 
 `GET /metrics/summary` now includes:
+  - `deployment` metadata:
+    - active deployment profile,
+    - effective metrics auth/rate-limit policy,
+    - operator runbook reference path,
   - `internal_metrics` snapshots for:
     - cumulative retry/failure counters,
     - block processing latency (`samples`, `avg`, `p95`, `max`, `last` in ms),
@@ -68,6 +74,11 @@ Indexer metrics endpoints:
     - and ingestion lag (in blocks),
 - `slo` status/checks for freshness, availability proxy, latency, and correctness proxy,
 - `alerts` with activation state + operator playbook steps for stalled cursor, sustained lag, and checksum mismatch conditions.
+
+Recommended profile progression for rollout:
+1. `localnet` (no-auth local bring-up),
+2. `shared-dev` (team-shared environment with auth/rate limiting),
+3. `production-candidate` (pre-prod hardening + fallback rehearsals).
 
 ### Frontend
 ```bash
