@@ -75,7 +75,7 @@ This checklist captures the implementation checkpoints for upgrading Citizen fro
 ### 4.1 Node SDK
 
 - [x] Keep existing `wrapEnvelope` behavior for legacy compatibility.
-- [ ] Add multisig helpers:
+- [x] Add multisig helpers:
   - [x] `wrapEnvelopeMulti(...)`
   - [x] `appendCoSignature(...)`
   - [x] `finalizeEnvelope(...)`
@@ -84,12 +84,12 @@ This checklist captures the implementation checkpoints for upgrading Citizen fro
 
 ### 4.2 Wallet CLI
 
-- [ ] Add compose/sign/finalize commands:
-  - [ ] `compose-envelope-init`
-  - [ ] `compose-envelope-sign --as <did>`
-  - [ ] `compose-envelope-finalize`
-  - [ ] `submit-envelope`
-- [ ] Preserve current single-signer submit behavior.
+- [x] Add compose/sign/finalize commands:
+  - [x] `compose-envelope-init`
+  - [x] `compose-envelope-sign --as <did>`
+  - [x] `compose-envelope-finalize`
+  - [x] `submit-envelope`
+- [x] Preserve current single-signer submit behavior.
 
 ### 4.3 Browser Extension (Compose tab)
 
@@ -103,11 +103,11 @@ This checklist captures the implementation checkpoints for upgrading Citizen fro
 
 ## 5) Compose Multisigner Draft Artifact (Compatibility-Friendly)
 
-- [ ] Standardize draft schema: `citizen.compose.multisig-draft.v1`.
-- [ ] Include immutable canonical payload/hash and signer policy metadata.
-- [ ] Include collected signatures as an append-only list.
-- [ ] Include `runtime_compat.envelope_v1` snapshot for legacy tooling during migration.
-- [ ] Validate draft integrity before accepting imported signatures.
+- [x] Standardize draft schema: `citizen.compose.multisig-draft.v1`.
+- [x] Include immutable canonical payload/hash and signer policy metadata.
+- [x] Include collected signatures as an append-only list.
+- [x] Include `runtime_compat.envelope_v1` snapshot for legacy tooling during migration.
+- [x] Validate draft integrity before accepting imported signatures.
 
 ---
 
@@ -123,10 +123,10 @@ This checklist captures the implementation checkpoints for upgrading Citizen fro
 
 ## 7) Security & Determinism Guardrails
 
-- [ ] Canonical preimage must be byte-stable across signers.
-- [ ] Reject mutated drafts after first signature.
+- [x] Canonical preimage must be byte-stable across signers.
+- [x] Reject mutated drafts after first signature.
 - [ ] Enforce signature scope and anti-replay binding (request ID/timestamps where applicable).
-- [ ] Enforce signer uniqueness in threshold count.
+- [x] Enforce signer uniqueness in threshold count.
 - [ ] Record auditable signer metadata in receipts/logs.
 
 ---

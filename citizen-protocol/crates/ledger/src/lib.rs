@@ -613,12 +613,15 @@ impl<S: LedgerStorage + 'static> Ledger<S> {
     }
 
     fn envelope_multisig_policy(&self, entry: &LedgerEntry, config: &Value) -> Result<()> {
-        let targeted_actions = config.get("actions").and_then(Value::as_array).map(|actions| {
-            actions
-                .iter()
-                .filter_map(Value::as_str)
-                .collect::<HashSet<&str>>()
-        });
+        let targeted_actions = config
+            .get("actions")
+            .and_then(Value::as_array)
+            .map(|actions| {
+                actions
+                    .iter()
+                    .filter_map(Value::as_str)
+                    .collect::<HashSet<&str>>()
+            });
         if let Some(actions) = targeted_actions {
             if !actions.is_empty() && !actions.contains(entry.action.as_str()) {
                 return Ok(());
@@ -652,9 +655,14 @@ impl<S: LedgerStorage + 'static> Ledger<S> {
             ));
         }
 
-        let threshold = config.get("threshold").and_then(Value::as_u64).ok_or_else(|| {
-            ProtocolError::ValidationFailed("envelope_multisig_policy requires threshold".into())
-        })? as usize;
+        let threshold = config
+            .get("threshold")
+            .and_then(Value::as_u64)
+            .ok_or_else(|| {
+                ProtocolError::ValidationFailed(
+                    "envelope_multisig_policy requires threshold".into(),
+                )
+            })? as usize;
         if threshold == 0 || threshold > allowed_signer_set.len() {
             return Err(ProtocolError::ValidationFailed(
                 "envelope_multisig_policy threshold must be between 1 and allowed_signers length"
@@ -692,8 +700,7 @@ impl<S: LedgerStorage + 'static> Ledger<S> {
             })?;
         if received_scope != expected_scope {
             return Err(ProtocolError::ValidationFailed(
-                "payload.envelope_multisig.signature_scope does not match namespace policy"
-                    .into(),
+                "payload.envelope_multisig.signature_scope does not match namespace policy".into(),
             ));
         }
 
@@ -717,11 +724,14 @@ impl<S: LedgerStorage + 'static> Ledger<S> {
                             .into(),
                     )
                 })?;
-                let signer_id = signer_obj.get("id").and_then(Value::as_str).ok_or_else(|| {
-                    ProtocolError::ValidationFailed(
-                        "payload.envelope_multisig.signers object entries require id".into(),
-                    )
-                })?;
+                let signer_id = signer_obj
+                    .get("id")
+                    .and_then(Value::as_str)
+                    .ok_or_else(|| {
+                        ProtocolError::ValidationFailed(
+                            "payload.envelope_multisig.signers object entries require id".into(),
+                        )
+                    })?;
                 let signer_role = signer_obj.get("role").and_then(Value::as_str);
                 (signer_id, signer_role)
             };
@@ -2986,8 +2996,10 @@ mod tests {
         )]);
 
         let mut entry = test_entry(namespace);
-        entry.payload =
-            envelope_multisig_payload("canonical_payload_v1", json!(["did:key:alice", "did:key:bob"]));
+        entry.payload = envelope_multisig_payload(
+            "canonical_payload_v1",
+            json!(["did:key:alice", "did:key:bob"]),
+        );
         let err = ledger
             .apply_entry(entry)
             .expect_err("threshold shortfall should fail");
@@ -3013,8 +3025,10 @@ mod tests {
         )]);
 
         let mut entry = test_entry(namespace);
-        entry.payload =
-            envelope_multisig_payload("canonical_payload_v1", json!(["did:key:alice", "did:key:mallory"]));
+        entry.payload = envelope_multisig_payload(
+            "canonical_payload_v1",
+            json!(["did:key:alice", "did:key:mallory"]),
+        );
         let err = ledger
             .apply_entry(entry)
             .expect_err("unauthorized signer should fail");
