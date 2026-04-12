@@ -1,0 +1,58 @@
+{
+  "header": {
+    "height": 120,
+    "prev_hash": "sha256:sim-119",
+    "entry_root": "sha256:sim-120-root",
+    "proposer": "validator-sim-alpha",
+    "timestamp": 1735690300,
+    "commit_proof": {
+      "aggregated_signature": "agg-sig-sim-120",
+      "participant_ids": ["validator-sim-alpha", "validator-sim-beta", "validator-sim-gamma"]
+    }
+  },
+  "entries": [
+    {
+      "entry_id": "88888888-8888-8888-8888-888888888888",
+      "namespace": "identity.citizen",
+      "action": "UPDATE_PROFILE",
+      "object_id": "did:citizen:sim:alex",
+      "payload": {
+        "display_name": "Alex Rivera",
+        "region": "NA-2",
+        "version": 5
+      },
+      "author": "did:key:sim-author-1",
+      "signature": "ed25519:sim-signature-1",
+      "timestamp": 1735690301
+    },
+    {
+      "entry_id": "99999999-9999-9999-9999-999999999999",
+      "namespace": "health.claims",
+      "action": "UPSERT_HYBRID",
+      "object_id": "claim-sim-2026-22",
+      "payload": {
+        "public": {
+          "claim_id": "SIM-22",
+          "status": "approved"
+        },
+        "encrypted_fields": {
+          "diagnosis": "0xdeafbeef",
+          "attachment_ref": "obj://sim/22"
+        }
+      },
+      "privacy_flag": true,
+      "privacy_mode": "hybrid",
+      "payload_commitment": "sha256:sim-claim-22",
+      "ciphertext_hex": "0a0b0c0d0e0f",
+      "nonce_hex": "abcdef012345",
+      "salt_hex": "9988aabbccdd",
+      "authorized_readers": ["did:key:sim-auditor"],
+      "field_reader_acls": {
+        "diagnosis": ["did:key:sim-auditor"]
+      },
+      "author": "did:key:sim-author-2",
+      "signature": "ed25519:sim-signature-2",
+      "timestamp": 1735690302
+    }
+  ]
+}

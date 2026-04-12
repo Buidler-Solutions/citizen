@@ -15,6 +15,16 @@ fixtures:
     source_file: entry_case_unicode_nested.json
     expected_weight_bytes: 361
     notes: Nested map/array and unicode payload values.
+  - fixture_id: entry_case_large_payload
+    kind: entry
+    source_file: entry_case_large_payload.json
+    expected_weight_bytes: 1117
+    notes: Boundary case for large encrypted-like payload blobs.
+  - fixture_id: entry_case_selective_encrypted_fields
+    kind: entry
+    source_file: entry_case_selective_encrypted_fields.json
+    expected_weight_bytes: 1064
+    notes: Boundary case for mixed plaintext metadata and selective encrypted fields.
   - fixture_id: block_case_empty
     kind: block
     source_file: block_case_empty.json
@@ -25,3 +35,8 @@ fixtures:
     source_file: block_case_mixed_entries.json
     expected_weight_bytes: 1004
     notes: Mixed plain and privacy-flagged entries.
+  - fixture_id: block_case_simulation_regression
+    kind: block
+    source_file: block_case_simulation_regression.json
+    expected_weight_bytes: 1295
+    notes: Regression fixture sampled from simulation-style committed block shape.
