@@ -28,27 +28,27 @@ This checklist captures the implementation checkpoints for upgrading Citizen fro
 
 ### 2.1 `/api/v1/envelopes/submit`
 
-- [ ] Preserve legacy validation branch when `co_signatures` is empty.
-- [ ] Add multisig validation branch when `co_signatures` is present:
-  - [ ] Verify canonical preimage consistency.
-  - [ ] Verify each co-signature against declared signer key material.
-  - [ ] Enforce signer uniqueness.
-  - [ ] Enforce threshold from `multisig_policy`.
-  - [ ] Enforce author participation requirement (unless policy explicitly allows otherwise).
+- [x] Preserve legacy validation branch when `co_signatures` is empty.
+- [x] Add multisig validation branch when `co_signatures` is present:
+  - [x] Verify canonical preimage consistency.
+  - [x] Verify each co-signature against declared signer key material.
+  - [x] Enforce signer uniqueness.
+  - [x] Enforce threshold from `multisig_policy`.
+  - [x] Enforce author participation requirement (unless policy explicitly allows otherwise).
 
 ### 2.2 `/api/v1/envelopes/submit-batch`
 
-- [ ] Mirror the same legacy + multisig branching logic used in single submit.
-- [ ] Ensure deterministic per-envelope error semantics for failed items.
+- [x] Mirror the same legacy + multisig branching logic used in single submit.
+- [x] Ensure deterministic per-envelope error semantics for failed items.
 
 ### 2.3 API Tests
 
-- [ ] Add tests for legacy acceptance (no regression).
-- [ ] Add tests for valid multisig acceptance.
-- [ ] Add tests for threshold failures.
-- [ ] Add tests for unauthorized signer failures.
-- [ ] Add tests for duplicate signer failures.
-- [ ] Add tests for signature scope mismatch failures.
+- [x] Add tests for legacy acceptance (no regression).
+- [x] Add tests for valid multisig acceptance.
+- [x] Add tests for threshold failures.
+- [x] Add tests for unauthorized signer failures.
+- [x] Add tests for duplicate signer failures.
+- [x] Add tests for signature scope mismatch failures.
 
 ---
 
