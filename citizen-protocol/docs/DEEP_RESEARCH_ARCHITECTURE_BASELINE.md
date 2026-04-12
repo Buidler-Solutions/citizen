@@ -54,6 +54,11 @@ Protocol requirements:
 - DEK-based hybrid encryption paths where payloads/field bundles are encrypted off-chain and key access is controlled by per-reader key wraps.
 - Deterministic per-payload commitments (and deterministic selective-field commitment views) that remain verifiable across node, wallet, dApp, and explorer surfaces.
 
+Implementation-status note (as of 2026-04-12):
+
+- The repository implements namespace-governed off-chain encrypted-file intent/commit/read/revoke API flows and deterministic commitment anchoring.
+- Runtime object-store execution remains deployment-configurable (feature flag + object-store profile wiring), so operators should treat off-chain encrypted storage as an active floating option for large encrypted artifacts when namespace on-chain-accepted size constraints are exceeded.
+
 ## Interoperability Direction (Staged)
 
 Interoperability must be standards-led and phased:
