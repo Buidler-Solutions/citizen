@@ -8,6 +8,7 @@ type CommitProof = {
 
 export type BlockSummary = {
   height: number;
+  block_weight_bytes?: number;
   header: {
     timestamp: number;
     proposer: string;

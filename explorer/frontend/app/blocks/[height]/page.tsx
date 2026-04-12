@@ -3,6 +3,8 @@ import { fetchBlockByHeight } from '../../lib/blocks';
 import { shortHash, toReadableDate } from '../../lib/format';
 import CopyableHash from '../../components/copyable-hash';
 import { blockDetailHref, parseBlockHeightParam } from '../../lib/block-routes';
+import { resolveEntryWeights } from '../../lib/indexer-metrics';
+import { computeCanonicalWeight } from '../../lib/local-indexer';
 
 export const dynamic = 'force-dynamic';
 
@@ -110,6 +112,11 @@ export default async function BlockDetailPage({
   }
 
   const block = blockResponse.data.block;
+  const entryIds = block.entries
+    .map((entry) => (entry && typeof entry === 'object' ? (entry as { entry_id?: unknown }).entry_id : null))
+    .filter((entryId): entryId is string => typeof entryId === 'string');
+  const entryWeights = await resolveEntryWeights(entryIds, block.entries);
+  const blockWeightBytes = computeCanonicalWeight(block);
 
   return (
     <>
@@ -118,6 +125,7 @@ export default async function BlockDetailPage({
           <p className="eyebrow">Citizen Explorer</p>
           <h1>Block #{block.header.height}</h1>
           <p className="subtitle">Source: {blockResponse.source}</p>
+          <p className="subtitle">Entry weight source: {entryWeights.source}</p>
         </div>
       </section>
 
@@ -173,6 +181,10 @@ export default async function BlockDetailPage({
               value={block.header.commit_proof.aggregated_signature}
               preview={shortHash(block.header.commit_proof.aggregated_signature)}
             />
+          </div>
+          <div className="row">
+            <span className="label">Block weight</span>
+            <span>{blockWeightBytes.toLocaleString('en-US')} bytes (runtime)</span>
           </div>
         </div>
       </section>
@@ -238,6 +250,15 @@ export default async function BlockDetailPage({
                   <div className="row">
                     <span className="label">Entry timestamp</span>
                     <span>{renderEpoch(asNumber(entryRecord?.timestamp))}</span>
+                  </div>
+                  <div className="row">
+                    <span className="label">Entry weight</span>
+                    <span>{(() => {
+                      const entryId = asString(entryRecord?.entry_id);
+                      if (!entryId) return 'N/A';
+                      const bytes = entryWeights.weights.get(entryId);
+                      return bytes === undefined ? 'N/A' : `${bytes.toLocaleString('en-US')} bytes`;
+                    })()}</span>
                   </div>
                   <div className="row">
                     <span className="label">Privacy mode</span>
