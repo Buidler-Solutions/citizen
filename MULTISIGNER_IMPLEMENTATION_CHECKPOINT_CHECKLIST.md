@@ -13,14 +13,14 @@ This checklist captures the implementation checkpoints for upgrading Citizen fro
 
 ## 1) Protocol Types: Backward-Compatible Extension
 
-- [ ] Extend envelope schema with optional multisig fields (do **not** remove existing `signer` + `signature`):
-  - [ ] `signature_scope` (e.g., `canonical_payload_v1`)
-  - [ ] `co_signatures: Vec<EnvelopeCoSignature>` (default empty)
-  - [ ] `multisig_policy: Option<EnvelopeMultisigPolicy>`
-- [ ] Keep serde defaults so legacy envelopes deserialize unchanged.
-- [ ] Add unit tests for:
-  - [ ] legacy envelope decode/encode parity
-  - [ ] multisig envelope decode/encode parity
+- [x] Extend envelope schema with optional multisig fields (do **not** remove existing `signer` + `signature`):
+  - [x] `signature_scope` (e.g., `canonical_payload_v1`)
+  - [x] `co_signatures: Vec<EnvelopeCoSignature>` (default empty)
+  - [x] `multisig_policy: Option<EnvelopeMultisigPolicy>`
+- [x] Keep serde defaults so legacy envelopes deserialize unchanged.
+- [x] Add unit tests for:
+  - [x] legacy envelope decode/encode parity
+  - [x] multisig envelope decode/encode parity
 
 ---
 

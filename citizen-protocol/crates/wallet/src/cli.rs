@@ -1288,6 +1288,9 @@ fn submit_entry(
         envelope_id: Uuid::new_v4(),
         signer: entry.author.clone(),
         signature: entry.signature.clone(),
+        signature_scope: None,
+        co_signatures: Vec::new(),
+        multisig_policy: None,
         submitted_at: Utc::now(),
         payload: entry.clone(),
     };
