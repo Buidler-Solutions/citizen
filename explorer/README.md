@@ -50,6 +50,7 @@ Backend environment variables:
 - `INDEXER_METRICS_RATE_LIMIT_RPM` - max metrics requests/minute per caller key/IP (`0` disables rate limiting; default `0`).
 - `INDEXER_METRICS_DEPLOYMENT_PROFILE` - deployment posture preset (`localnet`, `shared-dev`, `production-candidate`; defaults to `localnet`) that sets auth/rate-limit defaults when explicit env overrides are absent.
 - `INDEXER_METRICS_ONCALL_RUNBOOK` - optional runbook reference surfaced in summary payload (defaults to `citizen-protocol/docs/INDEXER_METRICS_ROLLOUT_COMPLETION.md`).
+- `INDEXER_METRICS_RELEASE_NOTES_CHECKLIST` - optional release-notes checklist artifact reference surfaced in summary payload (defaults to `citizen-protocol/docs/INDEXER_METRICS_ROLLOUT_COMPLETION.md#4-release-notes-checklist-indexer-metrics`).
 
 Indexer metrics endpoints:
 - `GET /metrics/summary`
@@ -67,6 +68,7 @@ Indexer metrics endpoints:
     - active deployment profile,
     - effective metrics auth/rate-limit policy,
     - operator runbook reference path,
+    - release-notes checklist artifact path,
   - `internal_metrics` snapshots for:
     - cumulative retry/failure counters,
     - block processing latency (`samples`, `avg`, `p95`, `max`, `last` in ms),

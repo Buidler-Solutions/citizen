@@ -84,6 +84,7 @@ export type IndexerSummary = {
     metrics_auth_required: boolean;
     metrics_rate_limit_rpm: number;
     oncall_runbook: string;
+    release_notes_checklist: string;
   };
   cursor: CursorState;
   counts: {
