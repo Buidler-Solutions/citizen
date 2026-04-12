@@ -10,7 +10,32 @@ type BlockLookupResponse = {
   };
 };
 
+type BackendSummary = {
+  lag?: {
+    indexed_height?: number;
+  };
+};
+
+type BackendBlockMetric = {
+  block_height: number;
+  committed_at: number;
+  entry_count: number;
+  block_weight_bytes: number;
+};
+
+type BackendEntryMetric = {
+  entry_id: string;
+  committed_at: number;
+  entry_weight_bytes: number;
+  signer: string | null;
+};
+
+type BackendTpsPoint = {
+  tps: number;
+};
+
 const nodeRuntimeBase = process.env.NEXT_PUBLIC_NODE_RUNTIME_URL ?? 'http://127.0.0.1:8081';
+const explorerBackendBase = process.env.NEXT_PUBLIC_EXPLORER_BACKEND_URL ?? 'http://127.0.0.1:4444';
 
 async function safeFetchJson<T>(url: string): Promise<T | null> {
   try {
@@ -51,7 +76,7 @@ function compactDate(epochSeconds: number): string {
   });
 }
 
-function shortId(value: string | undefined): string {
+function shortId(value: string | undefined | null): string {
   if (!value || value.length < 12) {
     return value ?? 'N/A';
   }
@@ -59,7 +84,90 @@ function shortId(value: string | undefined): string {
   return `${value.slice(0, 6)}…${value.slice(-6)}`;
 }
 
+async function fetchBackendMetrics() {
+  const base = explorerBackendBase.replace(/\/$/, '');
+  const [summary, blocks, entries, tps] = await Promise.all([
+    safeFetchJson<BackendSummary>(`${base}/metrics/summary`),
+    safeFetchJson<BackendBlockMetric[]>(`${base}/metrics/blocks`),
+    safeFetchJson<BackendEntryMetric[]>(`${base}/metrics/entries`),
+    safeFetchJson<BackendTpsPoint[]>(`${base}/metrics/tps?window=60s`),
+  ]);
+
+  if (!summary || !blocks || !entries || !tps) {
+    return null;
+  }
+
+  return { summary, blocks, entries, tps };
+}
+
 export default async function HomePage() {
+  const backendMetrics = await fetchBackendMetrics();
+
+  if (backendMetrics) {
+    const { blocks, entries, tps, summary } = backendMetrics;
+    const uniqueAuthors = new Set(entries.map((entry) => entry.signer).filter(Boolean));
+    const totalBlockBytes = blocks.reduce((sum, block) => sum + block.block_weight_bytes, 0);
+    const avgBlockWeight = blocks.length > 0 ? Math.round(totalBlockBytes / blocks.length) : 0;
+    const latestTps = tps[tps.length - 1]?.tps ?? 0;
+
+    const topMetrics = [
+      { label: 'Sampled Blocks', value: `${blocks.length.toLocaleString('en-US')}`, icon: '⛓' },
+      { label: 'Indexed Entries', value: `${entries.length.toLocaleString('en-US')}`, icon: '⇄' },
+      { label: 'Latest TPS (60s)', value: latestTps.toFixed(3), icon: '⏱' },
+      { label: 'Indexed Height', value: `${summary.lag?.indexed_height ?? 'N/A'}`, icon: '◎' },
+    ];
+
+    const charts = [
+      {
+        title: 'Entry Weight (indexer API)',
+        primary: `${entries.length.toLocaleString('en-US')} indexed`,
+        secondary: `Total ${(entries.reduce((sum, entry) => sum + entry.entry_weight_bytes, 0) / 1024).toFixed(2)} KiB`,
+        dateLabel: new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: '2-digit' }),
+        points: entries.slice(0, 10).map((entry) => entry.entry_weight_bytes).reverse(),
+        mode: 'bars' as const,
+      },
+      {
+        title: 'TPS (60s, indexer API)',
+        primary: latestTps.toFixed(3),
+        dateLabel: new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: '2-digit' }),
+        points: tps.slice(-10).map((point) => point.tps),
+        mode: 'line' as const,
+      },
+      {
+        title: 'Block Weight (indexer API)',
+        primary: formatBytes(avgBlockWeight),
+        secondary: `${blocks.length} block sample avg`,
+        dateLabel: new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: '2-digit' }),
+        points: blocks.slice(0, 10).map((item) => item.block_weight_bytes).reverse(),
+        mode: 'bars' as const,
+      },
+    ];
+
+    const transactions = entries.slice(0, 10).map((entry) => ({
+      id: shortId(entry.entry_id),
+      from: shortId(entry.signer),
+      sizeLabel: formatBytes(entry.entry_weight_bytes),
+      ageLabel: formatRelativeMinutes(entry.committed_at),
+    }));
+
+    const blockRows = blocks.slice(0, 10).map((block) => ({
+      height: block.block_height,
+      txCount: block.entry_count,
+      timestampLabel: compactDate(block.committed_at),
+      sizeLabel: formatBytes(block.block_weight_bytes),
+    }));
+
+    return (
+      <HomeDashboard
+        topMetrics={topMetrics}
+        charts={charts}
+        transactions={transactions}
+        blocks={blockRows}
+        sourceLabel="indexer (backend)"
+      />
+    );
+  }
+
   const blocksResult = await fetchBlocksPage(undefined, 20);
   const blockHeaders = blocksResult.ok ? blocksResult.payload.data.items : [];
 
@@ -139,7 +247,7 @@ export default async function HomePage() {
       charts={charts}
       transactions={transactions}
       blocks={blockRows}
-      sourceLabel="local-indexer (frontend)"
+      sourceLabel="local-indexer fallback (frontend)"
     />
   );
 }

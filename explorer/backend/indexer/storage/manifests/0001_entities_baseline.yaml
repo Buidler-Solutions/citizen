@@ -1,0 +1,22 @@
+revision: 1
+name: entities_baseline
+applies_to: indexer-metrics
+entities:
+  - indexed_blocks
+  - indexed_entries
+  - metric_windows
+keys:
+  indexed_blocks:
+    primary: blocks/{block_height}
+    unique:
+      - block_hash
+  indexed_entries:
+    primary: entries/{entry_id}
+    unique:
+      - entry_id
+      - block_height+entry_index
+  metric_windows:
+    primary: windows/{window_name}/{window_start}/{window_end}
+notes:
+  - Baseline entity contract mirroring citizen-protocol/docs/INDEXER_METRICS_DATA_MODEL_AND_SCHEMA.md.
+  - Intended for deterministic replay/idempotent upsert semantics.
