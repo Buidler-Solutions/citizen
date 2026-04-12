@@ -56,6 +56,7 @@ npm run dev
 The explorer frontend runs on `http://localhost:8885` by default.
 
 Dashboard prefers explorer-backend indexer metrics when `NEXT_PUBLIC_EXPLORER_BACKEND_URL` is reachable, and falls back to frontend-local derivation when backend metrics are unavailable.
+Blocks list and block detail screens label metric provenance explicitly (`runtime`, `indexer`, or `fallback`) and keep rendering with deterministic local weight computation when indexer metrics are unavailable.
 
 Environment variables:
 - `NEXT_PUBLIC_EXPLORER_BACKEND_URL` - explorer backend base URL (defaults to `http://127.0.0.1:4444`).

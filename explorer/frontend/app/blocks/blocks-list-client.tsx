@@ -8,6 +8,7 @@ import {
   fetchBlocksPage,
 } from '../lib/blocks';
 import { shortHash, toReadableDate } from '../lib/format';
+import { withBlockWeights, type WeightSource } from '../lib/indexer-metrics';
 import {
   mergePaginatedBlocks,
   mergeWithInitialBlocksState,
@@ -19,6 +20,7 @@ type BlocksListClientProps = {
   initialPayload: BlocksPageResponse;
   initialCursor?: string;
   searchQuery?: string;
+  weightSource: WeightSource;
 };
 
 type StoredBlocksState = {
@@ -35,6 +37,7 @@ export default function BlocksListClient({
   initialPayload,
   initialCursor,
   searchQuery,
+  weightSource,
 }: BlocksListClientProps) {
   const currentCursor = initialCursor ?? '';
   const [items, setItems] = useState<BlockSummary[]>(initialPayload.data.items);
@@ -126,6 +129,8 @@ export default function BlocksListClient({
     }
   }, [currentCursor, hasMore, items, nextCursor]);
 
+  const weightSourceLabel = weightSource === 'indexer' ? 'indexer' : 'fallback';
+
   const detailHrefFor = useCallback((height: number) => blockDetailHref(height), []);
 
   const filteredItems = useMemo(
@@ -150,7 +155,8 @@ export default function BlocksListClient({
       return;
     }
 
-    setItems((existing) => mergePaginatedBlocks(existing, result.payload.data.items));
+    const weighted = await withBlockWeights(result.payload.data.items);
+    setItems((existing) => mergePaginatedBlocks(existing, weighted.items));
     setNextCursor(result.payload.data.next_cursor);
     setHasMore(result.payload.data.has_more);
     setIsLoadingMore(false);
@@ -158,6 +164,10 @@ export default function BlocksListClient({
 
   return (
     <>
+      <section className="panel-card">
+        <h2>Metric sources</h2>
+        <p className="subtitle">Block records: runtime. Block weight: {weightSourceLabel}.</p>
+      </section>
       {orderedItems.length === 0 ? (
         <section className="card">
           <h2>{searchQuery?.trim() ? 'No blocks matched your search' : 'No blocks yet'}</h2>
@@ -185,6 +195,10 @@ export default function BlocksListClient({
                 <div className="row">
                   <span className="label">Timestamp</span>
                   <span>{toReadableDate(block.header.timestamp)}</span>
+                </div>
+                <div className="row">
+                  <span className="label">Block weight</span>
+                  <span>{block.block_weight_bytes !== undefined ? `${block.block_weight_bytes.toLocaleString('en-US')} bytes` : 'N/A'}</span>
                 </div>
                 <div className="row">
                   <span className="label">Proposer</span>

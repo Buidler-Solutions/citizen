@@ -1,6 +1,7 @@
 import { fetchBlocksPage } from '../lib/blocks';
 import { cursorFromSearchParams, type SearchParams } from '../lib/block-routes';
 import BlocksListClient from './blocks-list-client';
+import { withBlockWeights } from '../lib/indexer-metrics';
 
 export const dynamic = 'force-dynamic';
 
@@ -14,6 +15,7 @@ export default async function BlocksPage({
   const searchQuery = typeof resolvedParams.q === 'string' ? resolvedParams.q : '';
 
   const result = await fetchBlocksPage(cursor);
+  const weighted = result.ok ? await withBlockWeights(result.payload.data.items) : null;
 
   return (
     <>
@@ -32,7 +34,8 @@ export default async function BlocksPage({
         </section>
       ) : (
         <BlocksListClient
-          initialPayload={result.payload}
+          initialPayload={{ ...result.payload, data: { ...result.payload.data, items: weighted?.items ?? result.payload.data.items } }}
+          weightSource={weighted?.source ?? 'fallback'}
           initialCursor={cursor}
           searchQuery={searchQuery}
         />
