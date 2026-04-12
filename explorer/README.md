@@ -21,6 +21,67 @@ Explorer frontend now calls canonical node/runtime contracts directly:
 
 ## Quick start
 
+
+### Backend
+```bash
+cd backend
+npm install
+npm run start:dev
+```
+
+The explorer backend is optional and now supports both:
+- thin proxy/helper APIs for runtime lookups, and
+- an in-memory indexer worker that derives TPS + block/entry weight metrics from runtime blocks.
+
+When running, backend listens on `http://localhost:4444`.
+
+Backend environment variables:
+- `PORT` - backend listen port (defaults to `4444`; if occupied and unset, backend falls back to `4445`).
+- `CITIZEN_NODE_URL` - runtime API base URL (defaults to `http://127.0.0.1:8081`).
+- `INDEXER_POLL_MS` - steady-state indexer polling interval in milliseconds (defaults to `4000`).
+- `INDEXER_SLO_MAX_INGESTION_LAG_BLOCKS` - freshness SLO threshold in blocks (defaults to `5`).
+- `INDEXER_SLO_MIN_AVAILABILITY_RATIO` - API-availability proxy SLO using successful fetch ratio (defaults to `0.995`).
+- `INDEXER_SLO_MAX_P95_BLOCK_PROCESSING_MS` - block processing p95 latency SLO in milliseconds (defaults to `2000`).
+- `INDEXER_SLO_MAX_P95_AGGREGATION_MS` - aggregation p95 latency SLO in milliseconds (defaults to `1000`).
+- `INDEXER_ALERT_STALL_CURSOR_SECONDS` - stalled cursor alert threshold in seconds (defaults to `120`).
+- `INDEXER_ALERT_SUSTAINED_LAG_POLLS` - consecutive lagging polls before sustained-lag alert activates (defaults to `3`).
+- `INDEXER_METRICS_AUTH_REQUIRED` - when `true`, metrics endpoints require API key auth (defaults to `false`).
+- `INDEXER_METRICS_API_KEY` - shared secret accepted via `x-indexer-api-key` or `Authorization: Bearer <key>` when auth is enabled.
+- `INDEXER_METRICS_RATE_LIMIT_RPM` - max metrics requests/minute per caller key/IP (`0` disables rate limiting; default `0`).
+- `INDEXER_METRICS_DEPLOYMENT_PROFILE` - deployment posture preset (`localnet`, `shared-dev`, `production-candidate`; defaults to `localnet`) that sets auth/rate-limit defaults when explicit env overrides are absent.
+- `INDEXER_METRICS_ONCALL_RUNBOOK` - optional runbook reference surfaced in summary payload (defaults to `citizen-protocol/docs/INDEXER_METRICS_ROLLOUT_COMPLETION.md`).
+- `INDEXER_METRICS_RELEASE_NOTES_CHECKLIST` - optional release-notes checklist artifact reference surfaced in summary payload (defaults to `citizen-protocol/docs/INDEXER_METRICS_ROLLOUT_COMPLETION.md#4-release-notes-checklist-indexer-metrics`).
+
+Indexer metrics endpoints:
+- `GET /metrics/summary`
+- `GET /metrics/alerts`
+- `GET /metrics/tps?window=60s&from=&to=` (`window` supports `10s`, `60s`, `5m`, `1h`)
+- `GET /metrics/blocks?from_height=&to_height=`
+- `GET /metrics/entries?namespace=&entry_ids=<id,id2>&from=&to=`
+- `POST /metrics/backfill` with JSON body `{ "from_height": 0, "to_height": 1000 }` (optional `to_height`)
+- `GET /metrics/verify/samples?sample_count=25&seed=1337`
+- `GET /metrics/verify/tps?window=60s&from=&to=`
+- `GET /metrics/verify/evidence`
+
+`GET /metrics/summary` now includes:
+  - `deployment` metadata:
+    - active deployment profile,
+    - effective metrics auth/rate-limit policy,
+    - operator runbook reference path,
+    - release-notes checklist artifact path,
+  - `internal_metrics` snapshots for:
+    - cumulative retry/failure counters,
+    - block processing latency (`samples`, `avg`, `p95`, `max`, `last` in ms),
+    - aggregation-job latency (`samples`, `avg`, `p95`, `max`, `last` in ms),
+    - and ingestion lag (in blocks),
+- `slo` status/checks for freshness, availability proxy, latency, and correctness proxy,
+- `alerts` with activation state + operator playbook steps for stalled cursor, sustained lag, and checksum mismatch conditions.
+
+Recommended profile progression for rollout:
+1. `localnet` (no-auth local bring-up),
+2. `shared-dev` (team-shared environment with auth/rate limiting),
+3. `production-candidate` (pre-prod hardening + fallback rehearsals).
+
 ### Frontend
 ```bash
 cd frontend
@@ -30,12 +91,17 @@ npm run dev
 
 The explorer frontend runs on `http://localhost:8885` by default.
 
+Dashboard prefers explorer-backend indexer metrics when `NEXT_PUBLIC_EXPLORER_BACKEND_URL` is reachable, and falls back to frontend-local derivation when backend metrics are unavailable.
+Blocks list and block detail screens label metric provenance explicitly (`runtime`, `indexer`, or `fallback`) and keep rendering with deterministic runtime/local weight computation when indexer metrics are unavailable.
+
 Environment variables:
+- `NEXT_PUBLIC_EXPLORER_BACKEND_URL` - explorer backend base URL (defaults to `http://127.0.0.1:4444`).
 - `NEXT_PUBLIC_NODE_RUNTIME_URL` - base URL for the Citizen node runtime API (defaults to `http://127.0.0.1:8081`).
 - `NEXT_PUBLIC_BLOCK_HEIGHT` - block height to inspect (`1` by default).
 - `NEXT_PUBLIC_NAMESPACE` - namespace to inspect (`governance.vote` by default).
 - `NEXT_PUBLIC_WALLET_SIGNER_DID` - optional signer DID used to query entries by `payload.payload_wallet_signature.signer` (legacy fallback still supported).
 - `NEXT_PUBLIC_RECEIPT_ID` - optional deterministic receipt ID for finality proof lookup.
+- `NEXT_PUBLIC_METRICS_SOURCE` - metrics source mode: `auto` (default), `indexer` (prefer backend metrics), or `fallback` (force frontend local derivation).
 
 ### Postgres (optional)
 ```bash

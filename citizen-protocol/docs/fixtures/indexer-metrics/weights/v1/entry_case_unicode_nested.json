@@ -1,0 +1,16 @@
+{
+  "entry_id": "33333333-3333-3333-3333-333333333333",
+  "namespace": "documents.private",
+  "action": "STORE",
+  "object_id": "doc-α-01",
+  "payload": {
+    "meta": {
+      "city": "München",
+      "tags": ["résumé", "公文書"]
+    },
+    "ciphertext": "aGVsbG8td29ybGQ="
+  },
+  "author": "did:key:author-3",
+  "signature": "ed25519:signature-unicode",
+  "timestamp": 1735689800
+}

@@ -1,3 +1,5 @@
+const explorerBackendBase =
+  process.env.NEXT_PUBLIC_EXPLORER_BACKEND_URL ?? 'http://127.0.0.1:4444';
 const nodeRuntimeBase = process.env.NEXT_PUBLIC_NODE_RUNTIME_URL ?? 'http://127.0.0.1:8081';
 
 type CommitProof = {
@@ -6,6 +8,7 @@ type CommitProof = {
 
 export type BlockSummary = {
   height: number;
+  block_weight_bytes?: number;
   header: {
     timestamp: number;
     proposer: string;
@@ -286,13 +289,13 @@ export async function fetchBlocksPage(
   }
 
   try {
-    const response = await fetch(`${nodeRuntimeBase.replace(/\/$/, '')}/blocks?${query.toString()}`, {
+    const response = await fetch(`${explorerBackendBase.replace(/\/$/, '')}/blocks?${query.toString()}`, {
       cache: 'no-store',
     });
 
     if (response.ok) {
       const rawPayload = await response.json();
-      const normalizedPayload = normalizeBlocksPageResponse(rawPayload, nodeRuntimeBase);
+      const normalizedPayload = normalizeBlocksPageResponse(rawPayload, explorerBackendBase);
       if (normalizedPayload) {
         return { ok: true, payload: normalizedPayload };
       }
@@ -316,13 +319,13 @@ export async function fetchBlockByHeight(
   height: number,
 ): Promise<BlockDetailResponse | null> {
   try {
-    const response = await fetch(`${nodeRuntimeBase.replace(/\/$/, '')}/blocks/${height}`, {
+    const response = await fetch(`${explorerBackendBase.replace(/\/$/, '')}/blocks/${height}`, {
       cache: 'no-store',
     });
 
     if (response.ok) {
       const rawPayload = await response.json();
-      const normalizedPayload = normalizeBlockDetailResponse(rawPayload, nodeRuntimeBase, height);
+      const normalizedPayload = normalizeBlockDetailResponse(rawPayload, explorerBackendBase, height);
       if (normalizedPayload) {
         return normalizedPayload;
       }

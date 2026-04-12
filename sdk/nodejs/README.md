@@ -50,6 +50,29 @@ const receipt = await client.waitForReceipt(submission.receipt.receipt_id, {
 console.log(receipt);
 ```
 
+## Off-chain attachment MIME allowlist (wallet + app prechecks)
+
+For encrypted file intent/commit flows, the SDK exports a runtime-aligned MIME
+allowlist constant so browser wallet flows and dApps can pre-validate
+attachments before submit:
+
+```js
+import { OFFCHAIN_ATTACHMENT_ALLOWED_MIME_TYPES } from "@citizen-protocol/nodejs-sdk";
+
+if (!OFFCHAIN_ATTACHMENT_ALLOWED_MIME_TYPES.includes(file.type)) {
+  throw new Error(`Unsupported attachment type: ${file.type}`);
+}
+```
+
+Current allowlist includes audio/video/docs/spreadsheets/images:
+- audio: `audio/mpeg`, `audio/wav`
+- video: `video/mp4`, `video/webm`
+- docs/sheets: `application/pdf`, `application/msword`,
+  `application/vnd.openxmlformats-officedocument.wordprocessingml.document`,
+  `application/vnd.ms-excel`,
+  `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`
+- images: `image/jpeg`, `image/png`, `image/webp`
+
 
 ## Wallet-controlled form signing flow (builder app pattern)
 
@@ -173,6 +196,7 @@ Environment variables:
 - `createSponsorshipUsage({ builderId, amount, creditGrantId, sponsorshipId, sponsoredDid })`
 - `validateBuilderCreditsPayload({ action, payload })`
 - `signCitizenPayloadWithWallet({ payload, provider? })`
+- `OFFCHAIN_ATTACHMENT_ALLOWED_MIME_TYPES`
 
 Signer options:
 

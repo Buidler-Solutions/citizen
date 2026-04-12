@@ -147,7 +147,7 @@ Deliverables:
 - SDK helpers for per-payload field extraction/encryption based on namespace policy.
 
 Checklist:
-- [x] Implement streaming encryption path for large files (avoid full-memory buffering). ✅ Added wallet streaming helpers `encrypt_offchain_file_reader_to_writer` and `decrypt_offchain_file_reader_to_writer` that process framed ciphertext chunks without full-file buffering.
+- [x] Implement streaming encryption path for large files (avoid full-memory buffering). ✅ Added wallet streaming helpers `encrypt_offchain_file_reader_to_writer` and `decrypt_offchain_file_reader_to_writer` that process framed ciphertext chunks without full-file buffering, plus hybrid reader-key attachment helpers `encrypt_offchain_file_reader_to_writer_hybrid` / `decrypt_offchain_file_reader_to_writer_hybrid`.
 - [x] Reuse Argon2id + ChaCha20-Poly1305 standards for passphrase mode. ✅ Streaming file encryption now derives per-file keys with Argon2id and encrypts chunk frames with ChaCha20-Poly1305 nonces bound to chunk index AAD.
 - [x] Implement per-reader X25519 DEK wrapping for hybrid mode. ✅ Wallet hybrid signing now emits per-reader X25519 + XChaCha20-Poly1305 DEK wraps and validates unwrap during decrypt flows.
 - [x] Enforce grant validation before unwrap/decrypt in wallet SDK APIs.
@@ -195,6 +195,8 @@ Checklist:
 - [x] Persist immutable file manifest references with deterministic IDs.
 - [x] Persist encrypted field-blob references keyed by `entry_id + namespace + field_path`.
 - [x] Add retry/idempotency key semantics for commit endpoint.
+- [x] Add optional payload-to-manifest linkage guardrails. ✅ `POST /api/v1/payloads/commit` now accepts optional `linked_manifest_ids`; when supplied, encrypted field `blob_ref` values must resolve to `file_ref`s from those committed manifests.
+- [x] Add canonical manifest digest format validation. ✅ `POST /api/v1/files/commit` now rejects manifests whose `ciphertext_hash` or `payload_commitment` are not canonical `sha256:<64 hex>` digests.
 
 ## Phase D — Governance + Policy Runtime
 

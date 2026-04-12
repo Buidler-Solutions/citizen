@@ -30,6 +30,25 @@ export class CreateLeadDto {
   @MaxLength(2000)
   missionNeed!: string;
 
+  @IsOptional()
+  @IsString()
+  @MaxLength(220)
+  attachmentName?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  attachmentMimeType?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  attachmentSha256?: string;
+
+  @IsOptional()
+  @IsString()
+  attachmentBase64?: string;
+
   @IsString()
   @Matches(/^did:key:ed25519:[a-f0-9]{64}$/i)
   walletSignerDid!: string;
@@ -48,7 +67,6 @@ export class CreateLeadDto {
   walletPayloadHash!: string;
 
   @IsString()
-  @MaxLength(5000)
   walletSigningPayload!: string;
 
   @IsString()

@@ -381,6 +381,7 @@ impl NodeConfig {
             auth_required: self.api_auth_required,
             max_write_requests_per_minute: self.api_max_write_requests_per_minute,
             offchain_encrypted_files_v1_enabled: self.api_offchain_encrypted_files_v1_enabled,
+            enforce_manifest_payload_binding: false,
             require_builder_credit_for_all_writes: self.api_require_builder_credit_for_all_writes,
             clients,
         }

@@ -10,6 +10,7 @@ function makeBlock(height) {
     return {
         height,
         entry_count: 1,
+        entry_ids: [`entry-${height}`],
         header: {
             timestamp: 1710000000 + height,
             proposer: `proposer-${height}`,
@@ -36,4 +37,18 @@ function makeBlock(height) {
 (0, node_test_1.default)('sortByHeightDesc returns blocks in descending height order', () => {
     const sorted = (0, blocks_list_state_1.sortByHeightDesc)([makeBlock(3), makeBlock(8), makeBlock(5)]);
     strict_1.default.deepEqual(sorted.map((item) => item.height), [8, 5, 3]);
+});
+(0, node_test_1.default)('mergeWithInitialBlocksState preserves initial blocks while restoring cached pagination state', () => {
+    const merged = (0, blocks_list_state_1.mergeWithInitialBlocksState)({
+        items: [makeBlock(3), makeBlock(2), makeBlock(1)],
+        nextCursor: '0',
+        hasMore: true,
+    }, {
+        items: [makeBlock(2), makeBlock(1)],
+        nextCursor: null,
+        hasMore: false,
+    });
+    strict_1.default.deepEqual(merged.items.map((item) => item.height), [3, 2, 1]);
+    strict_1.default.equal(merged.nextCursor, '0');
+    strict_1.default.equal(merged.hasMore, true);
 });
