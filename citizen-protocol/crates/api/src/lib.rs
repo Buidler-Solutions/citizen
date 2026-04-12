@@ -4,7 +4,9 @@ use axum::http::StatusCode;
 use axum::routing::{get, post};
 use axum::{serve, Json, Router};
 use chrono::Utc;
-use citizen_crypto::{canonical_json, hash_block_header, sha256_hex};
+use citizen_crypto::{
+    canonical_json, hash_block_header, parse_verifying_key, sha256_hex, verify_signature,
+};
 use citizen_ledger::Ledger;
 use citizen_storage::LedgerStorage;
 use citizen_types::{
@@ -13,6 +15,7 @@ use citizen_types::{
     OffchainCommitmentSummary, PayloadFieldCommitmentSummary, ProtocolError, ReceiptStatus,
     SignedEnvelope, ValidationSummary,
 };
+use ed25519_dalek::Signature;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
@@ -2698,31 +2701,11 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
         ledger: Arc<Ledger<S>>,
         envelope: SignedEnvelope<LedgerEntry>,
     ) -> (StatusCode, Json<serde_json::Value>) {
-        if envelope.signature.is_empty() {
-            return protocol_error_response(ProtocolError::ValidationFailed(
-                "missing envelope signature".into(),
-            ));
-        }
-
-        if envelope.signer != envelope.payload.author {
-            return protocol_error_response(ProtocolError::ValidationFailed(
-                "envelope signer must match payload author".into(),
-            ));
-        }
-
-        if !envelope.payload.signature.is_empty()
-            && envelope.payload.signature != envelope.signature
-        {
-            return protocol_error_response(ProtocolError::ValidationFailed(
-                "envelope signature must match payload signature when both are present".into(),
-            ));
-        }
-
-        let action = envelope.payload.action.clone();
-        let mut entry = envelope.payload;
-        if entry.signature.is_empty() {
-            entry.signature = envelope.signature.clone();
-        }
+        let (entry, outcome) = match validate_envelope_signatures(&envelope) {
+            Ok(validated) => validated,
+            Err(err) => return protocol_error_response(err),
+        };
+        let action = entry.action.clone();
 
         if let Err(err) = ledger.validate_entry_submission(&entry) {
             return protocol_error_response(err);
@@ -2747,7 +2730,7 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
             validation: ValidationSummary {
                 namespace: namespace.clone(),
                 action,
-                outcome: "namespace rules accepted and finalized".into(),
+                outcome,
                 offchain_commitments,
             },
             finality: Some(finality),
@@ -2782,31 +2765,12 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
         let mut validated_entries = Vec::with_capacity(envelopes.len());
         let mut accepted = Vec::with_capacity(envelopes.len());
         for envelope in envelopes {
-            if envelope.signature.is_empty() {
-                return protocol_error_response(ProtocolError::ValidationFailed(
-                    "missing envelope signature".into(),
-                ));
-            }
-
-            if envelope.signer != envelope.payload.author {
-                return protocol_error_response(ProtocolError::ValidationFailed(
-                    "envelope signer must match payload author".into(),
-                ));
-            }
-
-            if !envelope.payload.signature.is_empty()
-                && envelope.payload.signature != envelope.signature
-            {
-                return protocol_error_response(ProtocolError::ValidationFailed(
-                    "envelope signature must match payload signature when both are present".into(),
-                ));
-            }
-
-            let action = envelope.payload.action.clone();
-            let mut entry = envelope.payload;
-            if entry.signature.is_empty() {
-                entry.signature = envelope.signature.clone();
-            }
+            let envelope_id = envelope.envelope_id;
+            let (entry, outcome) = match validate_envelope_signatures(&envelope) {
+                Ok(validated) => validated,
+                Err(err) => return protocol_error_response(err),
+            };
+            let action = entry.action.clone();
 
             if let Err(err) = ledger.validate_entry_submission(&entry) {
                 return protocol_error_response(err);
@@ -2815,8 +2779,9 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
                 entry.entry_id,
                 entry.namespace.clone(),
                 action,
-                envelope.envelope_id,
+                envelope_id,
                 extract_offchain_commitments(&entry),
+                outcome,
             ));
             validated_entries.push(entry);
         }
@@ -2833,7 +2798,7 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
         };
 
         let mut receipts = Vec::with_capacity(accepted.len());
-        for (entry_id, namespace, action, envelope_id, offchain_commitments) in accepted {
+        for (entry_id, namespace, action, envelope_id, offchain_commitments, outcome) in accepted {
             let receipt = DeterministicReceipt {
                 receipt_id: Uuid::new_v4(),
                 envelope_id,
@@ -2841,7 +2806,7 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
                 validation: ValidationSummary {
                     namespace: namespace.clone(),
                     action,
-                    outcome: "namespace rules accepted and finalized".into(),
+                    outcome,
                     offchain_commitments,
                 },
                 finality: Some(finality.clone()),
@@ -4094,6 +4059,77 @@ mod tests {
         }
     }
 
+    fn test_multisig_envelope() -> SignedEnvelope<LedgerEntry> {
+        let author_key = ValidatorKeypair::generate("author".to_string());
+        let co_signer_key = ValidatorKeypair::generate("co-signer".to_string());
+        let author_did = format!(
+            "did:key:{}",
+            verifying_key_to_string(author_key.verifying_key())
+        );
+        let co_signer_did = format!(
+            "did:key:{}",
+            verifying_key_to_string(co_signer_key.verifying_key())
+        );
+        let mut payload = LedgerEntry {
+            entry_id: Uuid::new_v4(),
+            namespace: "audit.procurement".to_string(),
+            action: "RECORD_EVENT".to_string(),
+            object_id: "PROC-001".to_string(),
+            payload: json!({"event":"BID_OPENED"}),
+            privacy_flag: false,
+            privacy_mode: citizen_types::PrivacyMode::None,
+            payload_commitment: None,
+            ciphertext_hex: None,
+            nonce_hex: None,
+            salt_hex: None,
+            kdf_params: None,
+            consent_receipt: None,
+            authorized_readers: vec![],
+            custodian_policy_id: None,
+            field_reader_acls: BTreeMap::new(),
+            key_wrapped_secrets: vec![],
+            revocation_events: vec![],
+            author: author_did.clone(),
+            signature: String::new(),
+            timestamp: chrono::Utc::now().timestamp(),
+        };
+        payload.payload["author_public_key"] =
+            json!(verifying_key_to_string(author_key.verifying_key()));
+
+        let preimage = canonical_json(&json!({
+            "entry_id": payload.entry_id,
+            "namespace": payload.namespace,
+            "action": payload.action,
+            "object_id": payload.object_id,
+            "payload": payload.payload,
+            "author": payload.author,
+            "timestamp": payload.timestamp,
+        }));
+        let author_signature =
+            hex::encode(sign_message(&author_key, preimage.as_bytes()).to_bytes());
+        let co_signature =
+            hex::encode(sign_message(&co_signer_key, preimage.as_bytes()).to_bytes());
+        payload.signature = author_signature.clone();
+
+        SignedEnvelope {
+            envelope_id: Uuid::new_v4(),
+            signer: author_did,
+            signature: author_signature,
+            signature_scope: Some("canonical_payload_v1".to_string()),
+            co_signatures: vec![citizen_types::EnvelopeCoSignature {
+                signer: co_signer_did.clone(),
+                signature: co_signature,
+            }],
+            multisig_policy: Some(citizen_types::EnvelopeMultisigPolicy {
+                threshold: 2,
+                allowed_signers: vec![payload.author.clone(), co_signer_did],
+                require_author_signature: true,
+            }),
+            submitted_at: chrono::Utc::now(),
+            payload,
+        }
+    }
+
     #[tokio::test]
     async fn envelope_submission_returns_receipt_with_finality() {
         let app = build_server().router();
@@ -4113,10 +4149,11 @@ mod tests {
             .await
             .expect("submit response");
 
-        assert_eq!(response.status(), StatusCode::ACCEPTED);
+        let status = response.status();
         let body = axum::body::to_bytes(response.into_body(), usize::MAX)
             .await
             .expect("body bytes");
+        assert_eq!(status, StatusCode::ACCEPTED);
         let payload: Value = serde_json::from_slice(&body).expect("submit payload");
 
         let receipt = &payload["receipt"];
@@ -5056,6 +5093,107 @@ mod tests {
             .await
             .expect("submit response");
 
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn envelope_submission_accepts_valid_multisig_envelope() {
+        let app = build_server().router();
+        let envelope = test_multisig_envelope();
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/envelopes/submit")
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        serde_json::to_vec(&envelope).expect("serialize envelope"),
+                    ))
+                    .expect("request"),
+            )
+            .await
+            .expect("submit response");
+
+        let status = response.status();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("body bytes");
+        assert_eq!(status, StatusCode::ACCEPTED);
+        let payload: Value = serde_json::from_slice(&body).expect("submit payload");
+        let outcome = payload["receipt"]["validation"]["outcome"]
+            .as_str()
+            .expect("outcome");
+        assert!(outcome.contains("multisig scope=canonical_payload_v1"));
+    }
+
+    #[tokio::test]
+    async fn envelope_submission_rejects_multisig_threshold_shortfall() {
+        let app = build_server().router();
+        let mut envelope = test_multisig_envelope();
+        envelope
+            .multisig_policy
+            .as_mut()
+            .expect("multisig policy")
+            .threshold = 3;
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/envelopes/submit")
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        serde_json::to_vec(&envelope).expect("serialize envelope"),
+                    ))
+                    .expect("request"),
+            )
+            .await
+            .expect("submit response");
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn envelope_submission_rejects_multisig_scope_mismatch() {
+        let app = build_server().router();
+        let mut envelope = test_multisig_envelope();
+        envelope.signature_scope = Some("canonical_payload_v2".to_string());
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/envelopes/submit")
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        serde_json::to_vec(&envelope).expect("serialize envelope"),
+                    ))
+                    .expect("request"),
+            )
+            .await
+            .expect("submit response");
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn envelope_submission_rejects_duplicate_multisig_signer() {
+        let app = build_server().router();
+        let mut envelope = test_multisig_envelope();
+        envelope.co_signatures[0].signer = envelope.signer.clone();
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/envelopes/submit")
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        serde_json::to_vec(&envelope).expect("serialize envelope"),
+                    ))
+                    .expect("request"),
+            )
+            .await
+            .expect("submit response");
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
     }
 
@@ -10474,4 +10612,183 @@ mod tests {
             "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
         ));
     }
+}
+fn canonical_envelope_preimage(
+    payload: &LedgerEntry,
+    signature_scope: &str,
+) -> Result<String, ProtocolError> {
+    if signature_scope != "canonical_payload_v1" {
+        return Err(ProtocolError::ValidationFailed(
+            "unsupported signature_scope; expected canonical_payload_v1".into(),
+        ));
+    }
+    let signing_payload = serde_json::json!({
+        "entry_id": payload.entry_id,
+        "namespace": payload.namespace,
+        "action": payload.action,
+        "object_id": payload.object_id,
+        "payload": payload.payload,
+        "author": payload.author,
+        "timestamp": payload.timestamp,
+    });
+    Ok(canonical_json(&signing_payload))
+}
+
+fn verify_signer_signature(
+    signer: &str,
+    signature_hex: &str,
+    preimage: &str,
+    payload: &LedgerEntry,
+) -> Result<(), ProtocolError> {
+    let verifying_key_hex = signer
+            .strip_prefix("did:key:")
+            .map(ToString::to_string)
+            .or_else(|| {
+                payload
+                    .payload
+                    .get("multisig_signer_keys")
+                    .and_then(|value| value.as_object())
+                    .and_then(|map| map.get(signer))
+                    .and_then(|value| value.as_str())
+                    .map(ToString::to_string)
+            })
+            .ok_or_else(|| {
+                ProtocolError::ValidationFailed(format!(
+                    "unable to resolve verifying key for signer {signer}; use did:key or payload.multisig_signer_keys"
+                ))
+            })?;
+
+    let verifying_key = parse_verifying_key(&verifying_key_hex).map_err(|err| {
+        ProtocolError::ValidationFailed(format!("invalid verifying key for signer {signer}: {err}"))
+    })?;
+    let signature_bytes = hex::decode(signature_hex).map_err(|err| {
+        ProtocolError::ValidationFailed(format!("invalid signature hex for signer {signer}: {err}"))
+    })?;
+    let signature = Signature::from_slice(&signature_bytes).map_err(|err| {
+        ProtocolError::ValidationFailed(format!(
+            "invalid signature bytes for signer {signer}: {err}"
+        ))
+    })?;
+    if !verify_signature(&verifying_key, preimage.as_bytes(), &signature) {
+        return Err(ProtocolError::ValidationFailed(format!(
+            "signature verification failed for signer {signer}"
+        )));
+    }
+    Ok(())
+}
+
+fn validate_envelope_signatures(
+    envelope: &SignedEnvelope<LedgerEntry>,
+) -> Result<(LedgerEntry, String), ProtocolError> {
+    if envelope.signature.is_empty() {
+        return Err(ProtocolError::ValidationFailed(
+            "missing envelope signature".into(),
+        ));
+    }
+    if envelope.signer != envelope.payload.author {
+        return Err(ProtocolError::ValidationFailed(
+            "envelope signer must match payload author".into(),
+        ));
+    }
+
+    // Legacy single-signer path.
+    if envelope.co_signatures.is_empty() {
+        if !envelope.payload.signature.is_empty()
+            && envelope.payload.signature != envelope.signature
+        {
+            return Err(ProtocolError::ValidationFailed(
+                "envelope signature must match payload signature when both are present".into(),
+            ));
+        }
+        let mut entry = envelope.payload.clone();
+        if entry.signature.is_empty() {
+            entry.signature = envelope.signature.clone();
+        }
+        return Ok((entry, "namespace rules accepted and finalized".to_string()));
+    }
+
+    let policy = envelope.multisig_policy.as_ref().ok_or_else(|| {
+        ProtocolError::ValidationFailed(
+            "multisig_policy is required when co_signatures are present".into(),
+        )
+    })?;
+    if policy.allowed_signers.is_empty() {
+        return Err(ProtocolError::ValidationFailed(
+            "multisig_policy.allowed_signers cannot be empty".into(),
+        ));
+    }
+    if policy.threshold == 0 || usize::from(policy.threshold) > policy.allowed_signers.len() {
+        return Err(ProtocolError::ValidationFailed(
+            "multisig_policy.threshold must be between 1 and allowed_signers length".into(),
+        ));
+    }
+    let signature_scope = envelope.signature_scope.as_deref().ok_or_else(|| {
+        ProtocolError::ValidationFailed(
+            "signature_scope is required when co_signatures are present".into(),
+        )
+    })?;
+    let preimage = canonical_envelope_preimage(&envelope.payload, signature_scope)?;
+
+    let mut unique_allowed: HashSet<String> = HashSet::new();
+    for signer in &policy.allowed_signers {
+        if !unique_allowed.insert(signer.clone()) {
+            return Err(ProtocolError::ValidationFailed(
+                "multisig_policy.allowed_signers must be unique".into(),
+            ));
+        }
+    }
+
+    let mut signed_by = Vec::with_capacity(envelope.co_signatures.len() + 1);
+    let mut unique_signers = HashSet::new();
+    let mut verify_and_track = |signer: &str, signature: &str| -> Result<(), ProtocolError> {
+        if signature.is_empty() {
+            return Err(ProtocolError::ValidationFailed(format!(
+                "missing signature for signer {signer}"
+            )));
+        }
+        if !unique_allowed.contains(signer) {
+            return Err(ProtocolError::ValidationFailed(format!(
+                "unauthorized signer {signer}; not in multisig_policy.allowed_signers"
+            )));
+        }
+        if !unique_signers.insert(signer.to_string()) {
+            return Err(ProtocolError::ValidationFailed(format!(
+                "duplicate signer {signer} in envelope signatures"
+            )));
+        }
+        verify_signer_signature(signer, signature, &preimage, &envelope.payload)?;
+        signed_by.push(signer.to_string());
+        Ok(())
+    };
+
+    verify_and_track(&envelope.signer, &envelope.signature)?;
+    for item in &envelope.co_signatures {
+        verify_and_track(&item.signer, &item.signature)?;
+    }
+
+    if signed_by.len() < usize::from(policy.threshold) {
+        return Err(ProtocolError::ValidationFailed(format!(
+            "multisig threshold not met: got {} unique signatures, need {}",
+            signed_by.len(),
+            policy.threshold
+        )));
+    }
+    if policy.require_author_signature && !unique_signers.contains(&envelope.payload.author) {
+        return Err(ProtocolError::ValidationFailed(
+            "multisig author participation requirement not satisfied".into(),
+        ));
+    }
+
+    let mut entry = envelope.payload.clone();
+    if entry.signature.is_empty() {
+        entry.signature = envelope.signature.clone();
+    }
+    Ok((
+        entry,
+        format!(
+                "namespace rules accepted and finalized (multisig scope={signature_scope}, threshold={}, signers={})",
+                policy.threshold,
+                signed_by.join(",")
+            ),
+        ))
 }
