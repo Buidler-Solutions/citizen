@@ -76,14 +76,14 @@ Implementation artifact: `citizen-protocol/docs/INDEXER_METRICS_DATA_MODEL_AND_S
 ## Checkpoint 3 — Canonical weight computation module
 
 - [x] Publish implementation-ready module contract and fixture/test plan.
-- [ ] Implement shared weight computation library:
-  - [ ] `compute_entry_weight(entry) -> u64`
-  - [ ] `compute_block_weight(block) -> u64`
-- [ ] Use one canonical serialization strategy across all calculations.
+- [x] Implement shared weight computation library:
+  - [x] `compute_entry_weight(entry) -> u64`
+  - [x] `compute_block_weight(block) -> u64`
+- [x] Use one canonical serialization strategy across all calculations.
 - [ ] Add deterministic test vectors:
-  - [ ] same input -> same bytes/weights,
+  - [x] same input -> same bytes/weights,
   - [ ] cross-process reproducibility,
-  - [ ] boundary tests (empty payload, large payload, selective encrypted fields).
+  - [x] boundary tests (empty payload, large payload, selective encrypted fields).
 - [ ] Add regression fixtures from real sample blocks.
 
 Deliverable: tested weight module + fixtures committed in repo.

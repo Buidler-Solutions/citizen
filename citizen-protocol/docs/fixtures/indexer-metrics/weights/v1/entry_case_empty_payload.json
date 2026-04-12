@@ -1,0 +1,10 @@
+{
+  "entry_id": "22222222-2222-2222-2222-222222222222",
+  "namespace": "health.claims",
+  "action": "UPSERT",
+  "object_id": "claim-2026-0001",
+  "payload": {},
+  "author": "did:key:author-2",
+  "signature": "ed25519:signature-empty",
+  "timestamp": 1735689700
+}

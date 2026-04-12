@@ -1,0 +1,41 @@
+{
+  "header": {
+    "height": 43,
+    "prev_hash": "sha256:block42",
+    "entry_root": "sha256:block43root",
+    "proposer": "validator-beta",
+    "timestamp": 1735690000,
+    "commit_proof": {
+      "aggregated_signature": "agg-sig-mixed",
+      "participant_ids": ["validator-alpha", "validator-beta", "validator-gamma"]
+    }
+  },
+  "entries": [
+    {
+      "entry_id": "44444444-4444-4444-4444-444444444444",
+      "namespace": "identity.citizen",
+      "action": "UPDATE",
+      "object_id": "did:citizen:bob",
+      "payload": {"name": "Bob", "version": 2},
+      "author": "did:key:author-4",
+      "signature": "ed25519:signature-4",
+      "timestamp": 1735690001
+    },
+    {
+      "entry_id": "55555555-5555-5555-5555-555555555555",
+      "namespace": "health.claims",
+      "action": "ATTACH",
+      "object_id": "claim-2026-0002",
+      "payload": {"public": {"code": "A12"}, "encrypted": "deadbeef"},
+      "privacy_flag": true,
+      "privacy_mode": "passphrase",
+      "payload_commitment": "sha256:abc",
+      "ciphertext_hex": "deadbeef",
+      "nonce_hex": "0011223344",
+      "salt_hex": "aabbccdd",
+      "author": "did:key:author-5",
+      "signature": "ed25519:signature-5",
+      "timestamp": 1735690002
+    }
+  ]
+}
