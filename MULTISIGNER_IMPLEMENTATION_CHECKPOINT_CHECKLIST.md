@@ -74,13 +74,13 @@ This checklist captures the implementation checkpoints for upgrading Citizen fro
 
 ### 4.1 Node SDK
 
-- [ ] Keep existing `wrapEnvelope` behavior for legacy compatibility.
+- [x] Keep existing `wrapEnvelope` behavior for legacy compatibility.
 - [ ] Add multisig helpers:
-  - [ ] `wrapEnvelopeMulti(...)`
-  - [ ] `appendCoSignature(...)`
-  - [ ] `finalizeEnvelope(...)`
-- [ ] Extend TypeScript types with optional multisig envelope fields.
-- [ ] Add tests for canonical payload determinism and multi-signature aggregation.
+  - [x] `wrapEnvelopeMulti(...)`
+  - [x] `appendCoSignature(...)`
+  - [x] `finalizeEnvelope(...)`
+- [x] Extend TypeScript types with optional multisig envelope fields.
+- [x] Add tests for canonical payload determinism and multi-signature aggregation.
 
 ### 4.2 Wallet CLI
 
