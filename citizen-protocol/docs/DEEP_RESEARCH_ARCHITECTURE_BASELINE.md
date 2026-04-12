@@ -182,3 +182,15 @@ The current repository implementation aligns with the data-ownership direction b
 - canonical receipt verification paths that preserve commit integrity across ecosystem surfaces.
 
 Operational synchronization details are tracked in `docs/ACL_DEK_IMPLEMENTATION_DOUBLE_CHECK.md`.
+
+## Current Implementation Sync Addendum (Indexer Metrics Analytics Surface)
+
+The current explorer/backend implementation includes an indexer-derived analytics surface for canonical TPS, block weight, and entry weight metrics with explicit metric-source signaling in explorer UI flows.
+
+Operationally, metrics rollout is staged and profile-driven:
+
+- `localnet` profile for local/dev default operation,
+- `shared-dev` profile with auth/rate-limit defaults for multi-tenant test environments,
+- `production-candidate` profile with stricter default access controls.
+
+On-call ownership, stage gates, and verification evidence procedures are documented in `docs/INDEXER_METRICS_ROLLOUT_COMPLETION.md`.

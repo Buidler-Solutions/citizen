@@ -79,6 +79,12 @@ export type CursorState = {
 };
 
 export type IndexerSummary = {
+  deployment: {
+    profile: IndexerDeploymentProfile;
+    metrics_auth_required: boolean;
+    metrics_rate_limit_rpm: number;
+    oncall_runbook: string;
+  };
   cursor: CursorState;
   counts: {
     indexed_blocks: number;
@@ -132,6 +138,8 @@ export type SloSnapshot = {
 };
 
 export type IndexerAlertSeverity = 'info' | 'warning' | 'critical';
+
+export type IndexerDeploymentProfile = 'localnet' | 'shared-dev' | 'production-candidate';
 
 export type IndexerAlert = {
   id: 'stalled_cursor' | 'sustained_lag' | 'checksum_mismatch';

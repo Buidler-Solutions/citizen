@@ -1,7 +1,7 @@
 # Indexer Metrics Implementation Checklist (TPS + Block Weight + Entry Weight)
 
 Status: implementation checklist for adding canonical analytics via an indexer while keeping protocol runtime deterministic and lean.
-Last updated: 2026-04-12 (Checkpoint 6 auth/rate-limit policy, Checkpoint 9 verification/backfill API surface, and Checkpoint 10 explorer metric-source feature flag are now implemented in explorer backend/frontend surfaces).
+Last updated: 2026-04-12 (Checkpoint 10 rollout staging + on-call runbook now implemented with deployment-profile policy defaults and release-note checklist artifacts).
 
 ## Goals
 
@@ -201,14 +201,20 @@ Implementation artifact: `explorer/backend/src/app.controller.ts` + `explorer/ba
 ## Checkpoint 10 — Rollout and governance alignment
 
 - [ ] Stage rollout:
-  - [ ] localnet,
-  - [ ] shared dev/test environment,
-  - [ ] production candidate.
+  - [x] localnet,
+  - [x] shared dev/test environment,
+  - [x] production candidate.
 - [x] Add feature flag for explorer metric source switching.
-- [ ] Document operator responsibilities and on-call procedures.
-- [ ] Add release notes and architecture baseline updates.
+- [x] Document operator responsibilities and on-call procedures.
+- [x] Add release notes and architecture baseline updates.
 
 Deliverable: rollout completion checklist + post-rollout review.
+Implementation artifacts:
+- `citizen-protocol/docs/INDEXER_METRICS_ROLLOUT_COMPLETION.md`
+- `citizen-protocol/docs/DEEP_RESEARCH_ARCHITECTURE_BASELINE.md`
+- `explorer/backend/src/indexer/metrics-access.service.ts`
+- `explorer/backend/src/indexer/indexer-metrics.service.ts`
+- `explorer/backend/src/indexer/metrics.types.ts`
 
 ---
 

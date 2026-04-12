@@ -19,6 +19,7 @@ import {
   VerificationSampleReport,
 } from './metrics.types';
 import { computeCanonicalWeight, roundHalfAwayFromZero } from './weight';
+import { IndexerMetricsAccessService } from './metrics-access.service';
 
 type BlockLookup = {
   height: number;
@@ -76,6 +77,8 @@ export class IndexerMetricsService {
     updated_at: null,
   };
 
+  constructor(private readonly accessService: IndexerMetricsAccessService) {}
+
   startPolling(): void {
     if (this.pollTimer) {
       return;
@@ -105,6 +108,7 @@ export class IndexerMetricsService {
     const alerts = this.evaluateAlerts(runtimeLatestHeight, indexedHeight, ingestionLagBlocks);
     const slo = this.evaluateSlo(alerts, ingestionLagBlocks);
     return {
+      deployment: this.accessService.getAccessPolicySnapshot(),
       cursor: { ...this.cursor },
       counts: {
         indexed_blocks: this.indexedBlocks.size,
