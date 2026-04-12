@@ -93,11 +93,11 @@ This checklist captures the implementation checkpoints for upgrading Citizen fro
 
 ### 4.3 Browser Extension (Compose tab)
 
-- [ ] Add draft import/export flow for handoff (Alice → Bob).
-- [ ] Ensure immutable canonical preimage once draft is created.
-- [ ] Add signer collection UI and threshold progress indicator.
-- [ ] Block submission until threshold satisfied.
-- [ ] Keep current single-sign flow available.
+- [x] Add draft import/export flow for handoff (Alice → Bob).
+- [x] Ensure immutable canonical preimage once draft is created.
+- [x] Add signer collection UI and threshold progress indicator.
+- [x] Block submission until threshold satisfied.
+- [x] Keep current single-sign flow available.
 
 ---
 
@@ -115,7 +115,7 @@ This checklist captures the implementation checkpoints for upgrading Citizen fro
 
 - [ ] Phase 1: Add optional fields + API dual-path support.
 - [ ] Phase 2: Introduce ledger policy rule and gate by namespace config.
-- [ ] Phase 3: Ship SDK/CLI/extension multisig compose UX.
+- [x] Phase 3: Ship SDK/CLI/extension multisig compose UX.
 - [ ] Phase 4: Enable multisig policies on selected namespaces/actions.
 - [ ] Phase 5: Monitor and deprecate non-required legacy paths only when safe.
 
@@ -136,5 +136,5 @@ This checklist captures the implementation checkpoints for upgrading Citizen fro
 - [ ] Legacy single-signer envelopes still submit successfully.
 - [ ] Multisig envelopes pass end-to-end (compose → collect signatures → submit → receipt).
 - [ ] Namespace policy can require multisig and reject insufficient signatures.
-- [ ] SDK/CLI/Browser extension all support multisig compose flow.
+- [x] SDK/CLI/Browser extension all support multisig compose flow.
 - [ ] Documentation updated for operators/builders with migration guidance.
