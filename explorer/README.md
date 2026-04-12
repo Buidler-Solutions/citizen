@@ -21,6 +21,21 @@ Explorer frontend now calls canonical node/runtime contracts directly:
 
 ## Quick start
 
+
+### Backend
+```bash
+cd backend
+npm install
+npm run start:dev
+```
+
+The explorer backend is optional and primarily acts as a thin proxy/helper API for runtime lookups.
+
+When running, backend listens on `http://localhost:3001`.
+
+Backend environment variables:
+- `CITIZEN_NODE_URL` - runtime API base URL (defaults to `http://127.0.0.1:8081`).
+
 ### Frontend
 ```bash
 cd frontend
@@ -29,6 +44,8 @@ npm run dev
 ```
 
 The explorer frontend runs on `http://localhost:8885` by default.
+
+Dashboard metrics are computed via a frontend-local indexer pass over runtime blocks (no centralized backend required for default operation).
 
 Environment variables:
 - `NEXT_PUBLIC_NODE_RUNTIME_URL` - base URL for the Citizen node runtime API (defaults to `http://127.0.0.1:8081`).

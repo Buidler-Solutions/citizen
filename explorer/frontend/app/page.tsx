@@ -1,25 +1,16 @@
 import { fetchBlocksPage } from './lib/blocks';
 import { HomeDashboard } from './components/home-dashboard';
+import { deriveLocalIndexerMetrics, type RuntimeBlock } from './lib/local-indexer';
 
 export const dynamic = 'force-dynamic';
 
-type EntryResponse = {
-  source: string;
-  data: {
-    namespace: string;
-    entries: {
-      entry_id?: string;
-      author?: string;
-      timestamp?: number;
-      privacy_flag?: boolean;
-      authorized_readers?: string[];
-      payload: Record<string, unknown>;
-    }[];
+type BlockLookupResponse = {
+  data?: {
+    block?: RuntimeBlock | null;
   };
 };
 
 const nodeRuntimeBase = process.env.NEXT_PUBLIC_NODE_RUNTIME_URL ?? 'http://127.0.0.1:8081';
-const namespace = process.env.NEXT_PUBLIC_NAMESPACE ?? 'governance.vote';
 
 async function safeFetchJson<T>(url: string): Promise<T | null> {
   try {
@@ -47,10 +38,6 @@ function formatBytes(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(2)} MiB`;
 }
 
-function pseudoSizeFromPayload(payload: Record<string, unknown>): number {
-  return Buffer.byteLength(JSON.stringify(payload), 'utf8');
-}
-
 function compactDate(epochSeconds: number): string {
   return new Date(epochSeconds * 1000).toLocaleString('en-US', {
     month: 'short',
@@ -73,70 +60,77 @@ function shortId(value: string | undefined): string {
 }
 
 export default async function HomePage() {
-  const [entries, blocksResult] = await Promise.all([
-    safeFetchJson<EntryResponse>(`${nodeRuntimeBase}/entries/${namespace}`),
-    fetchBlocksPage(undefined, 10),
-  ]);
+  const blocksResult = await fetchBlocksPage(undefined, 20);
+  const blockHeaders = blocksResult.ok ? blocksResult.payload.data.items : [];
 
-  const latestEntries = (entries?.data?.entries ?? []).slice(0, 10);
-  const blocks = blocksResult.ok ? blocksResult.payload.data.items.slice(0, 10) : [];
-  const encryptedEntries = latestEntries.filter((entry) => entry.privacy_flag);
-  const publicEntries = Math.max(0, latestEntries.length - encryptedEntries.length);
-  const readerAccessCount = new Set(
-    latestEntries.flatMap((entry) => entry.authorized_readers ?? [])
-  ).size;
+  const blockResponses = await Promise.all(
+    blockHeaders.map((item) =>
+      safeFetchJson<BlockLookupResponse>(`${nodeRuntimeBase.replace(/\/$/, '')}/blocks/${item.height}`),
+    ),
+  );
+
+  const runtimeBlocks = blockResponses
+    .map((response) => response?.data?.block ?? null)
+    .filter((block): block is RuntimeBlock => block !== null);
+
+  const localMetrics = deriveLocalIndexerMetrics(runtimeBlocks, 60);
+
+  const uniqueAuthors = new Set(localMetrics.indexedEntries.map((entry) => entry.author).filter(Boolean));
+  const totalBlockBytes = localMetrics.indexedBlocks.reduce((sum, block) => sum + block.blockWeightBytes, 0);
+  const avgBlockWeight =
+    localMetrics.indexedBlocks.length > 0
+      ? Math.round(totalBlockBytes / localMetrics.indexedBlocks.length)
+      : 0;
+  const latestTps = localMetrics.tpsSeries[localMetrics.tpsSeries.length - 1]?.tps ?? 0;
 
   const topMetrics = [
-    { label: 'Public Data', value: `${publicEntries.toLocaleString('en-US')}`, icon: '⇄' },
-    { label: 'Encrypted Data', value: `${encryptedEntries.length.toLocaleString('en-US')}`, icon: '⏱' },
-    {
-      label: 'Addresses',
-      value: `${new Set(latestEntries.map((item) => item.author).filter(Boolean)).size.toLocaleString('en-US')}`,
-      icon: '◫',
-    },
-    { label: 'Reader Access', value: `${readerAccessCount.toLocaleString('en-US')}`, icon: '◎' },
+    { label: 'Sampled Blocks', value: `${localMetrics.indexedBlocks.length.toLocaleString('en-US')}`, icon: '⛓' },
+    { label: 'Indexed Entries', value: `${localMetrics.indexedEntries.length.toLocaleString('en-US')}`, icon: '⇄' },
+    { label: 'Latest TPS (60s)', value: latestTps.toFixed(3), icon: '⏱' },
+    { label: 'Distinct Authors', value: `${uniqueAuthors.size.toLocaleString('en-US')}`, icon: '◎' },
   ];
 
-  const txBars = latestEntries.map((entry) => pseudoSizeFromPayload(entry.payload));
-  const tpsLine = blocks.map((item) => item.entry_count);
+  const txBars = localMetrics.indexedEntries.slice(0, 10).map((entry) => entry.weightBytes).reverse();
+  const tpsLine = localMetrics.tpsSeries.slice(-10).map((point) => point.tps);
 
   const charts = [
     {
-      title: 'Transactions',
-      primary: `${latestEntries.length.toLocaleString('en-US')}`,
-      secondary: `${(latestEntries.length * 14.9).toFixed(2)}K EOD Estimate`,
+      title: 'Entry Weight (local indexer)',
+      primary: `${localMetrics.indexedEntries.length.toLocaleString('en-US')} indexed`,
+      secondary: `Total ${(localMetrics.indexedEntries.reduce((sum, entry) => sum + entry.weightBytes, 0) / 1024).toFixed(2)} KiB`,
       dateLabel: new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: '2-digit' }),
       points: txBars,
       mode: 'bars' as const,
     },
     {
-      title: 'TPS',
+      title: 'TPS (60s, local windows)',
+      primary: latestTps.toFixed(3),
       dateLabel: new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: '2-digit' }),
       points: tpsLine,
       mode: 'line' as const,
     },
     {
-      title: 'Data Uploaded',
-      primary: `${(txBars.reduce((sum, point) => sum + point, 0) / (1024 * 1024)).toFixed(2)} MiB`,
-      secondary: `${(txBars.length * 0.48).toFixed(2)} GiB EOD Estimate`,
+      title: 'Block Weight (local indexer)',
+      primary: formatBytes(avgBlockWeight),
+      secondary: `${localMetrics.indexedBlocks.length} block sample avg`,
       dateLabel: new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: '2-digit' }),
-      points: txBars.slice().reverse(),
+      points: localMetrics.indexedBlocks.slice(0, 10).map((item) => item.blockWeightBytes).reverse(),
       mode: 'bars' as const,
     },
   ];
 
-  const transactions = latestEntries.map((entry) => ({
-    id: shortId(entry.entry_id),
+  const transactions = localMetrics.indexedEntries.slice(0, 10).map((entry) => ({
+    id: shortId(entry.entryId),
     from: shortId(entry.author),
-    sizeLabel: formatBytes(pseudoSizeFromPayload(entry.payload)),
+    sizeLabel: formatBytes(entry.weightBytes),
     ageLabel: formatRelativeMinutes(entry.timestamp),
   }));
 
-  const blockRows = blocks.map((item) => ({
-    height: item.height,
-    txCount: item.entry_count,
-    timestampLabel: compactDate(item.header.timestamp),
-    sizeLabel: formatBytes(item.entry_count * 1024 * 0.82),
+  const blockRows = localMetrics.indexedBlocks.slice(0, 10).map((block) => ({
+    height: block.height,
+    txCount: block.entryCount,
+    timestampLabel: compactDate(block.timestamp),
+    sizeLabel: formatBytes(block.blockWeightBytes),
   }));
 
   return (
@@ -145,6 +139,7 @@ export default async function HomePage() {
       charts={charts}
       transactions={transactions}
       blocks={blockRows}
+      sourceLabel="local-indexer (frontend)"
     />
   );
 }
