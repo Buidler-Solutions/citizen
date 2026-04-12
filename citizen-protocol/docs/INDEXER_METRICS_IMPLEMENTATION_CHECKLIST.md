@@ -1,7 +1,7 @@
 # Indexer Metrics Implementation Checklist (TPS + Block Weight + Entry Weight)
 
 Status: implementation checklist for adding canonical analytics via an indexer while keeping protocol runtime deterministic and lean.
-Last updated: 2026-04-12 (Checkpoint 7 explorer wiring advanced: block/entry weight lookups now query indexer first with runtime fallback + provenance labels).
+Last updated: 2026-04-12 (Checkpoint 8 observability started: indexer summary now emits ingestion lag, retry/failure counters, and processing/aggregation latency snapshots).
 
 ## Goals
 
@@ -164,12 +164,12 @@ Deliverable: explorer dashboard wired to indexer metrics endpoints.
 
 ## Checkpoint 8 — Observability, SLOs, and operations
 
-- [ ] Emit indexer internal metrics:
-  - [ ] ingestion lag (`latest_runtime_height - indexed_height`),
-  - [ ] block processing latency,
-  - [ ] failed block count,
-  - [ ] retry counts,
-  - [ ] aggregation job latency.
+- [x] Emit indexer internal metrics:
+  - [x] ingestion lag (`latest_runtime_height - indexed_height`),
+  - [x] block processing latency,
+  - [x] failed block count,
+  - [x] retry counts,
+  - [x] aggregation job latency.
 - [ ] Define SLO targets:
   - [ ] freshness (e.g., p95 lag under N seconds),
   - [ ] API availability,

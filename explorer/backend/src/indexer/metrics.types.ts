@@ -99,4 +99,18 @@ export type IndexerSummary = {
     latest_committed_at: number | null;
     allowed_lateness_seconds: number;
   };
+  internal_metrics: {
+    failed_block_count: number;
+    retry_count_total: number;
+    block_processing_latency_ms: LatencySnapshot;
+    aggregation_job_latency_ms: LatencySnapshot;
+  };
+};
+
+export type LatencySnapshot = {
+  samples: number;
+  avg: number;
+  p95: number;
+  max: number;
+  last: number | null;
 };

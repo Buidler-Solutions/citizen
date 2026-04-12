@@ -46,6 +46,12 @@ Indexer metrics endpoints:
 - `GET /metrics/blocks?from_height=&to_height=`
 - `GET /metrics/entries?namespace=&entry_ids=<id,id2>&from=&to=`
 
+`GET /metrics/summary` now includes `internal_metrics` snapshots for:
+- cumulative retry/failure counters,
+- block processing latency (`samples`, `avg`, `p95`, `max`, `last` in ms),
+- aggregation-job latency (`samples`, `avg`, `p95`, `max`, `last` in ms),
+- and ingestion lag (in blocks).
+
 ### Frontend
 ```bash
 cd frontend

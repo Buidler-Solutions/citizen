@@ -4,6 +4,7 @@ import {
   IndexedBlock,
   IndexedEntry,
   IndexerSummary,
+  LatencySnapshot,
   MetricWindow,
   MetricWindowName,
   PaginatedResult,
@@ -44,6 +45,10 @@ export class IndexerMetricsService {
   private readonly poisonBlocks: Array<{ height: number; reason: string; detected_at: number }> = [];
   private latestCommittedAt: number | null = null;
   private lateEntriesAccepted = 0;
+  private failedBlockCount = 0;
+  private retryCountTotal = 0;
+  private readonly blockProcessingLatenciesMs: number[] = [];
+  private readonly aggregationLatenciesMs: number[] = [];
 
   private cursor: CursorState = {
     last_indexed_height: -1,
@@ -95,6 +100,12 @@ export class IndexerMetricsService {
         accepted_entries: this.lateEntriesAccepted,
         latest_committed_at: this.latestCommittedAt,
         allowed_lateness_seconds: this.allowedLatenessSeconds,
+      },
+      internal_metrics: {
+        failed_block_count: this.failedBlockCount,
+        retry_count_total: this.retryCountTotal,
+        block_processing_latency_ms: this.toLatencySnapshot(this.blockProcessingLatenciesMs),
+        aggregation_job_latency_ms: this.toLatencySnapshot(this.aggregationLatenciesMs),
       },
     };
   }
@@ -212,7 +223,9 @@ export class IndexerMetricsService {
         this.markDegraded(height, continuityError);
         return;
       }
+      const blockStartMs = Date.now();
       this.persistBlockAtomically(candidate.block);
+      this.recordLatency(this.blockProcessingLatenciesMs, Date.now() - blockStartMs);
     }
   }
 
@@ -330,6 +343,7 @@ export class IndexerMetricsService {
   }
 
   private recomputeWindows(): void {
+    const recomputeStartMs = Date.now();
     const entries = Array.from(this.indexedEntries.values());
     const now = Date.now();
     (Object.keys(WINDOW_SECONDS) as MetricWindowName[]).forEach((windowName) => {
@@ -356,6 +370,7 @@ export class IndexerMetricsService {
         }));
       this.metricWindows.set(windowName, windows);
     });
+    this.recordLatency(this.aggregationLatenciesMs, Date.now() - recomputeStartMs);
   }
 
   private compactRetention(): void {
@@ -405,6 +420,7 @@ export class IndexerMetricsService {
 
   private markDegraded(height: number, reason: string): void {
     const detectedAt = Date.now();
+    this.failedBlockCount += 1;
     this.cursor = {
       ...this.cursor,
       degraded: true,
@@ -423,6 +439,7 @@ export class IndexerMetricsService {
         this.cursor.retry_count = attempt;
         return block;
       } catch (error) {
+        this.retryCountTotal += 1;
         lastError = error instanceof Error ? error.message : String(error);
         if (attempt === this.backoffMs.length) {
           break;
@@ -537,5 +554,34 @@ export class IndexerMetricsService {
       throw new BadRequestException('limit must be a positive integer');
     }
     return Math.min(limit, MAX_PAGE_LIMIT);
+  }
+
+  private recordLatency(target: number[], latencyMs: number): void {
+    target.push(Math.max(latencyMs, 0));
+    if (target.length > 1024) {
+      target.splice(0, target.length - 1024);
+    }
+  }
+
+  private toLatencySnapshot(latencies: number[]): LatencySnapshot {
+    if (latencies.length === 0) {
+      return {
+        samples: 0,
+        avg: 0,
+        p95: 0,
+        max: 0,
+        last: null,
+      };
+    }
+    const sorted = latencies.slice().sort((a, b) => a - b);
+    const p95Index = Math.min(sorted.length - 1, Math.floor((sorted.length - 1) * 0.95));
+    const total = sorted.reduce((sum, value) => sum + value, 0);
+    return {
+      samples: latencies.length,
+      avg: roundHalfAwayFromZero(total / sorted.length, 2),
+      p95: sorted[p95Index],
+      max: sorted[sorted.length - 1],
+      last: latencies[latencies.length - 1] ?? null,
+    };
   }
 }
