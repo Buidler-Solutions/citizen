@@ -163,6 +163,7 @@ impl<S: LedgerStorage + 'static> Ledger<S> {
             "consent_policy" => self.consent_policy(entry, config),
             "author_matches_object_id" => self.author_matches_object_id(entry),
             "builder_credit_policy" => self.builder_credit_policy(entry, config),
+            "envelope_multisig_policy" => self.envelope_multisig_policy(entry, config),
             "privacy_policy" => self.privacy_policy(entry, config),
             "asset_control_policy" => self.asset_control_policy(entry, config),
             "wasm_runtime_policy" => self.wasm_runtime_policy(entry, config),
@@ -603,6 +604,160 @@ impl<S: LedgerStorage + 'static> Ledger<S> {
                     return Err(ProtocolError::ValidationFailed(format!(
                         "daily sponsored spend limit exceeded: cap {max_daily_spend}, attempted {}",
                         daily_spend.saturating_add(amount)
+                    )));
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    fn envelope_multisig_policy(&self, entry: &LedgerEntry, config: &Value) -> Result<()> {
+        let targeted_actions = config.get("actions").and_then(Value::as_array).map(|actions| {
+            actions
+                .iter()
+                .filter_map(Value::as_str)
+                .collect::<HashSet<&str>>()
+        });
+        if let Some(actions) = targeted_actions {
+            if !actions.is_empty() && !actions.contains(entry.action.as_str()) {
+                return Ok(());
+            }
+        }
+
+        let allowed_signers = config
+            .get("allowed_signers")
+            .and_then(Value::as_array)
+            .ok_or_else(|| {
+                ProtocolError::ValidationFailed(
+                    "envelope_multisig_policy requires allowed_signers array".into(),
+                )
+            })?;
+        let mut allowed_signer_set: HashSet<&str> = HashSet::new();
+        for signer in allowed_signers {
+            let signer = signer.as_str().ok_or_else(|| {
+                ProtocolError::ValidationFailed(
+                    "envelope_multisig_policy allowed_signers entries must be strings".into(),
+                )
+            })?;
+            if !allowed_signer_set.insert(signer) {
+                return Err(ProtocolError::ValidationFailed(
+                    "envelope_multisig_policy allowed_signers entries must be unique".into(),
+                ));
+            }
+        }
+        if allowed_signer_set.is_empty() {
+            return Err(ProtocolError::ValidationFailed(
+                "envelope_multisig_policy allowed_signers cannot be empty".into(),
+            ));
+        }
+
+        let threshold = config.get("threshold").and_then(Value::as_u64).ok_or_else(|| {
+            ProtocolError::ValidationFailed("envelope_multisig_policy requires threshold".into())
+        })? as usize;
+        if threshold == 0 || threshold > allowed_signer_set.len() {
+            return Err(ProtocolError::ValidationFailed(
+                "envelope_multisig_policy threshold must be between 1 and allowed_signers length"
+                    .into(),
+            ));
+        }
+
+        let expected_scope = config
+            .get("signature_scope")
+            .and_then(Value::as_str)
+            .ok_or_else(|| {
+                ProtocolError::ValidationFailed(
+                    "envelope_multisig_policy requires signature_scope".into(),
+                )
+            })?;
+
+        let envelope_multisig = entry
+            .payload
+            .get("envelope_multisig")
+            .and_then(Value::as_object)
+            .ok_or_else(|| {
+                ProtocolError::ValidationFailed(
+                    "payload.envelope_multisig is required when envelope_multisig_policy is enabled"
+                        .into(),
+                )
+            })?;
+
+        let received_scope = envelope_multisig
+            .get("signature_scope")
+            .and_then(Value::as_str)
+            .ok_or_else(|| {
+                ProtocolError::ValidationFailed(
+                    "payload.envelope_multisig.signature_scope is required".into(),
+                )
+            })?;
+        if received_scope != expected_scope {
+            return Err(ProtocolError::ValidationFailed(
+                "payload.envelope_multisig.signature_scope does not match namespace policy"
+                    .into(),
+            ));
+        }
+
+        let signer_records = envelope_multisig
+            .get("signers")
+            .and_then(Value::as_array)
+            .ok_or_else(|| {
+                ProtocolError::ValidationFailed(
+                    "payload.envelope_multisig.signers must be an array".into(),
+                )
+            })?;
+        let mut unique_signers: HashSet<String> = HashSet::new();
+        let mut signer_roles: HashMap<String, String> = HashMap::new();
+        for signer_record in signer_records {
+            let (signer_id, signer_role) = if let Some(signer_id) = signer_record.as_str() {
+                (signer_id, None)
+            } else {
+                let signer_obj = signer_record.as_object().ok_or_else(|| {
+                    ProtocolError::ValidationFailed(
+                        "payload.envelope_multisig.signers entries must be strings or objects"
+                            .into(),
+                    )
+                })?;
+                let signer_id = signer_obj.get("id").and_then(Value::as_str).ok_or_else(|| {
+                    ProtocolError::ValidationFailed(
+                        "payload.envelope_multisig.signers object entries require id".into(),
+                    )
+                })?;
+                let signer_role = signer_obj.get("role").and_then(Value::as_str);
+                (signer_id, signer_role)
+            };
+
+            if !allowed_signer_set.contains(signer_id) {
+                return Err(ProtocolError::ValidationFailed(
+                    "payload.envelope_multisig.signers includes signer outside allowed_signers"
+                        .into(),
+                ));
+            }
+            unique_signers.insert(signer_id.to_string());
+            if let Some(role) = signer_role {
+                signer_roles.insert(signer_id.to_string(), role.to_string());
+            }
+        }
+
+        if unique_signers.len() < threshold {
+            return Err(ProtocolError::ValidationFailed(format!(
+                "payload.envelope_multisig.signers must include at least {threshold} unique signers"
+            )));
+        }
+
+        if let Some(required_roles) = config.get("required_roles").and_then(Value::as_array) {
+            let mut present_roles: HashSet<&str> = HashSet::new();
+            for role in signer_roles.values() {
+                present_roles.insert(role.as_str());
+            }
+            for required_role in required_roles {
+                let required_role = required_role.as_str().ok_or_else(|| {
+                    ProtocolError::ValidationFailed(
+                        "envelope_multisig_policy required_roles entries must be strings".into(),
+                    )
+                })?;
+                if !present_roles.contains(required_role) {
+                    return Err(ProtocolError::ValidationFailed(format!(
+                        "payload.envelope_multisig.signers is missing required role {required_role}"
                     )));
                 }
             }
@@ -1749,6 +1904,15 @@ mod tests {
         entry.payload = json!({"amount": amount, "multisig_proofs": proofs});
     }
 
+    fn envelope_multisig_payload(scope: &str, signers: serde_json::Value) -> serde_json::Value {
+        json!({
+            "envelope_multisig": {
+                "signature_scope": scope,
+                "signers": signers
+            }
+        })
+    }
+
     #[test]
     fn supports_generic_field_uniqueness_on_payload() {
         let ledger = Ledger::in_memory();
@@ -2771,6 +2935,144 @@ mod tests {
         assert!(err
             .to_string()
             .contains("interop standard 'custom-oneoff' is not governance approved"));
+    }
+
+    #[test]
+    fn envelope_multisig_policy_passes_for_targeted_action() {
+        let ledger = Ledger::in_memory();
+        let namespace = "forms.commitment";
+        ledger.bootstrap_namespaces(vec![namespace_with_rules(
+            namespace,
+            vec![NamespaceRule {
+                name: "envelope_multisig_policy".into(),
+                config: json!({
+                    "actions": ["RECORD_EVENT"],
+                    "allowed_signers": ["did:key:alice", "did:key:bob", "did:key:carol"],
+                    "threshold": 2,
+                    "signature_scope": "canonical_payload_v1",
+                    "required_roles": ["initiator", "approver"]
+                }),
+            }],
+        )]);
+
+        let mut entry = test_entry(namespace);
+        entry.payload = envelope_multisig_payload(
+            "canonical_payload_v1",
+            json!([
+                {"id": "did:key:alice", "role": "initiator"},
+                {"id": "did:key:bob", "role": "approver"}
+            ]),
+        );
+
+        ledger
+            .apply_entry(entry)
+            .expect("targeted multisig policy should pass with valid signer set");
+    }
+
+    #[test]
+    fn envelope_multisig_policy_rejects_threshold_shortfall() {
+        let ledger = Ledger::in_memory();
+        let namespace = "forms.commitment";
+        ledger.bootstrap_namespaces(vec![namespace_with_rules(
+            namespace,
+            vec![NamespaceRule {
+                name: "envelope_multisig_policy".into(),
+                config: json!({
+                    "allowed_signers": ["did:key:alice", "did:key:bob", "did:key:carol"],
+                    "threshold": 3,
+                    "signature_scope": "canonical_payload_v1"
+                }),
+            }],
+        )]);
+
+        let mut entry = test_entry(namespace);
+        entry.payload =
+            envelope_multisig_payload("canonical_payload_v1", json!(["did:key:alice", "did:key:bob"]));
+        let err = ledger
+            .apply_entry(entry)
+            .expect_err("threshold shortfall should fail");
+        assert!(err
+            .to_string()
+            .contains("must include at least 3 unique signers"));
+    }
+
+    #[test]
+    fn envelope_multisig_policy_rejects_signer_allowlist_mismatch() {
+        let ledger = Ledger::in_memory();
+        let namespace = "forms.commitment";
+        ledger.bootstrap_namespaces(vec![namespace_with_rules(
+            namespace,
+            vec![NamespaceRule {
+                name: "envelope_multisig_policy".into(),
+                config: json!({
+                    "allowed_signers": ["did:key:alice", "did:key:bob"],
+                    "threshold": 2,
+                    "signature_scope": "canonical_payload_v1"
+                }),
+            }],
+        )]);
+
+        let mut entry = test_entry(namespace);
+        entry.payload =
+            envelope_multisig_payload("canonical_payload_v1", json!(["did:key:alice", "did:key:mallory"]));
+        let err = ledger
+            .apply_entry(entry)
+            .expect_err("unauthorized signer should fail");
+        assert!(err.to_string().contains("outside allowed_signers"));
+    }
+
+    #[test]
+    fn envelope_multisig_policy_rejects_missing_required_role() {
+        let ledger = Ledger::in_memory();
+        let namespace = "forms.commitment";
+        ledger.bootstrap_namespaces(vec![namespace_with_rules(
+            namespace,
+            vec![NamespaceRule {
+                name: "envelope_multisig_policy".into(),
+                config: json!({
+                    "allowed_signers": ["did:key:alice", "did:key:bob"],
+                    "threshold": 2,
+                    "signature_scope": "canonical_payload_v1",
+                    "required_roles": ["initiator", "approver"]
+                }),
+            }],
+        )]);
+
+        let mut entry = test_entry(namespace);
+        entry.payload = envelope_multisig_payload(
+            "canonical_payload_v1",
+            json!([
+                {"id": "did:key:alice", "role": "initiator"},
+                {"id": "did:key:bob", "role": "observer"}
+            ]),
+        );
+        let err = ledger
+            .apply_entry(entry)
+            .expect_err("required role mismatch should fail");
+        assert!(err.to_string().contains("missing required role approver"));
+    }
+
+    #[test]
+    fn envelope_multisig_policy_skips_non_targeted_action() {
+        let ledger = Ledger::in_memory();
+        let namespace = "forms.commitment";
+        ledger.bootstrap_namespaces(vec![namespace_with_rules(
+            namespace,
+            vec![NamespaceRule {
+                name: "envelope_multisig_policy".into(),
+                config: json!({
+                    "actions": ["MULTISIG_COMMIT"],
+                    "allowed_signers": ["did:key:alice", "did:key:bob"],
+                    "threshold": 2,
+                    "signature_scope": "canonical_payload_v1"
+                }),
+            }],
+        )]);
+
+        let entry = test_entry(namespace);
+        ledger
+            .apply_entry(entry)
+            .expect("non-targeted action should not require multisig payload");
     }
     #[test]
     fn validate_entry_submission_requires_verifiable_signature_material() {

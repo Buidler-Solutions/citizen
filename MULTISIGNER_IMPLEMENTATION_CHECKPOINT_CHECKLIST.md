@@ -54,19 +54,19 @@ This checklist captures the implementation checkpoints for upgrading Citizen fro
 
 ## 3) Ledger Rule: Targeted Namespace/Action Enforcement
 
-- [ ] Add a new namespace rule (recommended name: `envelope_multisig_policy`).
-- [ ] Rule inputs should support:
-  - [ ] `allowed_signers`
-  - [ ] `threshold`
-  - [ ] `required_roles` (optional)
-  - [ ] `signature_scope`
-- [ ] Enforce policy only where configured (targeted namespaces/actions).
-- [ ] Keep single-signer namespaces unaffected unless governance enables multisig.
-- [ ] Add ledger tests for:
-  - [ ] policy pass
-  - [ ] policy threshold fail
-  - [ ] signer allowlist fail
-  - [ ] role mismatch fail (if role-based mode enabled)
+- [x] Add a new namespace rule (recommended name: `envelope_multisig_policy`).
+- [x] Rule inputs should support:
+  - [x] `allowed_signers`
+  - [x] `threshold`
+  - [x] `required_roles` (optional)
+  - [x] `signature_scope`
+- [x] Enforce policy only where configured (targeted namespaces/actions).
+- [x] Keep single-signer namespaces unaffected unless governance enables multisig.
+- [x] Add ledger tests for:
+  - [x] policy pass
+  - [x] policy threshold fail
+  - [x] signer allowlist fail
+  - [x] role mismatch fail (if role-based mode enabled)
 
 ---
 
