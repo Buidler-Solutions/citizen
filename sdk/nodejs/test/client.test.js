@@ -9,6 +9,7 @@ import { sha256DigestHex } from "../src/index.js";
 import {
   BrowserWalletSigner,
   CitizenNodeClient,
+  OFFCHAIN_ATTACHMENT_ALLOWED_MIME_TYPES,
   canonicalizeJson,
   createFormCommitmentReceipt,
   createMultisigCreditGrant,
@@ -48,6 +49,25 @@ function resolveVectorFixturePath(filename) {
 test("canonicalizeJson sorts keys recursively", () => {
   const output = canonicalizeJson({ z: 1, a: { d: 2, c: 1 } });
   assert.equal(output, '{"a":{"c":1,"d":2},"z":1}');
+});
+
+test("OFFCHAIN_ATTACHMENT_ALLOWED_MIME_TYPES includes runtime-supported media/doc aliases", () => {
+  const expectedMimeTypes = [
+    "audio/mp3",
+    "video/quicktime",
+    "application/zip",
+    "application/x-zip-compressed",
+    "application/vnd.ms-word",
+    "application/msexcel"
+  ];
+
+  expectedMimeTypes.forEach((mimeType) => {
+    assert.equal(
+      OFFCHAIN_ATTACHMENT_ALLOWED_MIME_TYPES.includes(mimeType),
+      true,
+      `Expected ${mimeType} to be allowlisted`
+    );
+  });
 });
 
 test("createFormCommitmentReceipt returns forms.commitment operation payload", () => {
