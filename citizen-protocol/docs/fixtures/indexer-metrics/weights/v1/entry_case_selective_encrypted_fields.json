@@ -1,0 +1,49 @@
+{
+  "entry_id": "77777777-7777-7777-7777-777777777777",
+  "namespace": "health.claims",
+  "action": "UPSERT_HYBRID",
+  "object_id": "claim-2026-0101",
+  "payload": {
+    "public": {
+      "claim_id": "C-2026-0101",
+      "status": "pending",
+      "provider": "metro-hospital"
+    },
+    "encrypted_fields": {
+      "diagnosis": "0xabc123ff",
+      "treatment_notes": "0x9988aabb"
+    }
+  },
+  "privacy_flag": true,
+  "privacy_mode": "hybrid",
+  "payload_commitment": "sha256:hybrid-entry-777",
+  "ciphertext_hex": "f00dfade11223344",
+  "nonce_hex": "0102030405aabbcc",
+  "salt_hex": "9988776655443322",
+  "kdf_params": {
+    "memory_kib": 65536,
+    "iterations": 3,
+    "parallelism": 1,
+    "output_length": 32
+  },
+  "authorized_readers": ["did:key:auditor-1", "did:key:hospital-ops"],
+  "field_reader_acls": {
+    "diagnosis": ["did:key:auditor-1"],
+    "treatment_notes": ["did:key:hospital-ops"]
+  },
+  "key_wrapped_secrets": [
+    {
+      "reader_id": "did:key:auditor-1",
+      "wrapped_dek": "2f3e4d5c",
+      "wrap_algorithm": "x25519-xsalsa20poly1305"
+    },
+    {
+      "reader_id": "did:key:hospital-ops",
+      "wrapped_dek": "a1b2c3d4",
+      "wrap_algorithm": "x25519-xsalsa20poly1305"
+    }
+  ],
+  "author": "did:key:author-7",
+  "signature": "ed25519:signature-hybrid",
+  "timestamp": 1735690200
+}

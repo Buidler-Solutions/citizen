@@ -80,11 +80,11 @@ Implementation artifact: `citizen-protocol/docs/INDEXER_METRICS_DATA_MODEL_AND_S
   - [x] `compute_entry_weight(entry) -> u64`
   - [x] `compute_block_weight(block) -> u64`
 - [x] Use one canonical serialization strategy across all calculations.
-- [ ] Add deterministic test vectors:
+- [x] Add deterministic test vectors:
   - [x] same input -> same bytes/weights,
-  - [ ] cross-process reproducibility,
+  - [x] cross-process reproducibility,
   - [x] boundary tests (empty payload, large payload, selective encrypted fields).
-- [ ] Add regression fixtures from real sample blocks.
+- [x] Add regression fixtures from real sample blocks.
 
 Deliverable: tested weight module + fixtures committed in repo.
 Implementation artifact: `citizen-protocol/docs/INDEXER_METRICS_WEIGHT_COMPUTATION_MODULE.md` (module boundary, serializer contract, fixture taxonomy, and test matrix documented).
