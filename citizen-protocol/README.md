@@ -49,6 +49,20 @@ Implementation handoff status is tracked in:
 
 - `docs/PHASE_IMPLEMENTATION_TRACKER.md`
 
+## Current Runtime Status (2026-04-12)
+
+- Core runtime surfaces (node, consensus, ledger validation, governance, storage,
+  simulation, wallet compatibility hooks, and API submit/query paths) are
+  implemented in this workspace.
+- Off-chain encrypted file APIs (`/api/v1/files/intents`, `/api/v1/files/commit`,
+  `/api/v1/files/read`, `/api/v1/files/revoke`) are implemented with namespace
+  policy enforcement, but object-store execution is profile/config dependent
+  (feature flag + optional MinIO configuration) and should not be assumed as
+  always-on in every deployment.
+- For builder/operator planning, keep off-chain encrypted storage as a floating
+  option for large encrypted artifacts when namespace-level on-chain accepted
+  size/shape constraints make direct on-chain payload handling impractical.
+
 ## Feasibility Note: "Institutional Integrity" Runtime Diagrams
 
 Citizen's existing runtime is already designed for that model at the
@@ -95,6 +109,7 @@ Current delivery includes Phase 2 identity/data ownership primitives, Phase 3 bu
 - Wallet opt-in privacy modes now include both full encrypt-then-commit and field-selective encryption (`public_fields` + encrypted `private_fields` + `public_allowlist`) with canonical commitment checks, Argon2id + ChaCha20-Poly1305 payload protection, and embedded consent receipts for governance/audit compliance while keeping public clear-text as the default mode.
 - Encrypt-then-commit is explicitly opt-in and supports two protected paths: (a) passphrase-protected mode for user-managed sharing and (b) ACL + DEK hybrid mode for reader-scoped access control.
 - Hybrid privacy mode enforces reader ACL + DEK wrapping semantics for both full-payload and per-field commit workflows: each authorized reader receives an X25519-wrapped DEK, `field_reader_acls` scopes access by field, and all flows keep deterministic `payload_commitment` anchoring so node, wallet, and explorer contracts stay verifiable.
+- Off-chain encrypted attachment workflows now also support reader-key hybrid decrypt/encrypt in wallet APIs (`encrypt_offchain_file_reader_to_writer_hybrid` / `decrypt_offchain_file_reader_to_writer_hybrid`) so authorized readers can decrypt with their own keys without passphrase exchange.
 - Privacy options are now documented as four operator/builder choices: `none` (default clear-text), `passphrase` encrypt-then-commit, `hybrid_full_payload` (ACL + DEK), and `hybrid_selective_fields` (ACL + DEK + per-field visibility).
 
 ## Getting Started

@@ -1,8 +1,9 @@
-use citizen_types::{BlockHeader, CommitProof, LedgerEntry, ProtocolError, ValidatorId};
+use citizen_types::{Block, BlockHeader, CommitProof, LedgerEntry, ProtocolError, ValidatorId};
 use ed25519_dalek::{
     Signature, Signer, SigningKey, VerifyingKey, PUBLIC_KEY_LENGTH, SECRET_KEY_LENGTH,
 };
 use parking_lot::RwLock;
+use serde::Serialize;
 use rand::rngs::OsRng;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
@@ -133,6 +134,22 @@ pub fn canonical_json(value: &Value) -> String {
     }
 }
 
+pub fn canonical_json_bytes<T: Serialize>(value: &T) -> Result<Vec<u8>> {
+    let normalized = serde_json::to_value(value)
+        .map_err(|err| ProtocolError::crypto(format!("failed to serialize canonical value: {err}")))?;
+    Ok(canonical_json(&normalized).into_bytes())
+}
+
+pub fn compute_entry_weight(entry: &LedgerEntry) -> Result<u64> {
+    let canonical = canonical_json_bytes(entry)?;
+    Ok(canonical.len() as u64)
+}
+
+pub fn compute_block_weight(block: &Block) -> Result<u64> {
+    let canonical = canonical_json_bytes(block)?;
+    Ok(canonical.len() as u64)
+}
+
 pub fn sha256_hex(input: &str) -> String {
     let mut hasher = Sha256::new();
     hasher.update(input.as_bytes());
@@ -227,6 +244,7 @@ pub fn verifying_key_to_string(key: &VerifyingKey) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use citizen_types::{Block, LedgerEntry};
     use serde::Deserialize;
 
     #[derive(Debug, Deserialize)]
@@ -278,5 +296,64 @@ mod tests {
             assert_eq!(canonical, vector.expected_canonical_json);
             assert_eq!(sha256_hex(&canonical), vector.expected_sha256);
         }
+    }
+
+    #[test]
+    fn canonical_json_bytes_matches_string_encoding() {
+        let value = serde_json::json!({
+            "z": [3, 2, 1],
+            "a": { "k": "v", "i": 1 }
+        });
+        let encoded = canonical_json_bytes(&value).expect("canonical bytes");
+        assert_eq!(encoded, canonical_json(&value).into_bytes());
+    }
+
+    #[test]
+    fn compute_weight_fixtures_match_expected_weights() {
+        let entry_cases = [
+            ("entry_case_baseline", include_str!("../../../docs/fixtures/indexer-metrics/weights/v1/entry_case_baseline.json"), 323_u64),
+            ("entry_case_empty_payload", include_str!("../../../docs/fixtures/indexer-metrics/weights/v1/entry_case_empty_payload.json"), 272_u64),
+            ("entry_case_unicode_nested", include_str!("../../../docs/fixtures/indexer-metrics/weights/v1/entry_case_unicode_nested.json"), 361_u64),
+            ("entry_case_large_payload", include_str!("../../../docs/fixtures/indexer-metrics/weights/v1/entry_case_large_payload.json"), 1117_u64),
+            ("entry_case_selective_encrypted_fields", include_str!("../../../docs/fixtures/indexer-metrics/weights/v1/entry_case_selective_encrypted_fields.json"), 1064_u64),
+        ];
+
+        for (fixture_id, fixture, expected_weight_bytes) in entry_cases {
+            let entry: LedgerEntry = serde_json::from_str(fixture).expect("entry fixture");
+            let first = compute_entry_weight(&entry).expect("entry weight");
+            let second = compute_entry_weight(&entry).expect("entry weight rerun");
+            assert_eq!(first, second, "entry fixture rerun mismatch: {fixture_id}");
+            assert_eq!(first, expected_weight_bytes, "entry fixture expected mismatch: {fixture_id}");
+        }
+
+        let block_cases = [
+            ("block_case_empty", include_str!("../../../docs/fixtures/indexer-metrics/weights/v1/block_case_empty.json"), 253_u64),
+            ("block_case_mixed_entries", include_str!("../../../docs/fixtures/indexer-metrics/weights/v1/block_case_mixed_entries.json"), 1004_u64),
+            ("block_case_simulation_regression", include_str!("../../../docs/fixtures/indexer-metrics/weights/v1/block_case_simulation_regression.json"), 1295_u64),
+        ];
+
+        for (fixture_id, fixture, expected_weight_bytes) in block_cases {
+            let block: Block = serde_json::from_str(fixture).expect("block fixture");
+            let first = compute_block_weight(&block).expect("block weight");
+            let second = compute_block_weight(&block).expect("block weight rerun");
+            assert_eq!(first, second, "block fixture rerun mismatch: {fixture_id}");
+            assert_eq!(first, expected_weight_bytes, "block fixture expected mismatch: {fixture_id}");
+        }
+    }
+
+    #[test]
+    fn malformed_weight_fixture_decode_fails_closed() {
+        let malformed_fixture = r#"{
+            "entry_id": "not-a-uuid",
+            "namespace": "identity.citizen",
+            "action": "REGISTER",
+            "object_id": "did:citizen:broken",
+            "payload": {},
+            "author": "did:key:author-malformed",
+            "signature": "ed25519:signature-malformed",
+            "timestamp": 1735690999
+        }"#;
+        let parsed = serde_json::from_str::<LedgerEntry>(malformed_fixture);
+        assert!(parsed.is_err(), "malformed payload should not decode");
     }
 }

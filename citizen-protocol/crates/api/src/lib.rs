@@ -37,6 +37,7 @@ pub struct ApiEdgeConfig {
     pub auth_required: bool,
     pub max_write_requests_per_minute: usize,
     pub offchain_encrypted_files_v1_enabled: bool,
+    pub enforce_manifest_payload_binding: bool,
     pub require_builder_credit_for_all_writes: bool,
     pub clients: BTreeMap<String, ApiClientProfile>,
 }
@@ -72,6 +73,7 @@ impl Default for ApiEdgeConfig {
             auth_required: false,
             max_write_requests_per_minute: 120,
             offchain_encrypted_files_v1_enabled: false,
+            enforce_manifest_payload_binding: false,
             require_builder_credit_for_all_writes: false,
             clients: BTreeMap::new(),
         }
@@ -372,6 +374,8 @@ struct PayloadCommitRequest {
     policy_version: u32,
     consent_receipt: ConsentReceipt,
     encrypted_field_refs: Vec<EncryptedFieldRef>,
+    #[serde(default)]
+    linked_manifest_ids: Vec<String>,
     envelope: SignedEnvelope<LedgerEntry>,
 }
 
@@ -714,9 +718,7 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
         if limit == 0 || limit > 100 {
             return (
                 StatusCode::BAD_REQUEST,
-                Json(
-                    serde_json::json!({"error":"limit must be an integer between 1 and 100"}),
-                ),
+                Json(serde_json::json!({"error":"limit must be an integer between 1 and 100"})),
             );
         }
 
@@ -738,7 +740,8 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
             );
         }
 
-        let mut current_height = std::cmp::min(query.cursor.unwrap_or(latest_height), latest_height);
+        let mut current_height =
+            std::cmp::min(query.cursor.unwrap_or(latest_height), latest_height);
         let mut items = Vec::new();
         let mut scanned = 0usize;
         let mut exhausted_at_genesis = false;
@@ -1281,6 +1284,24 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
         let manifest_id = manifest_commitment.clone();
         let now = Utc::now().timestamp();
 
+        if edge.config.enforce_manifest_payload_binding {
+            let envelope_manifest_id = request
+                .envelope
+                .payload
+                .payload
+                .get("manifest_id")
+                .and_then(serde_json::Value::as_str);
+            if envelope_manifest_id != Some(manifest_id.as_str()) {
+                return (
+                    StatusCode::UNPROCESSABLE_ENTITY,
+                    Json(serde_json::json!({
+                        "error": "file commit envelope payload.manifest_id must equal canonical manifest_id",
+                        "expected_manifest_id": manifest_id,
+                    })),
+                );
+            }
+        }
+
         if let Err(response) = Self::authorize_builder_credit_gate(
             Arc::clone(&edge),
             Arc::clone(&ledger),
@@ -1551,6 +1572,70 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
             );
         }
 
+        let linked_manifests: Vec<StoredFileManifest> = if request.linked_manifest_ids.is_empty() {
+            Vec::new()
+        } else {
+            let manifests = edge.file_manifests.lock().await;
+            let mut missing = Vec::new();
+            let mut linked = Vec::new();
+            for manifest_id in &request.linked_manifest_ids {
+                let Some(stored_manifest) = manifests.get(manifest_id) else {
+                    missing.push(manifest_id.clone());
+                    continue;
+                };
+                if stored_manifest.intent.namespace != request.namespace
+                    || stored_manifest.intent.object_id != request.object_id
+                {
+                    return (
+                        StatusCode::UNPROCESSABLE_ENTITY,
+                        Json(serde_json::json!({
+                            "error": "linked manifest namespace/object mismatch for payload commit",
+                            "manifest_id": manifest_id,
+                        })),
+                    );
+                }
+                linked.push(stored_manifest.clone());
+            }
+            if !missing.is_empty() {
+                return (
+                    StatusCode::UNPROCESSABLE_ENTITY,
+                    Json(serde_json::json!({
+                        "error": "linked manifest not found for payload commit",
+                        "missing_manifest_ids": missing,
+                    })),
+                );
+            }
+            linked
+        };
+
+        if !linked_manifests.is_empty() {
+            let allowed_refs: BTreeSet<String> = linked_manifests
+                .iter()
+                .filter_map(|stored_manifest| {
+                    stored_manifest
+                        .manifest
+                        .get("file_ref")
+                        .and_then(serde_json::Value::as_str)
+                        .map(ToOwned::to_owned)
+                })
+                .collect();
+            let unlinked_blob_refs: Vec<String> = request
+                .encrypted_field_refs
+                .iter()
+                .filter(|field_ref| !allowed_refs.contains(&field_ref.blob_ref))
+                .map(|field_ref| field_ref.blob_ref.clone())
+                .collect();
+            if !unlinked_blob_refs.is_empty() {
+                return (
+                    StatusCode::UNPROCESSABLE_ENTITY,
+                    Json(serde_json::json!({
+                        "error": "payload encrypted field blob_ref must reference a linked committed manifest",
+                        "unlinked_blob_refs": unlinked_blob_refs,
+                    })),
+                );
+            }
+        }
+
         let entry_id = request.envelope.payload.entry_id.to_string();
         let commitment_mismatches: Vec<serde_json::Value> = request
             .encrypted_field_refs
@@ -1614,6 +1699,7 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
             "status": "accepted",
             "namespace": request.namespace,
             "object_id": request.object_id,
+            "linked_manifest_ids": request.linked_manifest_ids,
             "encrypted_field_refs": request.encrypted_field_refs,
             "result": base,
         });
@@ -2070,10 +2156,9 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
                 .namespace_entries(&descriptor.namespace)
                 .unwrap_or_default();
             for entry in entries {
-                let matched_payload_commitment =
-                    entry.payload_commitment.as_deref() == Some(data_hash.as_str())
-                        || entry.payload_commitment.as_deref()
-                            == Some(normalized_data_hash.as_str());
+                let matched_payload_commitment = entry.payload_commitment.as_deref()
+                    == Some(data_hash.as_str())
+                    || entry.payload_commitment.as_deref() == Some(normalized_data_hash.as_str());
                 if matched_payload_commitment {
                     matches.push(serde_json::json!({
                         "entry_id": entry.entry_id,
@@ -2146,10 +2231,10 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
                 };
 
                 for entry in block.entries {
-                    let matched_payload_commitment =
-                        entry.payload_commitment.as_deref() == Some(data_hash.as_str())
-                            || entry.payload_commitment.as_deref()
-                                == Some(normalized_data_hash.as_str());
+                    let matched_payload_commitment = entry.payload_commitment.as_deref()
+                        == Some(data_hash.as_str())
+                        || entry.payload_commitment.as_deref()
+                            == Some(normalized_data_hash.as_str());
                     if matched_payload_commitment {
                         matches.push(serde_json::json!({
                             "entry_id": entry.entry_id,
@@ -2199,8 +2284,7 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
                         && (payload_data_hash == Some(data_hash.as_str())
                             || payload_data_hash == Some(normalized_data_hash.as_str())
                             || nested_payload_data_hash == Some(data_hash.as_str())
-                            || nested_payload_data_hash
-                                == Some(normalized_data_hash.as_str()))
+                            || nested_payload_data_hash == Some(normalized_data_hash.as_str()))
                     {
                         matches.push(serde_json::json!({
                             "entry_id": entry.entry_id,
@@ -2329,6 +2413,13 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
             ]
         });
         sha256_hex(&canonical_json(&commitment_input))
+    }
+
+    fn is_valid_sha256_digest(value: &str) -> bool {
+        let Some(hex) = value.strip_prefix("sha256:") else {
+            return false;
+        };
+        hex.len() == 64 && hex.chars().all(|ch| ch.is_ascii_hexdigit())
     }
 
     fn required_idempotency_key(
@@ -2486,6 +2577,22 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
             );
         }
         object_store.validate_object_ref(&intent.namespace, manifest_file_ref)?;
+
+        let ciphertext_hash = manifest
+            .get("ciphertext_hash")
+            .and_then(|value| value.as_str())
+            .ok_or_else(|| "manifest missing ciphertext_hash".to_string())?;
+        if !Self::is_valid_sha256_digest(ciphertext_hash) {
+            return Err("manifest ciphertext_hash must be sha256:<64 hex chars>".to_string());
+        }
+
+        let payload_commitment = manifest
+            .get("payload_commitment")
+            .and_then(|value| value.as_str())
+            .ok_or_else(|| "manifest missing payload_commitment".to_string())?;
+        if !Self::is_valid_sha256_digest(payload_commitment) {
+            return Err("manifest payload_commitment must be sha256:<64 hex chars>".to_string());
+        }
 
         Ok(())
     }
@@ -2684,7 +2791,8 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
                 ));
             }
 
-            if !envelope.payload.signature.is_empty() && envelope.payload.signature != envelope.signature
+            if !envelope.payload.signature.is_empty()
+                && envelope.payload.signature != envelope.signature
             {
                 return protocol_error_response(ProtocolError::ValidationFailed(
                     "envelope signature must match payload signature when both are present".into(),
@@ -3341,8 +3449,7 @@ fn protocol_error_response(err: ProtocolError) -> (StatusCode, Json<serde_json::
 mod tests {
     use super::{
         ApiClientProfile, ApiEdgeConfig, ApiEdgeState, ApiServer, DataHashQueryParams,
-        LocalOffchainObjectStore,
-        MinioOffchainObjectStoreConfig,
+        LocalOffchainObjectStore, MinioOffchainObjectStoreConfig,
     };
     use axum::body::{to_bytes, Body};
     use axum::http::{Request, StatusCode};
@@ -3441,7 +3548,21 @@ mod tests {
                         let mut policy = json!({
                             "enabled": true,
                             "max_file_size_bytes": 10_485_760,
-                            "allowed_mime_types": ["application/pdf", "application/json"],
+                            "allowed_mime_types": [
+                                "audio/mpeg",
+                                "audio/wav",
+                                "video/mp4",
+                                "video/webm",
+                                "application/json",
+                                "application/pdf",
+                                "application/msword",
+                                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                                "application/vnd.ms-excel",
+                                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                                "image/jpeg",
+                                "image/png",
+                                "image/webp"
+                            ],
                             "allowed_encryption_modes": ["passphrase", "hybrid-acl"],
                             "allowed_actions": allowed_file_actions
                         });
@@ -3618,7 +3739,21 @@ mod tests {
                         let mut policy = json!({
                             "enabled": true,
                             "max_file_size_bytes": 10_485_760,
-                            "allowed_mime_types": ["application/pdf", "application/json"],
+                            "allowed_mime_types": [
+                                "audio/mpeg",
+                                "audio/wav",
+                                "video/mp4",
+                                "video/webm",
+                                "application/json",
+                                "application/pdf",
+                                "application/msword",
+                                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                                "application/vnd.ms-excel",
+                                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                                "image/jpeg",
+                                "image/png",
+                                "image/webp"
+                            ],
                             "allowed_encryption_modes": ["passphrase", "hybrid-acl"],
                             "allowed_actions": allowed_file_actions
                         });
@@ -3927,7 +4062,7 @@ mod tests {
             object_id: "PROC-001".to_string(),
             payload: json!({"event":"BID_OPENED"}),
             privacy_flag: false,
-            privacy_mode: citizen_types::PrivacyMode::Hybrid,
+            privacy_mode: citizen_types::PrivacyMode::None,
             payload_commitment: None,
             ciphertext_hex: None,
             nonce_hex: None,
@@ -4072,7 +4207,10 @@ mod tests {
         let batch_json: Value = serde_json::from_slice(&batch_body).expect("batch json");
         assert_eq!(batch_json["status"], "accepted");
         assert_eq!(batch_json["batch_size"], 2);
-        assert_eq!(batch_json["receipts"].as_array().map(|items| items.len()), Some(2));
+        assert_eq!(
+            batch_json["receipts"].as_array().map(|items| items.len()),
+            Some(2)
+        );
         assert_eq!(
             batch_json["receipts"][0]["receipt"]["finality"]["block_height"],
             1
@@ -4922,6 +5060,7 @@ mod tests {
             auth_required: false,
             max_write_requests_per_minute: 1,
             offchain_encrypted_files_v1_enabled: true,
+            enforce_manifest_payload_binding: false,
             require_builder_credit_for_all_writes: false,
             clients: BTreeMap::new(),
         })
@@ -4974,6 +5113,7 @@ mod tests {
             auth_required: true,
             max_write_requests_per_minute: 10,
             offchain_encrypted_files_v1_enabled: true,
+            enforce_manifest_payload_binding: false,
             require_builder_credit_for_all_writes: false,
             clients,
         })
@@ -5003,6 +5143,7 @@ mod tests {
             auth_required: false,
             max_write_requests_per_minute: 10,
             offchain_encrypted_files_v1_enabled: true,
+            enforce_manifest_payload_binding: false,
             require_builder_credit_for_all_writes: true,
             clients: BTreeMap::new(),
         })
@@ -5032,6 +5173,7 @@ mod tests {
             auth_required: false,
             max_write_requests_per_minute: 10,
             offchain_encrypted_files_v1_enabled: true,
+            enforce_manifest_payload_binding: false,
             require_builder_credit_for_all_writes: true,
             clients: BTreeMap::new(),
         })
@@ -5137,6 +5279,7 @@ mod tests {
             auth_required: true,
             max_write_requests_per_minute: 10,
             offchain_encrypted_files_v1_enabled: true,
+            enforce_manifest_payload_binding: false,
             require_builder_credit_for_all_writes: false,
             clients,
         })
@@ -5172,6 +5315,7 @@ mod tests {
             auth_required: true,
             max_write_requests_per_minute: 1,
             offchain_encrypted_files_v1_enabled: true,
+            enforce_manifest_payload_binding: false,
             require_builder_credit_for_all_writes: false,
             clients,
         })
@@ -5224,6 +5368,7 @@ mod tests {
             auth_required: true,
             max_write_requests_per_minute: 10,
             offchain_encrypted_files_v1_enabled: true,
+            enforce_manifest_payload_binding: false,
             require_builder_credit_for_all_writes: false,
             clients,
         });
@@ -5268,6 +5413,7 @@ mod tests {
             auth_required: false,
             max_write_requests_per_minute: 10,
             offchain_encrypted_files_v1_enabled: false,
+            enforce_manifest_payload_binding: false,
             require_builder_credit_for_all_writes: false,
             clients: BTreeMap::new(),
         })
@@ -8642,6 +8788,7 @@ mod tests {
         assert_eq!(payload["status"], json!("accepted"));
         assert_eq!(payload["namespace"], json!("files.secure"));
         assert_eq!(payload["object_id"], json!("PROC-PAYLOAD-HAPPY-PATH"));
+        assert_eq!(payload["linked_manifest_ids"], json!([]));
         assert_eq!(
             payload["encrypted_field_refs"].as_array().map(Vec::len),
             Some(2)
@@ -9133,13 +9280,12 @@ mod tests {
             Arc::new(LocalOffchainObjectStore),
         ));
 
-        let (status, Json(payload)) =
-            ApiServer::<MemoryStorage>::handle_get_payload_data_hash(
-                Arc::clone(&ledger),
-                edge,
-                data_hash.to_string(),
-            )
-            .await;
+        let (status, Json(payload)) = ApiServer::<MemoryStorage>::handle_get_payload_data_hash(
+            Arc::clone(&ledger),
+            edge,
+            data_hash.to_string(),
+        )
+        .await;
 
         assert_eq!(status, StatusCode::OK);
         assert_eq!(payload["data_hash"], json!(data_hash));
@@ -9157,7 +9303,10 @@ mod tests {
 
     #[tokio::test]
     async fn payload_data_hash_query_route_requires_q_parameter() {
-        let ledger = Arc::new(Ledger::new(Arc::new(MemoryStorage::new()), KeyRegistry::new()));
+        let ledger = Arc::new(Ledger::new(
+            Arc::new(MemoryStorage::new()),
+            KeyRegistry::new(),
+        ));
         let edge = Arc::new(ApiEdgeState::new(
             ApiEdgeConfig {
                 offchain_encrypted_files_v1_enabled: true,
@@ -9166,15 +9315,19 @@ mod tests {
             Arc::new(LocalOffchainObjectStore),
         ));
 
-        let (status, Json(payload)) = ApiServer::<MemoryStorage>::handle_get_payload_data_hash_query(
-            ledger,
-            edge,
-            DataHashQueryParams { q: None },
-        )
-        .await;
+        let (status, Json(payload)) =
+            ApiServer::<MemoryStorage>::handle_get_payload_data_hash_query(
+                ledger,
+                edge,
+                DataHashQueryParams { q: None },
+            )
+            .await;
 
         assert_eq!(status, StatusCode::BAD_REQUEST);
-        assert_eq!(payload["error"], json!("missing required query parameter: q"));
+        assert_eq!(
+            payload["error"],
+            json!("missing required query parameter: q")
+        );
     }
 
     #[tokio::test]
@@ -9252,11 +9405,15 @@ mod tests {
         assert_eq!(payload["data_hash"], json!("sha256:form-sensitive-onchain"));
         assert_eq!(payload["matches"].as_array().map(Vec::len), Some(1));
         assert_eq!(payload["matches"][0]["source"], json!("payload.data_hash"));
-        assert_eq!(payload["matches"][0]["namespace"], json!("audit.procurement"));
+        assert_eq!(
+            payload["matches"][0]["namespace"],
+            json!("audit.procurement")
+        );
     }
 
     #[tokio::test]
-    async fn payload_data_hash_endpoint_avoids_duplicate_matches_when_commitment_and_payload_match() {
+    async fn payload_data_hash_endpoint_avoids_duplicate_matches_when_commitment_and_payload_match()
+    {
         let storage = Arc::new(MemoryStorage::new());
         let ledger = Arc::new(Ledger::new(Arc::clone(&storage), KeyRegistry::new()));
         ledger.bootstrap_namespaces(vec![NamespaceRuleset {
@@ -9402,7 +9559,6 @@ mod tests {
         assert_eq!(payload["matches"][0]["source"], json!("payload.data_hash"));
         assert_eq!(payload["matches"][0]["namespace"], json!("forms.secure"));
     }
-
 
     #[tokio::test]
     async fn payload_commit_rejects_non_payload_commit_action() {
@@ -10133,6 +10289,7 @@ mod tests {
             auth_required: true,
             max_write_requests_per_minute: 10,
             offchain_encrypted_files_v1_enabled: true,
+            enforce_manifest_payload_binding: false,
             require_builder_credit_for_all_writes: false,
             clients,
         })
@@ -10178,6 +10335,7 @@ mod tests {
             auth_required: true,
             max_write_requests_per_minute: 10,
             offchain_encrypted_files_v1_enabled: true,
+            enforce_manifest_payload_binding: false,
             require_builder_credit_for_all_writes: false,
             clients,
         })
@@ -10214,5 +10372,22 @@ mod tests {
             .expect("intent response");
 
         assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    }
+
+    #[test]
+    fn sha256_digest_validator_accepts_canonical_format() {
+        assert!(ApiServer::<MemoryStorage>::is_valid_sha256_digest(
+            "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        ));
+    }
+
+    #[test]
+    fn sha256_digest_validator_rejects_invalid_format() {
+        assert!(!ApiServer::<MemoryStorage>::is_valid_sha256_digest(
+            "sha256:xyz"
+        ));
+        assert!(!ApiServer::<MemoryStorage>::is_valid_sha256_digest(
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        ));
     }
 }

@@ -54,6 +54,11 @@ Protocol requirements:
 - DEK-based hybrid encryption paths where payloads/field bundles are encrypted off-chain and key access is controlled by per-reader key wraps.
 - Deterministic per-payload commitments (and deterministic selective-field commitment views) that remain verifiable across node, wallet, dApp, and explorer surfaces.
 
+Implementation-status note (as of 2026-04-12):
+
+- The repository implements namespace-governed off-chain encrypted-file intent/commit/read/revoke API flows and deterministic commitment anchoring.
+- Runtime object-store execution remains deployment-configurable (feature flag + object-store profile wiring), so operators should treat off-chain encrypted storage as an active floating option for large encrypted artifacts when namespace on-chain-accepted size constraints are exceeded.
+
 ## Interoperability Direction (Staged)
 
 Interoperability must be standards-led and phased:
@@ -182,3 +187,15 @@ The current repository implementation aligns with the data-ownership direction b
 - canonical receipt verification paths that preserve commit integrity across ecosystem surfaces.
 
 Operational synchronization details are tracked in `docs/ACL_DEK_IMPLEMENTATION_DOUBLE_CHECK.md`.
+
+## Current Implementation Sync Addendum (Indexer Metrics Analytics Surface)
+
+The current explorer/backend implementation includes an indexer-derived analytics surface for canonical TPS, block weight, and entry weight metrics with explicit metric-source signaling in explorer UI flows.
+
+Operationally, metrics rollout is staged and profile-driven:
+
+- `localnet` profile for local/dev default operation,
+- `shared-dev` profile with auth/rate-limit defaults for multi-tenant test environments,
+- `production-candidate` profile with stricter default access controls.
+
+On-call ownership, stage gates, and verification evidence procedures are documented in `docs/INDEXER_METRICS_ROLLOUT_COMPLETION.md`.

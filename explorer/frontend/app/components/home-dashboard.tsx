@@ -12,6 +12,7 @@ type HomeDashboardProps = {
   charts: ChartPanel[];
   transactions: TransactionRow[];
   blocks: BlockRow[];
+  sourceLabel: string;
 };
 
 function normalizePoints(points: number[]): number[] {
@@ -20,7 +21,7 @@ function normalizePoints(points: number[]): number[] {
   return points.map((point) => Math.max(8, Math.round((point / max) * 100)));
 }
 
-export function HomeDashboard({ topMetrics, charts, transactions, blocks }: HomeDashboardProps) {
+export function HomeDashboard({ topMetrics, charts, transactions, blocks, sourceLabel }: HomeDashboardProps) {
   const chartData = useMemo(() => charts.map((chart) => ({ ...chart, points: normalizePoints(chart.points) })), [charts]);
 
   return (
@@ -30,6 +31,7 @@ export function HomeDashboard({ topMetrics, charts, transactions, blocks }: Home
           <p className="eyebrow">Citizen Explorer</p>
           <h1>Dashboard</h1>
           <p className="subtitle">Network activity, recent transactions, and finality snapshots.</p>
+          <p className="panel-secondary">Metric source: {sourceLabel}</p>
         </div>
       </section>
 

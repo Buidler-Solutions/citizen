@@ -44,6 +44,20 @@ export async function sha256DigestHex(input) {
 }
 
 const DEFAULT_RECEIPT_TERMINAL_STATUSES = new Set(["Accepted", "Rejected"]);
+export const OFFCHAIN_ATTACHMENT_ALLOWED_MIME_TYPES = Object.freeze([
+  "audio/mpeg",
+  "audio/wav",
+  "video/mp4",
+  "video/webm",
+  "application/pdf",
+  "application/msword",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/vnd.ms-excel",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "image/jpeg",
+  "image/png",
+  "image/webp"
+]);
 
 function sleep(ms) {
   return new Promise((resolve) => {

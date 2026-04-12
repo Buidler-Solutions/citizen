@@ -67,6 +67,19 @@ The active direction emphasizes:
 5. **Non-speculative economics**
    - Builder fee credits and sponsored usage over speculative token-first design
 
+## Implementation Status Snapshot (2026-04-12)
+
+- The Rust runtime, ledger policy engine, governance workflows, and canonical API
+  surfaces are implemented in the current workspace.
+- Off-chain encrypted file workflows are implemented as a governance/policy-aware
+  API path, but production object-store execution remains operator-configurable
+  (`api_offchain_encrypted_files_v1_enabled` + optional MinIO config) rather than
+  universally enabled by default.
+- Documentation and planning should treat off-chain encrypted object handling as
+  an active **floating task/option** for large encrypted artifacts when a
+  namespace's on-chain-accepted size/profile is insufficient for direct payload
+  handling.
+
 
 ## Wallet System Tech-Stack (Cross-Monorepo)
 

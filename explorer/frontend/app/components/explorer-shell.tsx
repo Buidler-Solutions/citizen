@@ -14,12 +14,39 @@ const navItems = [
   { icon: '⌗', label: 'Data Hash', href: '/data-hash' },
 ];
 
+type NetworkOption = {
+  id: 'localnet' | 'testnet' | 'futurenet' | 'mainnet';
+  label: string;
+  url: string;
+};
+
+type NetworkHealth = {
+  healthy: boolean;
+  checkedAtMs: number;
+};
+
 export function ExplorerShell({ children }: ExplorerShellProps) {
   const pathname = usePathname();
   const router = useRouter();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [isDark, setIsDark] = useState(true);
   const [searchValue, setSearchValue] = useState('');
+  const networkOptions = useMemo<NetworkOption[]>(() => {
+    const runtimeFallback = (process.env.NEXT_PUBLIC_NODE_RUNTIME_URL ?? 'http://127.0.0.1:8081').trim();
+    const localnetUrl = (process.env.NEXT_PUBLIC_LOCALNET_URL ?? runtimeFallback).trim();
+    const testnetUrl = (process.env.NEXT_PUBLIC_TESTNET_URL ?? '').trim();
+    const futurenetUrl = (process.env.NEXT_PUBLIC_FUTURENET_URL ?? '').trim();
+    const mainnetUrl = (process.env.NEXT_PUBLIC_MAINNET_URL ?? '').trim();
+    return [
+      { id: 'localnet', label: 'Local Node', url: localnetUrl },
+      { id: 'testnet', label: 'Testnet', url: testnetUrl },
+      { id: 'futurenet', label: 'Futurenet', url: futurenetUrl },
+      { id: 'mainnet', label: 'Mainnet', url: mainnetUrl },
+    ];
+  }, []);
+  const [selectedNetworkId, setSelectedNetworkId] = useState<NetworkOption['id']>('localnet');
+  const [networkHealthById, setNetworkHealthById] = useState<Record<string, NetworkHealth>>({});
+  const [showNetworkSuggestion, setShowNetworkSuggestion] = useState(false);
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -34,6 +61,16 @@ export function ExplorerShell({ children }: ExplorerShellProps) {
     const storedSidebar = window.localStorage.getItem('citizen.explorer.sidebar');
     if (storedSidebar === 'collapsed') {
       setSidebarCollapsed(true);
+    }
+
+    const storedNetwork = window.localStorage.getItem('citizen.explorer.network');
+    if (
+      storedNetwork === 'localnet' ||
+      storedNetwork === 'testnet' ||
+      storedNetwork === 'futurenet' ||
+      storedNetwork === 'mainnet'
+    ) {
+      setSelectedNetworkId(storedNetwork);
     }
   }, []);
 
@@ -53,6 +90,13 @@ export function ExplorerShell({ children }: ExplorerShellProps) {
     window.localStorage.setItem('citizen.explorer.sidebar', sidebarCollapsed ? 'collapsed' : 'expanded');
   }, [sidebarCollapsed]);
 
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+    window.localStorage.setItem('citizen.explorer.network', selectedNetworkId);
+  }, [selectedNetworkId]);
+
   const themeClass = isDark ? 'theme-dark' : 'theme-light';
   const activePath = useMemo(() => pathname ?? '/', [pathname]);
 
@@ -65,6 +109,68 @@ export function ExplorerShell({ children }: ExplorerShellProps) {
     const activeQuery = params.get('q') ?? '';
     setSearchValue(activeQuery);
   }, [pathname]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const checkHealth = async () => {
+      const checks = await Promise.all(networkOptions.map(async (network) => {
+        if (!network.url) {
+          return [network.id, { healthy: false, checkedAtMs: Date.now() }] as const;
+        }
+        try {
+          const response = await fetch(`${network.url.replace(/\/$/, '')}/health`, { cache: 'no-store' });
+          if (!response.ok) {
+            return [network.id, { healthy: false, checkedAtMs: Date.now() }] as const;
+          }
+          const payload = (await response.json()) as { status?: unknown };
+          return [network.id, { healthy: payload?.status === 'ok', checkedAtMs: Date.now() }] as const;
+        } catch {
+          return [network.id, { healthy: false, checkedAtMs: Date.now() }] as const;
+        }
+      }));
+
+      if (cancelled) {
+        return;
+      }
+
+      setNetworkHealthById(Object.fromEntries(checks));
+    };
+
+    void checkHealth();
+    const timer = window.setInterval(() => {
+      void checkHealth();
+    }, 15000);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [networkOptions]);
+
+  const recommendedNetworkId = useMemo<NetworkOption['id'] | null>(() => {
+    const preferenceOrder: NetworkOption['id'][] = ['mainnet', 'futurenet', 'testnet', 'localnet'];
+    for (const id of preferenceOrder) {
+      if (networkHealthById[id]?.healthy) {
+        return id;
+      }
+    }
+    return null;
+  }, [networkHealthById]);
+
+  useEffect(() => {
+    if (recommendedNetworkId && recommendedNetworkId !== selectedNetworkId) {
+      setShowNetworkSuggestion(true);
+      return;
+    }
+    setShowNetworkSuggestion(false);
+  }, [recommendedNetworkId, selectedNetworkId]);
+
+  const selectedNetwork = networkOptions.find((network) => network.id === selectedNetworkId) ?? networkOptions[0];
+  const selectedNetworkHealthy = selectedNetwork ? (networkHealthById[selectedNetwork.id]?.healthy ?? false) : false;
+  const recommendedNetwork = recommendedNetworkId
+    ? networkOptions.find((network) => network.id === recommendedNetworkId) ?? null
+    : null;
 
   const onSearchSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -164,8 +270,58 @@ export function ExplorerShell({ children }: ExplorerShellProps) {
               </button>
             </form>
           </div>
-          <button type="button" className="wallet-button">WALLET CONNECT</button>
+          <div className="network-picker-shell">
+            <label htmlFor="network-select" className="network-picker-label">Ledger Network</label>
+            <select
+              id="network-select"
+              className="network-picker-select"
+              value={selectedNetworkId}
+              onChange={(event) => {
+                const selectedId = event.target.value as NetworkOption['id'];
+                setSelectedNetworkId(selectedId);
+                setShowNetworkSuggestion(false);
+              }}
+            >
+              {networkOptions.map((network) => (
+                <option key={network.id} value={network.id} disabled={!network.url}>
+                  {network.label}{network.url ? '' : ' (not configured)'}
+                </option>
+              ))}
+            </select>
+            <span className={`network-health-chip ${selectedNetworkHealthy ? 'healthy' : 'unhealthy'}`}>
+              {selectedNetworkHealthy ? 'Healthy' : 'Unavailable'}
+            </span>
+          </div>
         </header>
+        {showNetworkSuggestion && recommendedNetwork && selectedNetwork && (
+          <div className="network-modal-backdrop" role="dialog" aria-modal="true" aria-live="assertive">
+            <div className="network-modal-card">
+              <h2>Network health recommendation</h2>
+              <p>
+                Active healthy network detected: <strong>{recommendedNetwork.label}</strong>.
+                {' '}Current selection: <strong>{selectedNetwork.label}</strong>.
+              </p>
+              <p className="network-modal-note">
+                Select the healthy network to keep explorer reads aligned with the active ledger.
+              </p>
+              <div className="network-modal-actions">
+                <button
+                  type="button"
+                  className="header-search-button"
+                  onClick={() => {
+                    setSelectedNetworkId(recommendedNetwork.id);
+                    setShowNetworkSuggestion(false);
+                  }}
+                >
+                  Switch to {recommendedNetwork.label}
+                </button>
+                <button type="button" className="mode-pill" onClick={() => setShowNetworkSuggestion(false)}>
+                  Keep current selection
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
         {children}
       </section>
     </main>

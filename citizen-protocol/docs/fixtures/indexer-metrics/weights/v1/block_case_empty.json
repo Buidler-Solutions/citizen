@@ -1,0 +1,14 @@
+{
+  "header": {
+    "height": 42,
+    "prev_hash": "sha256:prev",
+    "entry_root": "sha256:root",
+    "proposer": "validator-alpha",
+    "timestamp": 1735689900,
+    "commit_proof": {
+      "aggregated_signature": "agg-sig-empty",
+      "participant_ids": ["validator-alpha", "validator-beta"]
+    }
+  },
+  "entries": []
+}
