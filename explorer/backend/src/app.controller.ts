@@ -81,6 +81,11 @@ export class AppController {
     return this.indexerMetricsService.getSummary();
   }
 
+  @Get('metrics/alerts')
+  async metricsAlerts() {
+    return this.indexerMetricsService.getAlerts();
+  }
+
   @Get('metrics/blocks')
   async metricsBlocks(
     @Query('from_height') fromHeight?: string,

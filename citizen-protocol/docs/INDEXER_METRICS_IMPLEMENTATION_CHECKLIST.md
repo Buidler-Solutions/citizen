@@ -1,7 +1,7 @@
 # Indexer Metrics Implementation Checklist (TPS + Block Weight + Entry Weight)
 
 Status: implementation checklist for adding canonical analytics via an indexer while keeping protocol runtime deterministic and lean.
-Last updated: 2026-04-12 (Checkpoint 8 observability started: indexer summary now emits ingestion lag, retry/failure counters, and processing/aggregation latency snapshots).
+Last updated: 2026-04-12 (Checkpoint 8 advanced: indexer summary now evaluates SLO snapshots and exposes alert-playbook state for stalled cursor, sustained lag, and checksum mismatch conditions).
 
 ## Goals
 
@@ -170,14 +170,14 @@ Deliverable: explorer dashboard wired to indexer metrics endpoints.
   - [x] failed block count,
   - [x] retry counts,
   - [x] aggregation job latency.
-- [ ] Define SLO targets:
-  - [ ] freshness (e.g., p95 lag under N seconds),
-  - [ ] API availability,
-  - [ ] aggregation correctness checks.
-- [ ] Add alerting playbooks for:
-  - [ ] stalled cursor,
-  - [ ] sustained lag,
-  - [ ] checksum mismatches.
+- [x] Define SLO targets:
+  - [x] freshness (lag-block SLO in summary snapshot),
+  - [x] API availability (successful fetch ratio proxy),
+  - [x] aggregation correctness checks (checksum mismatch proxy).
+- [x] Add alerting playbooks for:
+  - [x] stalled cursor,
+  - [x] sustained lag,
+  - [x] checksum mismatches.
 
 Deliverable: runbook + dashboards + alert definitions.
 

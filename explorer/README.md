@@ -39,18 +39,28 @@ Backend environment variables:
 - `PORT` - backend listen port (defaults to `4444`; if occupied and unset, backend falls back to `4445`).
 - `CITIZEN_NODE_URL` - runtime API base URL (defaults to `http://127.0.0.1:8081`).
 - `INDEXER_POLL_MS` - steady-state indexer polling interval in milliseconds (defaults to `4000`).
+- `INDEXER_SLO_MAX_INGESTION_LAG_BLOCKS` - freshness SLO threshold in blocks (defaults to `5`).
+- `INDEXER_SLO_MIN_AVAILABILITY_RATIO` - API-availability proxy SLO using successful fetch ratio (defaults to `0.995`).
+- `INDEXER_SLO_MAX_P95_BLOCK_PROCESSING_MS` - block processing p95 latency SLO in milliseconds (defaults to `2000`).
+- `INDEXER_SLO_MAX_P95_AGGREGATION_MS` - aggregation p95 latency SLO in milliseconds (defaults to `1000`).
+- `INDEXER_ALERT_STALL_CURSOR_SECONDS` - stalled cursor alert threshold in seconds (defaults to `120`).
+- `INDEXER_ALERT_SUSTAINED_LAG_POLLS` - consecutive lagging polls before sustained-lag alert activates (defaults to `3`).
 
 Indexer metrics endpoints:
 - `GET /metrics/summary`
+- `GET /metrics/alerts`
 - `GET /metrics/tps?window=60s&from=&to=` (`window` supports `10s`, `60s`, `5m`, `1h`)
 - `GET /metrics/blocks?from_height=&to_height=`
 - `GET /metrics/entries?namespace=&entry_ids=<id,id2>&from=&to=`
 
-`GET /metrics/summary` now includes `internal_metrics` snapshots for:
-- cumulative retry/failure counters,
-- block processing latency (`samples`, `avg`, `p95`, `max`, `last` in ms),
-- aggregation-job latency (`samples`, `avg`, `p95`, `max`, `last` in ms),
-- and ingestion lag (in blocks).
+`GET /metrics/summary` now includes:
+  - `internal_metrics` snapshots for:
+    - cumulative retry/failure counters,
+    - block processing latency (`samples`, `avg`, `p95`, `max`, `last` in ms),
+    - aggregation-job latency (`samples`, `avg`, `p95`, `max`, `last` in ms),
+    - and ingestion lag (in blocks),
+- `slo` status/checks for freshness, availability proxy, latency, and correctness proxy,
+- `alerts` with activation state + operator playbook steps for stalled cursor, sustained lag, and checksum mismatch conditions.
 
 ### Frontend
 ```bash
