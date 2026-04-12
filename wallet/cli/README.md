@@ -34,7 +34,9 @@ citizen-wallet-cli --help
   `sign-registry-transfer`, `sign-audit-record`, `sign-builder-credit-grant`,
   `sign-sponsor-usage`
 - Verification: `verify-entry`, `verify-receipt`
-- Submission + receipts: `submit`, `list-receipts`
+- Submission + receipts: `submit`, `submit-envelope`, `list-receipts`
+- Multisig compose workflow: `compose-envelope-init`, `compose-envelope-sign`,
+  `compose-envelope-finalize`
 - Governance policy controls: `sign-governance-vote --required-approvals --policy-approver --approval`
 
 ## Mnemonic compatibility mode (wallet extension + node runtime CLI)
@@ -121,4 +123,38 @@ Create a sponsorship usage envelope linked to an active grant:
 
 ```bash
 cargo run -p citizen-wallet-cli -- sign-sponsor-usage   --path ./tmp/wallet.json   --key-id <KEY_ID>   --sponsorship-id spn-2026-03-02-00001   --credit-grant-id grant:builder:alpha:q1   --amount 25   --sponsored-did did:ledger:user:publisher-01   --author did:ledger:builder:alpha   --sponsor-builder-id did:ledger:builder:alpha
+```
+
+## Multisigner envelope compose flow
+
+```bash
+# 1) Initialize a multisig draft artifact
+cargo run -p citizen-wallet-cli -- compose-envelope-init \
+  --entry-json "$(cat ./tmp/entry.json)" \
+  --path ./tmp/wallet.json \
+  --key-id <ALICE_KEY_ID> \
+  --signer did:key:alice \
+  --threshold 2 \
+  --allowed-signer did:key:alice \
+  --allowed-signer did:key:bob \
+  --output ./tmp/draft.json
+
+# 2) Add co-signature from another signer identity
+cargo run -p citizen-wallet-cli -- compose-envelope-sign \
+  --draft-json "$(cat ./tmp/draft.json)" \
+  --path ./tmp/wallet.json \
+  --key-id <BOB_KEY_ID> \
+  --as did:key:bob \
+  --output ./tmp/draft.json
+
+# 3) Finalize once threshold is met
+cargo run -p citizen-wallet-cli -- compose-envelope-finalize \
+  --draft-json "$(cat ./tmp/draft.json)" > ./tmp/envelope.json
+
+# 4) Submit finalized envelope
+cargo run -p citizen-wallet-cli -- submit-envelope \
+  --envelope-json "$(cat ./tmp/envelope.json)" \
+  --api-url http://127.0.0.1:8080 \
+  --endpoint /api/v1/envelopes/submit \
+  --receipts-path ./tmp/wallet-receipts.json
 ```
