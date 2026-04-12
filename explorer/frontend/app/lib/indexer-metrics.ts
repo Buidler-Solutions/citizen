@@ -88,6 +88,25 @@ export async function withBlockWeights(blocks: BlockSummary[]): Promise<{ items:
   };
 }
 
+export async function resolveBlockWeight(
+  blockHeight: number,
+  fallbackBlock: unknown,
+): Promise<{ blockWeightBytes: number; source: WeightSource }> {
+  const params = new URLSearchParams({
+    from_height: String(blockHeight),
+    to_height: String(blockHeight),
+    limit: '1',
+  });
+  const payload = await safeFetchJson<PaginatedPayload<BackendBlockMetric>>(
+    `${explorerBackendBase.replace(/\/$/, '')}/metrics/blocks?${params.toString()}`,
+  );
+  const metric = payload?.data?.find((row) => row.block_height === blockHeight);
+  if (metric) {
+    return { blockWeightBytes: metric.block_weight_bytes, source: 'indexer' };
+  }
+  return { blockWeightBytes: computeCanonicalWeight(fallbackBlock), source: 'fallback' };
+}
+
 export async function resolveEntryWeights(
   entryIds: string[],
   fallbackEntries: unknown[],
@@ -95,32 +114,21 @@ export async function resolveEntryWeights(
   const unresolved = new Set(entryIds.filter((entryId) => entryId.trim().length > 0));
   const weights = new Map<string, number>();
 
-  let cursor: string | null | undefined = undefined;
-  for (let page = 0; page < 5 && unresolved.size > 0; page += 1) {
-    const params = new URLSearchParams({ limit: '500' });
-    if (cursor) {
-      params.set('cursor', cursor);
-    }
-
+  if (unresolved.size > 0) {
+    const params = new URLSearchParams({
+      entry_ids: Array.from(unresolved).join(','),
+      limit: String(Math.max(unresolved.size, 100)),
+    });
     const payload = await safeFetchJson<PaginatedPayload<BackendEntryMetric>>(
       `${explorerBackendBase.replace(/\/$/, '')}/metrics/entries?${params.toString()}`,
     );
-
-    if (!Array.isArray(payload?.data)) {
-      break;
-    }
-
-    for (const metric of payload.data) {
-      if (unresolved.has(metric.entry_id)) {
-        unresolved.delete(metric.entry_id);
-        weights.set(metric.entry_id, metric.entry_weight_bytes);
+    if (Array.isArray(payload?.data)) {
+      for (const metric of payload.data) {
+        if (unresolved.has(metric.entry_id)) {
+          unresolved.delete(metric.entry_id);
+          weights.set(metric.entry_id, metric.entry_weight_bytes);
+        }
       }
-    }
-
-    const hasMore = payload.page?.has_more === true;
-    cursor = payload.page?.next_cursor;
-    if (!hasMore || !cursor) {
-      break;
     }
   }
 

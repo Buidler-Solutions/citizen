@@ -99,6 +99,7 @@ export class AppController {
   @Get('metrics/entries')
   async metricsEntries(
     @Query('namespace') namespace?: string,
+    @Query('entry_ids') entryIds?: string,
     @Query('from') from?: string,
     @Query('to') to?: string,
     @Query('cursor') cursor?: string,
@@ -106,6 +107,7 @@ export class AppController {
   ) {
     return this.indexerMetricsService.queryEntryMetrics(
       namespace,
+      this.optionalCsv(entryIds),
       this.optionalInteger(from, 'from'),
       this.optionalInteger(to, 'to'),
       cursor,
@@ -147,5 +149,16 @@ export class AppController {
       throw new BadRequestException(`${label} must be an integer`);
     }
     return parsed;
+  }
+
+  private optionalCsv(raw: string | undefined): string[] | undefined {
+    if (raw === undefined) {
+      return undefined;
+    }
+    const values = raw
+      .split(',')
+      .map((value) => value.trim())
+      .filter((value) => value.length > 0);
+    return values.length > 0 ? values : undefined;
   }
 }

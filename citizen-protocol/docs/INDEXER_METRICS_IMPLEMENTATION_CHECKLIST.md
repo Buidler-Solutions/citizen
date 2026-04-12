@@ -1,7 +1,7 @@
 # Indexer Metrics Implementation Checklist (TPS + Block Weight + Entry Weight)
 
 Status: implementation checklist for adding canonical analytics via an indexer while keeping protocol runtime deterministic and lean.
-Last updated: 2026-04-12 (Checkpoint 4 worker + Checkpoint 5/6 baseline API wiring added in explorer/backend).
+Last updated: 2026-04-12 (Checkpoint 7 explorer wiring advanced: block/entry weight lookups now query indexer first with runtime fallback + provenance labels).
 
 ## Goals
 
@@ -150,13 +150,13 @@ Implementation artifact: `explorer/backend/src/app.controller.ts` + `explorer/ba
 
 ## Checkpoint 7 — Explorer integration
 
-- [ ] Replace explorer dashboard heuristics with indexer metrics APIs:
-  - [ ] TPS chart reads real TPS series,
-  - [ ] block list uses real block weight,
-  - [ ] entry views use real entry weight.
-- [ ] Preserve fallback UX for local dev when indexer is unavailable.
-- [ ] Add clear source labels (`runtime`, `indexer`, or `fallback`).
-- [ ] Update explorer README and environment variables.
+- [x] Replace explorer dashboard heuristics with indexer metrics APIs:
+  - [x] TPS chart reads real TPS series,
+  - [x] block list uses real block weight,
+  - [x] entry views use real entry weight.
+- [x] Preserve fallback UX for local dev when indexer is unavailable.
+- [x] Add clear source labels (`runtime`, `indexer`, or `fallback`).
+- [x] Update explorer README and environment variables.
 
 Deliverable: explorer dashboard wired to indexer metrics endpoints.
 
