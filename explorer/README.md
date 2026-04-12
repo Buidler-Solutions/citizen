@@ -29,12 +29,22 @@ npm install
 npm run start:dev
 ```
 
-The explorer backend is optional and primarily acts as a thin proxy/helper API for runtime lookups.
+The explorer backend is optional and now supports both:
+- thin proxy/helper APIs for runtime lookups, and
+- an in-memory indexer worker that derives TPS + block/entry weight metrics from runtime blocks.
 
-When running, backend listens on `http://localhost:3001`.
+When running, backend listens on `http://localhost:4444`.
 
 Backend environment variables:
+- `PORT` - backend listen port (defaults to `4444`; if occupied and unset, backend falls back to `4445`).
 - `CITIZEN_NODE_URL` - runtime API base URL (defaults to `http://127.0.0.1:8081`).
+- `INDEXER_POLL_MS` - steady-state indexer polling interval in milliseconds (defaults to `4000`).
+
+Indexer metrics endpoints:
+- `GET /metrics/summary`
+- `GET /metrics/tps?window=60s&from=&to=` (`window` supports `10s`, `60s`, `5m`, `1h`)
+- `GET /metrics/blocks?from_height=&to_height=`
+- `GET /metrics/entries?namespace=&from=&to=`
 
 ### Frontend
 ```bash
@@ -45,9 +55,10 @@ npm run dev
 
 The explorer frontend runs on `http://localhost:8885` by default.
 
-Dashboard metrics are computed via a frontend-local indexer pass over runtime blocks (no centralized backend required for default operation).
+Dashboard prefers explorer-backend indexer metrics when `NEXT_PUBLIC_EXPLORER_BACKEND_URL` is reachable, and falls back to frontend-local derivation when backend metrics are unavailable.
 
 Environment variables:
+- `NEXT_PUBLIC_EXPLORER_BACKEND_URL` - explorer backend base URL (defaults to `http://127.0.0.1:4444`).
 - `NEXT_PUBLIC_NODE_RUNTIME_URL` - base URL for the Citizen node runtime API (defaults to `http://127.0.0.1:8081`).
 - `NEXT_PUBLIC_BLOCK_HEIGHT` - block height to inspect (`1` by default).
 - `NEXT_PUBLIC_NAMESPACE` - namespace to inspect (`governance.vote` by default).

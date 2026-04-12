@@ -1,7 +1,7 @@
 # Indexer Metrics Implementation Checklist (TPS + Block Weight + Entry Weight)
 
 Status: implementation checklist for adding canonical analytics via an indexer while keeping protocol runtime deterministic and lean.
-Last updated: 2026-04-12 (Checkpoint 3 module contract + fixture/test plan added).
+Last updated: 2026-04-12 (Checkpoint 4 worker + Checkpoint 5/6 baseline API wiring added in explorer/backend).
 
 ## Goals
 
@@ -93,55 +93,58 @@ Implementation artifact: `citizen-protocol/docs/INDEXER_METRICS_WEIGHT_COMPUTATI
 
 ## Checkpoint 4 — Indexer pipeline implementation
 
-- [ ] Implement block fetch loop:
-  - [ ] startup catch-up from cursor to latest,
-  - [ ] steady-state polling for new heights,
-  - [ ] backoff/retry policy.
-- [ ] For each block:
-  - [ ] verify continuity,
-  - [ ] compute/store block weight,
-  - [ ] compute/store each entry weight,
-  - [ ] persist atomically in one transaction.
-- [ ] Ensure idempotent upsert behavior for repeated fetches.
-- [ ] Add poison-block handling and operator visibility.
+- [x] Implement block fetch loop:
+  - [x] startup catch-up from cursor to latest,
+  - [x] steady-state polling for new heights,
+  - [x] backoff/retry policy.
+- [x] For each block:
+  - [x] verify continuity,
+  - [x] compute/store block weight,
+  - [x] compute/store each entry weight,
+  - [x] persist atomically in one transaction.
+- [x] Ensure idempotent upsert behavior for repeated fetches.
+- [x] Add poison-block handling and operator visibility.
 
 Deliverable: runnable indexer worker with structured logs.
+Implementation artifact: `explorer/backend/src/indexer/indexer-metrics.service.ts`.
 
 ---
 
 ## Checkpoint 5 — TPS/window aggregation
 
-- [ ] Define supported windows:
-  - [ ] 10s,
-  - [ ] 60s,
-  - [ ] 5m,
-  - [ ] 1h.
-- [ ] Implement window rollups:
-  - [ ] per-window `entries_committed`,
-  - [ ] derived `tps`,
-  - [ ] gap-safe bucket boundaries.
+- [x] Define supported windows:
+  - [x] 10s,
+  - [x] 60s,
+  - [x] 5m,
+  - [x] 1h.
+- [x] Implement window rollups:
+  - [x] per-window `entries_committed`,
+  - [x] derived `tps`,
+  - [x] gap-safe bucket boundaries.
 - [ ] Add late-data handling policy (if delayed ingestion occurs).
 - [ ] Add periodic compaction/retention jobs.
 
 Deliverable: deterministic aggregation jobs + test coverage.
+Implementation artifact: `explorer/backend/src/indexer/indexer-metrics.service.ts` (`recomputeWindows`).
 
 ---
 
 ## Checkpoint 6 — Metrics API surface (indexer service)
 
-- [ ] Add API endpoints:
-  - [ ] `GET /metrics/tps?window=60s&from=&to=`
-  - [ ] `GET /metrics/blocks?from_height=&to_height=`
-  - [ ] `GET /metrics/entries?namespace=&from=&to=`
-  - [ ] `GET /metrics/summary` (latest snapshot)
-- [ ] Define response schema with explicit units:
-  - [ ] `*_bytes`,
-  - [ ] `tps`,
-  - [ ] timestamps in UTC.
+- [x] Add API endpoints:
+  - [x] `GET /metrics/tps?window=60s&from=&to=`
+  - [x] `GET /metrics/blocks?from_height=&to_height=`
+  - [x] `GET /metrics/entries?namespace=&from=&to=`
+  - [x] `GET /metrics/summary` (latest snapshot)
+- [x] Define response schema with explicit units:
+  - [x] `*_bytes`,
+  - [x] `tps`,
+  - [x] timestamps in UTC.
 - [ ] Add pagination/filtering for high-volume datasets.
 - [ ] Add auth/rate-limit policy if needed for shared environments.
 
 Deliverable: API contract doc + integration tests.
+Implementation artifact: `explorer/backend/src/app.controller.ts` + `explorer/backend/src/indexer/metrics.types.ts`.
 
 ---
 

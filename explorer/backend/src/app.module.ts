@@ -1,9 +1,10 @@
 import { Module } from '@nestjs/common';
 import { AppController } from './app.controller';
 import { CitizenService } from './citizen.service';
+import { IndexerMetricsService } from './indexer/indexer-metrics.service';
 
 @Module({
   controllers: [AppController],
-  providers: [CitizenService],
+  providers: [CitizenService, IndexerMetricsService],
 })
 export class AppModule {}
