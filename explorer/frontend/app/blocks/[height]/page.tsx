@@ -3,8 +3,7 @@ import { fetchBlockByHeight } from '../../lib/blocks';
 import { shortHash, toReadableDate } from '../../lib/format';
 import CopyableHash from '../../components/copyable-hash';
 import { blockDetailHref, parseBlockHeightParam } from '../../lib/block-routes';
-import { resolveEntryWeights } from '../../lib/indexer-metrics';
-import { computeCanonicalWeight } from '../../lib/local-indexer';
+import { resolveBlockWeight, resolveEntryWeights } from '../../lib/indexer-metrics';
 
 export const dynamic = 'force-dynamic';
 
@@ -116,7 +115,7 @@ export default async function BlockDetailPage({
     .map((entry) => (entry && typeof entry === 'object' ? (entry as { entry_id?: unknown }).entry_id : null))
     .filter((entryId): entryId is string => typeof entryId === 'string');
   const entryWeights = await resolveEntryWeights(entryIds, block.entries);
-  const blockWeightBytes = computeCanonicalWeight(block);
+  const blockWeight = await resolveBlockWeight(block.header.height, block);
 
   return (
     <>
@@ -125,6 +124,7 @@ export default async function BlockDetailPage({
           <p className="eyebrow">Citizen Explorer</p>
           <h1>Block #{block.header.height}</h1>
           <p className="subtitle">Source: {blockResponse.source}</p>
+          <p className="subtitle">Block weight source: {blockWeight.source}</p>
           <p className="subtitle">Entry weight source: {entryWeights.source}</p>
         </div>
       </section>
@@ -184,7 +184,7 @@ export default async function BlockDetailPage({
           </div>
           <div className="row">
             <span className="label">Block weight</span>
-            <span>{blockWeightBytes.toLocaleString('en-US')} bytes (runtime)</span>
+            <span>{blockWeight.blockWeightBytes.toLocaleString('en-US')} bytes</span>
           </div>
         </div>
       </section>

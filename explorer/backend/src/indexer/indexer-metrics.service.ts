@@ -124,6 +124,7 @@ export class IndexerMetricsService {
 
   async queryEntryMetrics(
     namespace?: string,
+    entryIds?: string[],
     from?: number,
     to?: number,
     cursor?: string,
@@ -134,8 +135,12 @@ export class IndexerMetricsService {
       (a, b) => b.committed_at - a.committed_at || b.block_height - a.block_height,
     );
     const cursorKey = cursor ? this.decodeCursor(cursor) : null;
+    const entryIdSet = entryIds && entryIds.length > 0 ? new Set(entryIds) : null;
     const filtered = rows.filter((row) => {
       if (namespace && row.namespace !== namespace) {
+        return false;
+      }
+      if (entryIdSet && !entryIdSet.has(row.entry_id)) {
         return false;
       }
       if (from !== undefined && row.committed_at < from) {

@@ -44,7 +44,7 @@ Indexer metrics endpoints:
 - `GET /metrics/summary`
 - `GET /metrics/tps?window=60s&from=&to=` (`window` supports `10s`, `60s`, `5m`, `1h`)
 - `GET /metrics/blocks?from_height=&to_height=`
-- `GET /metrics/entries?namespace=&from=&to=`
+- `GET /metrics/entries?namespace=&entry_ids=<id,id2>&from=&to=`
 
 ### Frontend
 ```bash
@@ -56,7 +56,7 @@ npm run dev
 The explorer frontend runs on `http://localhost:8885` by default.
 
 Dashboard prefers explorer-backend indexer metrics when `NEXT_PUBLIC_EXPLORER_BACKEND_URL` is reachable, and falls back to frontend-local derivation when backend metrics are unavailable.
-Blocks list and block detail screens label metric provenance explicitly (`runtime`, `indexer`, or `fallback`) and keep rendering with deterministic local weight computation when indexer metrics are unavailable.
+Blocks list and block detail screens label metric provenance explicitly (`runtime`, `indexer`, or `fallback`) and keep rendering with deterministic runtime/local weight computation when indexer metrics are unavailable.
 
 Environment variables:
 - `NEXT_PUBLIC_EXPLORER_BACKEND_URL` - explorer backend base URL (defaults to `http://127.0.0.1:4444`).
