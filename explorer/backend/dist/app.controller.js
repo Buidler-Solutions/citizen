@@ -63,14 +63,14 @@ let AppController = class AppController {
     async metricsSummary() {
         return this.indexerMetricsService.getSummary();
     }
-    async metricsBlocks(fromHeight, toHeight) {
-        return this.indexerMetricsService.queryBlockMetrics(this.optionalInteger(fromHeight, 'from_height'), this.optionalInteger(toHeight, 'to_height'));
+    async metricsBlocks(fromHeight, toHeight, cursor, limit) {
+        return this.indexerMetricsService.queryBlockMetrics(this.optionalInteger(fromHeight, 'from_height'), this.optionalInteger(toHeight, 'to_height'), cursor, this.optionalInteger(limit, 'limit'));
     }
-    async metricsEntries(namespace, from, to) {
-        return this.indexerMetricsService.queryEntryMetrics(namespace, this.optionalInteger(from, 'from'), this.optionalInteger(to, 'to'));
+    async metricsEntries(namespace, from, to, cursor, limit) {
+        return this.indexerMetricsService.queryEntryMetrics(namespace, this.optionalInteger(from, 'from'), this.optionalInteger(to, 'to'), cursor, this.optionalInteger(limit, 'limit'));
     }
-    async metricsTps(window, from, to) {
-        return this.indexerMetricsService.queryTps(this.parseWindow(window), this.optionalInteger(from, 'from'), this.optionalInteger(to, 'to'));
+    async metricsTps(window, from, to, cursor, limit) {
+        return this.indexerMetricsService.queryTps(this.parseWindow(window), this.optionalInteger(from, 'from'), this.optionalInteger(to, 'to'), cursor, this.optionalInteger(limit, 'limit'));
     }
     parseWindow(window) {
         const value = window ?? '60s';
@@ -186,8 +186,10 @@ __decorate([
     (0, common_1.Get)('metrics/blocks'),
     __param(0, (0, common_1.Query)('from_height')),
     __param(1, (0, common_1.Query)('to_height')),
+    __param(2, (0, common_1.Query)('cursor')),
+    __param(3, (0, common_1.Query)('limit')),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, String]),
+    __metadata("design:paramtypes", [String, String, String, String]),
     __metadata("design:returntype", Promise)
 ], AppController.prototype, "metricsBlocks", null);
 __decorate([
@@ -195,8 +197,10 @@ __decorate([
     __param(0, (0, common_1.Query)('namespace')),
     __param(1, (0, common_1.Query)('from')),
     __param(2, (0, common_1.Query)('to')),
+    __param(3, (0, common_1.Query)('cursor')),
+    __param(4, (0, common_1.Query)('limit')),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, String, String]),
+    __metadata("design:paramtypes", [String, String, String, String, String]),
     __metadata("design:returntype", Promise)
 ], AppController.prototype, "metricsEntries", null);
 __decorate([
@@ -204,8 +208,10 @@ __decorate([
     __param(0, (0, common_1.Query)('window')),
     __param(1, (0, common_1.Query)('from')),
     __param(2, (0, common_1.Query)('to')),
+    __param(3, (0, common_1.Query)('cursor')),
+    __param(4, (0, common_1.Query)('limit')),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, String, String]),
+    __metadata("design:paramtypes", [String, String, String, String, String]),
     __metadata("design:returntype", Promise)
 ], AppController.prototype, "metricsTps", null);
 exports.AppController = AppController = __decorate([

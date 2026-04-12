@@ -34,6 +34,10 @@ type BackendTpsPoint = {
   tps: number;
 };
 
+type PaginatedPayload<T> = {
+  data?: T[];
+};
+
 const nodeRuntimeBase = process.env.NEXT_PUBLIC_NODE_RUNTIME_URL ?? 'http://127.0.0.1:8081';
 const explorerBackendBase = process.env.NEXT_PUBLIC_EXPLORER_BACKEND_URL ?? 'http://127.0.0.1:4444';
 
@@ -45,6 +49,22 @@ async function safeFetchJson<T>(url: string): Promise<T | null> {
   } catch {
     return null;
   }
+}
+
+function asArrayPayload<T>(value: T[] | PaginatedPayload<T> | null): T[] | null {
+  if (!value) {
+    return null;
+  }
+
+  if (Array.isArray(value)) {
+    return value;
+  }
+
+  if (Array.isArray(value.data)) {
+    return value.data;
+  }
+
+  return null;
 }
 
 function formatRelativeMinutes(epochSeconds: number | undefined): string {
@@ -88,16 +108,20 @@ async function fetchBackendMetrics() {
   const base = explorerBackendBase.replace(/\/$/, '');
   const [summary, blocks, entries, tps] = await Promise.all([
     safeFetchJson<BackendSummary>(`${base}/metrics/summary`),
-    safeFetchJson<BackendBlockMetric[]>(`${base}/metrics/blocks`),
-    safeFetchJson<BackendEntryMetric[]>(`${base}/metrics/entries`),
-    safeFetchJson<BackendTpsPoint[]>(`${base}/metrics/tps?window=60s`),
+    safeFetchJson<BackendBlockMetric[] | PaginatedPayload<BackendBlockMetric>>(`${base}/metrics/blocks`),
+    safeFetchJson<BackendEntryMetric[] | PaginatedPayload<BackendEntryMetric>>(`${base}/metrics/entries`),
+    safeFetchJson<BackendTpsPoint[] | PaginatedPayload<BackendTpsPoint>>(`${base}/metrics/tps?window=60s`),
   ]);
 
-  if (!summary || !blocks || !entries || !tps) {
+  const normalizedBlocks = asArrayPayload(blocks);
+  const normalizedEntries = asArrayPayload(entries);
+  const normalizedTps = asArrayPayload(tps);
+
+  if (!summary || !normalizedBlocks || !normalizedEntries || !normalizedTps) {
     return null;
   }
 
-  return { summary, blocks, entries, tps };
+  return { summary, blocks: normalizedBlocks, entries: normalizedEntries, tps: normalizedTps };
 }
 
 export default async function HomePage() {
