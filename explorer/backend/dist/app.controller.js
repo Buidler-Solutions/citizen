@@ -16,10 +16,12 @@ exports.AppController = void 0;
 const common_1 = require("@nestjs/common");
 const citizen_service_1 = require("./citizen.service");
 const indexer_metrics_service_1 = require("./indexer/indexer-metrics.service");
+const metrics_access_service_1 = require("./indexer/metrics-access.service");
 let AppController = class AppController {
-    constructor(citizenService, indexerMetricsService) {
+    constructor(citizenService, indexerMetricsService, indexerMetricsAccessService) {
         this.citizenService = citizenService;
         this.indexerMetricsService = indexerMetricsService;
+        this.indexerMetricsAccessService = indexerMetricsAccessService;
     }
     health() {
         return { status: 'ok' };
@@ -60,19 +62,24 @@ let AppController = class AppController {
         }
         return this.citizenService.getPayloadDataHash(dataHash.trim());
     }
-    async metricsSummary() {
+    async metricsSummary(headers, req) {
+        this.indexerMetricsAccessService.enforce(headers ?? {}, req?.ip);
         return this.indexerMetricsService.getSummary();
     }
-    async metricsAlerts() {
+    async metricsAlerts(headers, req) {
+        this.indexerMetricsAccessService.enforce(headers ?? {}, req?.ip);
         return this.indexerMetricsService.getAlerts();
     }
-    async metricsBlocks(fromHeight, toHeight, cursor, limit) {
+    async metricsBlocks(fromHeight, toHeight, cursor, limit, headers, req) {
+        this.indexerMetricsAccessService.enforce(headers ?? {}, req?.ip);
         return this.indexerMetricsService.queryBlockMetrics(this.optionalInteger(fromHeight, 'from_height'), this.optionalInteger(toHeight, 'to_height'), cursor, this.optionalInteger(limit, 'limit'));
     }
-    async metricsEntries(namespace, entryIds, from, to, cursor, limit) {
+    async metricsEntries(namespace, entryIds, from, to, cursor, limit, headers, req) {
+        this.indexerMetricsAccessService.enforce(headers ?? {}, req?.ip);
         return this.indexerMetricsService.queryEntryMetrics(namespace, this.optionalCsv(entryIds), this.optionalInteger(from, 'from'), this.optionalInteger(to, 'to'), cursor, this.optionalInteger(limit, 'limit'));
     }
-    async metricsTps(window, from, to, cursor, limit) {
+    async metricsTps(window, from, to, cursor, limit, headers, req) {
+        this.indexerMetricsAccessService.enforce(headers ?? {}, req?.ip);
         return this.indexerMetricsService.queryTps(this.parseWindow(window), this.optionalInteger(from, 'from'), this.optionalInteger(to, 'to'), cursor, this.optionalInteger(limit, 'limit'));
     }
     parseWindow(window) {
@@ -191,14 +198,18 @@ __decorate([
 ], AppController.prototype, "payloadDataHashByQuery", null);
 __decorate([
     (0, common_1.Get)('metrics/summary'),
+    __param(0, (0, common_1.Headers)()),
+    __param(1, (0, common_1.Req)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", []),
+    __metadata("design:paramtypes", [Object, Object]),
     __metadata("design:returntype", Promise)
 ], AppController.prototype, "metricsSummary", null);
 __decorate([
     (0, common_1.Get)('metrics/alerts'),
+    __param(0, (0, common_1.Headers)()),
+    __param(1, (0, common_1.Req)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", []),
+    __metadata("design:paramtypes", [Object, Object]),
     __metadata("design:returntype", Promise)
 ], AppController.prototype, "metricsAlerts", null);
 __decorate([
@@ -207,8 +218,10 @@ __decorate([
     __param(1, (0, common_1.Query)('to_height')),
     __param(2, (0, common_1.Query)('cursor')),
     __param(3, (0, common_1.Query)('limit')),
+    __param(4, (0, common_1.Headers)()),
+    __param(5, (0, common_1.Req)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, String, String, String]),
+    __metadata("design:paramtypes", [String, String, String, String, Object, Object]),
     __metadata("design:returntype", Promise)
 ], AppController.prototype, "metricsBlocks", null);
 __decorate([
@@ -219,8 +232,10 @@ __decorate([
     __param(3, (0, common_1.Query)('to')),
     __param(4, (0, common_1.Query)('cursor')),
     __param(5, (0, common_1.Query)('limit')),
+    __param(6, (0, common_1.Headers)()),
+    __param(7, (0, common_1.Req)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, String, String, String, String, String]),
+    __metadata("design:paramtypes", [String, String, String, String, String, String, Object, Object]),
     __metadata("design:returntype", Promise)
 ], AppController.prototype, "metricsEntries", null);
 __decorate([
@@ -230,12 +245,15 @@ __decorate([
     __param(2, (0, common_1.Query)('to')),
     __param(3, (0, common_1.Query)('cursor')),
     __param(4, (0, common_1.Query)('limit')),
+    __param(5, (0, common_1.Headers)()),
+    __param(6, (0, common_1.Req)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, String, String, String, String]),
+    __metadata("design:paramtypes", [String, String, String, String, String, Object, Object]),
     __metadata("design:returntype", Promise)
 ], AppController.prototype, "metricsTps", null);
 exports.AppController = AppController = __decorate([
     (0, common_1.Controller)(),
     __metadata("design:paramtypes", [citizen_service_1.CitizenService,
-        indexer_metrics_service_1.IndexerMetricsService])
+        indexer_metrics_service_1.IndexerMetricsService,
+        metrics_access_service_1.IndexerMetricsAccessService])
 ], AppController);

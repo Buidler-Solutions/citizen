@@ -142,3 +142,70 @@ export type IndexerAlert = {
   threshold: string;
   playbook: string[];
 };
+
+export type BackfillRunResult = {
+  requested_from_height: number;
+  requested_to_height: number;
+  runtime_latest_height: number;
+  indexed_start_height: number;
+  indexed_end_height: number;
+  processed_blocks: number;
+  indexed_blocks: number;
+  indexed_entries: number;
+  started_at_ms: number;
+  finished_at_ms: number;
+  duration_ms: number;
+  degraded: boolean;
+  last_error: string | null;
+};
+
+export type VerificationSampleIssue = {
+  height: number;
+  issue:
+    | 'missing_runtime_block'
+    | 'missing_indexed_block'
+    | 'entry_count_mismatch'
+    | 'timestamp_mismatch'
+    | 'block_weight_mismatch'
+    | 'entry_weight_mismatch';
+  details: string;
+};
+
+export type VerificationSampleReport = {
+  requested_sample_count: number;
+  sampled_heights: number[];
+  matched_heights: number;
+  failed_heights: number;
+  issues: VerificationSampleIssue[];
+  generated_at_ms: number;
+};
+
+export type TpsCrossCheckIssue = {
+  window_name: MetricWindowName;
+  window_start: number;
+  issue: 'missing_materialized_window' | 'entries_committed_mismatch' | 'tps_mismatch';
+  expected_entries_committed: number;
+  actual_entries_committed: number | null;
+  expected_tps: number;
+  actual_tps: number | null;
+};
+
+export type TpsCrossCheckReport = {
+  window_name: MetricWindowName;
+  from: number | null;
+  to: number | null;
+  compared_windows: number;
+  mismatch_windows: number;
+  issues: TpsCrossCheckIssue[];
+  generated_at_ms: number;
+};
+
+export type VerificationEvidenceBundle = {
+  generated_at_ms: number;
+  indexed_height: number;
+  runtime_latest_height: number;
+  block_checksum_sha256: string;
+  entry_checksum_sha256: string;
+  tps_window_checksums_sha256: Record<MetricWindowName, string>;
+  summary: IndexerSummary;
+};

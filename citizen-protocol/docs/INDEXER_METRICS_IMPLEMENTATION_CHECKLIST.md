@@ -1,7 +1,7 @@
 # Indexer Metrics Implementation Checklist (TPS + Block Weight + Entry Weight)
 
 Status: implementation checklist for adding canonical analytics via an indexer while keeping protocol runtime deterministic and lean.
-Last updated: 2026-04-12 (Checkpoint 6 auth/rate-limit policy and Checkpoint 10 explorer metric-source feature flag are now implemented in explorer backend/frontend surfaces).
+Last updated: 2026-04-12 (Checkpoint 6 auth/rate-limit policy, Checkpoint 9 verification/backfill API surface, and Checkpoint 10 explorer metric-source feature flag are now implemented in explorer backend/frontend surfaces).
 
 ## Goals
 
@@ -185,15 +185,16 @@ Deliverable: runbook + dashboards + alert definitions.
 
 ## Checkpoint 9 — Verification and backfill
 
-- [ ] Backfill historical blocks from genesis/current baseline.
-- [ ] Verify random sampled heights:
-  - [ ] entry counts match runtime,
-  - [ ] timestamps match runtime,
-  - [ ] computed weights reproducible.
-- [ ] Cross-check TPS windows against recomputation script.
-- [ ] Produce evidence bundle (queries, outputs, checksums).
+- [x] Backfill historical blocks from genesis/current baseline.
+- [x] Verify random sampled heights:
+  - [x] entry counts match runtime,
+  - [x] timestamps match runtime,
+  - [x] computed weights reproducible.
+- [x] Cross-check TPS windows against recomputation script.
+- [x] Produce evidence bundle (queries, outputs, checksums).
 
 Deliverable: signed verification report.
+Implementation artifact: `explorer/backend/src/app.controller.ts` + `explorer/backend/src/indexer/indexer-metrics.service.ts` + `explorer/backend/src/indexer/metrics.types.ts`.
 
 ---
 

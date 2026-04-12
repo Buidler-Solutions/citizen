@@ -1,5 +1,7 @@
 import { BadRequestException, Injectable, Logger } from '@nestjs/common';
+import { createHash } from 'node:crypto';
 import {
+  BackfillRunResult,
   CursorState,
   IndexerAlert,
   IndexedBlock,
@@ -11,6 +13,10 @@ import {
   PaginatedResult,
   RuntimeBlock,
   SloSnapshot,
+  TpsCrossCheckReport,
+  VerificationEvidenceBundle,
+  VerificationSampleIssue,
+  VerificationSampleReport,
 } from './metrics.types';
 import { computeCanonicalWeight, roundHalfAwayFromZero } from './weight';
 
@@ -214,6 +220,282 @@ export class IndexerMetricsService {
       return true;
     });
     return this.paginate(filtered, limit, (row) => String(row.window_start));
+  }
+
+  async backfill(fromHeight = 0, toHeight?: number): Promise<BackfillRunResult> {
+    const startedAtMs = Date.now();
+    const runtimeLatestHeight = await this.findLatestHeight();
+    const endHeight = Math.max(
+      -1,
+      Math.min(toHeight ?? runtimeLatestHeight, runtimeLatestHeight),
+    );
+    const startHeight = Math.max(0, fromHeight);
+    const indexedStartHeight = this.cursor.last_indexed_height;
+
+    if (endHeight < startHeight) {
+      const finishedAtMs = Date.now();
+      return {
+        requested_from_height: startHeight,
+        requested_to_height: endHeight,
+        runtime_latest_height: runtimeLatestHeight,
+        indexed_start_height: indexedStartHeight,
+        indexed_end_height: this.cursor.last_indexed_height,
+        processed_blocks: 0,
+        indexed_blocks: this.indexedBlocks.size,
+        indexed_entries: this.indexedEntries.size,
+        started_at_ms: startedAtMs,
+        finished_at_ms: finishedAtMs,
+        duration_ms: finishedAtMs - startedAtMs,
+        degraded: this.cursor.degraded,
+        last_error: this.cursor.last_error,
+      };
+    }
+
+    let processedBlocks = 0;
+    for (let height = startHeight; height <= endHeight; height += 1) {
+      const candidate = await this.fetchBlockWithRetry(height);
+      if (!candidate?.block) {
+        this.markDegraded(height, 'missing-block');
+        break;
+      }
+      const continuityError = this.verifyContinuity(candidate.block);
+      if (continuityError) {
+        this.markDegraded(height, continuityError);
+        break;
+      }
+      const blockStartMs = Date.now();
+      this.persistBlockAtomically(candidate.block);
+      this.recordLatency(this.blockProcessingLatenciesMs, Date.now() - blockStartMs);
+      processedBlocks += 1;
+      if (this.cursor.degraded) {
+        break;
+      }
+    }
+
+    const finishedAtMs = Date.now();
+    return {
+      requested_from_height: startHeight,
+      requested_to_height: endHeight,
+      runtime_latest_height: runtimeLatestHeight,
+      indexed_start_height: indexedStartHeight,
+      indexed_end_height: this.cursor.last_indexed_height,
+      processed_blocks: processedBlocks,
+      indexed_blocks: this.indexedBlocks.size,
+      indexed_entries: this.indexedEntries.size,
+      started_at_ms: startedAtMs,
+      finished_at_ms: finishedAtMs,
+      duration_ms: finishedAtMs - startedAtMs,
+      degraded: this.cursor.degraded,
+      last_error: this.cursor.last_error,
+    };
+  }
+
+  async verifySampledHeights(sampleCount = 10, seed = 1337): Promise<VerificationSampleReport> {
+    await this.catchUpToLatest();
+    const runtimeLatestHeight = await this.findLatestHeight();
+    const upperBound = Math.min(runtimeLatestHeight, this.cursor.last_indexed_height);
+    const lowerBound = 0;
+    const sampledHeights = this.sampleHeights(lowerBound, upperBound, sampleCount, seed);
+    const issues: VerificationSampleIssue[] = [];
+    const failedHeights = new Set<number>();
+
+    for (const height of sampledHeights) {
+      const runtime = await this.fetchBlockOrNull(height);
+      const indexed = this.indexedBlocks.get(height);
+      if (!runtime?.block) {
+        issues.push({
+          height,
+          issue: 'missing_runtime_block',
+          details: 'runtime node did not return a block for sampled height',
+        });
+        failedHeights.add(height);
+        continue;
+      }
+      if (!indexed) {
+        issues.push({
+          height,
+          issue: 'missing_indexed_block',
+          details: 'indexer has no materialized block row for sampled height',
+        });
+        failedHeights.add(height);
+        continue;
+      }
+      if (indexed.entry_count !== runtime.block.entries.length) {
+        issues.push({
+          height,
+          issue: 'entry_count_mismatch',
+          details: `indexed=${indexed.entry_count}, runtime=${runtime.block.entries.length}`,
+        });
+        failedHeights.add(height);
+      }
+      if (indexed.committed_at !== runtime.block.header.timestamp) {
+        issues.push({
+          height,
+          issue: 'timestamp_mismatch',
+          details: `indexed=${indexed.committed_at}, runtime=${runtime.block.header.timestamp}`,
+        });
+        failedHeights.add(height);
+      }
+      const recomputedBlockWeight = computeCanonicalWeight(runtime.block);
+      if (indexed.block_weight_bytes !== recomputedBlockWeight) {
+        issues.push({
+          height,
+          issue: 'block_weight_mismatch',
+          details: `indexed=${indexed.block_weight_bytes}, recomputed=${recomputedBlockWeight}`,
+        });
+        failedHeights.add(height);
+      }
+      runtime.block.entries.forEach((entry, entryIndex) => {
+        const indexedEntry = this.indexedEntries.get(entry.entry_id);
+        if (!indexedEntry) {
+          issues.push({
+            height,
+            issue: 'entry_weight_mismatch',
+            details: `entry_id=${entry.entry_id} missing from indexed_entries`,
+          });
+          failedHeights.add(height);
+          return;
+        }
+        const recomputedEntryWeight = computeCanonicalWeight(entry);
+        if (
+          indexedEntry.entry_weight_bytes !== recomputedEntryWeight
+          || indexedEntry.block_height !== height
+          || indexedEntry.entry_index !== entryIndex
+        ) {
+          issues.push({
+            height,
+            issue: 'entry_weight_mismatch',
+            details:
+              `entry_id=${entry.entry_id}, indexed_weight=${indexedEntry.entry_weight_bytes}, ` +
+              `recomputed_weight=${recomputedEntryWeight}, indexed_location=${indexedEntry.block_height}/${indexedEntry.entry_index}, ` +
+              `runtime_location=${height}/${entryIndex}`,
+          });
+          failedHeights.add(height);
+        }
+      });
+    }
+
+    return {
+      requested_sample_count: sampleCount,
+      sampled_heights: sampledHeights,
+      matched_heights: sampledHeights.length - failedHeights.size,
+      failed_heights: failedHeights.size,
+      issues,
+      generated_at_ms: Date.now(),
+    };
+  }
+
+  async crossCheckTps(
+    windowName: MetricWindowName,
+    from?: number,
+    to?: number,
+  ): Promise<TpsCrossCheckReport> {
+    await this.catchUpToLatest();
+    const seconds = WINDOW_SECONDS[windowName];
+    const buckets = new Map<number, number>();
+    for (const entry of this.indexedEntries.values()) {
+      const start = Math.floor(entry.committed_at / seconds) * seconds;
+      if (from !== undefined && start < from) {
+        continue;
+      }
+      if (to !== undefined && start + seconds > to) {
+        continue;
+      }
+      buckets.set(start, (buckets.get(start) ?? 0) + 1);
+    }
+
+    const windows = this.metricWindows.get(windowName) ?? [];
+    const windowByStart = new Map(windows.map((window) => [window.window_start, window]));
+    const issues: TpsCrossCheckReport['issues'] = [];
+    for (const [windowStart, expectedEntries] of buckets.entries()) {
+      const materialized = windowByStart.get(windowStart);
+      const expectedTps = roundHalfAwayFromZero(expectedEntries / seconds, 3);
+      if (!materialized) {
+        issues.push({
+          window_name: windowName,
+          window_start: windowStart,
+          issue: 'missing_materialized_window',
+          expected_entries_committed: expectedEntries,
+          actual_entries_committed: null,
+          expected_tps: expectedTps,
+          actual_tps: null,
+        });
+        continue;
+      }
+      if (materialized.entries_committed !== expectedEntries) {
+        issues.push({
+          window_name: windowName,
+          window_start: windowStart,
+          issue: 'entries_committed_mismatch',
+          expected_entries_committed: expectedEntries,
+          actual_entries_committed: materialized.entries_committed,
+          expected_tps: expectedTps,
+          actual_tps: materialized.tps,
+        });
+      } else if (materialized.tps !== expectedTps) {
+        issues.push({
+          window_name: windowName,
+          window_start: windowStart,
+          issue: 'tps_mismatch',
+          expected_entries_committed: expectedEntries,
+          actual_entries_committed: materialized.entries_committed,
+          expected_tps: expectedTps,
+          actual_tps: materialized.tps,
+        });
+      }
+    }
+
+    return {
+      window_name: windowName,
+      from: from ?? null,
+      to: to ?? null,
+      compared_windows: buckets.size,
+      mismatch_windows: issues.length,
+      issues: issues.sort((a, b) => a.window_start - b.window_start),
+      generated_at_ms: Date.now(),
+    };
+  }
+
+  async buildEvidenceBundle(): Promise<VerificationEvidenceBundle> {
+    await this.catchUpToLatest();
+    const summary = await this.getSummary();
+    const runtimeLatestHeight = summary.lag.runtime_latest_height;
+    const blocks = Array.from(this.indexedBlocks.values()).sort((a, b) => a.block_height - b.block_height);
+    const entries = Array.from(this.indexedEntries.values()).sort((a, b) =>
+      a.block_height - b.block_height || a.entry_index - b.entry_index,
+    );
+    const blockChecksum = this.checksum(blocks.map((block) => ({
+      h: block.block_height,
+      bh: block.block_hash,
+      ph: block.prev_hash,
+      c: block.committed_at,
+      n: block.entry_count,
+      w: block.block_weight_bytes,
+    })));
+    const entryChecksum = this.checksum(entries.map((entry) => ({
+      id: entry.entry_id,
+      h: entry.block_height,
+      i: entry.entry_index,
+      n: entry.namespace,
+      a: entry.action,
+      c: entry.committed_at,
+      w: entry.entry_weight_bytes,
+    })));
+    const tpsWindowChecksums: Record<MetricWindowName, string> = {
+      '10s': this.checksum((this.metricWindows.get('10s') ?? []).map(this.windowChecksumShape)),
+      '60s': this.checksum((this.metricWindows.get('60s') ?? []).map(this.windowChecksumShape)),
+      '5m': this.checksum((this.metricWindows.get('5m') ?? []).map(this.windowChecksumShape)),
+      '1h': this.checksum((this.metricWindows.get('1h') ?? []).map(this.windowChecksumShape)),
+    };
+    return {
+      generated_at_ms: Date.now(),
+      indexed_height: this.cursor.last_indexed_height,
+      runtime_latest_height: runtimeLatestHeight,
+      block_checksum_sha256: blockChecksum,
+      entry_checksum_sha256: entryChecksum,
+      tps_window_checksums_sha256: tpsWindowChecksums,
+      summary,
+    };
   }
 
   private async catchUpToLatest(): Promise<void> {
@@ -605,6 +887,36 @@ export class IndexerMetricsService {
       p95: sorted[p95Index],
       max: sorted[sorted.length - 1],
       last: latencies[latencies.length - 1] ?? null,
+    };
+  }
+
+  private sampleHeights(lowerBound: number, upperBound: number, sampleCount: number, seed: number): number[] {
+    if (upperBound < lowerBound || sampleCount <= 0) {
+      return [];
+    }
+    const total = upperBound - lowerBound + 1;
+    const target = Math.min(sampleCount, total);
+    const selected = new Set<number>();
+    let state = seed >>> 0;
+    while (selected.size < target) {
+      state = (1664525 * state + 1013904223) >>> 0;
+      const offset = state % total;
+      selected.add(lowerBound + offset);
+    }
+    return Array.from(selected).sort((a, b) => a - b);
+  }
+
+  private checksum(payload: unknown): string {
+    return createHash('sha256').update(JSON.stringify(payload)).digest('hex');
+  }
+
+  private windowChecksumShape(window: MetricWindow): unknown {
+    return {
+      s: window.window_start,
+      e: window.window_end,
+      c: window.entries_committed,
+      t: window.tps,
+      i: window.is_estimated,
     };
   }
 
