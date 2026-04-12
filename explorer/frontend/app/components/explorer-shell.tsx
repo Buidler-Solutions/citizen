@@ -252,7 +252,6 @@ export function ExplorerShell({ children }: ExplorerShellProps) {
       <section className="dashboard-content">
         <header className="top-bar">
           <div className="top-bar-search">
-            <div className="search-shell">Citizen Protocol Explorer</div>
             <form className="header-search-form" onSubmit={onSearchSubmit}>
               <label className="sr-only" htmlFor="top-bar-search-query">
                 Search query
@@ -289,7 +288,7 @@ export function ExplorerShell({ children }: ExplorerShellProps) {
               ))}
             </select>
             <span className={`network-health-chip ${selectedNetworkHealthy ? 'healthy' : 'unhealthy'}`}>
-              {selectedNetworkHealthy ? 'Healthy' : 'Unavailable'}
+              {selectedNetworkHealthy ? 'Healthy' : 'Running local'}
             </span>
           </div>
         </header>
