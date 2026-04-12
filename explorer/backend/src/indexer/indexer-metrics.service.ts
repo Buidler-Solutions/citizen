@@ -10,6 +10,7 @@ import {
   MetricWindowName,
   PaginatedResult,
   RuntimeBlock,
+  SloSnapshot,
 } from './metrics.types';
 import { computeCanonicalWeight, roundHalfAwayFromZero } from './weight';
 
@@ -607,13 +608,13 @@ export class IndexerMetricsService {
     };
   }
 
-  private evaluateSlo(alerts: IndexerAlert[], ingestionLagBlocks: number) {
+  private evaluateSlo(alerts: IndexerAlert[], ingestionLagBlocks: number): SloSnapshot {
     const blockLatencySnapshot = this.toLatencySnapshot(this.blockProcessingLatenciesMs);
     const aggregationLatencySnapshot = this.toLatencySnapshot(this.aggregationLatenciesMs);
     const availabilityRatio = this.fetchAttemptTotal === 0
       ? 1
       : this.successfulBlockCount / this.fetchAttemptTotal;
-    const checks = [
+    const checks: SloSnapshot['checks'] = [
       {
         name: 'freshness',
         target: `ingestion_lag_blocks <= ${this.maxLagBlocksSlo}`,
