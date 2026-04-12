@@ -1,22 +1,50 @@
-revision: 1
-name: entities_baseline
-applies_to: indexer-metrics
+revision: 0001
+title: Indexer metrics entities baseline
+status: active
+applies_to:
+  service: explorer/backend/src/indexer/indexer-metrics.service.ts
+  snapshot_store: explorer/backend/src/indexer/metrics-storage.service.ts
 entities:
-  - indexed_blocks
-  - indexed_entries
-  - metric_windows
-keys:
   indexed_blocks:
-    primary: blocks/{block_height}
-    unique:
-      - block_hash
+    key: blocks/{block_height}
+    fields:
+      - block_height:u64
+      - block_hash:string
+      - prev_hash:string
+      - proposer:string?
+      - committed_at:utc_seconds
+      - entry_count:u64
+      - block_weight_bytes:u64
+      - first_seen_at:utc_millis
+      - updated_at:utc_millis
   indexed_entries:
-    primary: entries/{entry_id}
-    unique:
-      - entry_id
-      - block_height+entry_index
+    key: entries/{entry_id}
+    fields:
+      - entry_id:string
+      - block_height:u64
+      - entry_index:u32
+      - namespace:string
+      - action:string
+      - committed_at:utc_seconds
+      - entry_weight_bytes:u64
+      - signer:string?
+      - first_seen_at:utc_millis
+      - updated_at:utc_millis
   metric_windows:
-    primary: windows/{window_name}/{window_start}/{window_end}
-notes:
-  - Baseline entity contract mirroring citizen-protocol/docs/INDEXER_METRICS_DATA_MODEL_AND_SCHEMA.md.
-  - Intended for deterministic replay/idempotent upsert semantics.
+    key: windows/{window_name}/{window_start}/{window_end}
+    fields:
+      - window_name:enum[10s,60s,5m,1h]
+      - window_start:utc_seconds
+      - window_end:utc_seconds
+      - entries_committed:u64
+      - tps:decimal(3)
+      - computed_at:utc_millis
+      - is_estimated:bool
+idempotency:
+  unique:
+    - indexed_blocks.block_hash
+    - indexed_entries.entry_id
+    - indexed_entries.(block_height,entry_index)
+migration_notes:
+  - Introduces persisted snapshot backing store.
+  - Safe to deploy without replay; worker rebuilds from runtime API if snapshot absent.

@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import {
   BackfillRunResult,
   CursorState,
+  IndexerMetricsSnapshot,
   IndexerAlert,
   IndexedBlock,
   IndexedEntry,
@@ -20,6 +21,7 @@ import {
 } from './metrics.types';
 import { computeCanonicalWeight, roundHalfAwayFromZero } from './weight';
 import { IndexerMetricsAccessService } from './metrics-access.service';
+import { IndexerMetricsStorageService } from './metrics-storage.service';
 
 type BlockLookup = {
   height: number;
@@ -67,6 +69,8 @@ export class IndexerMetricsService {
   private consecutiveLagPolls = 0;
   private readonly blockProcessingLatenciesMs: number[] = [];
   private readonly aggregationLatenciesMs: number[] = [];
+  private initialized = false;
+  private initializePromise: Promise<void> | null = null;
 
   private cursor: CursorState = {
     last_indexed_height: -1,
@@ -77,7 +81,10 @@ export class IndexerMetricsService {
     updated_at: null,
   };
 
-  constructor(private readonly accessService: IndexerMetricsAccessService) {}
+  constructor(
+    private readonly accessService: IndexerMetricsAccessService,
+    private readonly storageService: IndexerMetricsStorageService,
+  ) {}
 
   startPolling(): void {
     if (this.pollTimer) {
@@ -227,6 +234,7 @@ export class IndexerMetricsService {
   }
 
   async backfill(fromHeight = 0, toHeight?: number): Promise<BackfillRunResult> {
+    await this.ensureInitialized();
     const startedAtMs = Date.now();
     const runtimeLatestHeight = await this.findLatestHeight();
     const endHeight = Math.max(
@@ -260,18 +268,22 @@ export class IndexerMetricsService {
       const candidate = await this.fetchBlockWithRetry(height);
       if (!candidate?.block) {
         this.markDegraded(height, 'missing-block');
+        await this.persistSnapshot();
         break;
       }
       const continuityError = this.verifyContinuity(candidate.block);
       if (continuityError) {
         this.markDegraded(height, continuityError);
+        await this.persistSnapshot();
         break;
       }
       const blockStartMs = Date.now();
       this.persistBlockAtomically(candidate.block);
       this.recordLatency(this.blockProcessingLatenciesMs, Date.now() - blockStartMs);
+      await this.persistSnapshot();
       processedBlocks += 1;
       if (this.cursor.degraded) {
+        await this.persistSnapshot();
         break;
       }
     }
@@ -503,6 +515,7 @@ export class IndexerMetricsService {
   }
 
   private async catchUpToLatest(): Promise<void> {
+    await this.ensureInitialized();
     if (this.cursor.degraded) {
       return;
     }
@@ -523,16 +536,19 @@ export class IndexerMetricsService {
           continue;
         }
         this.markDegraded(height, 'missing-block');
+        await this.persistSnapshot();
         return;
       }
       const continuityError = this.verifyContinuity(candidate.block);
       if (continuityError) {
         this.markDegraded(height, continuityError);
+        await this.persistSnapshot();
         return;
       }
       const blockStartMs = Date.now();
       this.persistBlockAtomically(candidate.block);
       this.recordLatency(this.blockProcessingLatenciesMs, Date.now() - blockStartMs);
+      await this.persistSnapshot();
     }
   }
 
@@ -648,6 +664,84 @@ export class IndexerMetricsService {
 
     this.recomputeWindows();
     this.compactRetention();
+  }
+
+  private async ensureInitialized(): Promise<void> {
+    if (this.initialized) {
+      return;
+    }
+    if (!this.initializePromise) {
+      this.initializePromise = (async () => {
+        const snapshot = await this.storageService.loadSnapshot();
+        if (snapshot) {
+          this.restoreSnapshot(snapshot);
+        }
+        this.initialized = true;
+      })();
+    }
+    await this.initializePromise;
+  }
+
+  private restoreSnapshot(snapshot: IndexerMetricsSnapshot): void {
+    this.cursor = snapshot.cursor;
+    this.indexedBlocks.clear();
+    snapshot.indexed_blocks.forEach((block) => {
+      this.indexedBlocks.set(block.block_height, block);
+    });
+    this.indexedEntries.clear();
+    snapshot.indexed_entries.forEach((entry) => {
+      this.indexedEntries.set(entry.entry_id, entry);
+    });
+    this.metricWindows.clear();
+    (Object.keys(WINDOW_SECONDS) as MetricWindowName[]).forEach((windowName) => {
+      this.metricWindows.set(windowName, snapshot.metric_windows[windowName] ?? []);
+    });
+    this.poisonBlocks.splice(0, this.poisonBlocks.length, ...snapshot.poison_blocks);
+    this.latestCommittedAt = snapshot.latest_committed_at;
+    this.lateEntriesAccepted = snapshot.late_entries_accepted;
+    this.failedBlockCount = snapshot.failed_block_count;
+    this.retryCountTotal = snapshot.retry_count_total;
+    this.fetchAttemptTotal = snapshot.fetch_attempt_total;
+    this.successfulBlockCount = snapshot.successful_block_count;
+    this.consecutiveLagPolls = snapshot.consecutive_lag_polls;
+    this.blockProcessingLatenciesMs.splice(
+      0,
+      this.blockProcessingLatenciesMs.length,
+      ...snapshot.block_processing_latencies_ms,
+    );
+    this.aggregationLatenciesMs.splice(
+      0,
+      this.aggregationLatenciesMs.length,
+      ...snapshot.aggregation_latencies_ms,
+    );
+  }
+
+  private async persistSnapshot(): Promise<void> {
+    await this.storageService.writeSnapshot(this.buildSnapshot());
+  }
+
+  private buildSnapshot(): IndexerMetricsSnapshot {
+    return {
+      cursor: { ...this.cursor },
+      indexed_blocks: Array.from(this.indexedBlocks.values()),
+      indexed_entries: Array.from(this.indexedEntries.values()),
+      metric_windows: {
+        '10s': this.metricWindows.get('10s') ?? [],
+        '60s': this.metricWindows.get('60s') ?? [],
+        '5m': this.metricWindows.get('5m') ?? [],
+        '1h': this.metricWindows.get('1h') ?? [],
+      },
+      poison_blocks: this.poisonBlocks.slice(),
+      latest_committed_at: this.latestCommittedAt,
+      late_entries_accepted: this.lateEntriesAccepted,
+      failed_block_count: this.failedBlockCount,
+      retry_count_total: this.retryCountTotal,
+      fetch_attempt_total: this.fetchAttemptTotal,
+      successful_block_count: this.successfulBlockCount,
+      consecutive_lag_polls: this.consecutiveLagPolls,
+      block_processing_latencies_ms: this.blockProcessingLatenciesMs.slice(),
+      aggregation_latencies_ms: this.aggregationLatenciesMs.slice(),
+    };
   }
 
   private recomputeWindows(): void {
