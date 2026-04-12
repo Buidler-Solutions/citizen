@@ -45,6 +45,9 @@ Backend environment variables:
 - `INDEXER_SLO_MAX_P95_AGGREGATION_MS` - aggregation p95 latency SLO in milliseconds (defaults to `1000`).
 - `INDEXER_ALERT_STALL_CURSOR_SECONDS` - stalled cursor alert threshold in seconds (defaults to `120`).
 - `INDEXER_ALERT_SUSTAINED_LAG_POLLS` - consecutive lagging polls before sustained-lag alert activates (defaults to `3`).
+- `INDEXER_METRICS_AUTH_REQUIRED` - when `true`, metrics endpoints require API key auth (defaults to `false`).
+- `INDEXER_METRICS_API_KEY` - shared secret accepted via `x-indexer-api-key` or `Authorization: Bearer <key>` when auth is enabled.
+- `INDEXER_METRICS_RATE_LIMIT_RPM` - max metrics requests/minute per caller key/IP (`0` disables rate limiting; default `0`).
 
 Indexer metrics endpoints:
 - `GET /metrics/summary`
@@ -81,6 +84,7 @@ Environment variables:
 - `NEXT_PUBLIC_NAMESPACE` - namespace to inspect (`governance.vote` by default).
 - `NEXT_PUBLIC_WALLET_SIGNER_DID` - optional signer DID used to query entries by `payload.payload_wallet_signature.signer` (legacy fallback still supported).
 - `NEXT_PUBLIC_RECEIPT_ID` - optional deterministic receipt ID for finality proof lookup.
+- `NEXT_PUBLIC_METRICS_SOURCE` - metrics source mode: `auto` (default), `indexer` (prefer backend metrics), or `fallback` (force frontend local derivation).
 
 ### Postgres (optional)
 ```bash

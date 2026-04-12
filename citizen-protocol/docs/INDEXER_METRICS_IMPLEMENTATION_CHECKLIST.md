@@ -1,7 +1,7 @@
 # Indexer Metrics Implementation Checklist (TPS + Block Weight + Entry Weight)
 
 Status: implementation checklist for adding canonical analytics via an indexer while keeping protocol runtime deterministic and lean.
-Last updated: 2026-04-12 (Checkpoint 8 advanced: indexer summary now evaluates SLO snapshots and exposes alert-playbook state for stalled cursor, sustained lag, and checksum mismatch conditions).
+Last updated: 2026-04-12 (Checkpoint 6 auth/rate-limit policy and Checkpoint 10 explorer metric-source feature flag are now implemented in explorer backend/frontend surfaces).
 
 ## Goals
 
@@ -141,7 +141,7 @@ Implementation artifact: `explorer/backend/src/indexer/indexer-metrics.service.t
   - [x] `tps`,
   - [x] timestamps in UTC.
 - [x] Add pagination/filtering for high-volume datasets.
-- [ ] Add auth/rate-limit policy if needed for shared environments.
+- [x] Add auth/rate-limit policy if needed for shared environments.
 
 Deliverable: API contract doc + integration tests.
 Implementation artifact: `explorer/backend/src/app.controller.ts` + `explorer/backend/src/indexer/metrics.types.ts`.
@@ -203,7 +203,7 @@ Deliverable: signed verification report.
   - [ ] localnet,
   - [ ] shared dev/test environment,
   - [ ] production candidate.
-- [ ] Add feature flag for explorer metric source switching.
+- [x] Add feature flag for explorer metric source switching.
 - [ ] Document operator responsibilities and on-call procedures.
 - [ ] Add release notes and architecture baseline updates.
 

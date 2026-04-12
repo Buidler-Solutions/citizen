@@ -1,13 +1,15 @@
-import { BadRequestException, Controller, Get, Param, Query } from '@nestjs/common';
+import { BadRequestException, Controller, Get, Headers, Param, Query, Req } from '@nestjs/common';
 import { CitizenService } from './citizen.service';
 import { IndexerMetricsService } from './indexer/indexer-metrics.service';
 import { MetricWindowName } from './indexer/metrics.types';
+import { IndexerMetricsAccessService } from './indexer/metrics-access.service';
 
 @Controller()
 export class AppController {
   constructor(
     private readonly citizenService: CitizenService,
     private readonly indexerMetricsService: IndexerMetricsService,
+    private readonly indexerMetricsAccessService: IndexerMetricsAccessService,
   ) {}
 
   @Get('health')
@@ -77,12 +79,20 @@ export class AppController {
   }
 
   @Get('metrics/summary')
-  async metricsSummary() {
+  async metricsSummary(
+    @Headers() headers?: Record<string, string | string[] | undefined>,
+    @Req() req?: { ip?: string },
+  ) {
+    this.indexerMetricsAccessService.enforce(headers ?? {}, req?.ip);
     return this.indexerMetricsService.getSummary();
   }
 
   @Get('metrics/alerts')
-  async metricsAlerts() {
+  async metricsAlerts(
+    @Headers() headers?: Record<string, string | string[] | undefined>,
+    @Req() req?: { ip?: string },
+  ) {
+    this.indexerMetricsAccessService.enforce(headers ?? {}, req?.ip);
     return this.indexerMetricsService.getAlerts();
   }
 
@@ -92,7 +102,10 @@ export class AppController {
     @Query('to_height') toHeight?: string,
     @Query('cursor') cursor?: string,
     @Query('limit') limit?: string,
+    @Headers() headers?: Record<string, string | string[] | undefined>,
+    @Req() req?: { ip?: string },
   ) {
+    this.indexerMetricsAccessService.enforce(headers ?? {}, req?.ip);
     return this.indexerMetricsService.queryBlockMetrics(
       this.optionalInteger(fromHeight, 'from_height'),
       this.optionalInteger(toHeight, 'to_height'),
@@ -109,7 +122,10 @@ export class AppController {
     @Query('to') to?: string,
     @Query('cursor') cursor?: string,
     @Query('limit') limit?: string,
+    @Headers() headers?: Record<string, string | string[] | undefined>,
+    @Req() req?: { ip?: string },
   ) {
+    this.indexerMetricsAccessService.enforce(headers ?? {}, req?.ip);
     return this.indexerMetricsService.queryEntryMetrics(
       namespace,
       this.optionalCsv(entryIds),
@@ -127,7 +143,10 @@ export class AppController {
     @Query('to') to?: string,
     @Query('cursor') cursor?: string,
     @Query('limit') limit?: string,
+    @Headers() headers?: Record<string, string | string[] | undefined>,
+    @Req() req?: { ip?: string },
   ) {
+    this.indexerMetricsAccessService.enforce(headers ?? {}, req?.ip);
     return this.indexerMetricsService.queryTps(
       this.parseWindow(window),
       this.optionalInteger(from, 'from'),

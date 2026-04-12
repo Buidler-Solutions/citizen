@@ -1,6 +1,7 @@
 import { fetchBlocksPage } from './lib/blocks';
 import { HomeDashboard } from './components/home-dashboard';
 import { deriveLocalIndexerMetrics, type RuntimeBlock } from './lib/local-indexer';
+import { metricsSourceMode, shouldUseIndexerMetrics } from './lib/metrics-source';
 
 export const dynamic = 'force-dynamic';
 
@@ -125,7 +126,7 @@ async function fetchBackendMetrics() {
 }
 
 export default async function HomePage() {
-  const backendMetrics = await fetchBackendMetrics();
+  const backendMetrics = shouldUseIndexerMetrics() ? await fetchBackendMetrics() : null;
 
   if (backendMetrics) {
     const { blocks, entries, tps, summary } = backendMetrics;

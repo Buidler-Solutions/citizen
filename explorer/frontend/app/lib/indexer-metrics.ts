@@ -1,5 +1,6 @@
 import { computeCanonicalWeight } from './local-indexer';
 import { fetchBlockByHeight, type BlockSummary } from './blocks';
+import { shouldUseIndexerMetrics } from './metrics-source';
 
 const explorerBackendBase =
   process.env.NEXT_PUBLIC_EXPLORER_BACKEND_URL ?? 'http://127.0.0.1:4444';
@@ -39,6 +40,23 @@ async function safeFetchJson<T>(url: string): Promise<T | null> {
 export async function withBlockWeights(blocks: BlockSummary[]): Promise<{ items: BlockSummary[]; source: WeightSource }> {
   if (blocks.length === 0) {
     return { items: blocks, source: 'fallback' };
+  }
+
+  if (!shouldUseIndexerMetrics()) {
+    const items = await Promise.all(
+      blocks.map(async (block) => {
+        const detail = await fetchBlockByHeight(block.height);
+        const runtimeBlock = detail?.data?.block;
+        return {
+          ...block,
+          block_weight_bytes:
+            runtimeBlock !== null && runtimeBlock !== undefined
+              ? computeCanonicalWeight(runtimeBlock)
+              : computeCanonicalWeight({ header: block.header, entries: block.entry_ids }),
+        };
+      }),
+    );
+    return { items, source: 'fallback' };
   }
 
   const heights = blocks.map((block) => block.height);
@@ -92,17 +110,19 @@ export async function resolveBlockWeight(
   blockHeight: number,
   fallbackBlock: unknown,
 ): Promise<{ blockWeightBytes: number; source: WeightSource }> {
-  const params = new URLSearchParams({
-    from_height: String(blockHeight),
-    to_height: String(blockHeight),
-    limit: '1',
-  });
-  const payload = await safeFetchJson<PaginatedPayload<BackendBlockMetric>>(
-    `${explorerBackendBase.replace(/\/$/, '')}/metrics/blocks?${params.toString()}`,
-  );
-  const metric = payload?.data?.find((row) => row.block_height === blockHeight);
-  if (metric) {
-    return { blockWeightBytes: metric.block_weight_bytes, source: 'indexer' };
+  if (shouldUseIndexerMetrics()) {
+    const params = new URLSearchParams({
+      from_height: String(blockHeight),
+      to_height: String(blockHeight),
+      limit: '1',
+    });
+    const payload = await safeFetchJson<PaginatedPayload<BackendBlockMetric>>(
+      `${explorerBackendBase.replace(/\/$/, '')}/metrics/blocks?${params.toString()}`,
+    );
+    const metric = payload?.data?.find((row) => row.block_height === blockHeight);
+    if (metric) {
+      return { blockWeightBytes: metric.block_weight_bytes, source: 'indexer' };
+    }
   }
   return { blockWeightBytes: computeCanonicalWeight(fallbackBlock), source: 'fallback' };
 }
@@ -114,7 +134,7 @@ export async function resolveEntryWeights(
   const unresolved = new Set(entryIds.filter((entryId) => entryId.trim().length > 0));
   const weights = new Map<string, number>();
 
-  if (unresolved.size > 0) {
+  if (shouldUseIndexerMetrics() && unresolved.size > 0) {
     const params = new URLSearchParams({
       entry_ids: Array.from(unresolved).join(','),
       limit: String(Math.max(unresolved.size, 100)),
