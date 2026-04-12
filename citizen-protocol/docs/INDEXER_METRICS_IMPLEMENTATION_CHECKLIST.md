@@ -1,7 +1,7 @@
 # Indexer Metrics Implementation Checklist (TPS + Block Weight + Entry Weight)
 
 Status: implementation checklist for adding canonical analytics via an indexer while keeping protocol runtime deterministic and lean.
-Last updated: 2026-04-12 (Checkpoint 2 revised to storage-engine-agnostic/non-relational contract).
+Last updated: 2026-04-12 (Checkpoint 3 module contract + fixture/test plan added).
 
 ## Goals
 
@@ -75,6 +75,7 @@ Implementation artifact: `citizen-protocol/docs/INDEXER_METRICS_DATA_MODEL_AND_S
 
 ## Checkpoint 3 — Canonical weight computation module
 
+- [x] Publish implementation-ready module contract and fixture/test plan.
 - [ ] Implement shared weight computation library:
   - [ ] `compute_entry_weight(entry) -> u64`
   - [ ] `compute_block_weight(block) -> u64`
@@ -86,6 +87,7 @@ Implementation artifact: `citizen-protocol/docs/INDEXER_METRICS_DATA_MODEL_AND_S
 - [ ] Add regression fixtures from real sample blocks.
 
 Deliverable: tested weight module + fixtures committed in repo.
+Implementation artifact: `citizen-protocol/docs/INDEXER_METRICS_WEIGHT_COMPUTATION_MODULE.md` (module boundary, serializer contract, fixture taxonomy, and test matrix documented).
 
 ---
 
