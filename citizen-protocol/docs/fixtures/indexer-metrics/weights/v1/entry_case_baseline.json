@@ -1,0 +1,17 @@
+{
+  "entry_id": "11111111-1111-1111-1111-111111111111",
+  "namespace": "identity.citizen",
+  "action": "REGISTER",
+  "object_id": "did:citizen:alice",
+  "payload": {
+    "z": 2,
+    "a": 1,
+    "nested": {
+      "b": true,
+      "a": false
+    }
+  },
+  "author": "did:key:author-1",
+  "signature": "ed25519:signature-baseline",
+  "timestamp": 1735689600
+}
