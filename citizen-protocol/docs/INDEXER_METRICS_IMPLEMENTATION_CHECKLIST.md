@@ -121,8 +121,8 @@ Implementation artifact: `explorer/backend/src/indexer/indexer-metrics.service.t
   - [x] per-window `entries_committed`,
   - [x] derived `tps`,
   - [x] gap-safe bucket boundaries.
-- [ ] Add late-data handling policy (if delayed ingestion occurs).
-- [ ] Add periodic compaction/retention jobs.
+- [x] Add late-data handling policy (if delayed ingestion occurs).
+- [x] Add periodic compaction/retention jobs.
 
 Deliverable: deterministic aggregation jobs + test coverage.
 Implementation artifact: `explorer/backend/src/indexer/indexer-metrics.service.ts` (`recomputeWindows`).
@@ -140,7 +140,7 @@ Implementation artifact: `explorer/backend/src/indexer/indexer-metrics.service.t
   - [x] `*_bytes`,
   - [x] `tps`,
   - [x] timestamps in UTC.
-- [ ] Add pagination/filtering for high-volume datasets.
+- [x] Add pagination/filtering for high-volume datasets.
 - [ ] Add auth/rate-limit policy if needed for shared environments.
 
 Deliverable: API contract doc + integration tests.

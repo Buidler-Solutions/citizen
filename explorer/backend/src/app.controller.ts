@@ -82,10 +82,17 @@ export class AppController {
   }
 
   @Get('metrics/blocks')
-  async metricsBlocks(@Query('from_height') fromHeight?: string, @Query('to_height') toHeight?: string) {
+  async metricsBlocks(
+    @Query('from_height') fromHeight?: string,
+    @Query('to_height') toHeight?: string,
+    @Query('cursor') cursor?: string,
+    @Query('limit') limit?: string,
+  ) {
     return this.indexerMetricsService.queryBlockMetrics(
       this.optionalInteger(fromHeight, 'from_height'),
       this.optionalInteger(toHeight, 'to_height'),
+      cursor,
+      this.optionalInteger(limit, 'limit'),
     );
   }
 
@@ -94,20 +101,32 @@ export class AppController {
     @Query('namespace') namespace?: string,
     @Query('from') from?: string,
     @Query('to') to?: string,
+    @Query('cursor') cursor?: string,
+    @Query('limit') limit?: string,
   ) {
     return this.indexerMetricsService.queryEntryMetrics(
       namespace,
       this.optionalInteger(from, 'from'),
       this.optionalInteger(to, 'to'),
+      cursor,
+      this.optionalInteger(limit, 'limit'),
     );
   }
 
   @Get('metrics/tps')
-  async metricsTps(@Query('window') window?: string, @Query('from') from?: string, @Query('to') to?: string) {
+  async metricsTps(
+    @Query('window') window?: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+    @Query('cursor') cursor?: string,
+    @Query('limit') limit?: string,
+  ) {
     return this.indexerMetricsService.queryTps(
       this.parseWindow(window),
       this.optionalInteger(from, 'from'),
       this.optionalInteger(to, 'to'),
+      cursor,
+      this.optionalInteger(limit, 'limit'),
     );
   }
 

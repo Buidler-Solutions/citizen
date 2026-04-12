@@ -55,6 +55,18 @@ export type MetricWindow = {
   entries_committed: number;
   tps: number;
   computed_at: number;
+  is_estimated: boolean;
+};
+
+export type PageInfo = {
+  limit: number;
+  has_more: boolean;
+  next_cursor: string | null;
+};
+
+export type PaginatedResult<T> = {
+  data: T[];
+  page: PageInfo;
 };
 
 export type CursorState = {
@@ -82,4 +94,9 @@ export type IndexerSummary = {
     reason: string;
     detected_at: number;
   }>;
+  late_data: {
+    accepted_entries: number;
+    latest_committed_at: number | null;
+    allowed_lateness_seconds: number;
+  };
 };

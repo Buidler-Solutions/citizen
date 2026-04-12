@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import {
   CursorState,
   IndexedBlock,
@@ -6,6 +6,7 @@ import {
   IndexerSummary,
   MetricWindow,
   MetricWindowName,
+  PaginatedResult,
   RuntimeBlock,
 } from './metrics.types';
 import { computeCanonicalWeight, roundHalfAwayFromZero } from './weight';
@@ -22,6 +23,9 @@ const WINDOW_SECONDS: Record<MetricWindowName, number> = {
   '1h': 3600,
 };
 
+const DEFAULT_PAGE_LIMIT = 100;
+const MAX_PAGE_LIMIT = 1000;
+
 @Injectable()
 export class IndexerMetricsService {
   private readonly logger = new Logger(IndexerMetricsService.name);
@@ -29,11 +33,17 @@ export class IndexerMetricsService {
   private readonly pollMs = Number(process.env.INDEXER_POLL_MS ?? '4000');
   private readonly backoffMs = [250, 500, 1000];
   private pollTimer: NodeJS.Timeout | null = null;
+  private readonly allowedLatenessSeconds = Number(process.env.INDEXER_ALLOWED_LATENESS_SECONDS ?? '120');
+  private readonly blockRetentionSeconds = Number(process.env.INDEXER_BLOCK_RETENTION_SECONDS ?? '2592000');
+  private readonly entryRetentionSeconds = Number(process.env.INDEXER_ENTRY_RETENTION_SECONDS ?? '604800');
+  private readonly windowRetentionSeconds = Number(process.env.INDEXER_WINDOW_RETENTION_SECONDS ?? '604800');
 
   private readonly indexedBlocks = new Map<number, IndexedBlock>();
   private readonly indexedEntries = new Map<string, IndexedEntry>();
   private readonly metricWindows = new Map<MetricWindowName, MetricWindow[]>();
   private readonly poisonBlocks: Array<{ height: number; reason: string; detected_at: number }> = [];
+  private latestCommittedAt: number | null = null;
+  private lateEntriesAccepted = 0;
 
   private cursor: CursorState = {
     last_indexed_height: -1,
@@ -81,29 +91,50 @@ export class IndexerMetricsService {
             : Math.max(runtimeLatestHeight - indexedHeight, 0),
       },
       poison_blocks: this.poisonBlocks.slice(-20),
+      late_data: {
+        accepted_entries: this.lateEntriesAccepted,
+        latest_committed_at: this.latestCommittedAt,
+        allowed_lateness_seconds: this.allowedLatenessSeconds,
+      },
     };
   }
 
-  async queryBlockMetrics(fromHeight?: number, toHeight?: number): Promise<IndexedBlock[]> {
+  async queryBlockMetrics(
+    fromHeight?: number,
+    toHeight?: number,
+    cursor?: string,
+    limit?: number,
+  ): Promise<PaginatedResult<IndexedBlock>> {
     await this.catchUpToLatest();
     const rows = Array.from(this.indexedBlocks.values()).sort((a, b) => b.block_height - a.block_height);
-    return rows.filter((row) => {
+    const filtered = rows.filter((row) => {
       if (fromHeight !== undefined && row.block_height < fromHeight) {
         return false;
       }
       if (toHeight !== undefined && row.block_height > toHeight) {
         return false;
       }
+      if (cursor !== undefined && row.block_height >= this.parseCursorInteger(cursor, 'cursor')) {
+        return false;
+      }
       return true;
     });
+    return this.paginate(filtered, limit, (row) => String(row.block_height));
   }
 
-  async queryEntryMetrics(namespace?: string, from?: number, to?: number): Promise<IndexedEntry[]> {
+  async queryEntryMetrics(
+    namespace?: string,
+    from?: number,
+    to?: number,
+    cursor?: string,
+    limit?: number,
+  ): Promise<PaginatedResult<IndexedEntry>> {
     await this.catchUpToLatest();
     const rows = Array.from(this.indexedEntries.values()).sort(
       (a, b) => b.committed_at - a.committed_at || b.block_height - a.block_height,
     );
-    return rows.filter((row) => {
+    const cursorKey = cursor ? this.decodeCursor(cursor) : null;
+    const filtered = rows.filter((row) => {
       if (namespace && row.namespace !== namespace) {
         return false;
       }
@@ -113,22 +144,39 @@ export class IndexerMetricsService {
       if (to !== undefined && row.committed_at > to) {
         return false;
       }
+      if (cursorKey && this.entryCursorKey(row) >= cursorKey) {
+        return false;
+      }
       return true;
     });
+    return this.paginate(filtered, limit, (row) => this.entryCursorToken(row));
   }
 
-  async queryTps(windowName: MetricWindowName, from?: number, to?: number): Promise<MetricWindow[]> {
+  async queryTps(
+    windowName: MetricWindowName,
+    from?: number,
+    to?: number,
+    cursor?: string,
+    limit?: number,
+  ): Promise<PaginatedResult<MetricWindow>> {
     await this.catchUpToLatest();
     const rows = this.metricWindows.get(windowName) ?? [];
-    return rows.filter((row) => {
+    const filtered = rows
+      .slice()
+      .sort((a, b) => b.window_start - a.window_start)
+      .filter((row) => {
       if (from !== undefined && row.window_start < from) {
         return false;
       }
       if (to !== undefined && row.window_end > to) {
         return false;
       }
+      if (cursor !== undefined && row.window_start >= this.parseCursorInteger(cursor, 'cursor')) {
+        return false;
+      }
       return true;
     });
+    return this.paginate(filtered, limit, (row) => String(row.window_start));
   }
 
   private async catchUpToLatest(): Promise<void> {
@@ -201,6 +249,10 @@ export class IndexerMetricsService {
       first_seen_at: now,
       updated_at: now,
     }));
+    const blockLatestCommittedAt = stagedEntries.reduce(
+      (current, entry) => Math.max(current, entry.committed_at),
+      this.latestCommittedAt ?? Number.MIN_SAFE_INTEGER,
+    );
 
     const existingBlock = this.indexedBlocks.get(blockHeight);
     if (
@@ -244,12 +296,20 @@ export class IndexerMetricsService {
     });
 
     for (const entry of stagedEntries) {
+      if (
+        this.latestCommittedAt !== null &&
+        entry.committed_at < this.latestCommittedAt - this.allowedLatenessSeconds
+      ) {
+        this.lateEntriesAccepted += 1;
+      }
       const existing = this.indexedEntries.get(entry.entry_id);
       this.indexedEntries.set(entry.entry_id, {
         ...entry,
         first_seen_at: existing?.first_seen_at ?? entry.first_seen_at,
       });
     }
+    this.latestCommittedAt =
+      this.latestCommittedAt === null ? blockLatestCommittedAt : Math.max(this.latestCommittedAt, blockLatestCommittedAt);
 
     this.cursor = {
       ...this.cursor,
@@ -261,6 +321,7 @@ export class IndexerMetricsService {
     };
 
     this.recomputeWindows();
+    this.compactRetention();
   }
 
   private recomputeWindows(): void {
@@ -283,9 +344,39 @@ export class IndexerMetricsService {
           entries_committed: entriesCommitted,
           tps: roundHalfAwayFromZero(entriesCommitted / seconds, 3),
           computed_at: now,
+          is_estimated:
+            this.latestCommittedAt === null
+              ? false
+              : windowStart + seconds > this.latestCommittedAt - this.allowedLatenessSeconds,
         }));
       this.metricWindows.set(windowName, windows);
     });
+  }
+
+  private compactRetention(): void {
+    const watermark = this.latestCommittedAt ?? Math.floor(Date.now() / 1000);
+    const blockCutoff = watermark - this.blockRetentionSeconds;
+    const entryCutoff = watermark - this.entryRetentionSeconds;
+    const windowCutoff = watermark - this.windowRetentionSeconds;
+
+    for (const [height, block] of this.indexedBlocks.entries()) {
+      if (block.committed_at < blockCutoff) {
+        this.indexedBlocks.delete(height);
+      }
+    }
+
+    for (const [entryId, entry] of this.indexedEntries.entries()) {
+      if (entry.committed_at < entryCutoff) {
+        this.indexedEntries.delete(entryId);
+      }
+    }
+
+    for (const [windowName, windows] of this.metricWindows.entries()) {
+      this.metricWindows.set(
+        windowName,
+        windows.filter((window) => window.window_end >= windowCutoff),
+      );
+    }
   }
 
   private deriveBlockHash(block: RuntimeBlock): string {
@@ -390,5 +481,56 @@ export class IndexerMetricsService {
     return new Promise((resolve) => {
       setTimeout(resolve, ms);
     });
+  }
+
+  private parseCursorInteger(cursor: string, label: string): number {
+    const parsed = Number(cursor);
+    if (!Number.isInteger(parsed)) {
+      throw new BadRequestException(`${label} must be an integer cursor`);
+    }
+    return parsed;
+  }
+
+  private decodeCursor(cursor: string): string {
+    try {
+      return Buffer.from(cursor, 'base64url').toString('utf8');
+    } catch (_error) {
+      throw new BadRequestException('cursor must be valid base64url');
+    }
+  }
+
+  private entryCursorKey(entry: IndexedEntry): string {
+    const committed = String(entry.committed_at).padStart(12, '0');
+    const height = String(entry.block_height).padStart(12, '0');
+    return `${committed}:${height}:${entry.entry_id}`;
+  }
+
+  private entryCursorToken(entry: IndexedEntry): string {
+    return Buffer.from(this.entryCursorKey(entry), 'utf8').toString('base64url');
+  }
+
+  private paginate<T>(rows: T[], requestedLimit: number | undefined, cursorFor: (row: T) => string): PaginatedResult<T> {
+    const limit = this.clampLimit(requestedLimit);
+    const data = rows.slice(0, limit);
+    const hasMore = rows.length > limit;
+    const nextCursor = hasMore && data.length > 0 ? cursorFor(data[data.length - 1]) : null;
+    return {
+      data,
+      page: {
+        limit,
+        has_more: hasMore,
+        next_cursor: nextCursor,
+      },
+    };
+  }
+
+  private clampLimit(limit?: number): number {
+    if (limit === undefined) {
+      return DEFAULT_PAGE_LIMIT;
+    }
+    if (!Number.isInteger(limit) || limit < 1) {
+      throw new BadRequestException('limit must be a positive integer');
+    }
+    return Math.min(limit, MAX_PAGE_LIMIT);
   }
 }
