@@ -5,12 +5,12 @@ Last updated: 2026-04-12 (Checkpoint 10 rollout staging + on-call runbook now im
 
 ## Goals
 
-- [ ] Provide production-grade metrics for:
-  - [ ] transactions/entries per second (TPS)
-  - [ ] weight per block
-  - [ ] weight per entry
-- [ ] Keep node/runtime as canonical ledger source and indexer as derived analytics surface.
-- [ ] Ensure explorer reads metrics from indexer APIs (not local UI heuristics).
+- [x] Provide production-grade metrics for:
+  - [x] transactions/entries per second (TPS)
+  - [x] weight per block
+  - [x] weight per entry
+- [x] Keep node/runtime as canonical ledger source and indexer as derived analytics surface.
+- [x] Ensure explorer reads metrics from indexer APIs (not local UI heuristics).
 
 ---
 
@@ -69,7 +69,7 @@ Implementation artifact: `citizen-protocol/docs/INDEXER_METRICS_INGESTION_ARCHIT
 - [x] Add migration/versioning strategy for storage evolution.
 
 Deliverable: storage manifests/migrations + schema documentation.
-Implementation artifact: `citizen-protocol/docs/INDEXER_METRICS_DATA_MODEL_AND_SCHEMA.md` (storage-engine-agnostic schema contract complete; backend adapter/manifests pending implementation).
+Implementation artifacts: `citizen-protocol/docs/INDEXER_METRICS_DATA_MODEL_AND_SCHEMA.md` + `explorer/backend/indexer/storage/manifests/0001_entities_baseline.yaml` + `explorer/backend/src/indexer/metrics-storage.service.ts`.
 
 ---
 
@@ -220,8 +220,8 @@ Implementation artifacts:
 
 ## Done criteria
 
-- [ ] Metric definitions are stable, documented, and test-backed.
-- [ ] Indexer can replay from cursor/genesis deterministically.
-- [ ] APIs serve canonical TPS + weight metrics with explicit units.
-- [ ] Explorer displays indexer-backed metrics in normal operation.
-- [ ] Runbooks, alerts, and SLOs are in place.
+- [x] Metric definitions are stable, documented, and test-backed.
+- [x] Indexer can replay from cursor/genesis deterministically.
+- [x] APIs serve canonical TPS + weight metrics with explicit units.
+- [x] Explorer displays indexer-backed metrics in normal operation.
+- [x] Runbooks, alerts, and SLOs are in place.

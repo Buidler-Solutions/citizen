@@ -12,12 +12,13 @@ const app_controller_1 = require("./app.controller");
 const citizen_service_1 = require("./citizen.service");
 const indexer_metrics_service_1 = require("./indexer/indexer-metrics.service");
 const metrics_access_service_1 = require("./indexer/metrics-access.service");
+const metrics_storage_service_1 = require("./indexer/metrics-storage.service");
 let AppModule = class AppModule {
 };
 exports.AppModule = AppModule;
 exports.AppModule = AppModule = __decorate([
     (0, common_1.Module)({
         controllers: [app_controller_1.AppController],
-        providers: [citizen_service_1.CitizenService, indexer_metrics_service_1.IndexerMetricsService, metrics_access_service_1.IndexerMetricsAccessService],
+        providers: [citizen_service_1.CitizenService, indexer_metrics_service_1.IndexerMetricsService, metrics_access_service_1.IndexerMetricsAccessService, metrics_storage_service_1.IndexerMetricsStorageService],
     })
 ], AppModule);
