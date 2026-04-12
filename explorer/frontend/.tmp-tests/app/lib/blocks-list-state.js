@@ -3,6 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.dedupeByHeight = dedupeByHeight;
 exports.sortByHeightDesc = sortByHeightDesc;
 exports.mergePaginatedBlocks = mergePaginatedBlocks;
+exports.mergeWithInitialBlocksState = mergeWithInitialBlocksState;
 function dedupeByHeight(items) {
     const seen = new Set();
     return items.filter((item) => {
@@ -18,4 +19,11 @@ function sortByHeightDesc(items) {
 }
 function mergePaginatedBlocks(existing, incoming) {
     return dedupeByHeight([...existing, ...incoming]);
+}
+function mergeWithInitialBlocksState(initial, restored) {
+    return {
+        items: mergePaginatedBlocks(initial.items, restored.items),
+        nextCursor: restored.nextCursor ?? initial.nextCursor,
+        hasMore: initial.hasMore || restored.hasMore,
+    };
 }
