@@ -82,6 +82,7 @@ const isValidEmail = (email: string) => {
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
 const ASCIINEMA_SHORTCODE_PATTERN = /\[asciinema:([a-zA-Z0-9_-]+)(?:\|([^\]]+))?\]/g;
 const HASH_FORMAT = /^sha256:[a-f0-9]{64}$/i;
+const MAX_ONBOARDING_ATTACHMENT_BYTES = 100 * 1024 * 1024;
 
 type WalletProvider = {
   request: (args: { method: string; params?: unknown[] }) => Promise<unknown>;
@@ -786,8 +787,8 @@ export function InterestForm() {
       setSignedSubmission(null);
       return;
     }
-    if (file.size > 10 * 1024 * 1024) {
-      setStatus('Attachment must be 10MB or smaller for wallet-signed simulation flow.');
+    if (file.size > MAX_ONBOARDING_ATTACHMENT_BYTES) {
+      setStatus('Attachment must be 100MB or smaller for wallet-signed onboarding flow.');
       event.target.value = '';
       return;
     }

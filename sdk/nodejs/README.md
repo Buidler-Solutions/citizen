@@ -64,12 +64,15 @@ if (!OFFCHAIN_ATTACHMENT_ALLOWED_MIME_TYPES.includes(file.type)) {
 }
 ```
 
-Current allowlist includes audio/video/docs/spreadsheets/images:
-- audio: `audio/mpeg`, `audio/wav`
-- video: `video/mp4`, `video/webm`
-- docs/sheets: `application/pdf`, `application/msword`,
+Current allowlist includes audio/video/docs/archives/spreadsheets/images:
+- audio: `audio/mpeg`, `audio/mp3`, `audio/wav`, `audio/x-wav`, `audio/wave`,
+  `audio/mp4`, `audio/ogg`
+- video: `video/mp4`, `video/webm`, `video/quicktime`
+- docs/sheets/archives: `application/pdf`, `application/zip`,
+  `application/x-zip-compressed`, `application/msword`,
+  `application/vnd.ms-word`,
   `application/vnd.openxmlformats-officedocument.wordprocessingml.document`,
-  `application/vnd.ms-excel`,
+  `application/vnd.ms-excel`, `application/msexcel`,
   `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`
 - images: `image/jpeg`, `image/png`, `image/webp`
 

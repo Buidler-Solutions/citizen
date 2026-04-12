@@ -35,7 +35,7 @@ const DEFAULT_CAMPAIGN_CARDS = [
 const DEFAULT_RELAY_MAX_ATTEMPTS = 3;
 const DEFAULT_RELAY_RETRY_BACKOFF_MS = 250;
 const MAX_RELAY_RETRY_BACKOFF_MS = 5000;
-const MAX_ONBOARDING_ATTACHMENT_BYTES = 10 * 1024 * 1024;
+const MAX_ONBOARDING_ATTACHMENT_BYTES = 100 * 1024 * 1024;
 const MAX_WALLET_SIGNING_PAYLOAD_CHARS = 17_000_000;
 const DEFAULT_RUNTIME_NAMESPACE = 'forms.commitment';
 const DEFAULT_RUNTIME_ACTION = 'SUBMIT_ONBOARDING_INTEREST';
@@ -281,7 +281,7 @@ export class LeadService {
     }
     const attachmentBuffer = Buffer.from(attachmentBase64, 'base64');
     if (attachmentBuffer.length > MAX_ONBOARDING_ATTACHMENT_BYTES) {
-      throw new BadRequestException('attachmentBase64 exceeds the 10MB maximum attachment size.');
+      throw new BadRequestException('attachmentBase64 exceeds the 100MB maximum attachment size.');
     }
     const computedHash = createHash('sha256').update(attachmentBuffer).digest('hex');
     if (attachmentSha256.toLowerCase() !== `sha256:${computedHash}`) {

@@ -85,6 +85,29 @@ describe('createDappSigningRequestEnvelope', () => {
     expect(envelope.policyChecks.map((check) => check.code)).toContain('builder_credit_payload_missing');
   });
 
+  it('does not flag landing-page onboarding payloads with mp3 attachments as policy violations', async () => {
+    const envelope = await createDappSigningRequestEnvelope({
+      origin: 'https://demo.citizen.local',
+      payload: {
+        fullName: 'Alex Citizen',
+        institution: 'City Ops',
+        email: 'alex@example.org',
+        country: 'US',
+        role: 'Validator',
+        missionNeed: 'Pilot transparency workflows.',
+        schema_version: '1.0.0',
+        attachmentName: 'voice-note.mp3',
+        attachmentMimeType: 'audio/mpeg',
+        attachmentSha256: 'sha256:abc123',
+        attachmentBase64: 'dGVzdA==',
+      },
+    });
+
+    expect(envelope.riskFlags).not.toContain('policy_violation');
+    expect(envelope.riskFlags).not.toContain('unsupported_fields');
+    expect(envelope.policyChecks).toEqual([]);
+  });
+
   it('adds form commitment receipt policy checks for forms.commitment namespace', async () => {
     const missingFields = await createDappSigningRequestEnvelope({
       origin: 'https://demo.citizen.local',

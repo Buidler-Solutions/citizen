@@ -61,6 +61,29 @@ function collectUnsupportedTopLevelFields(payload: unknown): boolean {
   if (!isObjectRecord(payload)) {
     return false;
   }
+  const protocolHintFields = new Set([
+    'namespace',
+    'action',
+    'operation',
+    'entry',
+    'objectId',
+    'object_id',
+    'consent',
+    'metadata',
+    'proof',
+    'builderCredit',
+    'assetControl',
+    'privacy',
+    'timestamp',
+    'nonce',
+    'payload',
+  ]);
+  const keys = Object.keys(payload);
+  const appearsToBeProtocolPayload = keys.some((key) => protocolHintFields.has(key));
+  if (!appearsToBeProtocolPayload) {
+    return false;
+  }
+
   const allowed = new Set([
     'namespace',
     'action',
@@ -76,9 +99,10 @@ function collectUnsupportedTopLevelFields(payload: unknown): boolean {
     'privacy',
     'timestamp',
     'nonce',
+    'payload',
   ]);
 
-  return Object.keys(payload).some((key) => !allowed.has(key));
+  return keys.some((key) => !allowed.has(key));
 }
 
 function collectPolicyChecks(payload: unknown): DappSigningPolicyCheck[] {
@@ -94,6 +118,12 @@ function collectPolicyChecks(payload: unknown): DappSigningPolicyCheck[] {
   const checks: DappSigningPolicyCheck[] = [];
   const namespace = payload.namespace;
   const operation = payload.operation ?? payload.action;
+  const hasNamespace = namespace !== undefined && namespace !== null;
+  const hasOperation = operation !== undefined && operation !== null;
+
+  if (!hasNamespace && !hasOperation) {
+    return checks;
+  }
 
   if (typeof namespace !== 'string' || namespace.trim().length === 0) {
     checks.push({
