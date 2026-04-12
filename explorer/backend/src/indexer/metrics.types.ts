@@ -105,6 +105,8 @@ export type IndexerSummary = {
     block_processing_latency_ms: LatencySnapshot;
     aggregation_job_latency_ms: LatencySnapshot;
   };
+  slo: SloSnapshot;
+  alerts: IndexerAlert[];
 };
 
 export type LatencySnapshot = {
@@ -113,4 +115,30 @@ export type LatencySnapshot = {
   p95: number;
   max: number;
   last: number | null;
+};
+
+export type SloCheckStatus = 'pass' | 'warn' | 'fail';
+
+export type SloCheck = {
+  name: string;
+  status: SloCheckStatus;
+  target: string;
+  observed: string;
+};
+
+export type SloSnapshot = {
+  status: SloCheckStatus;
+  checks: SloCheck[];
+};
+
+export type IndexerAlertSeverity = 'info' | 'warning' | 'critical';
+
+export type IndexerAlert = {
+  id: 'stalled_cursor' | 'sustained_lag' | 'checksum_mismatch';
+  severity: IndexerAlertSeverity;
+  active: boolean;
+  message: string;
+  observed: string;
+  threshold: string;
+  playbook: string[];
 };

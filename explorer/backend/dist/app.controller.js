@@ -63,6 +63,9 @@ let AppController = class AppController {
     async metricsSummary() {
         return this.indexerMetricsService.getSummary();
     }
+    async metricsAlerts() {
+        return this.indexerMetricsService.getAlerts();
+    }
     async metricsBlocks(fromHeight, toHeight, cursor, limit) {
         return this.indexerMetricsService.queryBlockMetrics(this.optionalInteger(fromHeight, 'from_height'), this.optionalInteger(toHeight, 'to_height'), cursor, this.optionalInteger(limit, 'limit'));
     }
@@ -192,6 +195,12 @@ __decorate([
     __metadata("design:paramtypes", []),
     __metadata("design:returntype", Promise)
 ], AppController.prototype, "metricsSummary", null);
+__decorate([
+    (0, common_1.Get)('metrics/alerts'),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", Promise)
+], AppController.prototype, "metricsAlerts", null);
 __decorate([
     (0, common_1.Get)('metrics/blocks'),
     __param(0, (0, common_1.Query)('from_height')),

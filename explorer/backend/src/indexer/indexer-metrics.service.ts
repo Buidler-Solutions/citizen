@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import {
   CursorState,
+  IndexerAlert,
   IndexedBlock,
   IndexedEntry,
   IndexerSummary,
@@ -38,6 +39,12 @@ export class IndexerMetricsService {
   private readonly blockRetentionSeconds = Number(process.env.INDEXER_BLOCK_RETENTION_SECONDS ?? '2592000');
   private readonly entryRetentionSeconds = Number(process.env.INDEXER_ENTRY_RETENTION_SECONDS ?? '604800');
   private readonly windowRetentionSeconds = Number(process.env.INDEXER_WINDOW_RETENTION_SECONDS ?? '604800');
+  private readonly maxLagBlocksSlo = Number(process.env.INDEXER_SLO_MAX_INGESTION_LAG_BLOCKS ?? '5');
+  private readonly maxBlockProcessingP95MsSlo = Number(process.env.INDEXER_SLO_MAX_P95_BLOCK_PROCESSING_MS ?? '2000');
+  private readonly maxAggregationP95MsSlo = Number(process.env.INDEXER_SLO_MAX_P95_AGGREGATION_MS ?? '1000');
+  private readonly minAvailabilityRatioSlo = Number(process.env.INDEXER_SLO_MIN_AVAILABILITY_RATIO ?? '0.995');
+  private readonly stallThresholdSeconds = Number(process.env.INDEXER_ALERT_STALL_CURSOR_SECONDS ?? '120');
+  private readonly sustainedLagPollThreshold = Number(process.env.INDEXER_ALERT_SUSTAINED_LAG_POLLS ?? '3');
 
   private readonly indexedBlocks = new Map<number, IndexedBlock>();
   private readonly indexedEntries = new Map<string, IndexedEntry>();
@@ -47,6 +54,9 @@ export class IndexerMetricsService {
   private lateEntriesAccepted = 0;
   private failedBlockCount = 0;
   private retryCountTotal = 0;
+  private fetchAttemptTotal = 0;
+  private successfulBlockCount = 0;
+  private consecutiveLagPolls = 0;
   private readonly blockProcessingLatenciesMs: number[] = [];
   private readonly aggregationLatenciesMs: number[] = [];
 
@@ -81,6 +91,12 @@ export class IndexerMetricsService {
     await this.catchUpToLatest();
     const runtimeLatestHeight = await this.findLatestHeight();
     const indexedHeight = this.cursor.last_indexed_height;
+    const ingestionLagBlocks =
+      runtimeLatestHeight < 0 || indexedHeight < 0
+        ? 0
+        : Math.max(runtimeLatestHeight - indexedHeight, 0);
+    const alerts = this.evaluateAlerts(runtimeLatestHeight, indexedHeight, ingestionLagBlocks);
+    const slo = this.evaluateSlo(alerts, ingestionLagBlocks);
     return {
       cursor: { ...this.cursor },
       counts: {
@@ -90,10 +106,7 @@ export class IndexerMetricsService {
       lag: {
         runtime_latest_height: runtimeLatestHeight,
         indexed_height: indexedHeight,
-        ingestion_lag_blocks:
-          runtimeLatestHeight < 0 || indexedHeight < 0
-            ? 0
-            : Math.max(runtimeLatestHeight - indexedHeight, 0),
+        ingestion_lag_blocks: ingestionLagBlocks,
       },
       poison_blocks: this.poisonBlocks.slice(-20),
       late_data: {
@@ -107,7 +120,14 @@ export class IndexerMetricsService {
         block_processing_latency_ms: this.toLatencySnapshot(this.blockProcessingLatenciesMs),
         aggregation_job_latency_ms: this.toLatencySnapshot(this.aggregationLatenciesMs),
       },
+      slo,
+      alerts,
     };
+  }
+
+  async getAlerts(): Promise<IndexerAlert[]> {
+    const summary = await this.getSummary();
+    return summary.alerts;
   }
 
   async queryBlockMetrics(
@@ -337,6 +357,7 @@ export class IndexerMetricsService {
       last_error: null,
       retry_count: 0,
     };
+    this.successfulBlockCount += 1;
 
     this.recomputeWindows();
     this.compactRetention();
@@ -435,6 +456,7 @@ export class IndexerMetricsService {
     let lastError = '';
     for (let attempt = 0; attempt <= this.backoffMs.length; attempt += 1) {
       try {
+        this.fetchAttemptTotal += 1;
         const block = await this.fetchBlockOrNull(height);
         this.cursor.retry_count = attempt;
         return block;
@@ -583,5 +605,124 @@ export class IndexerMetricsService {
       max: sorted[sorted.length - 1],
       last: latencies[latencies.length - 1] ?? null,
     };
+  }
+
+  private evaluateSlo(alerts: IndexerAlert[], ingestionLagBlocks: number) {
+    const blockLatencySnapshot = this.toLatencySnapshot(this.blockProcessingLatenciesMs);
+    const aggregationLatencySnapshot = this.toLatencySnapshot(this.aggregationLatenciesMs);
+    const availabilityRatio = this.fetchAttemptTotal === 0
+      ? 1
+      : this.successfulBlockCount / this.fetchAttemptTotal;
+    const checks = [
+      {
+        name: 'freshness',
+        target: `ingestion_lag_blocks <= ${this.maxLagBlocksSlo}`,
+        observed: `${ingestionLagBlocks}`,
+        status: this.compareNumber(ingestionLagBlocks, this.maxLagBlocksSlo),
+      },
+      {
+        name: 'api_availability_proxy',
+        target: `successful_fetch_ratio >= ${this.minAvailabilityRatioSlo}`,
+        observed: `${roundHalfAwayFromZero(availabilityRatio, 4)}`,
+        status: this.compareNumberDescending(availabilityRatio, this.minAvailabilityRatioSlo),
+      },
+      {
+        name: 'aggregation_correctness_proxy',
+        target: 'no checksum mismatch alerts',
+        observed: alerts.some((alert) => alert.id === 'checksum_mismatch' && alert.active)
+          ? 'checksum mismatch active'
+          : 'no mismatches',
+        status: alerts.some((alert) => alert.id === 'checksum_mismatch' && alert.active) ? 'fail' : 'pass',
+      },
+      {
+        name: 'block_processing_latency',
+        target: `p95_ms <= ${this.maxBlockProcessingP95MsSlo}`,
+        observed: `${blockLatencySnapshot.p95}`,
+        status: this.compareNumber(blockLatencySnapshot.p95, this.maxBlockProcessingP95MsSlo),
+      },
+      {
+        name: 'aggregation_job_latency',
+        target: `p95_ms <= ${this.maxAggregationP95MsSlo}`,
+        observed: `${aggregationLatencySnapshot.p95}`,
+        status: this.compareNumber(aggregationLatencySnapshot.p95, this.maxAggregationP95MsSlo),
+      },
+    ];
+    const hasFail = checks.some((check) => check.status === 'fail');
+    return {
+      status: hasFail ? 'fail' : 'pass',
+      checks,
+    };
+  }
+
+  private evaluateAlerts(runtimeLatestHeight: number, indexedHeight: number, ingestionLagBlocks: number): IndexerAlert[] {
+    const nowSeconds = Math.floor(Date.now() / 1000);
+    const updatedAtSeconds = this.cursor.updated_at === null ? null : Math.floor(this.cursor.updated_at / 1000);
+    const stalledCursorActive = updatedAtSeconds !== null
+      && runtimeLatestHeight > indexedHeight
+      && nowSeconds - updatedAtSeconds >= this.stallThresholdSeconds;
+
+    if (ingestionLagBlocks > this.maxLagBlocksSlo) {
+      this.consecutiveLagPolls += 1;
+    } else {
+      this.consecutiveLagPolls = 0;
+    }
+    const sustainedLagActive = this.consecutiveLagPolls >= this.sustainedLagPollThreshold;
+    const checksumMismatchActive = this.poisonBlocks.some((candidate) =>
+      candidate.reason.includes('prev-hash-mismatch')
+      || candidate.reason.includes('poison-entry')
+      || candidate.reason.includes('poison-block'),
+    );
+
+    return [
+      {
+        id: 'stalled_cursor',
+        severity: 'critical',
+        active: stalledCursorActive,
+        message: 'Indexer cursor has not advanced while runtime has newer blocks.',
+        observed: updatedAtSeconds === null ? 'never-indexed' : `${nowSeconds - updatedAtSeconds}s since last cursor update`,
+        threshold: `${this.stallThresholdSeconds}s`,
+        playbook: [
+          'Check indexer logs for fetch-failed or missing-block degradation reasons.',
+          'Verify node API reachability and /blocks/{height} latency.',
+          'Restart indexer after resolving connectivity or data-source issues.',
+        ],
+      },
+      {
+        id: 'sustained_lag',
+        severity: 'warning',
+        active: sustainedLagActive,
+        message: 'Indexer lag exceeded freshness target for multiple consecutive polls.',
+        observed: `${ingestionLagBlocks} lag blocks for ${this.consecutiveLagPolls} polls`,
+        threshold: `${this.maxLagBlocksSlo} lag blocks for ${this.sustainedLagPollThreshold} polls`,
+        playbook: [
+          'Inspect processing latency and retry counters for bottlenecks.',
+          'Scale indexer worker resources or reduce polling interval if needed.',
+          'Evaluate whether upstream node is saturated or returning intermittent failures.',
+        ],
+      },
+      {
+        id: 'checksum_mismatch',
+        severity: 'critical',
+        active: checksumMismatchActive,
+        message: 'Indexer continuity or idempotency checks detected inconsistent chain data.',
+        observed: checksumMismatchActive
+          ? `${this.poisonBlocks[this.poisonBlocks.length - 1]?.reason ?? 'mismatch-detected'}`
+          : 'none',
+        threshold: '0 mismatches',
+        playbook: [
+          'Freeze explorer analytics source to runtime/fallback until resolved.',
+          'Run targeted replay from last known good height and compare block hashes.',
+          'Escalate to protocol operators with poison block evidence and timestamps.',
+        ],
+      },
+    ];
+  }
+
+  private compareNumber(observed: number, targetMax: number): 'pass' | 'fail' {
+    return observed <= targetMax ? 'pass' : 'fail';
+  }
+
+  private compareNumberDescending(observed: number, targetMin: number): 'pass' | 'fail' {
+    return observed >= targetMin ? 'pass' : 'fail';
   }
 }
