@@ -1,4 +1,4 @@
-import { BadRequestException, Controller, Get, Headers, Param, Query, Req } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, Headers, Param, Post, Query, Req } from '@nestjs/common';
 import { CitizenService } from './citizen.service';
 import { IndexerMetricsService } from './indexer/indexer-metrics.service';
 import { MetricWindowName } from './indexer/metrics.types';
@@ -154,6 +154,58 @@ export class AppController {
       cursor,
       this.optionalInteger(limit, 'limit'),
     );
+  }
+
+  @Post('metrics/backfill')
+  async metricsBackfill(
+    @Body() body?: { from_height?: number; to_height?: number },
+    @Headers() headers?: Record<string, string | string[] | undefined>,
+    @Req() req?: { ip?: string },
+  ) {
+    this.indexerMetricsAccessService.enforce(headers ?? {}, req?.ip);
+    return this.indexerMetricsService.backfill(
+      body?.from_height ?? 0,
+      body?.to_height,
+    );
+  }
+
+  @Get('metrics/verify/samples')
+  async metricsVerifySamples(
+    @Query('sample_count') sampleCount?: string,
+    @Query('seed') seed?: string,
+    @Headers() headers?: Record<string, string | string[] | undefined>,
+    @Req() req?: { ip?: string },
+  ) {
+    this.indexerMetricsAccessService.enforce(headers ?? {}, req?.ip);
+    return this.indexerMetricsService.verifySampledHeights(
+      this.optionalInteger(sampleCount, 'sample_count') ?? 10,
+      this.optionalInteger(seed, 'seed') ?? 1337,
+    );
+  }
+
+  @Get('metrics/verify/tps')
+  async metricsVerifyTps(
+    @Query('window') window?: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+    @Headers() headers?: Record<string, string | string[] | undefined>,
+    @Req() req?: { ip?: string },
+  ) {
+    this.indexerMetricsAccessService.enforce(headers ?? {}, req?.ip);
+    return this.indexerMetricsService.crossCheckTps(
+      this.parseWindow(window),
+      this.optionalInteger(from, 'from'),
+      this.optionalInteger(to, 'to'),
+    );
+  }
+
+  @Get('metrics/verify/evidence')
+  async metricsVerifyEvidence(
+    @Headers() headers?: Record<string, string | string[] | undefined>,
+    @Req() req?: { ip?: string },
+  ) {
+    this.indexerMetricsAccessService.enforce(headers ?? {}, req?.ip);
+    return this.indexerMetricsService.buildEvidenceBundle();
   }
 
   private parseWindow(window?: string): MetricWindowName {

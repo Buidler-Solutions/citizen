@@ -55,6 +55,10 @@ Indexer metrics endpoints:
 - `GET /metrics/tps?window=60s&from=&to=` (`window` supports `10s`, `60s`, `5m`, `1h`)
 - `GET /metrics/blocks?from_height=&to_height=`
 - `GET /metrics/entries?namespace=&entry_ids=<id,id2>&from=&to=`
+- `POST /metrics/backfill` with JSON body `{ "from_height": 0, "to_height": 1000 }` (optional `to_height`)
+- `GET /metrics/verify/samples?sample_count=25&seed=1337`
+- `GET /metrics/verify/tps?window=60s&from=&to=`
+- `GET /metrics/verify/evidence`
 
 `GET /metrics/summary` now includes:
   - `internal_metrics` snapshots for:
