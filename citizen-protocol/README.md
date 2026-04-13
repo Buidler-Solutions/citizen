@@ -98,6 +98,7 @@ Current delivery includes Phase 2 identity/data ownership primitives, Phase 3 bu
 - Builder credit reporting endpoint: `GET /api/v1/builder-credits/:builder_id` for deterministic credited/sponsored/available accounting, active policy metadata (including `max_daily_spend`), and sponsorship instrumentation.
 - Strict API write gating now requires `payload.credit_grant_id` linkage for submit/envelope writes and offchain envelope commit/revoke flows, with optional `payload.sponsor_builder_id` for builder-sponsored user actions.
 - Detailed 3-of-5 multisig implementation and operations guide for builder credit grants: `docs/MULTISIG_3_OF_5_IMPLEMENTATION_HOWTO.md`.
+- Runtime-native multisigner envelope rollout + migration guidance (targeted namespace/action activation and legacy-path deprecation criteria): `docs/MULTISIGNER_ENVELOPE_ROLLOUT_AND_MIGRATION_GUIDE.md`.
 - Governed asset control namespace policy (`asset.control`) enforcing trustline activation, issuer-authorized holds, holder-authorized releases, and governance-scoped policy flags/disclosure commitments.
 - Asset disclosure endpoint: `GET /api/v1/assets/:account_id` for trustline status, controlled policy flags, held balance, and available trustline capacity.
 - Scoped WASM runtime namespace policy (`execution.module`) enforcing audit artifact requirements, governance-gated activation thresholds, and deterministic execution receipt commitments.
