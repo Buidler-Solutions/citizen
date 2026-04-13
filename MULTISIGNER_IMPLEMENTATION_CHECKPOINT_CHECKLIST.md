@@ -4,10 +4,10 @@ This checklist captures the implementation checkpoints for upgrading Citizen fro
 
 ## 0) Baseline Reality Check (Current)
 
-- [ ] Confirm `SignedEnvelope<T>` currently contains only single `signer` and single `signature` fields.
-- [ ] Confirm API currently enforces `envelope.signer == payload.author` and envelope/payload signature match semantics.
-- [ ] Confirm ledger submission signature verification currently validates one canonical entry signature.
-- [ ] Confirm client surfaces (wallet CLI, SDK, browser extension) currently emit and submit single-signer envelopes.
+- [x] Confirm `SignedEnvelope<T>` currently contains only single `signer` and single `signature` fields.
+- [x] Confirm API currently enforces `envelope.signer == payload.author` and envelope/payload signature match semantics.
+- [x] Confirm ledger submission signature verification currently validates one canonical entry signature.
+- [x] Confirm client surfaces (wallet CLI, SDK, browser extension) currently emit and submit single-signer envelopes.
 
 ---
 
@@ -113,8 +113,8 @@ This checklist captures the implementation checkpoints for upgrading Citizen fro
 
 ## 6) Rollout Strategy
 
-- [ ] Phase 1: Add optional fields + API dual-path support.
-- [ ] Phase 2: Introduce ledger policy rule and gate by namespace config.
+- [x] Phase 1: Add optional fields + API dual-path support.
+- [x] Phase 2: Introduce ledger policy rule and gate by namespace config.
 - [x] Phase 3: Ship SDK/CLI/extension multisig compose UX.
 - [ ] Phase 4: Enable multisig policies on selected namespaces/actions.
 - [ ] Phase 5: Monitor and deprecate non-required legacy paths only when safe.
@@ -133,8 +133,8 @@ This checklist captures the implementation checkpoints for upgrading Citizen fro
 
 ## 8) Definition of Done
 
-- [ ] Legacy single-signer envelopes still submit successfully.
-- [ ] Multisig envelopes pass end-to-end (compose → collect signatures → submit → receipt).
-- [ ] Namespace policy can require multisig and reject insufficient signatures.
+- [x] Legacy single-signer envelopes still submit successfully.
+- [x] Multisig envelopes pass end-to-end (compose → collect signatures → submit → receipt).
+- [x] Namespace policy can require multisig and reject insufficient signatures.
 - [x] SDK/CLI/Browser extension all support multisig compose flow.
 - [ ] Documentation updated for operators/builders with migration guidance.

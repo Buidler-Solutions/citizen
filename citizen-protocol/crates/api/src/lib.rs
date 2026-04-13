@@ -2766,17 +2766,29 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
 
         let mut validated_entries = Vec::with_capacity(envelopes.len());
         let mut accepted = Vec::with_capacity(envelopes.len());
-        for envelope in envelopes {
+        for (index, envelope) in envelopes.into_iter().enumerate() {
             let envelope_id = envelope.envelope_id;
             let validation = match validate_envelope_signatures(&envelope) {
                 Ok(validated) => validated,
-                Err(err) => return protocol_error_response(err),
+                Err(err) => {
+                    return protocol_batch_error_response(
+                        err,
+                        index,
+                        envelope_id,
+                        "signature_validation",
+                    )
+                }
             };
             let entry = validation.entry;
             let action = entry.action.clone();
 
             if let Err(err) = ledger.validate_entry_submission(&entry) {
-                return protocol_error_response(err);
+                return protocol_batch_error_response(
+                    err,
+                    index,
+                    envelope_id,
+                    "namespace_validation",
+                );
             }
             accepted.push((
                 entry.entry_id,
@@ -2790,9 +2802,14 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
             validated_entries.push(entry);
         }
 
-        for entry in &validated_entries {
+        for (index, entry) in validated_entries.iter().enumerate() {
             if let Err(err) = ledger.apply_entry(entry.clone()) {
-                return protocol_error_response(err);
+                return protocol_batch_error_response(
+                    err,
+                    index,
+                    accepted[index].3,
+                    "apply_entry",
+                );
             }
         }
 
@@ -3418,6 +3435,26 @@ fn protocol_error_response(err: ProtocolError) -> (StatusCode, Json<serde_json::
             error: err.to_string(),
         })),
     )
+}
+
+fn protocol_batch_error_response(
+    err: ProtocolError,
+    envelope_index: usize,
+    envelope_id: Uuid,
+    stage: &str,
+) -> (StatusCode, Json<serde_json::Value>) {
+    let (status, Json(mut payload)) = protocol_error_response(err);
+    if let Some(object) = payload.as_object_mut() {
+        object.insert(
+            "failed_envelope".to_string(),
+            serde_json::json!({
+                "index": envelope_index,
+                "envelope_id": envelope_id,
+                "stage": stage,
+            }),
+        );
+    }
+    (status, Json(payload))
 }
 
 #[cfg(test)]
@@ -4295,6 +4332,46 @@ mod tests {
                 .map(|entries| entries.len()),
             Some(2)
         );
+    }
+
+    #[tokio::test]
+    async fn batch_envelope_submission_returns_deterministic_failed_envelope_details() {
+        let app = build_server().router();
+        let valid = test_envelope();
+        let mut invalid_multisig = test_multisig_envelope();
+        invalid_multisig.co_signatures[0].signer = invalid_multisig.signer.clone();
+        let invalid_envelope_id = invalid_multisig.envelope_id.to_string();
+
+        let batch_submit = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/envelopes/submit-batch")
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        serde_json::to_vec(&vec![valid, invalid_multisig])
+                            .expect("serialize envelopes"),
+                    ))
+                    .expect("request"),
+            )
+            .await
+            .expect("submit response");
+
+        assert_eq!(batch_submit.status(), StatusCode::BAD_REQUEST);
+        let batch_body = axum::body::to_bytes(batch_submit.into_body(), usize::MAX)
+            .await
+            .expect("batch bytes");
+        let batch_json: Value = serde_json::from_slice(&batch_body).expect("batch json");
+        assert_eq!(batch_json["failed_envelope"]["index"], 1);
+        assert_eq!(
+            batch_json["failed_envelope"]["envelope_id"],
+            invalid_envelope_id
+        );
+        assert_eq!(
+            batch_json["failed_envelope"]["stage"],
+            "signature_validation"
+        );
+        assert!(batch_json["error"].as_str().is_some());
     }
 
     #[tokio::test]
