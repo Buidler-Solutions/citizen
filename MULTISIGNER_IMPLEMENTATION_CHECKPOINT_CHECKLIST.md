@@ -116,8 +116,8 @@ This checklist captures the implementation checkpoints for upgrading Citizen fro
 - [x] Phase 1: Add optional fields + API dual-path support.
 - [x] Phase 2: Introduce ledger policy rule and gate by namespace config.
 - [x] Phase 3: Ship SDK/CLI/extension multisig compose UX.
-- [ ] Phase 4: Enable multisig policies on selected namespaces/actions.
-- [ ] Phase 5: Monitor and deprecate non-required legacy paths only when safe.
+- [x] Phase 4: Enable multisig policies on selected namespaces/actions.
+- [x] Phase 5: Monitor and deprecate non-required legacy paths only when safe.
 
 ---
 
@@ -137,4 +137,4 @@ This checklist captures the implementation checkpoints for upgrading Citizen fro
 - [x] Multisig envelopes pass end-to-end (compose → collect signatures → submit → receipt).
 - [x] Namespace policy can require multisig and reject insufficient signatures.
 - [x] SDK/CLI/Browser extension all support multisig compose flow.
-- [ ] Documentation updated for operators/builders with migration guidance.
+- [x] Documentation updated for operators/builders with migration guidance.
