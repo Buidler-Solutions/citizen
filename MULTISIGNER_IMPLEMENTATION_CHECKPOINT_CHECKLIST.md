@@ -125,7 +125,7 @@ This checklist captures the implementation checkpoints for upgrading Citizen fro
 
 - [x] Canonical preimage must be byte-stable across signers.
 - [x] Reject mutated drafts after first signature.
-- [ ] Enforce signature scope and anti-replay binding (request ID/timestamps where applicable).
+- [x] Enforce signature scope and anti-replay binding (request ID/timestamps where applicable).
 - [x] Enforce signer uniqueness in threshold count.
 - [x] Record auditable signer metadata in receipts/logs.
 
