@@ -44,14 +44,32 @@ export async function sha256DigestHex(input) {
 }
 
 function getEnvelopeSignaturePreimage(payload, signatureScope) {
-  if (signatureScope !== "canonical_payload_v1") {
-    throw new Error("multisig signatureScope must be canonical_payload_v1");
+  if (signatureScope !== "canonical_payload_v1" && signatureScope !== "canonical_payload_v2") {
+    throw new Error("multisig signatureScope must be canonical_payload_v1 or canonical_payload_v2");
   }
 
-  return canonicalizeJson({
+  const signingPayload = {
     ...payload,
     signature: undefined
-  });
+  };
+
+  if (signatureScope === "canonical_payload_v2") {
+    const replayProtection = payload?.payload?.replay_protection;
+    const requestId = replayProtection?.request_id;
+    if (typeof requestId !== "string" || requestId.trim().length === 0) {
+      throw new Error("canonical_payload_v2 requires payload.replay_protection.request_id");
+    }
+    if (replayProtection?.expires_at !== undefined && !Number.isInteger(replayProtection.expires_at)) {
+      throw new Error("payload.replay_protection.expires_at must be a unix timestamp integer");
+    }
+
+    signingPayload.replay_protection = {
+      request_id: requestId.trim(),
+      expires_at: replayProtection?.expires_at
+    };
+  }
+
+  return canonicalizeJson(signingPayload);
 }
 
 function listEnvelopeSigners(envelope) {

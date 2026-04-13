@@ -1553,14 +1553,50 @@ fn envelope_signature_preimage(
     payload: &LedgerEntry,
     signature_scope: &str,
 ) -> anyhow::Result<String> {
-    if signature_scope != "canonical_payload_v1" {
+    if signature_scope != "canonical_payload_v1" && signature_scope != "canonical_payload_v2" {
         return Err(anyhow::anyhow!(
-            "multisig signature scope must be canonical_payload_v1"
+            "multisig signature scope must be canonical_payload_v1 or canonical_payload_v2"
         ));
     }
     let mut payload_value = serde_json::to_value(payload)?;
     if let Some(payload_obj) = payload_value.as_object_mut() {
         payload_obj.remove("signature");
+    }
+    if signature_scope == "canonical_payload_v2" {
+        let replay_protection = payload
+            .payload
+            .get("replay_protection")
+            .and_then(Value::as_object)
+            .ok_or_else(|| {
+                anyhow::anyhow!("canonical_payload_v2 requires payload.replay_protection object")
+            })?;
+        let request_id = replay_protection
+            .get("request_id")
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .ok_or_else(|| {
+                anyhow::anyhow!(
+                    "canonical_payload_v2 requires payload.replay_protection.request_id"
+                )
+            })?;
+        let expires_at = replay_protection
+            .get("expires_at")
+            .map(|value| {
+                value.as_i64().ok_or_else(|| {
+                    anyhow::anyhow!("payload.replay_protection.expires_at must be a unix timestamp")
+                })
+            })
+            .transpose()?;
+        if let Some(payload_obj) = payload_value.as_object_mut() {
+            payload_obj.insert(
+                "replay_protection".to_string(),
+                serde_json::json!({
+                    "request_id": request_id,
+                    "expires_at": expires_at
+                }),
+            );
+        }
     }
     Ok(canonical_json(&payload_value))
 }

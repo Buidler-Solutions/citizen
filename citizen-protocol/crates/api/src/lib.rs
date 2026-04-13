@@ -11,9 +11,9 @@ use citizen_ledger::Ledger;
 use citizen_storage::LedgerStorage;
 use citizen_types::{
     Block, BlockHeader, BlockHeight, CommitProof, ConsentPolicyCheck, ConsentReceipt,
-    DeterministicReceipt, DidDocument, DidStatus, FinalityProof, LedgerEntry, NamespaceRuleset,
-    MultisigValidationSummary, OffchainCommitmentSummary, PayloadFieldCommitmentSummary,
-    ProtocolError, ReceiptStatus, SignedEnvelope, ValidationSummary,
+    DeterministicReceipt, DidDocument, DidStatus, FinalityProof, LedgerEntry,
+    MultisigValidationSummary, NamespaceRuleset, OffchainCommitmentSummary,
+    PayloadFieldCommitmentSummary, ProtocolError, ReceiptStatus, SignedEnvelope, ValidationSummary,
 };
 use ed25519_dalek::Signature;
 use serde::{Deserialize, Serialize};
@@ -2802,7 +2802,9 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
         };
 
         let mut receipts = Vec::with_capacity(accepted.len());
-        for (entry_id, namespace, action, envelope_id, offchain_commitments, outcome, multisig) in accepted {
+        for (entry_id, namespace, action, envelope_id, offchain_commitments, outcome, multisig) in
+            accepted
+        {
             let receipt = DeterministicReceipt {
                 receipt_id: Uuid::new_v4(),
                 envelope_id,
@@ -3421,8 +3423,8 @@ fn protocol_error_response(err: ProtocolError) -> (StatusCode, Json<serde_json::
 #[cfg(test)]
 mod tests {
     use super::{
-        ApiClientProfile, ApiEdgeConfig, ApiEdgeState, ApiServer, DataHashQueryParams,
-        LocalOffchainObjectStore, MinioOffchainObjectStoreConfig,
+        canonical_envelope_preimage, ApiClientProfile, ApiEdgeConfig, ApiEdgeState, ApiServer,
+        DataHashQueryParams, LocalOffchainObjectStore, MinioOffchainObjectStoreConfig,
     };
     use axum::body::{to_bytes, Body};
     use axum::http::{Request, StatusCode};
@@ -4064,7 +4066,7 @@ mod tests {
         }
     }
 
-    fn test_multisig_envelope() -> SignedEnvelope<LedgerEntry> {
+    fn test_multisig_envelope_with_scope(signature_scope: &str) -> SignedEnvelope<LedgerEntry> {
         let author_key = ValidatorKeypair::generate("author".to_string());
         let co_signer_key = ValidatorKeypair::generate("co-signer".to_string());
         let author_did = format!(
@@ -4100,16 +4102,15 @@ mod tests {
         };
         payload.payload["author_public_key"] =
             json!(verifying_key_to_string(author_key.verifying_key()));
+        if signature_scope == "canonical_payload_v2" {
+            payload.payload["replay_protection"] = json!({
+                "request_id": format!("req-{}", Uuid::new_v4()),
+                "expires_at": chrono::Utc::now().timestamp() + 300,
+            });
+        }
 
-        let preimage = canonical_json(&json!({
-            "entry_id": payload.entry_id,
-            "namespace": payload.namespace,
-            "action": payload.action,
-            "object_id": payload.object_id,
-            "payload": payload.payload,
-            "author": payload.author,
-            "timestamp": payload.timestamp,
-        }));
+        let preimage =
+            canonical_envelope_preimage(&payload, signature_scope).expect("canonical preimage");
         let author_signature =
             hex::encode(sign_message(&author_key, preimage.as_bytes()).to_bytes());
         let co_signature =
@@ -4120,7 +4121,7 @@ mod tests {
             envelope_id: Uuid::new_v4(),
             signer: author_did,
             signature: author_signature,
-            signature_scope: Some("canonical_payload_v1".to_string()),
+            signature_scope: Some(signature_scope.to_string()),
             co_signatures: vec![citizen_types::EnvelopeCoSignature {
                 signer: co_signer_did.clone(),
                 signature: co_signature,
@@ -4133,6 +4134,10 @@ mod tests {
             submitted_at: chrono::Utc::now(),
             payload,
         }
+    }
+
+    fn test_multisig_envelope() -> SignedEnvelope<LedgerEntry> {
+        test_multisig_envelope_with_scope("canonical_payload_v1")
     }
 
     #[tokio::test]
@@ -5171,7 +5176,43 @@ mod tests {
     async fn envelope_submission_rejects_multisig_scope_mismatch() {
         let app = build_server().router();
         let mut envelope = test_multisig_envelope();
-        envelope.signature_scope = Some("canonical_payload_v2".to_string());
+        envelope.signature_scope = Some("canonical_payload_v3".to_string());
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/envelopes/submit")
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        serde_json::to_vec(&envelope).expect("serialize envelope"),
+                    ))
+                    .expect("request"),
+            )
+            .await
+            .expect("submit response");
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[test]
+    fn canonical_preimage_v2_includes_replay_protection_binding() {
+        let envelope = test_multisig_envelope_with_scope("canonical_payload_v2");
+        let preimage = canonical_envelope_preimage(&envelope.payload, "canonical_payload_v2")
+            .expect("canonical preimage");
+        assert!(preimage.contains("\"replay_protection\""));
+        assert!(preimage.contains("\"request_id\""));
+    }
+
+    #[tokio::test]
+    async fn envelope_submission_rejects_multisig_scope_v2_without_replay_binding() {
+        let app = build_server().router();
+        let mut envelope = test_multisig_envelope_with_scope("canonical_payload_v2");
+        envelope
+            .payload
+            .payload
+            .as_object_mut()
+            .expect("payload object")
+            .remove("replay_protection");
 
         let response = app
             .oneshot(
@@ -10631,12 +10672,7 @@ fn canonical_envelope_preimage(
     payload: &LedgerEntry,
     signature_scope: &str,
 ) -> Result<String, ProtocolError> {
-    if signature_scope != "canonical_payload_v1" {
-        return Err(ProtocolError::ValidationFailed(
-            "unsupported signature_scope; expected canonical_payload_v1".into(),
-        ));
-    }
-    let signing_payload = serde_json::json!({
+    let base_signing_payload = serde_json::json!({
         "entry_id": payload.entry_id,
         "namespace": payload.namespace,
         "action": payload.action,
@@ -10645,7 +10681,58 @@ fn canonical_envelope_preimage(
         "author": payload.author,
         "timestamp": payload.timestamp,
     });
-    Ok(canonical_json(&signing_payload))
+    match signature_scope {
+        "canonical_payload_v1" => Ok(canonical_json(&base_signing_payload)),
+        "canonical_payload_v2" => {
+            let replay_protection = payload
+                .payload
+                .get("replay_protection")
+                .and_then(|value| value.as_object())
+                .ok_or_else(|| {
+                    ProtocolError::ValidationFailed(
+                        "canonical_payload_v2 requires payload.replay_protection object".into(),
+                    )
+                })?;
+            let request_id = replay_protection
+                .get("request_id")
+                .and_then(|value| value.as_str())
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .ok_or_else(|| {
+                    ProtocolError::ValidationFailed(
+                        "canonical_payload_v2 requires payload.replay_protection.request_id".into(),
+                    )
+                })?;
+            let expires_at = replay_protection
+                .get("expires_at")
+                .map(|value| {
+                    value.as_i64().ok_or_else(|| {
+                        ProtocolError::ValidationFailed(
+                            "payload.replay_protection.expires_at must be a unix timestamp".into(),
+                        )
+                    })
+                })
+                .transpose()?;
+            let signing_payload = serde_json::json!({
+                "entry_id": payload.entry_id,
+                "namespace": payload.namespace,
+                "action": payload.action,
+                "object_id": payload.object_id,
+                "payload": payload.payload,
+                "author": payload.author,
+                "timestamp": payload.timestamp,
+                "replay_protection": {
+                    "request_id": request_id,
+                    "expires_at": expires_at,
+                }
+            });
+            Ok(canonical_json(&signing_payload))
+        }
+        _ => Err(ProtocolError::ValidationFailed(
+            "unsupported signature_scope; expected canonical_payload_v1 or canonical_payload_v2"
+                .into(),
+        )),
+    }
 }
 
 fn verify_signer_signature(
