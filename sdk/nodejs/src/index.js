@@ -43,6 +43,49 @@ export async function sha256DigestHex(input) {
   return `sha256:${createHash("sha256").update(source).digest("hex")}`;
 }
 
+function getEnvelopeSignaturePreimage(payload, signatureScope) {
+  if (signatureScope !== "canonical_payload_v1" && signatureScope !== "canonical_payload_v2") {
+    throw new Error("multisig signatureScope must be canonical_payload_v1 or canonical_payload_v2");
+  }
+
+  const signingPayload = {
+    ...payload,
+    signature: undefined
+  };
+
+  if (signatureScope === "canonical_payload_v2") {
+    const replayProtection = payload?.payload?.replay_protection;
+    const requestId = replayProtection?.request_id;
+    if (typeof requestId !== "string" || requestId.trim().length === 0) {
+      throw new Error("canonical_payload_v2 requires payload.replay_protection.request_id");
+    }
+    if (replayProtection?.expires_at !== undefined && !Number.isInteger(replayProtection.expires_at)) {
+      throw new Error("payload.replay_protection.expires_at must be a unix timestamp integer");
+    }
+
+    signingPayload.replay_protection = {
+      request_id: requestId.trim(),
+      expires_at: replayProtection?.expires_at
+    };
+  }
+
+  return canonicalizeJson(signingPayload);
+}
+
+function listEnvelopeSigners(envelope) {
+  return [envelope.signer, ...(envelope.co_signatures ?? []).map((item) => item.signer)];
+}
+
+function assertMultisigPolicy(multisigPolicy) {
+  if (!multisigPolicy || typeof multisigPolicy !== "object") {
+    throw new Error("multisigPolicy is required for multisig envelopes");
+  }
+
+  if (!Number.isInteger(multisigPolicy.threshold) || multisigPolicy.threshold < 1) {
+    throw new Error("multisigPolicy.threshold must be an integer >= 1");
+  }
+}
+
 const DEFAULT_RECEIPT_TERMINAL_STATUSES = new Set(["Accepted", "Rejected"]);
 export const OFFCHAIN_ATTACHMENT_ALLOWED_MIME_TYPES = Object.freeze([
   "audio/mpeg",
@@ -265,6 +308,101 @@ export function validateBuilderCreditsPayload({ action, payload }) {
   }
 }
 
+export async function wrapEnvelopeMulti({
+  entry,
+  signer,
+  coSigners = [],
+  multisigPolicy,
+  signatureScope = "canonical_payload_v1",
+  submittedAt
+}) {
+  if (!entry || typeof entry !== "object") {
+    throw new Error("entry is required");
+  }
+  if (!signer) {
+    throw new Error("signer is required");
+  }
+  if (!Array.isArray(coSigners)) {
+    throw new Error("coSigners must be an array");
+  }
+
+  assertMultisigPolicy(multisigPolicy);
+  const signingPayload = getEnvelopeSignaturePreimage(entry, signatureScope);
+
+  const signerId = await signer.getSignerId();
+  const primarySignature = await signer.sign(signingPayload);
+  const coSignatures = [];
+  const seen = new Set([signerId]);
+
+  for (const coSigner of coSigners) {
+    const coSignerId = await coSigner.getSignerId();
+    if (seen.has(coSignerId)) {
+      throw new Error(`duplicate multisig signer: ${coSignerId}`);
+    }
+    const signature = await coSigner.sign(signingPayload);
+    coSignatures.push({ signer: coSignerId, signature });
+    seen.add(coSignerId);
+  }
+
+  return {
+    envelope_id: createUuid(),
+    signer: signerId,
+    signature: primarySignature,
+    signature_scope: signatureScope,
+    co_signatures: coSignatures,
+    multisig_policy: multisigPolicy,
+    submitted_at: submittedAt ?? new Date().toISOString(),
+    payload: entry
+  };
+}
+
+export async function appendCoSignature({ envelope, signer }) {
+  if (!envelope || typeof envelope !== "object") {
+    throw new Error("envelope is required");
+  }
+  if (!signer) {
+    throw new Error("signer is required");
+  }
+
+  const signatureScope = envelope.signature_scope ?? "canonical_payload_v1";
+  const signingPayload = getEnvelopeSignaturePreimage(envelope.payload, signatureScope);
+  const signerId = await signer.getSignerId();
+  if (listEnvelopeSigners(envelope).includes(signerId)) {
+    throw new Error(`signer already present in envelope: ${signerId}`);
+  }
+
+  const signature = await signer.sign(signingPayload);
+  return {
+    ...envelope,
+    co_signatures: [...(envelope.co_signatures ?? []), { signer: signerId, signature }]
+  };
+}
+
+export function finalizeEnvelope({ envelope }) {
+  if (!envelope || typeof envelope !== "object") {
+    throw new Error("envelope is required");
+  }
+  assertMultisigPolicy(envelope.multisig_policy);
+  const threshold = envelope.multisig_policy.threshold;
+  const signers = listEnvelopeSigners(envelope);
+
+  if (new Set(signers).size !== signers.length) {
+    throw new Error("envelope contains duplicate signers");
+  }
+
+  if (signers.length < threshold) {
+    throw new Error(
+      `envelope has ${signers.length} unique signatures but threshold is ${threshold}`
+    );
+  }
+
+  if (envelope.multisig_policy.require_author_signature && !signers.includes(envelope.payload?.author)) {
+    throw new Error("multisig policy requires payload author to sign");
+  }
+
+  return envelope;
+}
+
 export class BrowserWalletSigner {
   constructor({ provider, account, requestMethod = "personal_sign" } = {}) {
     this.provider = resolveWalletProvider(provider);
@@ -411,6 +549,18 @@ export class CitizenNodeClient {
       ...envelope,
       signature
     };
+  }
+
+  async wrapEnvelopeMulti(args) {
+    return wrapEnvelopeMulti(args);
+  }
+
+  async appendCoSignature(args) {
+    return appendCoSignature(args);
+  }
+
+  finalizeEnvelope(args) {
+    return finalizeEnvelope(args);
   }
 
   async submitEnvelope(envelope) {

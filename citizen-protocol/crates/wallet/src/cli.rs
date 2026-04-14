@@ -1,11 +1,11 @@
 use chrono::Utc;
 use citizen_types::PrivacyMode;
-use citizen_types::{LedgerEntry, SignedEnvelope};
+use citizen_types::{EnvelopeCoSignature, EnvelopeMultisigPolicy, LedgerEntry, SignedEnvelope};
 use clap::{Parser, Subcommand};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 use uuid::Uuid;
@@ -146,6 +146,56 @@ enum Commands {
     Submit {
         #[arg(long)]
         entry_json: String,
+        #[arg(long, default_value = "http://127.0.0.1:8080")]
+        api_url: String,
+        #[arg(long, default_value = "/api/v1/envelopes/submit")]
+        endpoint: String,
+        #[arg(long, default_value = "wallet-receipts.json")]
+        receipts_path: PathBuf,
+    },
+    ComposeEnvelopeInit {
+        #[arg(long)]
+        entry_json: String,
+        #[arg(long, default_value = "wallet.json")]
+        path: PathBuf,
+        #[arg(long)]
+        key_id: Uuid,
+        #[arg(long)]
+        signer: String,
+        #[arg(long, default_value = "canonical_payload_v1")]
+        signature_scope: String,
+        #[arg(long)]
+        threshold: u16,
+        #[arg(long = "allowed-signer")]
+        allowed_signers: Vec<String>,
+        #[arg(long, default_value_t = true)]
+        require_author_signature: bool,
+        #[arg(long)]
+        password: Option<String>,
+        #[arg(long)]
+        output: Option<PathBuf>,
+    },
+    ComposeEnvelopeSign {
+        #[arg(long)]
+        draft_json: String,
+        #[arg(long, default_value = "wallet.json")]
+        path: PathBuf,
+        #[arg(long)]
+        key_id: Uuid,
+        #[arg(long = "as")]
+        as_signer: String,
+        #[arg(long)]
+        password: Option<String>,
+        #[arg(long)]
+        output: Option<PathBuf>,
+    },
+    ComposeEnvelopeFinalize {
+        #[arg(long)]
+        draft_json: String,
+    },
+    SubmitEnvelope {
+        #[arg(long)]
+        envelope_json: String,
         #[arg(long, default_value = "http://127.0.0.1:8080")]
         api_url: String,
         #[arg(long, default_value = "/api/v1/envelopes/submit")]
@@ -340,6 +390,28 @@ struct BuilderCreditProof {
     #[serde(flatten)]
     proof: WrcpMsigV1Proof,
     signing_payload: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct ComposeDraftRuntimeCompat {
+    envelope_v1: SignedEnvelope<LedgerEntry>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+struct ComposeDraftCollectedSignature {
+    signer: String,
+    signature: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct ComposeEnvelopeMultisigDraft {
+    schema: String,
+    canonical_payload: Value,
+    canonical_payload_hash: String,
+    signature_scope: String,
+    envelope: SignedEnvelope<LedgerEntry>,
+    collected_signatures: Vec<ComposeDraftCollectedSignature>,
+    runtime_compat: ComposeDraftRuntimeCompat,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -803,7 +875,134 @@ pub fn run() -> anyhow::Result<()> {
             receipts_path,
         } => {
             let entry: LedgerEntry = serde_json::from_str(&entry_json)?;
-            let receipt = submit_entry(&api_url, &endpoint, &entry)?;
+            let envelope = legacy_signed_envelope(&entry);
+            let receipt = submit_envelope(&api_url, &endpoint, &envelope)?;
+            let mut store = ReceiptStore::load_or_create(&receipts_path)?;
+            store.add_receipt(receipt.clone());
+            store.save(&receipts_path)?;
+            println!("{}", serde_json::to_string_pretty(&receipt)?);
+        }
+        Commands::ComposeEnvelopeInit {
+            entry_json,
+            path,
+            key_id,
+            signer,
+            signature_scope,
+            threshold,
+            allowed_signers,
+            require_author_signature,
+            password,
+            output,
+        } => {
+            let entry: LedgerEntry = serde_json::from_str(&entry_json)?;
+            let store = Keystore::load_or_create(&path)?;
+            let record = store
+                .find_key(key_id)
+                .ok_or_else(|| anyhow::anyhow!("unknown key_id {key_id}"))?;
+            let secret_bytes = load_secret_key_bytes(record, password)?;
+            let keypair = WalletKeypair::from_secret_bytes(record.key_id, &secret_bytes)?;
+
+            let preimage = envelope_signature_preimage(&entry, &signature_scope)?;
+            let signature = hex::encode(keypair.sign_bytes(preimage.as_bytes()).to_bytes());
+            let multisig_policy = EnvelopeMultisigPolicy {
+                threshold,
+                allowed_signers,
+                require_author_signature,
+            };
+            let envelope = SignedEnvelope {
+                envelope_id: Uuid::new_v4(),
+                signer,
+                signature,
+                signature_scope: Some(signature_scope.clone()),
+                co_signatures: vec![],
+                multisig_policy: Some(multisig_policy),
+                submitted_at: Utc::now(),
+                payload: entry,
+            };
+            let draft = compose_draft_from_envelope(envelope, signature_scope)?;
+            let draft_json = serde_json::to_string_pretty(&draft)?;
+            if let Some(output_path) = output {
+                if let Some(parent) = output_path.parent() {
+                    if !parent.as_os_str().is_empty() {
+                        fs::create_dir_all(parent)?;
+                    }
+                }
+                fs::write(&output_path, draft_json)?;
+                println!(
+                    "Initialized multisig envelope draft at {}",
+                    output_path.display()
+                );
+            } else {
+                println!("{draft_json}");
+            }
+        }
+        Commands::ComposeEnvelopeSign {
+            draft_json,
+            path,
+            key_id,
+            as_signer,
+            password,
+            output,
+        } => {
+            let mut draft: ComposeEnvelopeMultisigDraft = serde_json::from_str(&draft_json)?;
+            validate_compose_draft_integrity(&draft)?;
+            if draft
+                .collected_signatures
+                .iter()
+                .any(|item| item.signer == as_signer)
+            {
+                return Err(anyhow::anyhow!(
+                    "signer already present in draft: {as_signer}"
+                ));
+            }
+            let store = Keystore::load_or_create(&path)?;
+            let record = store
+                .find_key(key_id)
+                .ok_or_else(|| anyhow::anyhow!("unknown key_id {key_id}"))?;
+            let secret_bytes = load_secret_key_bytes(record, password)?;
+            let keypair = WalletKeypair::from_secret_bytes(record.key_id, &secret_bytes)?;
+
+            let preimage =
+                envelope_signature_preimage(&draft.envelope.payload, &draft.signature_scope)?;
+            let signature = hex::encode(keypair.sign_bytes(preimage.as_bytes()).to_bytes());
+            draft.envelope.co_signatures.push(EnvelopeCoSignature {
+                signer: as_signer.clone(),
+                signature: signature.clone(),
+            });
+            draft
+                .collected_signatures
+                .push(ComposeDraftCollectedSignature {
+                    signer: as_signer,
+                    signature,
+                });
+            validate_compose_draft_integrity(&draft)?;
+            let output_json = serde_json::to_string_pretty(&draft)?;
+            if let Some(output_path) = output {
+                if let Some(parent) = output_path.parent() {
+                    if !parent.as_os_str().is_empty() {
+                        fs::create_dir_all(parent)?;
+                    }
+                }
+                fs::write(&output_path, output_json)?;
+                println!("Updated multisig draft at {}", output_path.display());
+            } else {
+                println!("{output_json}");
+            }
+        }
+        Commands::ComposeEnvelopeFinalize { draft_json } => {
+            let draft: ComposeEnvelopeMultisigDraft = serde_json::from_str(&draft_json)?;
+            validate_compose_draft_integrity(&draft)?;
+            validate_envelope_signers(&draft.envelope, true)?;
+            println!("{}", serde_json::to_string_pretty(&draft.envelope)?);
+        }
+        Commands::SubmitEnvelope {
+            envelope_json,
+            api_url,
+            endpoint,
+            receipts_path,
+        } => {
+            let envelope: SignedEnvelope<LedgerEntry> = serde_json::from_str(&envelope_json)?;
+            let receipt = submit_envelope(&api_url, &endpoint, &envelope)?;
             let mut store = ReceiptStore::load_or_create(&receipts_path)?;
             store.add_receipt(receipt.clone());
             store.save(&receipts_path)?;
@@ -1278,22 +1477,28 @@ fn load_secret_key_bytes(record: &KeyRecord, password: Option<String>) -> anyhow
     ))
 }
 
-fn submit_entry(
-    api_url: &str,
-    endpoint: &str,
-    entry: &LedgerEntry,
-) -> anyhow::Result<SubmissionReceipt> {
-    let url = format!("{}{}", api_url.trim_end_matches('/'), endpoint);
-    let envelope = SignedEnvelope {
+fn legacy_signed_envelope(entry: &LedgerEntry) -> SignedEnvelope<LedgerEntry> {
+    SignedEnvelope {
         envelope_id: Uuid::new_v4(),
         signer: entry.author.clone(),
         signature: entry.signature.clone(),
+        signature_scope: None,
+        co_signatures: Vec::new(),
+        multisig_policy: None,
         submitted_at: Utc::now(),
         payload: entry.clone(),
-    };
+    }
+}
+
+fn submit_envelope(
+    api_url: &str,
+    endpoint: &str,
+    envelope: &SignedEnvelope<LedgerEntry>,
+) -> anyhow::Result<SubmissionReceipt> {
+    let url = format!("{}{}", api_url.trim_end_matches('/'), endpoint);
     let response_json: Value = reqwest::blocking::Client::new()
         .post(url)
-        .json(&envelope)
+        .json(envelope)
         .send()?
         .error_for_status()?
         .json()?;
@@ -1325,7 +1530,7 @@ fn submit_entry(
                 .and_then(Value::as_str)
                 .and_then(|raw| Uuid::parse_str(raw).ok())
         })
-        .unwrap_or(entry.entry_id);
+        .unwrap_or(envelope.payload.entry_id);
 
     let merkle_proof = response_json
         .get("merkle_proof")
@@ -1342,6 +1547,230 @@ fn submit_entry(
         submitted_at: Utc::now().timestamp(),
         api_url: api_url.to_string(),
     })
+}
+
+fn envelope_signature_preimage(
+    payload: &LedgerEntry,
+    signature_scope: &str,
+) -> anyhow::Result<String> {
+    if signature_scope != "canonical_payload_v1" && signature_scope != "canonical_payload_v2" {
+        return Err(anyhow::anyhow!(
+            "multisig signature scope must be canonical_payload_v1 or canonical_payload_v2"
+        ));
+    }
+    let mut payload_value = serde_json::to_value(payload)?;
+    if let Some(payload_obj) = payload_value.as_object_mut() {
+        payload_obj.remove("signature");
+    }
+    if signature_scope == "canonical_payload_v2" {
+        let replay_protection = payload
+            .payload
+            .get("replay_protection")
+            .and_then(Value::as_object)
+            .ok_or_else(|| {
+                anyhow::anyhow!("canonical_payload_v2 requires payload.replay_protection object")
+            })?;
+        let request_id = replay_protection
+            .get("request_id")
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .ok_or_else(|| {
+                anyhow::anyhow!(
+                    "canonical_payload_v2 requires payload.replay_protection.request_id"
+                )
+            })?;
+        let expires_at = replay_protection
+            .get("expires_at")
+            .map(|value| {
+                value.as_i64().ok_or_else(|| {
+                    anyhow::anyhow!("payload.replay_protection.expires_at must be a unix timestamp")
+                })
+            })
+            .transpose()?;
+        if let Some(payload_obj) = payload_value.as_object_mut() {
+            payload_obj.insert(
+                "replay_protection".to_string(),
+                serde_json::json!({
+                    "request_id": request_id,
+                    "expires_at": expires_at
+                }),
+            );
+        }
+    }
+    Ok(canonical_json(&payload_value))
+}
+
+fn canonical_json(value: &Value) -> String {
+    serde_json::to_string(&canonicalize_value(value)).expect("canonical JSON serialization")
+}
+
+fn canonicalize_value(value: &Value) -> Value {
+    match value {
+        Value::Array(items) => Value::Array(items.iter().map(canonicalize_value).collect()),
+        Value::Object(map) => {
+            let mut ordered = serde_json::Map::new();
+            let sorted: BTreeMap<String, Value> = map
+                .iter()
+                .map(|(key, value)| (key.clone(), canonicalize_value(value)))
+                .collect();
+            for (key, value) in sorted {
+                ordered.insert(key, value);
+            }
+            Value::Object(ordered)
+        }
+        _ => value.clone(),
+    }
+}
+
+fn compose_draft_from_envelope(
+    envelope: SignedEnvelope<LedgerEntry>,
+    signature_scope: String,
+) -> anyhow::Result<ComposeEnvelopeMultisigDraft> {
+    let mut canonical_payload = serde_json::to_value(&envelope.payload)?;
+    if let Some(payload_obj) = canonical_payload.as_object_mut() {
+        payload_obj.remove("signature");
+    }
+    let canonical_payload = canonicalize_value(&canonical_payload);
+    let canonical_payload_hash = format!(
+        "sha256:{}",
+        hex::encode(Sha256::digest(
+            canonical_json(&canonical_payload).as_bytes()
+        ))
+    );
+    let collected_signatures = std::iter::once(ComposeDraftCollectedSignature {
+        signer: envelope.signer.clone(),
+        signature: envelope.signature.clone(),
+    })
+    .chain(
+        envelope
+            .co_signatures
+            .iter()
+            .map(|item| ComposeDraftCollectedSignature {
+                signer: item.signer.clone(),
+                signature: item.signature.clone(),
+            }),
+    )
+    .collect();
+    Ok(ComposeEnvelopeMultisigDraft {
+        schema: "citizen.compose.multisig-draft.v1".to_string(),
+        canonical_payload,
+        canonical_payload_hash,
+        signature_scope,
+        runtime_compat: ComposeDraftRuntimeCompat {
+            envelope_v1: envelope.clone(),
+        },
+        envelope,
+        collected_signatures,
+    })
+}
+
+fn validate_compose_draft_integrity(draft: &ComposeEnvelopeMultisigDraft) -> anyhow::Result<()> {
+    if draft.schema != "citizen.compose.multisig-draft.v1" {
+        return Err(anyhow::anyhow!(
+            "unsupported draft schema: {}",
+            draft.schema
+        ));
+    }
+    let expected_preimage =
+        envelope_signature_preimage(&draft.envelope.payload, &draft.signature_scope)?;
+    let expected_payload: Value = serde_json::from_str(&expected_preimage)?;
+    if expected_payload != draft.canonical_payload {
+        return Err(anyhow::anyhow!(
+            "draft canonical payload mismatch; payload mutated after draft creation"
+        ));
+    }
+    let expected_hash = format!(
+        "sha256:{}",
+        hex::encode(Sha256::digest(expected_preimage.as_bytes()))
+    );
+    if expected_hash != draft.canonical_payload_hash {
+        return Err(anyhow::anyhow!(
+            "draft canonical payload hash mismatch; payload mutated after draft creation"
+        ));
+    }
+    if draft.runtime_compat.envelope_v1.payload != draft.envelope.payload {
+        return Err(anyhow::anyhow!(
+            "runtime_compat.envelope_v1 payload mismatch with draft envelope payload"
+        ));
+    }
+    if draft.runtime_compat.envelope_v1.signature_scope != draft.envelope.signature_scope {
+        return Err(anyhow::anyhow!(
+            "runtime_compat.envelope_v1 signature_scope mismatch with draft envelope"
+        ));
+    }
+    let expected_collected: Vec<ComposeDraftCollectedSignature> =
+        std::iter::once(ComposeDraftCollectedSignature {
+            signer: draft.envelope.signer.clone(),
+            signature: draft.envelope.signature.clone(),
+        })
+        .chain(
+            draft
+                .envelope
+                .co_signatures
+                .iter()
+                .map(|item| ComposeDraftCollectedSignature {
+                    signer: item.signer.clone(),
+                    signature: item.signature.clone(),
+                }),
+        )
+        .collect();
+    if draft.collected_signatures != expected_collected {
+        return Err(anyhow::anyhow!(
+            "draft collected_signatures must be append-only mirror of envelope signatures"
+        ));
+    }
+    validate_envelope_signers(&draft.envelope, false)?;
+    Ok(())
+}
+
+fn validate_envelope_signers(
+    envelope: &SignedEnvelope<LedgerEntry>,
+    enforce_threshold: bool,
+) -> anyhow::Result<()> {
+    let policy = envelope.multisig_policy.as_ref().ok_or_else(|| {
+        anyhow::anyhow!("multisig_policy is required for compose draft envelopes")
+    })?;
+    let mut seen = BTreeSet::new();
+    let mut signer_list = vec![envelope.signer.clone()];
+    signer_list.extend(
+        envelope
+            .co_signatures
+            .iter()
+            .map(|item| item.signer.clone())
+            .collect::<Vec<_>>(),
+    );
+    for signer in &signer_list {
+        if !seen.insert(signer.clone()) {
+            return Err(anyhow::anyhow!(
+                "envelope contains duplicate signer: {signer}"
+            ));
+        }
+    }
+    if enforce_threshold && signer_list.len() < usize::from(policy.threshold) {
+        return Err(anyhow::anyhow!(
+            "envelope has {} signatures but threshold is {}",
+            signer_list.len(),
+            policy.threshold
+        ));
+    }
+    if !policy.allowed_signers.is_empty() {
+        let allowed: BTreeSet<String> = policy.allowed_signers.iter().cloned().collect();
+        for signer in &signer_list {
+            if !allowed.contains(signer) {
+                return Err(anyhow::anyhow!(
+                    "signer {signer} not in multisig_policy.allowed_signers"
+                ));
+            }
+        }
+    }
+    if policy.require_author_signature && !signer_list.contains(&envelope.payload.author) {
+        return Err(anyhow::anyhow!(
+            "multisig policy requires payload author {} to sign",
+            envelope.payload.author
+        ));
+    }
+    Ok(())
 }
 
 fn verify_receipt(receipt: &SubmissionReceipt, entry: &LedgerEntry) -> anyhow::Result<()> {
@@ -1522,5 +1951,93 @@ mod tests {
 
         let fifteen = format!("{}{}", "abandon ".repeat(14), "about");
         assert!(validate_supported_mnemonic_phrase(&fifteen).is_err());
+    }
+
+    #[test]
+    fn compose_draft_detects_payload_mutation() {
+        let keypair = WalletKeypair::generate();
+        let entry = sign_entry(
+            EntryDraft {
+                namespace: "audit.procurement".to_string(),
+                action: "RECORD_EVENT".to_string(),
+                object_id: "AUD-2".to_string(),
+                payload: json!({"event": "OPEN"}),
+                privacy_flag: false,
+                privacy_mode: PrivacyMode::None,
+                encryption_passphrase: None,
+                authorized_readers: vec![],
+                custodian_policy_id: None,
+                key_wrapped_secrets: vec![],
+                revocation_events: vec![],
+                field_reader_acls: Default::default(),
+                reader_public_keys: BTreeMap::new(),
+                author: "did:ledger:author-1".to_string(),
+                timestamp: 1_736_500_000,
+            },
+            &keypair,
+        )
+        .expect("entry");
+        let envelope = SignedEnvelope {
+            envelope_id: Uuid::new_v4(),
+            signer: "did:key:alice".to_string(),
+            signature: "sig-a".to_string(),
+            signature_scope: Some("canonical_payload_v1".to_string()),
+            co_signatures: vec![],
+            multisig_policy: Some(EnvelopeMultisigPolicy {
+                threshold: 2,
+                allowed_signers: vec!["did:key:alice".to_string(), "did:key:bob".to_string()],
+                require_author_signature: false,
+            }),
+            submitted_at: Utc::now(),
+            payload: entry,
+        };
+        let mut draft = compose_draft_from_envelope(envelope, "canonical_payload_v1".to_string())
+            .expect("draft");
+        draft.envelope.payload.object_id = "AUD-3".to_string();
+        let err = validate_compose_draft_integrity(&draft).expect_err("mutation should fail");
+        assert!(err.to_string().contains("payload mutated"));
+    }
+
+    #[test]
+    fn finalize_requires_threshold() {
+        let entry = LedgerEntry {
+            entry_id: Uuid::new_v4(),
+            namespace: "identity.citizen".to_string(),
+            action: "REGISTER_IDENTITY".to_string(),
+            object_id: "did:citizen:a".to_string(),
+            payload: json!({"subject":"did:citizen:a"}),
+            privacy_flag: false,
+            privacy_mode: PrivacyMode::None,
+            payload_commitment: None,
+            ciphertext_hex: None,
+            nonce_hex: None,
+            salt_hex: None,
+            kdf_params: None,
+            consent_receipt: None,
+            authorized_readers: vec![],
+            custodian_policy_id: None,
+            field_reader_acls: BTreeMap::new(),
+            key_wrapped_secrets: vec![],
+            revocation_events: vec![],
+            author: "did:key:alice".to_string(),
+            signature: "sig-a".to_string(),
+            timestamp: 1_736_500_000,
+        };
+        let envelope = SignedEnvelope {
+            envelope_id: Uuid::new_v4(),
+            signer: "did:key:alice".to_string(),
+            signature: "sig-a".to_string(),
+            signature_scope: Some("canonical_payload_v1".to_string()),
+            co_signatures: vec![],
+            multisig_policy: Some(EnvelopeMultisigPolicy {
+                threshold: 2,
+                allowed_signers: vec!["did:key:alice".to_string(), "did:key:bob".to_string()],
+                require_author_signature: true,
+            }),
+            submitted_at: Utc::now(),
+            payload: entry,
+        };
+        let err = validate_envelope_signers(&envelope, true).expect_err("threshold");
+        assert!(err.to_string().contains("threshold"));
     }
 }

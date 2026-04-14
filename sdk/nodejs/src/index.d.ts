@@ -28,6 +28,20 @@ export type SignedEnvelope = {
   submitted_at: string;
   payload: LedgerEntry;
   signature: string;
+  signature_scope?: string;
+  co_signatures?: EnvelopeCoSignature[];
+  multisig_policy?: EnvelopeMultisigPolicy | null;
+};
+
+export type EnvelopeCoSignature = {
+  signer: string;
+  signature: string;
+};
+
+export type EnvelopeMultisigPolicy = {
+  threshold: number;
+  allowed_signers?: string[];
+  require_author_signature?: boolean;
 };
 
 export type ReceiptEnvelope = {
@@ -106,6 +120,19 @@ export function validateBuilderCreditsPayload(args: {
   action: string;
   payload: Record<string, unknown>;
 }): void;
+export function wrapEnvelopeMulti(args: {
+  entry: LedgerEntry;
+  signer: Signer;
+  coSigners?: Signer[];
+  multisigPolicy: EnvelopeMultisigPolicy;
+  signatureScope?: "canonical_payload_v1";
+  submittedAt?: string;
+}): Promise<SignedEnvelope>;
+export function appendCoSignature(args: {
+  envelope: SignedEnvelope;
+  signer: Signer;
+}): Promise<SignedEnvelope>;
+export function finalizeEnvelope(args: { envelope: SignedEnvelope }): SignedEnvelope;
 
 export class BrowserWalletSigner implements Signer {
   constructor(args?: { provider?: WalletProvider; account?: string; requestMethod?: string });
@@ -141,6 +168,16 @@ export class CitizenNodeClient {
   }): Promise<unknown>;
   signEntry(entry: LedgerEntry, signer: Signer): Promise<LedgerEntry>;
   wrapEnvelope(args: { entry: LedgerEntry; signer: Signer; submittedAt?: string }): Promise<SignedEnvelope>;
+  wrapEnvelopeMulti(args: {
+    entry: LedgerEntry;
+    signer: Signer;
+    coSigners?: Signer[];
+    multisigPolicy: EnvelopeMultisigPolicy;
+    signatureScope?: "canonical_payload_v1";
+    submittedAt?: string;
+  }): Promise<SignedEnvelope>;
+  appendCoSignature(args: { envelope: SignedEnvelope; signer: Signer }): Promise<SignedEnvelope>;
+  finalizeEnvelope(args: { envelope: SignedEnvelope }): SignedEnvelope;
   submitEnvelope(envelope: SignedEnvelope): Promise<unknown>;
   submitEnvelopeBatch(envelopes: SignedEnvelope[]): Promise<unknown>;
   getReceipt(receiptId: string): Promise<unknown>;

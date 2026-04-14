@@ -22,10 +22,15 @@ fn weight_fixture_runner_is_reproducible_across_processes() {
     assert!(!rows.is_empty(), "expected non-empty fixture report");
 
     for row in rows {
-        let expected = row["expected_weight_bytes"].as_u64().expect("expected bytes");
-        let computed = row["computed_weight_bytes"].as_u64().expect("computed bytes");
+        let expected = row["expected_weight_bytes"]
+            .as_u64()
+            .expect("expected bytes");
+        let computed = row["computed_weight_bytes"]
+            .as_u64()
+            .expect("computed bytes");
         assert_eq!(
-            expected, computed,
+            expected,
+            computed,
             "fixture weight mismatch for {}",
             row["fixture_id"].as_str().unwrap_or("<unknown>")
         );

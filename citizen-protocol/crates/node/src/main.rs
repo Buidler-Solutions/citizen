@@ -766,6 +766,34 @@ fn default_namespaces() -> Vec<NamespaceRuleset> {
         },
         NamespaceRuleset {
             descriptor: citizen_types::NamespaceDescriptor {
+                namespace: "ops.multisig".into(),
+                version: 1,
+                rules_hash: "sha256:ops-multisig-default-v1".into(),
+                governed_by: "governance.vote".into(),
+            },
+            writers: BTreeSet::from(["ops.multisig".into()]),
+            validators: vec![
+                citizen_types::NamespaceRule {
+                    name: "require_signature".into(),
+                    config: json!({}),
+                },
+                citizen_types::NamespaceRule {
+                    name: "envelope_multisig_policy".into(),
+                    config: json!({
+                        "target_actions": ["APPROVAL_RECORD"],
+                        "allowed_signers": [
+                            "did:key:z6MkmGx93zW7M7jhjLSeXfhBF3nf6tDr7guP5AnbcW2CYwiV",
+                            "did:key:z6MktN6wM6oqP4Q8zjKK6z7ecduf3aYvN5nM8m3Mp6R6Y2t8",
+                            "did:key:z6Mks6xVwFNWQaYQJY9ycYzaPt6F6DRKCVhcdtrzXHNoS7ao"
+                        ],
+                        "threshold": 2,
+                        "signature_scope": "canonical_payload_v1"
+                    }),
+                },
+            ],
+        },
+        NamespaceRuleset {
+            descriptor: citizen_types::NamespaceDescriptor {
                 namespace: "execution.module".into(),
                 version: 1,
                 rules_hash: "sha256:execution-module-default-v1".into(),
