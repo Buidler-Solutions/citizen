@@ -3,7 +3,7 @@ use ed25519_dalek::{
     Signature, Signer, SigningKey, VerifyingKey, PUBLIC_KEY_LENGTH, SECRET_KEY_LENGTH,
 };
 use parking_lot::RwLock;
-use rand::rngs::OsRng;
+use rand_core::OsRng as DalekOsRng;
 use serde::Serialize;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
@@ -21,7 +21,7 @@ pub struct ValidatorKeypair {
 
 impl ValidatorKeypair {
     pub fn generate(validator_id: ValidatorId) -> Self {
-        let mut rng = OsRng;
+        let mut rng = DalekOsRng;
         let signing_key = SigningKey::generate(&mut rng);
         let verifying_key = signing_key.verifying_key();
         Self {

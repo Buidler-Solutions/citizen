@@ -1,5 +1,5 @@
 use ed25519_dalek::{SigningKey, VerifyingKey};
-use rand::rngs::OsRng;
+use rand_core::OsRng as DalekOsRng;
 use std::{
     env, fs,
     path::{Path, PathBuf},
@@ -81,7 +81,7 @@ where
 }
 
 fn generate_keys(validator_id: &str) -> GeneratedKeys {
-    let mut rng = OsRng;
+    let mut rng = DalekOsRng;
     let signing_key = SigningKey::generate(&mut rng);
     let verifying_key: VerifyingKey = signing_key.verifying_key();
 

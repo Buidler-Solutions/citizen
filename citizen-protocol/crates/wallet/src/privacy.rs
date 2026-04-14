@@ -3,7 +3,7 @@ use chacha20poly1305::{
     XChaCha20Poly1305, XNonce,
 };
 use citizen_types::ProtocolError;
-use rand::{rngs::OsRng, RngCore};
+use rand::{rngs::OsRng, TryRngCore};
 use sha2::{Digest, Sha256};
 use x25519_dalek::{PublicKey, StaticSecret};
 
@@ -11,7 +11,9 @@ pub type Result<T> = std::result::Result<T, ProtocolError>;
 
 pub fn generate_dek() -> [u8; 32] {
     let mut dek = [0u8; 32];
-    OsRng.fill_bytes(&mut dek);
+    let mut rng = OsRng;
+    rng.try_fill_bytes(&mut dek)
+        .expect("os randomness source unavailable");
     dek
 }
 

@@ -13,7 +13,8 @@ use ed25519_dalek::{
 };
 use hmac::{Hmac, Mac};
 use rand::rngs::OsRng;
-use rand::RngCore;
+use rand::TryRngCore;
+use rand_core::OsRng as DalekOsRng;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use sha2::{Digest, Sha256};
@@ -26,6 +27,12 @@ pub type Result<T> = std::result::Result<T, ProtocolError>;
 
 pub mod cli;
 pub mod privacy;
+
+fn fill_os_random(dest: &mut [u8]) {
+    let mut rng = OsRng;
+    rng.try_fill_bytes(dest)
+        .expect("os randomness source unavailable");
+}
 
 const DEFAULT_HARDENED_DERIVATION_PATH: &str = "m/44'/930'/0'/0'/0'";
 
@@ -233,7 +240,7 @@ pub struct WrcpMsigV1DryRunReport {
 
 impl WalletKeypair {
     pub fn generate() -> Self {
-        let mut rng = OsRng;
+        let mut rng = DalekOsRng;
         let signing_key = SigningKey::generate(&mut rng);
         let verifying_key = signing_key.verifying_key();
         Self {
@@ -307,7 +314,7 @@ pub fn generate_mnemonic_phrase(word_count: usize) -> Result<String> {
         }
     };
     let mut entropy = vec![0u8; entropy_len];
-    OsRng.fill_bytes(&mut entropy);
+    fill_os_random(&mut entropy);
     let mnemonic = Mnemonic::from_entropy_in(Language::English, &entropy)
         .map_err(|err| ProtocolError::crypto(format!("failed to generate mnemonic: {err}")))?;
     Ok(mnemonic.to_string())
@@ -813,7 +820,7 @@ pub fn encrypt_offchain_file_reader_to_writer<R: Read, W: Write>(
     passphrase: &str,
 ) -> Result<EncryptedFileMetadata> {
     let mut salt = [0u8; 16];
-    OsRng.fill_bytes(&mut salt);
+    fill_os_random(&mut salt);
     let params = Params::new(19456, 2, 1, Some(32))
         .map_err(|err| ProtocolError::crypto(format!("invalid kdf params: {err}")))?;
     let mut derived_key = [0u8; 32];
@@ -829,7 +836,7 @@ pub fn encrypt_offchain_file_reader_to_writer<R: Read, W: Write>(
         .map_err(|err| ProtocolError::crypto(format!("failed to derive key: {err}")))?;
 
     let mut nonce_prefix = [0u8; 4];
-    OsRng.fill_bytes(&mut nonce_prefix);
+    fill_os_random(&mut nonce_prefix);
     let mut hasher = Sha256::new();
     let cipher = ChaCha20Poly1305::new(Key::from_slice(&derived_key));
     let mut chunk = vec![0_u8; OFFCHAIN_FILE_CHUNK_SIZE_BYTES];
@@ -976,7 +983,7 @@ pub fn encrypt_offchain_file_reader_to_writer_hybrid<R: Read, W: Write>(
     context_id: &str,
 ) -> Result<HybridEncryptedFileMetadata> {
     let mut nonce_prefix = [0u8; 4];
-    OsRng.fill_bytes(&mut nonce_prefix);
+    fill_os_random(&mut nonce_prefix);
     let mut hasher = Sha256::new();
     let dek = privacy::generate_dek();
     let cipher = ChaCha20Poly1305::new(Key::from_slice(&dek));
@@ -1151,9 +1158,9 @@ pub fn encrypt_payload(payload: &Value, passphrase: &str) -> Result<EncryptedPay
     let canonical_payload = canonical_json(payload);
     let plaintext = canonical_payload.as_bytes();
     let mut salt = [0u8; 16];
-    OsRng.fill_bytes(&mut salt);
+    fill_os_random(&mut salt);
     let mut nonce = [0u8; 12];
-    OsRng.fill_bytes(&mut nonce);
+    fill_os_random(&mut nonce);
     let params = Params::new(19456, 2, 1, Some(32))
         .map_err(|err| ProtocolError::crypto(format!("invalid kdf params: {err}")))?;
     let mut derived_key = [0u8; 32];
@@ -1340,7 +1347,7 @@ pub fn ensure_active_reader_grant(
 fn encrypt_payload_with_dek(payload: &Value, dek: &[u8; 32]) -> Result<EncryptedPayload> {
     let canonical_payload = canonical_json(payload);
     let mut nonce = [0u8; 24];
-    OsRng.fill_bytes(&mut nonce);
+    fill_os_random(&mut nonce);
     let cipher = XChaCha20Poly1305::new_from_slice(dek)
         .map_err(|err| ProtocolError::crypto(format!("invalid DEK: {err}")))?;
     let ciphertext = cipher
@@ -1386,9 +1393,9 @@ pub fn encrypt_secret_key(
     password: &str,
 ) -> Result<EncryptedSecretKey> {
     let mut salt = [0u8; 16];
-    OsRng.fill_bytes(&mut salt);
+    fill_os_random(&mut salt);
     let mut nonce = [0u8; 12];
-    OsRng.fill_bytes(&mut nonce);
+    fill_os_random(&mut nonce);
     let params = Params::new(19456, 2, 1, Some(32))
         .map_err(|err| ProtocolError::crypto(format!("invalid kdf params: {err}")))?;
     let mut derived_key = [0u8; 32];
