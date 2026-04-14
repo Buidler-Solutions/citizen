@@ -461,15 +461,15 @@ pub struct NetworkLatency {
 
 impl NetworkLatency {
     fn sample_delay(&self) -> Duration {
-        let mut rng = rand::thread_rng();
-        let base = rng.gen_range(self.min_ms..=self.max_ms);
-        let jitter = rng.gen_range(0..=self.jitter_ms);
+        let mut rng = rand::rng();
+        let base = rng.random_range(self.min_ms..=self.max_ms);
+        let jitter = rng.random_range(0..=self.jitter_ms);
         Duration::from_millis(base + jitter)
     }
 
     fn drop_packet(&self) -> bool {
-        let mut rng = rand::thread_rng();
-        rng.gen_bool(self.packet_loss)
+        let mut rng = rand::rng();
+        rng.random_bool(self.packet_loss)
     }
 }
 
@@ -824,7 +824,7 @@ impl Network for QuicNetwork {
         let wire = WireMessage {
             handshake: {
                 let identity = self.admission.identity();
-                let nonce = rand::thread_rng().gen();
+                let nonce = rand::rng().random();
                 let timestamp_ms = SystemTime::now()
                     .duration_since(UNIX_EPOCH)
                     .map(|duration| duration.as_millis() as u64)

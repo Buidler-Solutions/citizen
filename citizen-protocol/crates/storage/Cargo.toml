@@ -17,7 +17,7 @@ uuid = { workspace = true }
 
 [dev-dependencies]
 criterion = { version = "0.5", default-features = false, features = ["cargo_bench_support"] }
-rand = { version = "0.8", features = ["std", "std_rng"] }
+rand = { version = "0.9.3", features = ["std", "std_rng"] }
 tempfile = "3"
 uuid = { version = "1", features = ["v4"] }
 
