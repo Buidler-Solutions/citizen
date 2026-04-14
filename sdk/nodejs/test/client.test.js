@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 import { sha256DigestHex } from "../src/index.js";
 
 import {
+  appendCoSignature,
   BrowserWalletSigner,
   CitizenNodeClient,
   OFFCHAIN_ATTACHMENT_ALLOWED_MIME_TYPES,
@@ -14,6 +15,8 @@ import {
   createFormCommitmentReceipt,
   createMultisigCreditGrant,
   createSponsorshipUsage,
+  finalizeEnvelope,
+  wrapEnvelopeMulti,
   signCitizenPayloadWithWallet
 } from "../src/index.js";
 
@@ -28,6 +31,18 @@ class StubSigner {
 
   async sign(message) {
     return `sig:${Buffer.from(message).toString("base64url")}`;
+  }
+}
+
+class RecordingSigner extends StubSigner {
+  constructor(id) {
+    super(id);
+    this.messages = [];
+  }
+
+  async sign(message) {
+    this.messages.push(message);
+    return super.sign(message);
   }
 }
 
@@ -295,6 +310,147 @@ test("submitEnvelopeBatch posts array payload to batch endpoint", async () => {
   const body = JSON.parse(capturedRequest.init.body);
   assert.equal(Array.isArray(body), true);
   assert.equal(body.length, 2);
+});
+
+test("wrapEnvelopeMulti signs a canonical payload preimage across all signers", async () => {
+  const entry = {
+    entry_id: "22222222-2222-2222-2222-222222222222",
+    namespace: "audit.procurement",
+    action: "RECORD_EVENT",
+    object_id: "PO-1",
+    payload: { event: "OPENED" },
+    author: "did:ledger:alice",
+    signature: "entry-sig",
+    timestamp: 1_713_151_200
+  };
+
+  const alice = new RecordingSigner("did:ledger:alice");
+  const bob = new RecordingSigner("did:ledger:bob");
+
+  const envelope = await wrapEnvelopeMulti({
+    entry,
+    signer: alice,
+    coSigners: [bob],
+    multisigPolicy: {
+      threshold: 2,
+      allowed_signers: ["did:ledger:alice", "did:ledger:bob"],
+      require_author_signature: true
+    }
+  });
+
+  assert.equal(envelope.signature_scope, "canonical_payload_v1");
+  assert.equal(envelope.co_signatures.length, 1);
+  assert.equal(alice.messages.length, 1);
+  assert.equal(bob.messages.length, 1);
+  assert.equal(alice.messages[0], bob.messages[0]);
+  assert.equal(alice.messages[0], canonicalizeJson({ ...entry, signature: undefined }));
+});
+
+test("wrapEnvelopeMulti supports canonical_payload_v2 replay protection binding", async () => {
+  const entry = {
+    entry_id: "33333333-3333-3333-3333-333333333333",
+    namespace: "audit.procurement",
+    action: "RECORD_EVENT",
+    object_id: "PO-9",
+    payload: {
+      event: "AWARDED",
+      replay_protection: {
+        request_id: "req-123",
+        expires_at: 1_713_151_500
+      }
+    },
+    author: "did:ledger:alice",
+    signature: "entry-sig",
+    timestamp: 1_713_151_200
+  };
+
+  const alice = new RecordingSigner("did:ledger:alice");
+  const bob = new RecordingSigner("did:ledger:bob");
+
+  const envelope = await wrapEnvelopeMulti({
+    entry,
+    signer: alice,
+    coSigners: [bob],
+    signatureScope: "canonical_payload_v2",
+    multisigPolicy: {
+      threshold: 2,
+      allowed_signers: ["did:ledger:alice", "did:ledger:bob"],
+      require_author_signature: true
+    }
+  });
+
+  assert.equal(envelope.signature_scope, "canonical_payload_v2");
+  assert.equal(alice.messages.length, 1);
+  assert.equal(bob.messages[0], alice.messages[0]);
+  assert.match(alice.messages[0], /replay_protection/);
+});
+
+test("wrapEnvelopeMulti rejects canonical_payload_v2 without replay request id", async () => {
+  const entry = {
+    entry_id: "44444444-4444-4444-4444-444444444444",
+    namespace: "audit.procurement",
+    action: "RECORD_EVENT",
+    object_id: "PO-10",
+    payload: { event: "AWARDED", replay_protection: {} },
+    author: "did:ledger:alice",
+    signature: "entry-sig",
+    timestamp: 1_713_151_200
+  };
+  const alice = new StubSigner("did:ledger:alice");
+
+  await assert.rejects(
+    () =>
+      wrapEnvelopeMulti({
+        entry,
+        signer: alice,
+        signatureScope: "canonical_payload_v2",
+        multisigPolicy: {
+          threshold: 1,
+          allowed_signers: ["did:ledger:alice"],
+          require_author_signature: true
+        }
+      }),
+    /canonical_payload_v2 requires payload.replay_protection.request_id/
+  );
+});
+
+test("appendCoSignature and finalizeEnvelope enforce threshold and uniqueness", async () => {
+  const entry = {
+    entry_id: "22222222-2222-2222-2222-222222222222",
+    namespace: "audit.procurement",
+    action: "RECORD_EVENT",
+    object_id: "PO-1",
+    payload: { event: "OPENED" },
+    author: "did:ledger:alice",
+    signature: "entry-sig",
+    timestamp: 1_713_151_200
+  };
+
+  const alice = new StubSigner("did:ledger:alice");
+  const bob = new StubSigner("did:ledger:bob");
+  const carol = new StubSigner("did:ledger:carol");
+
+  const twoOfThree = {
+    threshold: 2,
+    allowed_signers: ["did:ledger:alice", "did:ledger:bob", "did:ledger:carol"],
+    require_author_signature: true
+  };
+
+  let envelope = await wrapEnvelopeMulti({
+    entry,
+    signer: alice,
+    multisigPolicy: twoOfThree
+  });
+  assert.throws(() => finalizeEnvelope({ envelope }), /threshold is 2/);
+
+  envelope = await appendCoSignature({ envelope, signer: bob });
+  const finalized = finalizeEnvelope({ envelope });
+  assert.equal(finalized.co_signatures.length, 1);
+
+  await assert.rejects(
+    () => appendCoSignature({ envelope: finalized, signer: bob }),
+    /signer already present/
+  );
 });
 
 test("BrowserWalletSigner accepts explicit account", async () => {

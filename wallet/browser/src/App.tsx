@@ -9,6 +9,7 @@ import {
   isApprovalUiEnabled,
   type ApprovalUiRolloutStage,
 } from './rollout';
+import { canonicalJson, sha256DigestHex } from './canonical';
 
 type WalletState = {
   account: string;
@@ -142,6 +143,24 @@ type ProfileDetails = {
   address: string;
   profession: string;
   kycVerified: boolean;
+};
+
+type ComposeDraftCollectedSignature = {
+  signer: string;
+  signature: string;
+};
+
+type ComposeMultisigDraft = {
+  schema: 'citizen.compose.multisig-draft.v1';
+  canonical_payload: string;
+  canonical_payload_hash: string;
+  policy: {
+    signature_scope: 'canonical_payload_v1';
+    threshold: number;
+    allowed_signers: string[];
+    require_author_signature: boolean;
+  };
+  collected_signatures: ComposeDraftCollectedSignature[];
 };
 
 type TabId = 'activity' | 'decrypt' | 'compose' | 'vault' | 'security' | 'profile';
@@ -332,6 +351,11 @@ export function App() {
   const [grantScope, setGrantScope] = useState('content.article');
   const [draftErrors, setDraftErrors] = useState<string[]>([]);
   const [draftPayload, setDraftPayload] = useState('');
+  const [composeAllowedSigners, setComposeAllowedSigners] = useState('');
+  const [composeDraftJson, setComposeDraftJson] = useState('');
+  const [composeDraftSignerDid, setComposeDraftSignerDid] = useState('');
+  const [composeDraftSignerSignature, setComposeDraftSignerSignature] = useState('');
+  const [composeMultisigDraft, setComposeMultisigDraft] = useState<ComposeMultisigDraft | null>(null);
 
   const checklist = useMemo(
     () =>
@@ -348,6 +372,18 @@ export function App() {
       }),
     [grantAmount, grantId, grantScope, multisigThreshold, protocolKeyMaterial?.signer.did, sponsorDid, sponsorUsageAmount, sponsoredDid, sponsorshipId, state.account],
   );
+
+  const composeThreshold = useMemo(() => {
+    const parsed = Number.parseInt(multisigThreshold, 10);
+    return Number.isInteger(parsed) && parsed > 0 ? parsed : 1;
+  }, [multisigThreshold]);
+  const composeSignerOptions = useMemo(
+    () => composeAllowedSigners.split(',').map((entry) => entry.trim()).filter(Boolean),
+    [composeAllowedSigners],
+  );
+  const composeCollectedSignerCount = composeMultisigDraft?.collected_signatures.length ?? 0;
+  const composeDraftThreshold = composeMultisigDraft?.policy.threshold ?? composeThreshold;
+  const composeThresholdSatisfied = composeCollectedSignerCount >= composeDraftThreshold;
 
   const refreshState = useCallback(async () => {
     setIsLoading(true);
@@ -734,6 +770,143 @@ export function App() {
     setComposeSignature(payload.signature ?? '');
     setStatus('Composed payload signed successfully.');
     await refreshState();
+  };
+
+  const handleInitComposeMultisigDraft = async () => {
+    setStatus('');
+    if (!composeMessage.trim()) {
+      setStatus('Compose a transaction payload first.');
+      return;
+    }
+    const uniqueAllowedSigners = Array.from(new Set(composeSignerOptions));
+    if (uniqueAllowedSigners.length < composeThreshold) {
+      setStatus('Allowed signers count must be greater than or equal to threshold.');
+      return;
+    }
+    const signerDid = protocolKeyMaterial?.signer.did ?? state.account;
+    const canonicalPayload = canonicalJson({
+      author: signerDid,
+      message: composeMessage.trim(),
+    });
+    const canonicalPayloadHash = await sha256DigestHex(canonicalPayload);
+    const draft: ComposeMultisigDraft = {
+      schema: 'citizen.compose.multisig-draft.v1',
+      canonical_payload: canonicalPayload,
+      canonical_payload_hash: canonicalPayloadHash,
+      policy: {
+        signature_scope: 'canonical_payload_v1',
+        threshold: composeThreshold,
+        allowed_signers: uniqueAllowedSigners,
+        require_author_signature: true,
+      },
+      collected_signatures: [],
+    };
+    setComposeMultisigDraft(draft);
+    setComposeDraftJson(JSON.stringify(draft, null, 2));
+    setComposeDraftSignerDid('');
+    setComposeDraftSignerSignature('');
+    setStatus('Multisig draft initialized. Canonical payload is now immutable for this draft.');
+  };
+
+  const handleImportComposeMultisigDraft = async () => {
+    setStatus('');
+    if (!composeDraftJson.trim()) {
+      setStatus('Paste a multisig draft JSON document to import.');
+      return;
+    }
+    try {
+      const parsed = JSON.parse(composeDraftJson) as ComposeMultisigDraft;
+      if (parsed.schema !== 'citizen.compose.multisig-draft.v1') {
+        setStatus('Unsupported compose draft schema.');
+        return;
+      }
+      if (parsed.policy.signature_scope !== 'canonical_payload_v1') {
+        setStatus('Draft signature_scope must be canonical_payload_v1.');
+        return;
+      }
+      const expectedHash = await sha256DigestHex(parsed.canonical_payload);
+      if (expectedHash !== parsed.canonical_payload_hash) {
+        setStatus('Draft integrity check failed: canonical_payload_hash mismatch.');
+        return;
+      }
+      const signerSet = new Set(parsed.collected_signatures.map((entry) => entry.signer));
+      if (signerSet.size !== parsed.collected_signatures.length) {
+        setStatus('Draft integrity check failed: duplicate signer in collected_signatures.');
+        return;
+      }
+      setComposeMultisigDraft(parsed);
+      setComposeDraftJson(JSON.stringify(parsed, null, 2));
+      setStatus('Multisig draft imported successfully.');
+    } catch (error) {
+      setStatus(error instanceof Error ? `Invalid draft JSON: ${error.message}` : 'Invalid draft JSON.');
+    }
+  };
+
+  const handleAppendComposeDraftSignature = async () => {
+    setStatus('');
+    if (!composeMultisigDraft) {
+      setStatus('Initialize or import a multisig draft first.');
+      return;
+    }
+    const signer = composeDraftSignerDid.trim();
+    const signature = composeDraftSignerSignature.trim();
+    if (!signer || !signature) {
+      setStatus('Provide signer DID and signature to append a co-signature.');
+      return;
+    }
+    if (!composeMultisigDraft.policy.allowed_signers.includes(signer)) {
+      setStatus('Signer is not in the draft allowed_signers policy.');
+      return;
+    }
+    if (composeMultisigDraft.collected_signatures.some((entry) => entry.signer === signer)) {
+      setStatus('Signer already collected for this draft.');
+      return;
+    }
+    const updatedDraft: ComposeMultisigDraft = {
+      ...composeMultisigDraft,
+      collected_signatures: [
+        ...composeMultisigDraft.collected_signatures,
+        { signer, signature },
+      ],
+    };
+    const expectedHash = await sha256DigestHex(updatedDraft.canonical_payload);
+    if (expectedHash !== updatedDraft.canonical_payload_hash) {
+      setStatus('Draft mutation rejected: canonical payload hash mismatch.');
+      return;
+    }
+    setComposeMultisigDraft(updatedDraft);
+    setComposeDraftJson(JSON.stringify(updatedDraft, null, 2));
+    setComposeDraftSignerDid('');
+    setComposeDraftSignerSignature('');
+    setStatus('Signer appended to multisig draft.');
+  };
+
+  const handleFinalizeComposeMultisigDraft = () => {
+    setStatus('');
+    if (!composeMultisigDraft) {
+      setStatus('Initialize or import a multisig draft first.');
+      return;
+    }
+    if (composeMultisigDraft.collected_signatures.length < composeMultisigDraft.policy.threshold) {
+      setStatus('Threshold not satisfied. Collect more signatures before finalizing.');
+      return;
+    }
+    const finalizedEnvelope = {
+      signature_scope: composeMultisigDraft.policy.signature_scope,
+      payload: JSON.parse(composeMultisigDraft.canonical_payload) as unknown,
+      co_signatures: composeMultisigDraft.collected_signatures,
+      multisig_policy: composeMultisigDraft.policy,
+    };
+    setDraftPayload(JSON.stringify(finalizedEnvelope, null, 2));
+    setStatus('Multisig envelope finalized. Review payload below and submit with your standard flow.');
+  };
+
+  const handleResetComposeMultisigDraft = () => {
+    setComposeMultisigDraft(null);
+    setComposeDraftJson('');
+    setComposeDraftSignerDid('');
+    setComposeDraftSignerSignature('');
+    setStatus('Multisig draft cleared.');
   };
 
   const handleDecryptWithReaderKey = async () => {
@@ -1415,9 +1588,100 @@ export function App() {
                     value={composeMessage}
                     onChange={(event) => setComposeMessage(event.target.value)}
                     aria-label="Composed transaction payload"
+                    disabled={Boolean(composeMultisigDraft)}
                   />
+                  {composeMultisigDraft ? (
+                    <p className="meta-text">
+                      Multisig draft is active: canonical payload is locked until you clear/reset the draft.
+                    </p>
+                  ) : null}
                   <button className="primary" onClick={handleSignComposed}>Sign payload</button>
                   {composeSignature ? <code className="secret-box">{composeSignature}</code> : null}
+                </div>
+              </article>
+
+              <article className="request-card">
+                <h2>Multisigner compose draft</h2>
+                <p className="meta-text">
+                  Create/import <code>citizen.compose.multisig-draft.v1</code>, collect signer signatures, and finalize only when threshold is satisfied.
+                </p>
+                <div className="form-grid">
+                  <input
+                    value={composeAllowedSigners}
+                    onChange={(event) => setComposeAllowedSigners(event.target.value)}
+                    placeholder="allowed_signers (comma-separated DIDs)"
+                  />
+                  <div className="hero-actions">
+                    <button className="primary" onClick={() => void handleInitComposeMultisigDraft()}>
+                      Initialize draft
+                    </button>
+                    <button className="ghost" onClick={handleResetComposeMultisigDraft}>
+                      Clear draft
+                    </button>
+                  </div>
+                  <textarea
+                    rows={8}
+                    value={composeDraftJson}
+                    onChange={(event) => setComposeDraftJson(event.target.value)}
+                    aria-label="Compose multisig draft JSON"
+                    placeholder="Paste draft JSON to import or edit before import."
+                  />
+                  <div className="hero-actions">
+                    <button className="ghost" onClick={() => void handleImportComposeMultisigDraft()}>
+                      Import draft
+                    </button>
+                    <button
+                      className="ghost"
+                      onClick={async () => {
+                        await navigator.clipboard.writeText(composeDraftJson);
+                        setStatus('Multisig draft copied to clipboard for signer handoff.');
+                      }}
+                      disabled={!composeDraftJson}
+                    >
+                      Copy draft for handoff
+                    </button>
+                  </div>
+                  {composeMultisigDraft ? (
+                    <>
+                      <p className="meta-text">
+                        Threshold progress: {composeCollectedSignerCount} / {composeMultisigDraft.policy.threshold}
+                      </p>
+                      <progress
+                        max={composeMultisigDraft.policy.threshold}
+                        value={Math.min(composeCollectedSignerCount, composeMultisigDraft.policy.threshold)}
+                      />
+                      <ul>
+                        {composeMultisigDraft.collected_signatures.map((entry) => (
+                          <li key={entry.signer}>
+                            <strong>{entry.signer}</strong> — {mask(entry.signature)}
+                          </li>
+                        ))}
+                      </ul>
+                    </>
+                  ) : null}
+                  <input
+                    value={composeDraftSignerDid}
+                    onChange={(event) => setComposeDraftSignerDid(event.target.value)}
+                    placeholder="co-signer DID"
+                  />
+                  <textarea
+                    rows={3}
+                    value={composeDraftSignerSignature}
+                    onChange={(event) => setComposeDraftSignerSignature(event.target.value)}
+                    placeholder="signature over canonical_payload"
+                  />
+                  <div className="hero-actions">
+                    <button className="ghost" onClick={() => void handleAppendComposeDraftSignature()}>
+                      Append signature
+                    </button>
+                    <button
+                      className="primary"
+                      onClick={handleFinalizeComposeMultisigDraft}
+                      disabled={!composeThresholdSatisfied || !composeMultisigDraft}
+                    >
+                      Finalize multisig envelope (threshold required)
+                    </button>
+                  </div>
                 </div>
               </article>
 

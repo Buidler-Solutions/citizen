@@ -20,7 +20,8 @@ chrono = { workspace = true }
 uuid = { workspace = true }
 urlencoding = "2.1"
 blake3 = { workspace = true }
+ed25519-dalek = { workspace = true }
+hex = { workspace = true }
 
 [dev-dependencies]
 tower = "0.5"
-hex = { workspace = true }

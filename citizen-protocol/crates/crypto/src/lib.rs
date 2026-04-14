@@ -3,8 +3,8 @@ use ed25519_dalek::{
     Signature, Signer, SigningKey, VerifyingKey, PUBLIC_KEY_LENGTH, SECRET_KEY_LENGTH,
 };
 use parking_lot::RwLock;
-use serde::Serialize;
 use rand::rngs::OsRng;
+use serde::Serialize;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
@@ -135,8 +135,9 @@ pub fn canonical_json(value: &Value) -> String {
 }
 
 pub fn canonical_json_bytes<T: Serialize>(value: &T) -> Result<Vec<u8>> {
-    let normalized = serde_json::to_value(value)
-        .map_err(|err| ProtocolError::crypto(format!("failed to serialize canonical value: {err}")))?;
+    let normalized = serde_json::to_value(value).map_err(|err| {
+        ProtocolError::crypto(format!("failed to serialize canonical value: {err}"))
+    })?;
     Ok(canonical_json(&normalized).into_bytes())
 }
 
@@ -323,7 +324,10 @@ mod tests {
             let first = compute_entry_weight(&entry).expect("entry weight");
             let second = compute_entry_weight(&entry).expect("entry weight rerun");
             assert_eq!(first, second, "entry fixture rerun mismatch: {fixture_id}");
-            assert_eq!(first, expected_weight_bytes, "entry fixture expected mismatch: {fixture_id}");
+            assert_eq!(
+                first, expected_weight_bytes,
+                "entry fixture expected mismatch: {fixture_id}"
+            );
         }
 
         let block_cases = [
@@ -337,7 +341,10 @@ mod tests {
             let first = compute_block_weight(&block).expect("block weight");
             let second = compute_block_weight(&block).expect("block weight rerun");
             assert_eq!(first, second, "block fixture rerun mismatch: {fixture_id}");
-            assert_eq!(first, expected_weight_bytes, "block fixture expected mismatch: {fixture_id}");
+            assert_eq!(
+                first, expected_weight_bytes,
+                "block fixture expected mismatch: {fixture_id}"
+            );
         }
     }
 
