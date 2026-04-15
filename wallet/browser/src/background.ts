@@ -141,6 +141,9 @@ function getMnemonicWordCount(mnemonicPhrase?: string): SupportedMnemonicWordCou
     : null;
 }
 const MAX_ACTIVITY = 100;
+const MAX_ACTIVITY_PARAMS = 8;
+const MAX_ACTIVITY_PARAM_STRING_LENGTH = 512;
+const MAX_ACTIVITY_PARAM_DEPTH = 3;
 const MAX_DAPP_AUDIT_EVENTS = 1_000;
 const DAPP_DECIDED_REQUEST_RETENTION_MS = 24 * 60 * 60 * 1000;
 const DAPP_REQUEST_CONCURRENCY_MODE = 'single_active';
@@ -738,7 +741,7 @@ async function recordRequest(request: WalletRequest, account: string) {
     requestedAt: new Date().toISOString(),
     origin: request.origin ?? 'unknown',
     method: request.method,
-    params: request.params ?? [],
+    params: sanitizeActivityParams(request.params ?? []),
     account,
   };
   const existing = await chrome.storage.local.get(ACTIVITY_KEY);
@@ -748,6 +751,44 @@ async function recordRequest(request: WalletRequest, account: string) {
     [LAST_REQUEST_KEY]: nextEntry,
     [ACTIVITY_KEY]: trimmed,
   });
+}
+
+function truncateActivityString(value: string): string {
+  if (value.length <= MAX_ACTIVITY_PARAM_STRING_LENGTH) {
+    return value;
+  }
+  return `${value.slice(0, MAX_ACTIVITY_PARAM_STRING_LENGTH)}…[truncated ${value.length - MAX_ACTIVITY_PARAM_STRING_LENGTH} chars]`;
+}
+
+function sanitizeActivityParamValue(value: unknown, depth = 0): unknown {
+  if (depth > MAX_ACTIVITY_PARAM_DEPTH) {
+    return '[truncated_depth]';
+  }
+  if (typeof value === 'string') {
+    return truncateActivityString(value);
+  }
+  if (typeof value === 'number' || typeof value === 'boolean' || value === null) {
+    return value;
+  }
+  if (typeof value === 'bigint') {
+    return value.toString();
+  }
+  if (Array.isArray(value)) {
+    return value.slice(0, MAX_ACTIVITY_PARAMS).map((item) => sanitizeActivityParamValue(item, depth + 1));
+  }
+  if (typeof value === 'object') {
+    const out: Record<string, unknown> = {};
+    const entries = Object.entries(value as Record<string, unknown>).slice(0, MAX_ACTIVITY_PARAMS);
+    for (const [key, entryValue] of entries) {
+      out[key] = sanitizeActivityParamValue(entryValue, depth + 1);
+    }
+    return out;
+  }
+  return String(value);
+}
+
+function sanitizeActivityParams(params: unknown[]): unknown[] {
+  return params.slice(0, MAX_ACTIVITY_PARAMS).map((entry) => sanitizeActivityParamValue(entry));
 }
 
 function randomNonce(length = 16): string {
