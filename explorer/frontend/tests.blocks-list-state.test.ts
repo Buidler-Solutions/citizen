@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import type { BlockSummary } from './app/lib/blocks';
 import {
   dedupeByHeight,
+  isRestoredStateCompatible,
   mergeWithInitialBlocksState,
   mergePaginatedBlocks,
   sortByHeightDesc,
@@ -80,4 +81,26 @@ test('mergeWithInitialBlocksState preserves initial blocks while restoring cache
   );
   assert.equal(merged.nextCursor, '0');
   assert.equal(merged.hasMore, true);
+});
+
+test('isRestoredStateCompatible returns false when overlapping heights have different block identities', () => {
+  const initial = [makeBlock(5), makeBlock(4), makeBlock(3)];
+  const restored = [makeBlock(5), makeBlock(4), makeBlock(3)];
+  restored[0].header.entry_root = 'different-root';
+
+  assert.equal(isRestoredStateCompatible(initial, restored), false);
+});
+
+test('isRestoredStateCompatible returns false when cache only has heights above current chain tip', () => {
+  const initial = [makeBlock(2), makeBlock(1), makeBlock(0)];
+  const restored = [makeBlock(12), makeBlock(11), makeBlock(10)];
+
+  assert.equal(isRestoredStateCompatible(initial, restored), false);
+});
+
+test('isRestoredStateCompatible returns true for matching overlap despite additional cached pages', () => {
+  const initial = [makeBlock(8), makeBlock(7), makeBlock(6)];
+  const restored = [makeBlock(8), makeBlock(7), makeBlock(6), makeBlock(5), makeBlock(4)];
+
+  assert.equal(isRestoredStateCompatible(initial, restored), true);
 });

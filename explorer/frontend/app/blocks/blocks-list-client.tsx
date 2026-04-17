@@ -10,6 +10,7 @@ import {
 import { shortHash, toReadableDate } from '../lib/format';
 import { withBlockWeights, type WeightSource } from '../lib/indexer-metrics';
 import {
+  isRestoredStateCompatible,
   mergePaginatedBlocks,
   mergeWithInitialBlocksState,
   sortByHeightDesc,
@@ -61,6 +62,10 @@ export default function BlocksListClient({
 
       const stored = JSON.parse(raw) as StoredBlocksState;
       if (stored.cursor !== currentCursor || stored.items.length === 0) {
+        return;
+      }
+      if (!isRestoredStateCompatible(initialPayload.data.items, stored.items)) {
+        window.sessionStorage.removeItem(storageKey);
         return;
       }
 

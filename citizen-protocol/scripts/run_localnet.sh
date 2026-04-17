@@ -16,6 +16,9 @@ fi
 
 mkdir -p data/alpha data/beta data/gamma
 
+echo "[localnet] generating fresh shared QUIC CA/certs"
+scripts/generate_localnet_quic_certs.sh --fresh
+
 configs=(
   "config/localnet/validator-alpha.toml"
   "config/localnet/validator-beta.toml"

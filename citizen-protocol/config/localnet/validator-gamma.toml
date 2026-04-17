@@ -8,6 +8,11 @@ bind_addr = "127.0.0.1:9102"
 network_key_rotation_secs = 3600
 manifest_enforce = false
 
+[quic_tls]
+ca_cert_path = "config/localnet/certs/ca.der"
+cert_chain_path = "config/localnet/certs/validator-gamma.der"
+private_key_path = "config/localnet/certs/validator-gamma.key.der"
+
 [[namespaces]]
 descriptor.namespace = "identity.citizen"
 descriptor.version = 1

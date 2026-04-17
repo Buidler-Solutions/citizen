@@ -33,6 +33,8 @@ The explorer backend is optional and now supports both:
 - thin proxy/helper APIs for runtime lookups, and
 - an in-memory indexer worker that derives TPS + block/entry weight metrics from runtime blocks.
 
+If the connected runtime is reset to a lower block height than the backend has indexed (for example, local test chain reset to genesis), the backend automatically clears its persisted indexer snapshot and re-indexes from height `0`.
+
 When running, backend listens on `http://localhost:4444`.
 
 Backend environment variables:

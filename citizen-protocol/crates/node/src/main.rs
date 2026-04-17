@@ -15,7 +15,7 @@ use citizen_crypto::{verifying_key_to_string, KeyRegistry, ValidatorKeypair};
 use citizen_ledger::Ledger;
 use citizen_network::{
     AdmissionControl, ConsensusMessage, HandshakeIdentity, MockNetwork, Network, NetworkLatency,
-    QuicNetwork,
+    QuicNetwork, QuicTlsConfig,
 };
 use citizen_storage::RocksDbStorage;
 use citizen_types::{
@@ -121,6 +121,7 @@ async fn main() -> anyhow::Result<()> {
                 config.validator_id.clone(),
                 verifying_key_hex,
                 Some(keypair.signing_key()),
+                config.quic_tls_config(),
             )?))
         } else {
             Arc::new(NodeNetwork::Mock(MockNetwork::new(NetworkLatency {
@@ -188,6 +189,7 @@ async fn main() -> anyhow::Result<()> {
                     config.validator_id.clone(),
                     config.observer_public_key(),
                     None,
+                    config.quic_tls_config(),
                 )?));
                 Some(tokio::spawn(async move {
                     match network.subscribe().await {
@@ -312,6 +314,8 @@ struct NodeConfig {
     #[serde(default = "default_network_id")]
     network_id: String,
     #[serde(default)]
+    quic_tls: Option<QuicTlsPaths>,
+    #[serde(default)]
     manifest_path: Option<PathBuf>,
     #[serde(default = "default_manifest_enforce")]
     manifest_enforce: bool,
@@ -347,6 +351,13 @@ struct ApiOffchainMinioConfig {
     path_style: bool,
     #[serde(default = "default_minio_key_prefix")]
     key_prefix: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+struct QuicTlsPaths {
+    ca_cert_path: PathBuf,
+    cert_chain_path: PathBuf,
+    private_key_path: PathBuf,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -409,6 +420,14 @@ impl NodeConfig {
             startup_secret: self.startup_secret.clone(),
             expected_genesis_hash: self.expected_genesis_hash.clone(),
         }
+    }
+
+    fn quic_tls_config(&self) -> Option<QuicTlsConfig> {
+        self.quic_tls.as_ref().map(|paths| QuicTlsConfig {
+            cert_chain_path: paths.cert_chain_path.clone(),
+            private_key_path: paths.private_key_path.clone(),
+            ca_cert_path: paths.ca_cert_path.clone(),
+        })
     }
 
     fn handshake_identity(&self, context: &AdmissionContext) -> HandshakeIdentity {
@@ -588,6 +607,7 @@ impl Default for NodeConfig {
             peers: Vec::new(),
             network_key_rotation_secs: default_rotation_secs(),
             network_id: default_network_id(),
+            quic_tls: None,
             manifest_path: None,
             manifest_enforce: default_manifest_enforce(),
             startup_secret: None,
