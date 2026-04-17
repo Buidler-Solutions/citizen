@@ -31,8 +31,17 @@ use quinn::{ClientConfig, Endpoint, RecvStream, SendStream, ServerConfig};
 use rcgen::generate_simple_self_signed;
 use rustls::pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer};
 use rustls::RootCertStore;
+use std::fs;
+use std::path::PathBuf;
 
 pub type Result<T> = std::result::Result<T, ProtocolError>;
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct QuicTlsConfig {
+    pub cert_chain_path: PathBuf,
+    pub private_key_path: PathBuf,
+    pub ca_cert_path: PathBuf,
+}
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct PeerHandshake {
@@ -694,18 +703,28 @@ impl QuicNetwork {
         local_validator_id: ValidatorId,
         local_public_key: String,
         local_signing_key: Option<Arc<SigningKey>>,
+        tls_config: Option<QuicTlsConfig>,
     ) -> Result<Self> {
-        let cert = generate_simple_self_signed(["citizen.local".into()])
-            .map_err(ProtocolError::storage)?;
-        let priv_key_bytes = cert.signing_key.serialize_der();
-        let priv_key = PrivateKeyDer::Pkcs8(PrivatePkcs8KeyDer::from(priv_key_bytes));
-        let cert_der = CertificateDer::from(cert.cert);
-        let server_config = ServerConfig::with_single_cert(vec![cert_der.clone()], priv_key)
+        let (certificate_chain, private_key, root_certs) = if let Some(config) = tls_config {
+            let certificate_chain = vec![load_certificate(&config.cert_chain_path)?];
+            let private_key = load_private_key(&config.private_key_path)?;
+            let root_certs = vec![load_certificate(&config.ca_cert_path)?];
+            (certificate_chain, private_key, root_certs)
+        } else {
+            let cert = generate_simple_self_signed(["citizen.local".into()])
+                .map_err(ProtocolError::storage)?;
+            let priv_key_bytes = cert.signing_key.serialize_der();
+            let private_key = PrivateKeyDer::Pkcs8(PrivatePkcs8KeyDer::from(priv_key_bytes));
+            let cert_der = CertificateDer::from(cert.cert);
+            (vec![cert_der.clone()], private_key, vec![cert_der])
+        };
+
+        let server_config = ServerConfig::with_single_cert(certificate_chain, private_key)
             .map_err(ProtocolError::storage)?;
         let endpoint =
             Endpoint::server(server_config, bind_addr).map_err(ProtocolError::storage)?;
         let mut roots = RootCertStore::empty();
-        let _ = roots.add_parsable_certificates([cert_der]);
+        let _ = roots.add_parsable_certificates(root_certs);
         let client_cfg =
             ClientConfig::with_root_certificates(roots.into()).map_err(ProtocolError::storage)?;
 
@@ -800,12 +819,22 @@ impl QuicNetwork {
         drop(peers);
         let conn = self
             .endpoint
-            .connect_with(self.client_cfg.clone(), addr, "citizen")
+            .connect_with(self.client_cfg.clone(), addr, "citizen.local")
             .map_err(ProtocolError::storage)?
             .await
             .map_err(ProtocolError::storage)?;
         conn.open_bi().await.map_err(ProtocolError::storage)
     }
+}
+
+fn load_certificate(path: &PathBuf) -> Result<CertificateDer<'static>> {
+    let bytes = fs::read(path).map_err(ProtocolError::storage)?;
+    Ok(CertificateDer::from(bytes))
+}
+
+fn load_private_key(path: &PathBuf) -> Result<PrivateKeyDer<'static>> {
+    let bytes = fs::read(path).map_err(ProtocolError::storage)?;
+    Ok(PrivateKeyDer::Pkcs8(PrivatePkcs8KeyDer::from(bytes)))
 }
 
 #[async_trait]

@@ -521,6 +521,16 @@ export class IndexerMetricsService {
     }
 
     const latest = await this.findLatestHeight();
+    if (latest < this.cursor.last_indexed_height) {
+      this.logger.warn(
+        `Runtime height rewound from indexed height ${this.cursor.last_indexed_height} to ${latest}; resetting indexer state`,
+      );
+      this.resetStateForRuntimeRewind();
+      await this.persistSnapshot();
+      if (latest < 0) {
+        return;
+      }
+    }
     if (latest < 0 || latest <= this.cursor.last_indexed_height) {
       return;
     }
@@ -550,6 +560,33 @@ export class IndexerMetricsService {
       this.recordLatency(this.blockProcessingLatenciesMs, Date.now() - blockStartMs);
       await this.persistSnapshot();
     }
+  }
+
+  private resetStateForRuntimeRewind(): void {
+    this.cursor = {
+      last_indexed_height: -1,
+      last_indexed_block_hash: null,
+      degraded: false,
+      last_error: null,
+      retry_count: 0,
+      updated_at: null,
+    };
+    this.indexedBlocks.clear();
+    this.indexedEntries.clear();
+    this.metricWindows.clear();
+    (Object.keys(WINDOW_SECONDS) as MetricWindowName[]).forEach((windowName) => {
+      this.metricWindows.set(windowName, []);
+    });
+    this.poisonBlocks.length = 0;
+    this.latestCommittedAt = null;
+    this.lateEntriesAccepted = 0;
+    this.failedBlockCount = 0;
+    this.retryCountTotal = 0;
+    this.fetchAttemptTotal = 0;
+    this.successfulBlockCount = 0;
+    this.consecutiveLagPolls = 0;
+    this.blockProcessingLatenciesMs.length = 0;
+    this.aggregationLatenciesMs.length = 0;
   }
 
   private verifyContinuity(block: RuntimeBlock): string | null {
