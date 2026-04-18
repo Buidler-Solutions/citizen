@@ -21,6 +21,7 @@ interface InterestSubmission {
   country: string;
   role?: string;
   missionNeed: string;
+  walletPayloadHash?: string | null;
   createdAt: string;
 }
 
@@ -311,6 +312,7 @@ export function AdminApplicantsPage() {
                     <th className="px-5 py-3">Contact</th>
                     <th className="px-5 py-3">Role</th>
                     <th className="px-5 py-3">Location</th>
+                    <th className="px-5 py-3">Commitment receipt</th>
                     <th className="px-5 py-3">Submitted</th>
                     <th className="px-5 py-3 text-right">Actions</th>
                   </tr>
@@ -346,6 +348,15 @@ export function AdminApplicantsPage() {
                           <Badge variant="info">{submission.country}</Badge>
                         </td>
                         <td className="px-5 py-4">
+                          {submission.walletPayloadHash ? (
+                            <code className="rounded bg-slate-100 px-2 py-1 text-xs text-slate-700">
+                              {submission.walletPayloadHash}
+                            </code>
+                          ) : (
+                            <span className="text-sm text-slate-400">Not provided</span>
+                          )}
+                        </td>
+                        <td className="px-5 py-4">
                           <span className="text-sm font-semibold text-slate-600">
                             {new Date(submission.createdAt).toLocaleDateString()}
                           </span>
@@ -366,7 +377,7 @@ export function AdminApplicantsPage() {
                   })}
                   {filteredSubmissions.length === 0 && (
                     <tr>
-                      <td colSpan={6} className="px-5 py-12">
+                      <td colSpan={7} className="px-5 py-12">
                         <div className="flex flex-col items-center gap-3">
                           <div className="rounded-full bg-slate-100 p-4">
                             <svg className="h-8 w-8 text-slate-400" fill="none" viewBox="0 0 24 24">
