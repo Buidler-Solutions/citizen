@@ -1009,6 +1009,32 @@ export function InterestForm() {
             ) : null}
           </div>
 
+          {currentStep?.name === 'missionNeed' ? (
+            <div data-stage-item className="mb-2 rounded-2xl border border-cyan-300/30 bg-gradient-to-br from-cyan-500/10 via-slate-900/60 to-blue-950/80 p-4 shadow-[0_10px_40px_rgba(0,0,0,0.3)] backdrop-blur-sm">
+              <p className="m-0 mb-2 text-sm font-semibold tracking-wide text-cyan-100">
+                Add supporting attachment ({settings.attachmentMode})
+              </p>
+              <p className="m-0 mb-3 text-xs text-cyan-200/90">
+                Upload a document to support your onboarding mission details.
+              </p>
+              <input
+                type="file"
+                className="mb-2 block w-full cursor-pointer rounded-xl border border-cyan-200/30 bg-slate-950/70 p-2.5 text-xs text-cyan-100 file:mr-3 file:cursor-pointer file:rounded-lg file:border-0 file:bg-cyan-400/20 file:px-3 file:py-1.5 file:text-cyan-100 hover:border-cyan-200/50"
+                onChange={onAttachmentChange}
+                required={settings.attachmentMode === 'required'}
+              />
+              {attachment ? (
+                <p className="mb-0 mt-2 rounded-lg border border-cyan-300/25 bg-cyan-500/10 px-3 py-2 text-xs text-cyan-100">
+                  Attached: {attachment.name} · {attachment.mimeType}
+                </p>
+              ) : (
+                <p className="m-0 text-xs text-cyan-200/80">
+                  Max size: {(MAX_ONBOARDING_ATTACHMENT_BYTES / (1024 * 1024)).toFixed(0)} MB.
+                </p>
+              )}
+            </div>
+          ) : null}
+
           <div data-stage-item className="grid gap-3 [grid-template-columns:1fr_1fr] max-[680px]:grid-cols-1">
             <button className={primaryButtonClass} type="button" onClick={previousStep} disabled={stepIndex === 0 || loading}>Back</button>
             <button className={primaryButtonClass} type="submit" disabled={loading}>
@@ -1021,18 +1047,6 @@ export function InterestForm() {
           </div>
           {stepIndex === totalSteps - 1 ? (
             <div data-stage-item className="rounded-xl border border-cyan-300/40 bg-cyan-500/10 p-4 text-sm text-cyan-100">
-              <p className="m-0 mb-2 font-semibold">Attachment option ({settings.attachmentMode})</p>
-              <input
-                type="file"
-                className="mb-2 block w-full cursor-pointer rounded-lg border border-cyan-200/30 bg-slate-900/40 p-2 text-xs text-cyan-100"
-                onChange={onAttachmentChange}
-                required={settings.attachmentMode === 'required'}
-              />
-              {attachment ? (
-                <p className="mb-2 mt-0 text-xs text-cyan-200">
-                  Attached: {attachment.name} · {attachment.mimeType} · {attachment.sha256}
-                </p>
-              ) : null}
               <p className="m-0 font-semibold">Submission consent</p>
               <p className="mb-2 mt-1">
                 {signedSubmissionContract?.consent.backendPersistence
