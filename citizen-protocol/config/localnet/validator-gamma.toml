@@ -120,6 +120,16 @@ validator_id = "validator-beta"
 public_key = "dcb38143815f465d8d8d262812260ade8e721b3fe15da833ad477dd711ebc10f"
 anchors = ["org:beta"]
 
+[[validators]]
+validator_id = "validator-delta"
+public_key = "e667f082fd93d9ca735d4e5eaf993dd9a82f5b7be30e64e54024281c0576a2ec"
+anchors = ["org:delta"]
+
+[[validators]]
+validator_id = "validator-epsilon"
+public_key = "cc5fc59cd382829c2c1379a3898371cb31cf93b290f613c5361fe6f693ca43b9"
+anchors = ["org:epsilon"]
+
 [[peers]]
 validator_id = "validator-alpha"
 address = "127.0.0.1:9100"
@@ -127,3 +137,11 @@ address = "127.0.0.1:9100"
 [[peers]]
 validator_id = "validator-beta"
 address = "127.0.0.1:9101"
+
+[[peers]]
+validator_id = "validator-delta"
+address = "127.0.0.1:9103"
+
+[[peers]]
+validator_id = "validator-epsilon"
+address = "127.0.0.1:9104"

@@ -14,7 +14,7 @@ if ! command -v curl >/dev/null 2>&1; then
   exit 1
 fi
 
-mkdir -p data/alpha data/beta data/gamma
+mkdir -p data/alpha data/beta data/gamma data/delta data/epsilon
 
 echo "[localnet] generating fresh shared QUIC CA/certs"
 scripts/generate_localnet_quic_certs.sh --fresh
@@ -23,6 +23,8 @@ configs=(
   "config/localnet/validator-alpha.toml"
   "config/localnet/validator-beta.toml"
   "config/localnet/validator-gamma.toml"
+  "config/localnet/validator-delta.toml"
+  "config/localnet/validator-epsilon.toml"
 )
 
 api_ports=()

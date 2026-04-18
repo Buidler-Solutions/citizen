@@ -148,7 +148,7 @@ cargo test -p citizen-wallet privacy_mode_hybrid_ -- --nocapture
 
    The node exposes a read-only HTTP API on `http://127.0.0.1:8080` (configurable).
 
-4. To stand up a three-validator QUIC localnet that mirrors production settings,
+4. To stand up a five-validator QUIC localnet that mirrors production settings (3 active + 2 standby by default),
    use the deterministic configs under `config/localnet/` and the helper
    launcher:
 
@@ -158,6 +158,21 @@ cargo test -p citizen-wallet privacy_mode_hybrid_ -- --nocapture
 
    See `docs/LOCALNET_RUNBOOK.md` for details on swapping in your own keys and
    endpoints for a real deployment.
+
+   To verify all five validators are healthy, converged, and correctly split into
+   active-voting vs standby-syncing behavior, run:
+
+   ```bash
+   AUTHOR_KEY_ID=<wallet_key_id> scripts/check_localnet_replication_finality.sh
+   ```
+
+   The replication/finality checker now targets `forms.commitment` by default
+   (the wallet browser extension priority namespace) and auto-bootstraps/reuses
+   a localnet `builder.credits` grant for write-gated profiles.
+   For permissive local profiles that do not enforce grant linkage, you can run
+   with `DISABLE_CREDIT_GRANT=true`.
+   You can override the submit route via `API_SUBMIT_ENDPOINT` (default:
+   `/api/v1/entries/submit`; checker supports `/api/v1/envelopes/submit` too).
 
    For running the validator localnet together with the demo blog, browser
    wallet extension, and blockchain explorer (backend + frontend), follow

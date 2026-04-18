@@ -1,6 +1,6 @@
 # Citizen Localnet to Production Hand-off
 
-This runbook packages the minimum artifacts needed to stand up a three-validator
+This runbook packages the minimum artifacts needed to stand up a five-validator
 Citizen network on a single host using the QUIC transport (no mock network),
 mirroring the production topology. It is meant to be reproducible so operators
 can swap in their own keys, ports, and namespaces when moving to real
@@ -9,11 +9,11 @@ infrastructure.
 ## What's Included
 
 - Deterministic validator configs under `config/localnet/` with pre-seeded
-  signing keys and admission allowlists for the other two peers.
+  signing keys and admission allowlists for the other four peers.
 - Namespace rulesets for `identity.citizen`, `registry.land`,
   `audit.procurement`, and `governance.vote` with signature checks and
   double-spend prevention for the land registry.
-- A launcher script (`scripts/run_localnet.sh`) that starts all three nodes with
+- A launcher script (`scripts/run_localnet.sh`) that starts all five nodes with
   QUIC enabled, persists to separate RocksDB folders, and tails logs to the
   `data/` directory.
 
@@ -26,15 +26,46 @@ infrastructure.
    scripts/run_localnet.sh
    ```
 
-   - Ports: QUIC listeners on `127.0.0.1:9100-9102`, HTTP APIs on
-     `127.0.0.1:8081-8083`.
+   - Ports: QUIC listeners on `127.0.0.1:9100-9104`, HTTP APIs on
+     `127.0.0.1:8081-8085`.
    - Logs: `data/validator-alpha.log`, `data/validator-beta.log`,
-     `data/validator-gamma.log`.
-   - Data: RocksDB state under `data/alpha|beta|gamma/`.
+     `data/validator-gamma.log`,
+     `data/validator-delta.log`, `data/validator-epsilon.log`.
+   - Data: RocksDB state under `data/alpha|beta|gamma|delta|epsilon/`.
 
 3. In another shell, issue API reads/writes against any node (e.g. using `curl`
    against `http://127.0.0.1:8081`).
 4. Press `Ctrl+C` in the launcher to stop all nodes cleanly.
+
+
+## Confirm all five validators are working (and roles are correct)
+
+With localnet running, execute:
+
+```bash
+AUTHOR_KEY_ID=<wallet_key_id> scripts/check_localnet_replication_finality.sh
+```
+
+The script verifies:
+
+1. all five API endpoints are healthy (`8081..8085`),
+2. a valid `builder.credits` grant is available (auto-bootstrapped with localnet 3-of-5 sample proofs when missing),
+3. real signed `forms.commitment` entries finalize with deterministic receipts,
+4. receipt status + block height converge on all five validators,
+5. submitted objects replicate to all five validators, and
+6. commit proof participants (active voters) vs standby syncing validators are reported.
+
+This is the safest operator-facing check for “5 validators up + doing their respective tasks” before deeper chaos/failover drills.
+
+If you previously saw `400 Bad Request` on `/api/v1/envelopes/submit`, ensure your payload includes `forms.commitment` required fields (`data_hash`, `encrypted_form_url`) plus `credit_grant_id`, `sponsor_builder_id`, and `author_public_key`, with `author = forms.commitment`. The checker now auto-bootstraps (or reuses) a localnet builder grant unless `AUTO_BOOTSTRAP_CREDIT_GRANT=false`.
+
+If your local policy differs from the sample 3-of-5 approver set, pass `BUILDER_CREDIT_POLICY_JSON` to override proof validation policy used by the checker bootstrap step.
+
+If you explicitly want to bypass grant bootstrap/linkage in permissive local profiles, run with `DISABLE_CREDIT_GRANT=true`.
+
+The checker now cross-checks `AUTHOR_PUBLIC_KEY_HEX` against the wallet record for `AUTHOR_KEY_ID` and prefers the wallet-derived key if they differ.
+
+The checker submits through `API_SUBMIT_ENDPOINT` (default `/api/v1/entries/submit`) and now auto-shapes request payloads for either `/api/v1/entries/submit` or `/api/v1/envelopes/submit`.
 
 ## Adapting to Production
 
@@ -89,6 +120,16 @@ infrastructure.
 - `config/localnet/validator-gamma.toml` – uses signing key
   `3f3e...23222120`, binds `127.0.0.1:9102`, API `8083`.
 
-All three share identical namespace rulesets and admit one another by verifying
+- `config/localnet/validator-delta.toml` – uses signing key
+  `e48c...6c6a69`, binds `127.0.0.1:9103`, API `8084`.
+- `config/localnet/validator-epsilon.toml` – uses signing key
+  `ed71...ae9bc7`, binds `127.0.0.1:9104`, API `8085`.
+
+The localnet bootstrap snapshot intentionally models a 200% validator list: the
+first half (rounded up) starts as `Active` and the remainder starts as `Standby`.
+Standby validators sync blocks but do not prevote until liveness rotation
+promotes them.
+
+All five share identical namespace rulesets and admit one another by verifying
 key. Replace these values with your institution keys and endpoint coordinates to
 create a production-ready manifest.

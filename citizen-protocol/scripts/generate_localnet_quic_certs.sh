@@ -48,7 +48,7 @@ DNS.2 = citizen
 IP.1 = 127.0.0.1
 EOF
 
-for validator in validator-alpha validator-beta validator-gamma; do
+for validator in validator-alpha validator-beta validator-gamma validator-delta validator-epsilon; do
   openssl genpkey -algorithm Ed25519 -out "${CERT_DIR}/${validator}.key" >/dev/null 2>&1
   openssl pkey \
     -in "${CERT_DIR}/${validator}.key" \
