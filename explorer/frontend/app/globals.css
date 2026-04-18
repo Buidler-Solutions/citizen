@@ -719,32 +719,59 @@ h1 {
 .chart-frame {
   margin-top: 12px;
   height: 120px;
+  border-radius: 10px;
+  padding: 8px;
+  border: 1px solid color-mix(in oklab, var(--line) 80%, transparent);
+  background:
+    linear-gradient(to top, color-mix(in oklab, var(--accent) 8%, transparent), transparent 65%),
+    repeating-linear-gradient(
+      to top,
+      color-mix(in oklab, var(--line) 80%, transparent) 0,
+      color-mix(in oklab, var(--line) 80%, transparent) 1px,
+      transparent 1px,
+      transparent 24px
+    );
+}
+
+.chart-frame.bars {
   display: flex;
   align-items: end;
   gap: 3px;
 }
 
-.chart-frame > span {
+.chart-frame.bars > span {
   flex: 1 1 0;
   border-radius: 2px 2px 0 0;
   background: var(--accent);
 }
 
 .chart-frame.line {
-  align-items: end;
-  background:
-    linear-gradient(
-      to top,
-      color-mix(in oklab, var(--accent) 20%, transparent),
-      transparent
-    ),
-    linear-gradient(var(--line), var(--line));
+  position: relative;
+  overflow: hidden;
 }
 
-.chart-frame.line > span {
-  background: transparent;
-  border-top: 2px solid var(--accent);
-  border-radius: 0;
+.chart-svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.chart-line {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2.25;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.chart-area {
+  opacity: 1;
+}
+
+.chart-point {
+  fill: var(--panel);
+  stroke: var(--accent);
+  stroke-width: 1;
 }
 
 .list-card ul {

@@ -1305,7 +1305,7 @@ export function App() {
           {protocolKeyMaterial ? (
             <div className="top-address-row">
               <p className="top-address" title={protocolKeyMaterial.signer.did}>
-                Signer (Ed25519): {mask(protocolKeyMaterial.signer.did)}
+                Signer: {mask(protocolKeyMaterial.signer.did)}
               </p>
               <button
                 className="copy-address-button"
@@ -1320,7 +1320,7 @@ export function App() {
           {protocolKeyMaterial ? (
             <div className="top-address-row">
               <p className="top-address" title={protocolKeyMaterial.reader.readerDid}>
-                Reader (X25519): {mask(protocolKeyMaterial.reader.readerDid)}
+                Reader: {mask(protocolKeyMaterial.reader.readerDid)}
               </p>
               <button
                 className="copy-address-button"

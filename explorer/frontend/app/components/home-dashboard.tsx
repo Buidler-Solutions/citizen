@@ -21,6 +21,21 @@ function normalizePoints(points: number[]): number[] {
   return points.map((point) => Math.max(8, Math.round((point / max) * 100)));
 }
 
+function lineCoordinates(points: number[]): Array<{ x: number; y: number }> {
+  if (points.length === 0) {
+    return [];
+  }
+
+  if (points.length === 1) {
+    return [{ x: 50, y: 100 - points[0] }];
+  }
+
+  return points.map((point, index) => ({
+    x: (index / (points.length - 1)) * 100,
+    y: 100 - point,
+  }));
+}
+
 export function HomeDashboard({ topMetrics, charts, transactions, blocks, sourceLabel }: HomeDashboardProps) {
   const chartData = useMemo(() => charts.map((chart) => ({ ...chart, points: normalizePoints(chart.points) })), [charts]);
 
@@ -57,11 +72,49 @@ export function HomeDashboard({ topMetrics, charts, transactions, blocks, source
             {chart.primary ? <p className="panel-primary">{chart.primary}</p> : null}
             {chart.secondary && <p className="panel-secondary">{chart.secondary}</p>}
             <p className="panel-date">{chart.dateLabel}</p>
-            <div className={`chart-frame ${chart.mode === 'line' ? 'line' : 'bars'}`}>
-              {chart.points.map((value, idx) => (
-                <span key={`${chart.title}-${idx}`} style={{ height: `${value}%` }} />
-              ))}
-            </div>
+            {chart.mode === 'line' ? (
+              <div className="chart-frame line">
+                {(() => {
+                  const coords = lineCoordinates(chart.points);
+                  if (coords.length === 0) {
+                    return null;
+                  }
+
+                  const linePath = coords
+                    .map((coord, idx) => `${idx === 0 ? 'M' : 'L'} ${coord.x} ${coord.y}`)
+                    .join(' ');
+                  const areaPath = `M ${coords[0].x} 100 ${coords
+                    .map((coord) => `L ${coord.x} ${coord.y}`)
+                    .join(' ')} L ${coords[coords.length - 1].x} 100 Z`;
+                  const gradientId = `chart-gradient-${chart.title
+                    .toLowerCase()
+                    .replace(/[^a-z0-9]+/g, '-')
+                    .replace(/(^-|-$)/g, '')}`;
+
+                  return (
+                    <svg className="chart-svg" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+                      <defs>
+                        <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="var(--accent)" stopOpacity="0.35" />
+                          <stop offset="100%" stopColor="var(--accent)" stopOpacity="0.03" />
+                        </linearGradient>
+                      </defs>
+                      <path d={areaPath} fill={`url(#${gradientId})`} className="chart-area" />
+                      <path d={linePath} className="chart-line" />
+                      {coords.map((coord, idx) => (
+                        <circle key={`${chart.title}-pt-${idx}`} cx={coord.x} cy={coord.y} r="1.7" className="chart-point" />
+                      ))}
+                    </svg>
+                  );
+                })()}
+              </div>
+            ) : (
+              <div className="chart-frame bars">
+                {chart.points.map((value, idx) => (
+                  <span key={`${chart.title}-${idx}`} style={{ height: `${value}%` }} />
+                ))}
+              </div>
+            )}
           </article>
         ))}
       </section>

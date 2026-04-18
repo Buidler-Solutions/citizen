@@ -84,6 +84,52 @@ function formatBytes(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(2)} MiB`;
 }
 
+function buildComparisonSeries(values: number[]): number[] {
+  if (values.length === 0) {
+    return [];
+  }
+
+  return values.map((current, index) => {
+    if (index === 0) {
+      return 100;
+    }
+
+    const previous = values[index - 1];
+    if (!Number.isFinite(previous) || previous <= 0) {
+      return 100;
+    }
+
+    return Math.max(1, Math.round((current / previous) * 100));
+  });
+}
+
+function formatEntryComparison(currentWeight: number, previousWeight: number | undefined): string {
+  const prev = previousWeight ?? 0;
+  if (!Number.isFinite(prev) || prev <= 0) {
+    return 'No previous entry to compare';
+  }
+
+  const delta = ((currentWeight - prev) / prev) * 100;
+  const sign = delta >= 0 ? '+' : '';
+  return `vs previous entry: ${sign}${delta.toFixed(1)}%`;
+}
+
+function formatSeriesComparison(
+  currentValue: number,
+  previousValue: number | undefined,
+  emptyLabel: string,
+  prefixLabel: string,
+): string {
+  const prev = previousValue ?? 0;
+  if (!Number.isFinite(prev) || prev <= 0) {
+    return emptyLabel;
+  }
+
+  const delta = ((currentValue - prev) / prev) * 100;
+  const sign = delta >= 0 ? '+' : '';
+  return `${prefixLabel}: ${sign}${delta.toFixed(1)}%`;
+}
+
 function compactDate(epochSeconds: number): string {
   return new Date(epochSeconds * 1000).toLocaleString('en-US', {
     month: 'short',
@@ -131,8 +177,6 @@ export default async function HomePage() {
   if (backendMetrics) {
     const { blocks, entries, tps, summary } = backendMetrics;
     const uniqueAuthors = new Set(entries.map((entry) => entry.signer).filter(Boolean));
-    const totalBlockBytes = blocks.reduce((sum, block) => sum + block.block_weight_bytes, 0);
-    const avgBlockWeight = blocks.length > 0 ? Math.round(totalBlockBytes / blocks.length) : 0;
     const latestTps = tps[tps.length - 1]?.tps ?? 0;
 
     const topMetrics = [
@@ -143,28 +187,45 @@ export default async function HomePage() {
     ];
 
     const charts = [
-      {
-        title: 'Entry Weight (indexer API)',
-        primary: `${entries.length.toLocaleString('en-US')} indexed`,
-        secondary: `Total ${(entries.reduce((sum, entry) => sum + entry.entry_weight_bytes, 0) / 1024).toFixed(2)} KiB`,
-        dateLabel: new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: '2-digit' }),
-        points: entries.slice(0, 10).map((entry) => entry.entry_weight_bytes).reverse(),
-        mode: 'bars' as const,
-      },
+      (() => {
+        const currentEntryWindow = entries.slice(0, 10);
+        const currentWeight = currentEntryWindow[0]?.entry_weight_bytes ?? 0;
+        const previousWeight = currentEntryWindow[1]?.entry_weight_bytes;
+
+        return {
+          title: 'Entry Weight (indexer API)',
+          primary: `${formatBytes(currentWeight)}`,
+          secondary: formatEntryComparison(currentWeight, previousWeight),
+          dateLabel: new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: '2-digit' }),
+          points: buildComparisonSeries(currentEntryWindow.map((entry) => entry.entry_weight_bytes).reverse()),
+          mode: 'line' as const,
+        };
+      })(),
       {
         title: 'TPS (60s, indexer API)',
-        primary: latestTps.toFixed(3),
+        primary: `${latestTps.toFixed(3)}`,
+        secondary: formatSeriesComparison(
+          latestTps,
+          tps[tps.length - 2]?.tps,
+          'No previous TPS sample to compare',
+          'vs previous TPS sample',
+        ),
         dateLabel: new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: '2-digit' }),
-        points: tps.slice(-10).map((point) => point.tps),
+        points: buildComparisonSeries(tps.slice(-10).map((point) => point.tps)),
         mode: 'line' as const,
       },
       {
         title: 'Block Weight (indexer API)',
-        primary: formatBytes(avgBlockWeight),
-        secondary: `${blocks.length} block sample avg`,
+        primary: `${formatBytes(blocks[0]?.block_weight_bytes ?? 0)}`,
+        secondary: formatSeriesComparison(
+          blocks[0]?.block_weight_bytes ?? 0,
+          blocks[1]?.block_weight_bytes,
+          'No previous block to compare',
+          'vs previous block',
+        ),
         dateLabel: new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: '2-digit' }),
-        points: blocks.slice(0, 10).map((item) => item.block_weight_bytes).reverse(),
-        mode: 'bars' as const,
+        points: buildComparisonSeries(blocks.slice(0, 10).map((item) => item.block_weight_bytes).reverse()),
+        mode: 'line' as const,
       },
     ];
 
@@ -209,11 +270,6 @@ export default async function HomePage() {
   const localMetrics = deriveLocalIndexerMetrics(runtimeBlocks, 60);
 
   const uniqueAuthors = new Set(localMetrics.indexedEntries.map((entry) => entry.author).filter(Boolean));
-  const totalBlockBytes = localMetrics.indexedBlocks.reduce((sum, block) => sum + block.blockWeightBytes, 0);
-  const avgBlockWeight =
-    localMetrics.indexedBlocks.length > 0
-      ? Math.round(totalBlockBytes / localMetrics.indexedBlocks.length)
-      : 0;
   const latestTps = localMetrics.tpsSeries[localMetrics.tpsSeries.length - 1]?.tps ?? 0;
 
   const topMetrics = [
@@ -223,32 +279,45 @@ export default async function HomePage() {
     { label: 'Distinct Authors', value: `${uniqueAuthors.size.toLocaleString('en-US')}`, icon: '◎' },
   ];
 
-  const txBars = localMetrics.indexedEntries.slice(0, 10).map((entry) => entry.weightBytes).reverse();
+  const currentEntryWindow = localMetrics.indexedEntries.slice(0, 10);
+  const currentWeight = currentEntryWindow[0]?.weightBytes ?? 0;
+  const previousWeight = currentEntryWindow[1]?.weightBytes;
   const tpsLine = localMetrics.tpsSeries.slice(-10).map((point) => point.tps);
 
   const charts = [
     {
-      title: 'Entry Weight (local indexer)',
-      primary: `${localMetrics.indexedEntries.length.toLocaleString('en-US')} indexed`,
-      secondary: `Total ${(localMetrics.indexedEntries.reduce((sum, entry) => sum + entry.weightBytes, 0) / 1024).toFixed(2)} KiB`,
+      title: 'Entry Weight Comparison (local indexer)',
+      primary: `Current weight: ${formatBytes(currentWeight)}`,
+      secondary: formatEntryComparison(currentWeight, previousWeight),
       dateLabel: new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: '2-digit' }),
-      points: txBars,
-      mode: 'bars' as const,
-    },
-    {
-      title: 'TPS (60s, local windows)',
-      primary: latestTps.toFixed(3),
-      dateLabel: new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: '2-digit' }),
-      points: tpsLine,
+      points: buildComparisonSeries(currentEntryWindow.map((entry) => entry.weightBytes).reverse()),
       mode: 'line' as const,
     },
     {
-      title: 'Block Weight (local indexer)',
-      primary: formatBytes(avgBlockWeight),
-      secondary: `${localMetrics.indexedBlocks.length} block sample avg`,
+      title: 'TPS (60s, local windows)',
+      primary: `Current TPS: ${latestTps.toFixed(3)}`,
+      secondary: formatSeriesComparison(
+        latestTps,
+        localMetrics.tpsSeries[localMetrics.tpsSeries.length - 2]?.tps,
+        'No previous TPS sample to compare',
+        'vs previous TPS sample',
+      ),
       dateLabel: new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: '2-digit' }),
-      points: localMetrics.indexedBlocks.slice(0, 10).map((item) => item.blockWeightBytes).reverse(),
-      mode: 'bars' as const,
+      points: buildComparisonSeries(tpsLine),
+      mode: 'line' as const,
+    },
+    {
+      title: 'Block Weight Comparison (local indexer)',
+      primary: `Current weight: ${formatBytes(localMetrics.indexedBlocks[0]?.blockWeightBytes ?? 0)}`,
+      secondary: formatSeriesComparison(
+        localMetrics.indexedBlocks[0]?.blockWeightBytes ?? 0,
+        localMetrics.indexedBlocks[1]?.blockWeightBytes,
+        'No previous block to compare',
+        'vs previous block',
+      ),
+      dateLabel: new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: '2-digit' }),
+      points: buildComparisonSeries(localMetrics.indexedBlocks.slice(0, 10).map((item) => item.blockWeightBytes).reverse()),
+      mode: 'line' as const,
     },
   ];
 
