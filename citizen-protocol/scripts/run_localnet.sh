@@ -91,4 +91,5 @@ done
 
 echo "[localnet] all nodes healthy. Press Ctrl+C to stop."
 echo "[localnet] try: curl http://127.0.0.1:${api_ports[0]}/health"
+echo "[localnet] note: /health is process liveness only; run scripts/check_localnet_replication_finality.sh to validate QUIC replication/finality"
 wait

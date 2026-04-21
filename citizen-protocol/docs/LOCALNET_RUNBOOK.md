@@ -37,6 +37,10 @@ infrastructure.
    against `http://127.0.0.1:8081`).
 4. Press `Ctrl+C` in the launcher to stop all nodes cleanly.
 
+> `scripts/run_localnet.sh` only verifies that each node API process responds on
+> `/health`. It does **not** prove QUIC peering, block replication, or consensus
+> participation.
+
 
 ## Confirm all five validators are working (and roles are correct)
 
@@ -56,6 +60,35 @@ The script verifies:
 6. commit proof participants (active voters) vs standby syncing validators are reported.
 
 This is the safest operator-facing check for “5 validators up + doing their respective tasks” before deeper chaos/failover drills.
+
+## Troubleshooting: "health is ok but only alpha appears to work"
+
+If `curl http://127.0.0.1:808{1..5}/health` is green but writes/finality only
+show up on one node:
+
+1. **Treat QUIC as required for node-to-node sync in localnet.**
+   - In this topology, validator replication/consensus traffic is on QUIC
+     (`127.0.0.1:9100..9104`), not on the HTTP API ports.
+   - If QUIC peer links fail, `/health` can still return `{ "status": "ok" }`.
+2. **Run the replication checker, not only health probes.**
+   - `AUTHOR_KEY_ID=<wallet_key_id> scripts/check_localnet_replication_finality.sh`
+   - This verifies cross-node receipt/block convergence and replication.
+3. **Inspect per-validator logs for QUIC admission or transport failures.**
+   - `rg -n "quic|admission|reject|manifest|mismatch|handshake" data/validator-*.log`
+4. **Quick local socket check (inside the same WSL distro).**
+   - `ss -ltnp | rg ":(9100|9101|9102|9103|9104|8081|8082|8083|8084|8085)\\b"`
+   - If QUIC ports are not listening, the node did not start networking
+     correctly.
+5. **WSL-specific caveat.**
+   - If you run some components in Windows and some in WSL, `127.0.0.1` can
+     point to different network namespaces. Keep all five validators in the
+     same environment (all in one WSL distro, or all on Windows/native Linux),
+     and use consistent addresses reachable from each process.
+   - Windows firewall or endpoint security can also interfere with UDP-based
+     QUIC flows; validate in-distro first before cross-host tests.
+
+In short: for syncing validators, QUIC connectivity is essential; HTTP health
+alone is only a process liveness check.
 
 If you previously saw `400 Bad Request` on `/api/v1/envelopes/submit`, ensure your payload includes `forms.commitment` required fields (`data_hash`, `encrypted_form_url`) plus `credit_grant_id`, `sponsor_builder_id`, and `author_public_key`, with `author = forms.commitment`. The checker now auto-bootstraps (or reuses) a localnet builder grant unless `AUTO_BOOTSTRAP_CREDIT_GRANT=false`.
 
