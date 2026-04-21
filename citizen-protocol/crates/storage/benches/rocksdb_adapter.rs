@@ -1,7 +1,7 @@
 use std::env;
 use std::time::Duration;
 
-use citizen_types::{LedgerEntry, NamespaceId};
+use citizen_types::{LedgerEntry, NamespaceId, PrivacyMode};
 use criterion::{criterion_group, criterion_main, BatchSize, Criterion, SamplingMode, Throughput};
 use rand::{rngs::StdRng, Rng, SeedableRng};
 use serde_json::json;
@@ -21,12 +21,18 @@ fn rand_entry(rng: &mut StdRng, namespace: &NamespaceId) -> LedgerEntry {
         object_id: format!("object-{}", rng.gen::<u64>()),
         payload: json!({ "blob": bytes }),
         privacy_flag: false,
+        privacy_mode: PrivacyMode::None,
         payload_commitment: None,
         ciphertext_hex: None,
         nonce_hex: None,
         salt_hex: None,
         kdf_params: None,
         consent_receipt: None,
+        authorized_readers: Vec::new(),
+        custodian_policy_id: None,
+        field_reader_acls: Default::default(),
+        key_wrapped_secrets: Vec::new(),
+        revocation_events: Vec::new(),
         author: format!("did:bench:{}", rng.gen::<u32>()),
         signature: format!("sig-{}", rng.gen::<u64>()),
         timestamp: rng.gen_range(1_700_000_000i64..1_800_000_000i64),
