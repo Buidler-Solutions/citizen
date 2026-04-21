@@ -115,7 +115,7 @@ impl SimulationHarness {
                     "note" = "stopping random validators mid-run"
                 );
                 sleep(duration / 2).await;
-                let mut rng = rand::thread_rng();
+                let mut rng = rand::rng();
                 let mut victims: Vec<_> = handles.iter_mut().collect();
                 victims.shuffle(&mut rng);
                 for (id, handle) in victims.into_iter().take(failure_count) {
@@ -285,7 +285,7 @@ async fn simulate_active_failures(
         "note" = "dropping validators mid-epoch"
     );
     sleep(duration / 2).await;
-    let mut rng = rand::thread_rng();
+    let mut rng = rand::rng();
     let mut victims: Vec<_> = handles.iter_mut().collect();
     victims.shuffle(&mut rng);
     for (id, handle) in victims.into_iter().take(failure_count) {
