@@ -76,7 +76,7 @@
   - [x] `npm run typecheck`
   - [x] `npm test`
   - [x] `npm run build`
-- [ ] Add linting (`eslint` + `@typescript-eslint`) and formatting checks.
+- [x] Add linting (`eslint` + `@typescript-eslint`) and formatting checks.
 
 ---
 
@@ -116,7 +116,6 @@ Mark complete only when all are true:
 - [x] Add API report generation to track accidental public-surface drift.
 - [x] Add changelog automation for SDK package releases.
 - [x] Add sample TypeScript app under `demo/` or `sdk/typescript/examples/`.
-
 
 ## Checkpoint evidence (current implementation)
 

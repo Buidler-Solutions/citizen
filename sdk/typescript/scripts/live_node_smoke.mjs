@@ -143,7 +143,7 @@ async function startNodeForMode(mode) {
   }
 
   throw new Error(
-    `Unsupported CITIZEN_NODE_MODE \"${mode}\". Use one of: external, local, command.`
+    `Unsupported CITIZEN_NODE_MODE "${mode}". Use one of: external, local, command.`
   );
 }
 
