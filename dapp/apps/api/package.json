@@ -9,7 +9,7 @@
     "lint": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
-    "@citizen-protocol/nodejs-sdk": "file:../../../sdk/nodejs",
+    "@citizen-protocol/typescript-sdk": "file:../../../sdk/typescript",
     "@nestjs/common": "^11.1.6",
     "@nestjs/core": "^11.1.18",
     "@nestjs/platform-express": "^11.1.6",

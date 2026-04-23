@@ -157,7 +157,7 @@ When implementing any wallet data-isolation task, keep these surfaces synchroniz
 - [x] landing-page onboarding dApp submission flow (`landing-page/frontend`)
 - [x] wallet/backend verification + session/relay paths (`wallet/backend`)
 - [x] landing-page backend validation + network relay (`landing-page/backend`)
-- [x] builder SDK contracts (`sdk/nodejs`, `wallet/sdk/typescript-auth`)
+- [x] builder SDK contracts (`sdk/typescript`, `wallet/sdk/typescript-auth`)
 - [x] wallet CLI operational guidance (`wallet/cli`)
 
 For every signed submission flow, explicitly document and enforce:

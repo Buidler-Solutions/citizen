@@ -92,7 +92,7 @@
 
 ### Documentation updates
 
-- [ ] Update `sdk/nodejs/README.md` examples to TypeScript where appropriate.
+- [ ] Update `sdk/typescript/README.md` examples to TypeScript where appropriate.
 - [ ] Add migration notes for JS consumers (confirm continued JS support).
 - [ ] Document supported Node versions and module import patterns.
 
@@ -115,4 +115,4 @@ Mark complete only when all are true:
 
 - [ ] Add API report generation to track accidental public-surface drift.
 - [ ] Add changelog automation for SDK package releases.
-- [ ] Add sample TypeScript app under `demo/` or `sdk/nodejs/examples/`.
+- [ ] Add sample TypeScript app under `demo/` or `sdk/typescript/examples/`.

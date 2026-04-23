@@ -226,7 +226,7 @@ Expected:
 
 ## 8) SDK demonstration (Node.js)
 
-`sdk/nodejs` now exposes a batch submit helper:
+`sdk/typescript` now exposes a batch submit helper:
 
 ```js
 const result = await client.submitEnvelopeBatch([envelopeA, envelopeB]);

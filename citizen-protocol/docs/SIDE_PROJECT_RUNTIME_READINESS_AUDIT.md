@@ -6,7 +6,7 @@ Date: 2026-03-07
 
 Audit targets for integration with the Citizen runtime (`citizen-node`):
 
-- Node.js SDK (`sdk/nodejs`)
+- Node.js SDK (`sdk/typescript`)
 - Builder dApp (`dapp/apps/api`, `dapp/apps/web`)
 - Explorer (`explorer/backend`, `explorer/frontend`)
 - Wallet React app (`wallet/react`)
@@ -24,7 +24,7 @@ The side-project ecosystem is **partially deployment-ready**:
 
 ## Findings by project
 
-### 1) Node.js SDK (`sdk/nodejs`) — **Ready with baseline validation**
+### 1) Node.js SDK (`sdk/typescript`) — **Ready with baseline validation**
 
 - SDK README claims working status and runtime submit/receipt support.
 - Test suite runs and passes for envelope submission, wallet signing flow, and receipt polling.

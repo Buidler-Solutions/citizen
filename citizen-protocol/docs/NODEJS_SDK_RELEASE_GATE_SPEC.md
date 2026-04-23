@@ -2,11 +2,11 @@
 
 Status: Draft (fast-path to move SDK release readiness from **NO-GO** to **GO**)
 
-Scope: `sdk/nodejs` and its runtime integration path used by `dapp/apps/api`.
+Scope: `sdk/typescript` and its runtime integration path used by `dapp/apps/api`.
 
 ## 1. Goal
 
-Define the **minimum CI release gate** that must pass before promoting `@citizen-protocol/nodejs-sdk` for broad dApp-builder consumption.
+Define the **minimum CI release gate** that must pass before promoting `@citizen-protocol/typescript-sdk` for broad dApp-builder consumption.
 
 This spec is intentionally small: it prioritizes deterministic receipts, canonical envelope correctness, and builder onboarding speed.
 
@@ -17,7 +17,7 @@ A release candidate is valid only if all jobs below are green on the release bra
 ### Job A — `sdk-unit-node18`
 
 - Runtime: Node.js 18.x
-- Working dir: `sdk/nodejs`
+- Working dir: `sdk/typescript`
 - Commands:
   - `npm ci`
   - `npm test`
@@ -34,7 +34,7 @@ A release candidate is valid only if all jobs below are green on the release bra
 ### Job B — `sdk-unit-node20`
 
 - Runtime: Node.js 20.x
-- Working dir: `sdk/nodejs`
+- Working dir: `sdk/typescript`
 - Commands:
   - `npm ci`
   - `npm test`
@@ -51,7 +51,7 @@ A release candidate is valid only if all jobs below are green on the release bra
 ### Job C — `sdk-package-audit`
 
 - Runtime: Node.js 20.x
-- Working dir: `sdk/nodejs`
+- Working dir: `sdk/typescript`
 - Commands:
   - `npm ci`
   - `npm pack --dry-run`
@@ -80,7 +80,7 @@ A release candidate is valid only if all jobs below are green on the release bra
 2. Wait for health:
    - `curl --fail http://127.0.0.1:8081/health`
 3. Run SDK smoke script (checked into repo):
-   - `node sdk/nodejs/scripts/live_node_smoke.mjs`
+   - `node sdk/typescript/scripts/live_node_smoke.mjs`
 
 **Smoke script contract**
 - Uses `CitizenNodeClient` against `http://127.0.0.1:8081`.
@@ -111,14 +111,14 @@ No manual override for red checks on release tags.
 
 ## 4. Semver and Release Rules
 
-Use strict semantic versioning for `@citizen-protocol/nodejs-sdk`:
+Use strict semantic versioning for `@citizen-protocol/typescript-sdk`:
 
 - **PATCH**: bug fixes, docs-only packaging metadata changes, non-breaking internal refactors.
 - **MINOR**: additive non-breaking API (new optional params, new exports).
 - **MAJOR**: any API removal/rename, behavior change that can break existing dApps.
 
 Release PR must include:
-1. Version bump in `sdk/nodejs/package.json`.
+1. Version bump in `sdk/typescript/package.json`.
 2. Short changelog section in PR body:
    - Added
    - Changed
@@ -139,7 +139,7 @@ Otherwise status is **NO-GO**.
 
 ## 6. Fast Adoption Plan (to implement this spec quickly)
 
-1. Add `sdk/nodejs/scripts/live_node_smoke.mjs`.
+1. Add `sdk/typescript/scripts/live_node_smoke.mjs`.
 2. Add CI workflow implementing the four jobs in this spec.
 3. Make these checks required in branch protection.
 4. Use this document as the release checklist source of truth.

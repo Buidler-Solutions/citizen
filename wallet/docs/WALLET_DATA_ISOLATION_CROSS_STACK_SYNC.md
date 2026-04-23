@@ -11,7 +11,7 @@ This document operationalizes the cross-stack sync checklist for signed submissi
 - `landing-page/frontend`: onboarding form signing UX and signed-submit gating.
 - `wallet/backend`: signature/session verification primitives used by wallet-auth flows.
 - `landing-page/backend`: signed onboarding verification, relay, retry/dedup telemetry.
-- `sdk/nodejs` and `wallet/sdk/typescript-auth`: contract-level payload/signature interoperability.
+- `sdk/typescript` and `wallet/sdk/typescript-auth`: contract-level payload/signature interoperability.
 - `wallet/cli`: operator guidance for custody, relay, and auditing workflows.
 
 ## Canonical signed submission contract

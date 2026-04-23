@@ -101,7 +101,7 @@ For onboarding/form workflows, the landing page is one part of the broader walle
 
 - `landing-page` (builder app UX + backend integration)
 - `wallet/browser` (user-controlled signing + local custody surface)
-- `sdk/nodejs` (builder integration helpers)
+- `sdk/typescript` (builder integration helpers)
 - `citizen-protocol` runtime APIs (canonical envelopes/receipts/finality)
 - wallet CLI/runtime crate (`citizen-protocol/crates/wallet`) for reference signing parity
 

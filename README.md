@@ -89,7 +89,7 @@ When we refer to the **wallet system tech-stack**, this includes all of the foll
    - Canonical envelope/receipt APIs and deterministic validation/finality behavior.
 2. **Landing-page app-builder surface (`landing-page/`)**
    - Builder-facing application workflow where user forms and onboarding UX are defined.
-3. **Wallet SDK (`sdk/nodejs/`)**
+3. **Wallet SDK (`sdk/typescript/`)**
    - Builder integration layer for provider access, canonicalization, transaction submission, and wallet signing helpers.
 4. **Wallet browser extension (`wallet/browser/`)**
    - User custody surface for account management, consented signing, and protocol payload commitment generation.

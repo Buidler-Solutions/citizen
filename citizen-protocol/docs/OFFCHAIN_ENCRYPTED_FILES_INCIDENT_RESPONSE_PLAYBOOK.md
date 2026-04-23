@@ -141,7 +141,7 @@ Run and archive command outputs after containment/recovery:
 
 - `cargo test -p citizen-api offchain_encrypted_files`
 - `cargo test -p citizen-wallet offchain`
-- `pnpm --dir sdk/nodejs test -- offchain`
+- `pnpm --dir sdk/typescript test -- offchain`
 
 If unavailable locally, capture CI job URLs and outcomes before production re-enable.
 

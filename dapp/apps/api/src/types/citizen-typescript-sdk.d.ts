@@ -1,4 +1,4 @@
-declare module "@citizen-protocol/nodejs-sdk" {
+declare module "@citizen-protocol/typescript-sdk" {
   export interface CitizenNodeClientArgs {
     baseUrl: string;
   }
