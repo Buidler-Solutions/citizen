@@ -1,4 +1,137 @@
 // @ts-nocheck
+export type JsonPrimitive = string | number | boolean | null;
+export type JsonValue = JsonPrimitive | JsonObject | JsonValue[];
+export type JsonObject = { [key: string]: JsonValue | undefined };
+
+export interface CitizenSigner {
+  getSignerId(): Promise<string>;
+  sign(message: string): Promise<string>;
+}
+
+export interface MultisigPolicy {
+  threshold: number;
+  allowed_signers?: string[];
+  require_author_signature?: boolean;
+}
+
+export interface EntryRecord {
+  entry_id: string;
+  namespace: string;
+  action: string;
+  object_id: string;
+  payload: Record<string, unknown>;
+  author: string;
+  timestamp: number;
+  signature?: string;
+}
+
+export interface CoSignature {
+  signer: string;
+  signature: string;
+}
+
+export interface EnvelopeRecord {
+  envelope_id: string;
+  signer: string;
+  signature?: string;
+  signature_scope?: "canonical_payload_v1" | "canonical_payload_v2";
+  co_signatures?: CoSignature[];
+  multisig_policy?: MultisigPolicy;
+  submitted_at: string;
+  payload: EntryRecord;
+}
+
+export interface WrapEnvelopeMultiArgs {
+  entry: EntryRecord;
+  signer: CitizenSigner;
+  coSigners?: CitizenSigner[];
+  multisigPolicy: MultisigPolicy;
+  signatureScope?: "canonical_payload_v1" | "canonical_payload_v2";
+  submittedAt?: string;
+}
+
+export interface BrowserWalletProvider {
+  request(args: { method: string; params?: unknown[] }): Promise<any>;
+}
+
+export interface WalletSignedPayload {
+  signer: string;
+  verifyingKey: string;
+  signature: string;
+  algorithm: string;
+  signingPayload: string;
+  payloadHash: string;
+  payloadHashHex: string;
+  signatureScope: "canonical_payload_v1" | "payload_hash_v1";
+}
+
+export interface SignCitizenPayloadWithWalletArgs {
+  payload: Record<string, unknown>;
+  provider?: BrowserWalletProvider;
+}
+
+export interface CreateFormCommitmentReceiptArgs {
+  formId: string;
+  dataHash: string;
+  encryptedFormUrl: string;
+  commitmentReceipt?: Record<string, unknown>;
+}
+
+export interface MultisigProof {
+  approver: string;
+  public_key: string;
+  signature: string;
+}
+
+export interface CreateMultisigCreditGrantArgs {
+  builderId: string;
+  amount: number;
+  multisigProofs: MultisigProof[];
+}
+
+export interface CreateSponsorshipUsageArgs {
+  builderId: string;
+  amount: number;
+  creditGrantId: string;
+  sponsorshipId: string;
+  sponsoredDid: string;
+}
+
+export type BuilderCreditsAction = "MULTISIG_CREDIT_GRANT" | "SPONSOR_USAGE";
+export type BuilderCreditsPayload =
+  | { amount: number; multisig_proofs: MultisigProof[] }
+  | { amount: number; credit_grant_id: string; sponsorship_id: string; sponsored_did: string };
+
+export interface ValidateBuilderCreditsPayloadArgs {
+  action: BuilderCreditsAction | string;
+  payload: Record<string, any>;
+}
+
+export interface CitizenNodeClientOptions {
+  baseUrl: string;
+  apiKey?: string;
+  fetchImpl?: typeof fetch;
+}
+
+export interface SubmitTransactionArgs {
+  namespace: string;
+  action: string;
+  objectId: string;
+  payload?: Record<string, unknown>;
+  signer: CitizenSigner;
+  timestamp?: number;
+}
+
+export interface SubmitWithBrowserWalletArgs {
+  namespace: string;
+  action: string;
+  objectId: string;
+  payload?: Record<string, unknown>;
+  walletProvider?: BrowserWalletProvider;
+  account?: string;
+  requestMethod?: string;
+  timestamp?: number;
+}
 function hasWebCrypto() {
   return typeof globalThis.crypto !== "undefined" && typeof globalThis.crypto.randomUUID === "function";
 }
@@ -88,7 +221,7 @@ function assertMultisigPolicy(multisigPolicy) {
 }
 
 const DEFAULT_RECEIPT_TERMINAL_STATUSES = new Set(["Accepted", "Rejected"]);
-export const OFFCHAIN_ATTACHMENT_ALLOWED_MIME_TYPES = Object.freeze([
+export const OFFCHAIN_ATTACHMENT_ALLOWED_MIME_TYPES: readonly string[] = Object.freeze([
   "audio/mpeg",
   "audio/mp3",
   "audio/wav",
@@ -137,7 +270,7 @@ function resolveWalletProvider(explicitProvider) {
 }
 
 
-export async function signCitizenPayloadWithWallet({ payload, provider } = {}) {
+export async function signCitizenPayloadWithWallet({ payload, provider }: SignCitizenPayloadWithWalletArgs = {} as SignCitizenPayloadWithWalletArgs): Promise<WalletSignedPayload> {
   const walletProvider = resolveWalletProvider(provider);
   if (payload === undefined || payload === null) {
     throw new Error("payload is required");
@@ -220,7 +353,7 @@ export function createFormCommitmentReceipt({
   dataHash,
   encryptedFormUrl,
   commitmentReceipt
-}) {
+}: CreateFormCommitmentReceiptArgs) {
   assertNonEmptyString(formId, "formId");
   assertSha256Digest(dataHash, "dataHash");
   assertHttpUrl(encryptedFormUrl, "encryptedFormUrl");
@@ -241,7 +374,7 @@ export function createFormCommitmentReceipt({
   };
 }
 
-export function createMultisigCreditGrant({ builderId, amount, multisigProofs }) {
+export function createMultisigCreditGrant({ builderId, amount, multisigProofs }: CreateMultisigCreditGrantArgs) {
   assertNonEmptyString(builderId, "builderId");
 
   const payload = {
@@ -259,7 +392,7 @@ export function createMultisigCreditGrant({ builderId, amount, multisigProofs })
   };
 }
 
-export function createSponsorshipUsage({ builderId, amount, creditGrantId, sponsorshipId, sponsoredDid }) {
+export function createSponsorshipUsage({ builderId, amount, creditGrantId, sponsorshipId, sponsoredDid }: CreateSponsorshipUsageArgs) {
   assertNonEmptyString(builderId, "builderId");
 
   const payload = {
@@ -279,7 +412,7 @@ export function createSponsorshipUsage({ builderId, amount, creditGrantId, spons
   };
 }
 
-export function validateBuilderCreditsPayload({ action, payload }) {
+export function validateBuilderCreditsPayload({ action, payload }: ValidateBuilderCreditsPayloadArgs): void {
   assertNonEmptyString(action, "action");
 
   if (action === "MULTISIG_CREDIT_GRANT") {
@@ -316,7 +449,7 @@ export async function wrapEnvelopeMulti({
   multisigPolicy,
   signatureScope = "canonical_payload_v1",
   submittedAt
-}) {
+}: WrapEnvelopeMultiArgs): Promise<EnvelopeRecord> {
   if (!entry || typeof entry !== "object") {
     throw new Error("entry is required");
   }
@@ -357,7 +490,7 @@ export async function wrapEnvelopeMulti({
   };
 }
 
-export async function appendCoSignature({ envelope, signer }) {
+export async function appendCoSignature({ envelope, signer }: { envelope: EnvelopeRecord; signer: CitizenSigner }): Promise<EnvelopeRecord> {
   if (!envelope || typeof envelope !== "object") {
     throw new Error("envelope is required");
   }
@@ -379,7 +512,7 @@ export async function appendCoSignature({ envelope, signer }) {
   };
 }
 
-export function finalizeEnvelope({ envelope }) {
+export function finalizeEnvelope({ envelope }: { envelope: EnvelopeRecord }): EnvelopeRecord {
   if (!envelope || typeof envelope !== "object") {
     throw new Error("envelope is required");
   }
@@ -405,7 +538,7 @@ export function finalizeEnvelope({ envelope }) {
 }
 
 export class BrowserWalletSigner {
-  constructor({ provider, account, requestMethod = "personal_sign" } = {}) {
+  constructor({ provider, account, requestMethod = "personal_sign" }: { provider?: BrowserWalletProvider; account?: string; requestMethod?: string } = {}) {
     this.provider = resolveWalletProvider(provider);
     this.account = account?.toLowerCase();
     this.requestMethod = requestMethod;
@@ -435,7 +568,7 @@ export class BrowserWalletSigner {
 }
 
 export class Ed25519Signer {
-  constructor({ signerId, privateKeyPem }) {
+  constructor({ signerId, privateKeyPem }: { signerId: string; privateKeyPem: string }) {
     if (!signerId) {
       throw new Error("signerId is required");
     }
@@ -461,7 +594,7 @@ export class Ed25519Signer {
 }
 
 export class CitizenNodeClient {
-  constructor({ baseUrl, apiKey, fetchImpl } = {}) {
+  constructor({ baseUrl, apiKey, fetchImpl }: CitizenNodeClientOptions = {} as CitizenNodeClientOptions) {
     if (!baseUrl) {
       throw new Error("baseUrl is required");
     }
@@ -475,7 +608,7 @@ export class CitizenNodeClient {
     }
   }
 
-  async submitTransaction({ namespace, action, objectId, payload, signer, timestamp }) {
+  async submitTransaction({ namespace, action, objectId, payload, signer, timestamp }: SubmitTransactionArgs) {
     if (!namespace || !action || !objectId || !signer) {
       throw new Error("namespace, action, objectId, and signer are required");
     }
@@ -509,7 +642,7 @@ export class CitizenNodeClient {
     account,
     requestMethod,
     timestamp
-  }) {
+  }: SubmitWithBrowserWalletArgs) {
     const signer = new BrowserWalletSigner({
       provider: walletProvider,
       account,

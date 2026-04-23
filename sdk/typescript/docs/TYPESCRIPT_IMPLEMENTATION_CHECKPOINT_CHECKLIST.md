@@ -6,8 +6,8 @@
 
 - [x] Confirm current package entrypoints (`main`/`exports`) and type declarations.
 - [x] Confirm all tests are green before migration.
-- [ ] Capture current public API surface (exports, options, error shapes).
-- [ ] Record current package size and install behavior for comparison after conversion.
+- [x] Capture current public API surface (exports, options, error shapes).
+- [x] Record current package size and install behavior for comparison after conversion.
 
 ---
 
@@ -51,7 +51,7 @@
 - [x] Rename/port `src/index.js` to `src/index.ts`.
 - [x] Replace manual declaration maintenance with inferred types from source.
 - [ ] Split large modules into typed submodules where helpful.
-- [ ] Add explicit public types for all builder-facing request/response payloads.
+- [x] Add explicit public types for all builder-facing request/response payloads.
 
 ### API compatibility controls
 
@@ -66,9 +66,9 @@
 
 ### Test migration
 
-- [ ] Port tests from `.js` to `.ts` (or enable TS execution for existing tests).
+- [x] Port tests from `.js` to `.ts` (or enable TS execution for existing tests).
 - [ ] Keep canonicalization, signing, envelope flow, and receipt-path tests unchanged in behavior.
-- [ ] Add focused type-level tests for public APIs (compile-time contract checks).
+- [x] Add focused type-level tests for public APIs (compile-time contract checks).
 
 ### CI quality gates
 
