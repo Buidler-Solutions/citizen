@@ -57,7 +57,7 @@
 
 - [x] Preserve existing public export names.
 - [x] Preserve existing runtime behavior and defaults.
-- [ ] Keep error messages stable where clients may depend on them.
+- [x] Keep error messages stable where clients may depend on them.
 - [ ] Add deprecations (if needed) with migration notes instead of silent breaking changes.
 
 ---
@@ -67,15 +67,15 @@
 ### Test migration
 
 - [x] Port tests from `.js` to `.ts` (or enable TS execution for existing tests).
-- [ ] Keep canonicalization, signing, envelope flow, and receipt-path tests unchanged in behavior.
+- [x] Keep canonicalization, signing, envelope flow, and receipt-path tests unchanged in behavior.
 - [x] Add focused type-level tests for public APIs (compile-time contract checks).
 
 ### CI quality gates
 
-- [ ] Require passing checks in CI:
-  - [ ] `npm run typecheck`
-  - [ ] `npm test`
-  - [ ] `npm run build`
+- [x] Require passing checks in CI:
+  - [x] `npm run typecheck`
+  - [x] `npm test`
+  - [x] `npm run build`
 - [ ] Add linting (`eslint` + `@typescript-eslint`) and formatting checks.
 
 ---
@@ -92,9 +92,9 @@
 
 ### Documentation updates
 
-- [ ] Update `sdk/typescript/README.md` examples to TypeScript where appropriate.
-- [ ] Add migration notes for JS consumers (confirm continued JS support).
-- [ ] Document supported Node versions and module import patterns.
+- [x] Update `sdk/typescript/README.md` examples to TypeScript where appropriate.
+- [x] Add migration notes for JS consumers (confirm continued JS support).
+- [x] Document supported Node versions and module import patterns.
 
 ---
 
@@ -106,8 +106,8 @@ Mark complete only when all are true:
 - [ ] ESM + CJS artifacts publish correctly.
 - [ ] Declarations are generated from source and match runtime exports.
 - [ ] Existing builder flows pass integration tests.
-- [ ] CI includes typecheck/build/test gates.
-- [ ] Documentation is updated with TypeScript-first usage and migration notes.
+- [x] CI includes typecheck/build/test gates.
+- [x] Documentation is updated with TypeScript-first usage and migration notes.
 
 ---
 

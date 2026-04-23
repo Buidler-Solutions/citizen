@@ -313,6 +313,21 @@ test("submitEnvelopeBatch posts array payload to batch endpoint", async () => {
   assert.equal(body.length, 2);
 });
 
+test("constructor and request guards keep stable error messages", async () => {
+  assert.throws(
+    () => new CitizenNodeClient({ fetchImpl: async () => new Response(null, { status: 200 }) }),
+    /baseUrl is required/
+  );
+
+  const client = new CitizenNodeClient({
+    baseUrl: "http://127.0.0.1:8080",
+    fetchImpl: async () => new Response(null, { status: 200 })
+  });
+
+  await assert.rejects(() => client.getReceipt(""), /receiptId is required/);
+  await assert.rejects(() => client.submitEnvelopeBatch([]), /envelopes must be a non-empty array/);
+});
+
 test("wrapEnvelopeMulti signs a canonical payload preimage across all signers", async () => {
   const entry = {
     entry_id: "22222222-2222-2222-2222-222222222222",
