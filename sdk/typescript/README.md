@@ -1,8 +1,8 @@
-# Citizen Node.js SDK
+# Citizen TypeScript SDK
 
 > Status: ✅ Working and ready for dApp builders.
 
-Node.js/browser client library for dApps that need to trigger the Citizen browser wallet extension for signing, submit signed CITIZEN runtime transactions (`LedgerEntry` wrapped in `SignedEnvelope`), and fetch deterministic receipts.
+TypeScript-first Node.js/browser client library for dApps that need to trigger the Citizen browser wallet extension for signing, submit signed CITIZEN runtime transactions (`LedgerEntry` wrapped in `SignedEnvelope`), and fetch deterministic receipts.
 
 ## Install
 
@@ -21,7 +21,7 @@ npm install
 
 ## Browser wallet flow (recommended for dApps)
 
-```js
+```ts
 import { CitizenNodeClient } from "@citizen-protocol/typescript-sdk";
 
 const client = new CitizenNodeClient({
@@ -56,7 +56,7 @@ For encrypted file intent/commit flows, the SDK exports a runtime-aligned MIME
 allowlist constant so browser wallet flows and dApps can pre-validate
 attachments before submit:
 
-```js
+```ts
 import { OFFCHAIN_ATTACHMENT_ALLOWED_MIME_TYPES } from "@citizen-protocol/typescript-sdk";
 
 if (!OFFCHAIN_ATTACHMENT_ALLOWED_MIME_TYPES.includes(file.type)) {
@@ -81,7 +81,7 @@ Current allowlist includes audio/video/docs/archives/spreadsheets/images:
 
 For app-builder forms where sensitive user fields should stay in wallet-controlled flows, use the Citizen extension protocol-signing methods via the SDK helper:
 
-```js
+```ts
 import { signCitizenPayloadWithWallet } from "@citizen-protocol/typescript-sdk";
 
 const signed = await signCitizenPayloadWithWallet({
@@ -103,7 +103,7 @@ await fetch("/api/forms/submit", {
 
 To anchor an encrypted form host reference on-chain as a commitment receipt, use the SDK namespace helper:
 
-```js
+```ts
 import { createFormCommitmentReceipt } from "@citizen-protocol/typescript-sdk";
 
 const tx = createFormCommitmentReceipt({
@@ -137,7 +137,7 @@ For landing-page onboarding backends that enforce wallet-first submission, map t
 
 ## Server-side signer flow (optional)
 
-```js
+```ts
 import { CitizenNodeClient, Ed25519Signer } from "@citizen-protocol/typescript-sdk";
 import { readFileSync } from "node:fs";
 
@@ -205,6 +205,31 @@ Signer options:
 
 - `BrowserWalletSigner({ provider?, account?, requestMethod? })`
 - `Ed25519Signer({ signerId, privateKeyPem })`
+
+## JavaScript migration notes
+
+The package remains compatible with JavaScript consumers. No runtime wrapper is required; use either ESM `import` or CJS `require` depending on your project:
+
+```js
+// ESM
+import { CitizenNodeClient } from "@citizen-protocol/typescript-sdk";
+```
+
+```js
+// CommonJS
+const { CitizenNodeClient } = require("@citizen-protocol/typescript-sdk");
+```
+
+Runtime artifacts and generated type declarations are published together:
+- ESM entrypoint: `dist/esm/index.js`
+- CJS entrypoint: `dist/cjs/index.js`
+- Types entrypoint: `dist/esm/index.d.ts`
+
+## Supported Node and module patterns
+
+- Minimum Node.js version: `>=18`
+- Supported package entrypoints: `import`, `require`, and `types` via `exports`
+- Browser usage is supported when a `window.citizen` or `window.ctzn` wallet provider is available
 
 ## Notes
 
