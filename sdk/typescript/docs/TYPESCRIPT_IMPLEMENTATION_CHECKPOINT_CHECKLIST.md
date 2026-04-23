@@ -114,7 +114,7 @@ Mark complete only when all are true:
 ## Optional Nice-to-Haves (Post-Conversion)
 
 - [x] Add API report generation to track accidental public-surface drift.
-- [ ] Add changelog automation for SDK package releases.
+- [x] Add changelog automation for SDK package releases.
 - [x] Add sample TypeScript app under `demo/` or `sdk/typescript/examples/`.
 
 

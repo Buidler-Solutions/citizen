@@ -23,12 +23,14 @@
     "build:test": "tsc -p tsconfig.test.json",
     "typecheck:public": "tsc -p tsconfig.types.json",
     "smoke:live": "npm run build && node scripts/live_node_smoke.mjs",
-    "release:check": "npm run typecheck && npm test && npm run build && npm run api:check",
+    "release:check": "npm run typecheck && npm test && npm run build && npm run api:check && npm run changelog:check",
     "release:pack": "npm run release:check && npm pack --dry-run",
     "release:next": "npm run release:check && npm publish --tag next",
     "api:report": "npm run build && node scripts/generate_api_report.mjs --write",
     "api:check": "npm run build && node scripts/generate_api_report.mjs --check",
-    "example:build": "tsc -p tsconfig.examples.json"
+    "example:build": "tsc -p tsconfig.examples.json",
+    "changelog:generate": "node scripts/generate_changelog.mjs",
+    "changelog:check": "node scripts/generate_changelog.mjs --check"
   },
   "license": "Apache-2.0",
   "types": "dist/esm/index.d.ts",
