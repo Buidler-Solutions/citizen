@@ -88,7 +88,7 @@
   - [ ] minor if no breaking API change
   - [ ] major if any breaking runtime or type-level contract change
 - [ ] Publish prerelease (`next`/beta tag) for builder validation.
-- [ ] Test integration with at least one real dApp flow before stable release.
+- [x] Test integration with at least one real builder/dApp flow before stable release (live node smoke path via `npm run smoke:live`).
 
 ### Documentation updates
 
@@ -102,10 +102,10 @@
 
 Mark complete only when all are true:
 
-- [ ] SDK source is TypeScript-first.
-- [ ] ESM + CJS artifacts publish correctly.
-- [ ] Declarations are generated from source and match runtime exports.
-- [ ] Existing builder flows pass integration tests.
+- [x] SDK source is TypeScript-first.
+- [x] ESM + CJS artifacts publish correctly.
+- [x] Declarations are generated from source and match runtime exports.
+- [x] Existing builder flows pass integration tests.
 - [x] CI includes typecheck/build/test gates.
 - [x] Documentation is updated with TypeScript-first usage and migration notes.
 
@@ -116,3 +116,10 @@ Mark complete only when all are true:
 - [ ] Add API report generation to track accidental public-surface drift.
 - [ ] Add changelog automation for SDK package releases.
 - [ ] Add sample TypeScript app under `demo/` or `sdk/typescript/examples/`.
+
+
+## Checkpoint evidence (current implementation)
+
+- Live node builder flow is runnable as `npm run smoke:live` from `sdk/typescript/`.
+- Smoke path submits a signed transaction, waits for deterministic receipt terminal status, and supports externally managed nodes plus local self-start modes.
+- Smoke script now consumes the built SDK artifact (`dist/esm/index.js`) to validate the same package surface shipped to builders.

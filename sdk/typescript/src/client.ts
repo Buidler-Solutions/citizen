@@ -107,6 +107,10 @@ export class CitizenNodeClient {
     submittedAt?: string;
   }): Promise<EnvelopeRecord> {
     const signerId = await signer.getSignerId();
+    if (!entry.signature) {
+      throw new Error("entry.signature is required before wrapping envelope");
+    }
+
     const envelope = {
       envelope_id: createUuid(),
       signer: signerId,
@@ -114,16 +118,9 @@ export class CitizenNodeClient {
       payload: entry
     };
 
-    const signature = await signer.sign(
-      canonicalizeJson({
-        ...envelope,
-        signature: undefined
-      })
-    );
-
     return {
       ...envelope,
-      signature
+      signature: entry.signature
     };
   }
 
