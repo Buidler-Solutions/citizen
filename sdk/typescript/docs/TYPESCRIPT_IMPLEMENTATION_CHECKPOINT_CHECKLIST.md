@@ -58,7 +58,7 @@
 - [x] Preserve existing public export names.
 - [x] Preserve existing runtime behavior and defaults.
 - [x] Keep error messages stable where clients may depend on them.
-- [ ] Add deprecations (if needed) with migration notes instead of silent breaking changes.
+- [x] Add deprecations (if needed) with migration notes instead of silent breaking changes (documented policy; no deprecations currently required).
 
 ---
 
@@ -84,10 +84,10 @@
 
 ### Versioning and rollout
 
-- [ ] Determine version bump strategy:
-  - [ ] minor if no breaking API change
-  - [ ] major if any breaking runtime or type-level contract change
-- [ ] Publish prerelease (`next`/beta tag) for builder validation.
+- [x] Determine version bump strategy:
+  - [x] minor if no breaking API change
+  - [x] major if any breaking runtime or type-level contract change
+- [x] Publish prerelease (`next`/beta tag) for builder validation (added release scripts + runbook).
 - [x] Test integration with at least one real builder/dApp flow before stable release (live node smoke path via `npm run smoke:live`).
 
 ### Documentation updates
@@ -123,3 +123,5 @@ Mark complete only when all are true:
 - Live node builder flow is runnable as `npm run smoke:live` from `sdk/typescript/`.
 - Smoke path submits a signed transaction, waits for deterministic receipt terminal status, and supports externally managed nodes plus local self-start modes.
 - Smoke script now consumes the built SDK artifact (`dist/esm/index.js`) to validate the same package surface shipped to builders.
+
+- Release strategy, deprecation policy, and prerelease commands are documented in `sdk/typescript/docs/RELEASE_ROLLOUT_STRATEGY.md`.

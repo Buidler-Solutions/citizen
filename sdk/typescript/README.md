@@ -239,6 +239,23 @@ Runtime artifacts and generated type declarations are published together:
 - Supported package entrypoints: `import`, `require`, and `types` via `exports`
 - Browser usage is supported when a `window.citizen` or `window.ctzn` wallet provider is available
 
+## Release rollout helpers
+
+From `sdk/typescript/`:
+
+```bash
+npm run release:check
+npm run release:pack
+# publish prerelease for builder validation
+npm run release:next
+```
+
+- `release:check` runs the stable quality gates (`typecheck`, `test`, `build`).
+- `release:pack` validates publish contents with `npm pack --dry-run`.
+- `release:next` publishes a prerelease package under the npm `next` tag.
+
+Detailed bump/deprecation policy is documented in `docs/RELEASE_ROLLOUT_STRATEGY.md`.
+
 ## Notes
 
 - Canonical JSON key ordering is applied before signatures are generated, keeping signatures deterministic across runtimes.
