@@ -5,8 +5,8 @@ import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { sha256DigestHex } from "../dist/index.js";
-import { appendCoSignature, BrowserWalletSigner, CitizenNodeClient, OFFCHAIN_ATTACHMENT_ALLOWED_MIME_TYPES, canonicalizeJson, createFormCommitmentReceipt, createMultisigCreditGrant, createSponsorshipUsage, finalizeEnvelope, wrapEnvelopeMulti, signCitizenPayloadWithWallet } from "../dist/index.js";
+import { sha256DigestHex } from "../dist/esm/index.js";
+import { appendCoSignature, BrowserWalletSigner, CitizenNodeClient, OFFCHAIN_ATTACHMENT_ALLOWED_MIME_TYPES, canonicalizeJson, createFormCommitmentReceipt, createMultisigCreditGrant, createSponsorshipUsage, finalizeEnvelope, wrapEnvelopeMulti, signCitizenPayloadWithWallet } from "../dist/esm/index.js";
 class StubSigner {
     constructor(id = "did:ledger:builder:demo") {
         this.id = id;

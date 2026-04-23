@@ -50,7 +50,7 @@
 
 - [x] Rename/port `src/index.js` to `src/index.ts`.
 - [x] Replace manual declaration maintenance with inferred types from source.
-- [ ] Split large modules into typed submodules where helpful.
+- [x] Split large modules into typed submodules where helpful.
 - [x] Add explicit public types for all builder-facing request/response payloads.
 
 ### API compatibility controls
