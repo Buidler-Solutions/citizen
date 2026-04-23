@@ -129,7 +129,7 @@ Run and archive these checks after any credential change:
 
 - `cargo test -p citizen-api offchain_encrypted_files`
 - `cargo test -p citizen-wallet offchain`
-- `pnpm --dir sdk/nodejs test -- offchain`
+- `pnpm --dir sdk/typescript test -- offchain`
 
 If a command is unavailable in the environment, document the limitation and run equivalent CI jobs before production rollout.
 

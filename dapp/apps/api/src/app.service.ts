@@ -537,7 +537,7 @@ export class AppService {
       return existingClient;
     }
 
-    const { CitizenNodeClient } = (await import("@citizen-protocol/nodejs-sdk")) as {
+    const { CitizenNodeClient } = (await import("@citizen-protocol/typescript-sdk")) as {
       CitizenNodeClient: new (args: { baseUrl: string }) => CitizenNodeClientInstance;
     };
 

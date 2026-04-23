@@ -34,7 +34,7 @@ When describing the project, prefer the implemented shape of the repository:
 - **Builder/API surface exists.** `crates/api` exposes protocol-facing HTTP endpoints and also contains off-chain object-store support for encrypted file workflows.
 - **Simulation harness exists.** `crates/simulation` runs multi-validator scenarios for normal operation, partial failure, quorum loss, malicious leader, Byzantine subsets, and network partitions.
 - **Wallet/privacy implementation exists.** The wallet crate and docs support consent receipts, encrypt-then-commit flows, selective field privacy, and hybrid ACL/DEK-based sharing.
-- **Builder-facing SDK exists.** `sdk/nodejs` is a first-class integration surface and should be treated as part of the core product story, not as a placeholder.
+- **Builder-facing SDK exists.** `sdk/typescript` is a first-class integration surface and should be treated as part of the core product story, not as a placeholder.
 - **Off-chain encrypted-file runtime path is implementation-aware but deployment-optional.** API and policy checks are implemented; production object-store wiring is profile/config dependent. Treat off-chain encrypted storage as a floating option for large encrypted artifacts when namespace on-chain-accepted size constraints are exceeded.
 
 ## Strategic Direction to Preserve

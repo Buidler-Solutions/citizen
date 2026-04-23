@@ -2,7 +2,7 @@
 
 ## Scope reviewed
 - Runtime policy and API enforcement (`crates/ledger`, `crates/api`)
-- SDK helper coverage (`sdk/nodejs`)
+- SDK helper coverage (`sdk/typescript`)
 - Wallet surfaces (`wallet/cli`, `wallet/react`, `wallet/browser`)
 - Demo ecosystem apps (`dapp`, `demo`)
 - Runbooks/scripts (`docs/*runbook*`, `scripts/smoke_test_node_entry.sh`)

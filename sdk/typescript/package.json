@@ -1,5 +1,5 @@
 {
-  "name": "@citizen-protocol/nodejs-sdk",
+  "name": "@citizen-protocol/typescript-sdk",
   "version": "0.1.0",
   "description": "Node.js SDK for submitting signed CITIZEN protocol envelopes and retrieving deterministic receipts.",
   "type": "module",

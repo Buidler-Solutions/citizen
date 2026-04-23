@@ -9,20 +9,20 @@ Node.js/browser client library for dApps that need to trigger the Citizen browse
 From npm (published package):
 
 ```bash
-npm install @citizen-protocol/nodejs-sdk
+npm install @citizen-protocol/typescript-sdk
 ```
 
 For local development in this repository:
 
 ```bash
-cd sdk/nodejs
+cd sdk/typescript
 npm install
 ```
 
 ## Browser wallet flow (recommended for dApps)
 
 ```js
-import { CitizenNodeClient } from "@citizen-protocol/nodejs-sdk";
+import { CitizenNodeClient } from "@citizen-protocol/typescript-sdk";
 
 const client = new CitizenNodeClient({
   baseUrl: "http://127.0.0.1:8080",
@@ -57,7 +57,7 @@ allowlist constant so browser wallet flows and dApps can pre-validate
 attachments before submit:
 
 ```js
-import { OFFCHAIN_ATTACHMENT_ALLOWED_MIME_TYPES } from "@citizen-protocol/nodejs-sdk";
+import { OFFCHAIN_ATTACHMENT_ALLOWED_MIME_TYPES } from "@citizen-protocol/typescript-sdk";
 
 if (!OFFCHAIN_ATTACHMENT_ALLOWED_MIME_TYPES.includes(file.type)) {
   throw new Error(`Unsupported attachment type: ${file.type}`);
@@ -82,7 +82,7 @@ Current allowlist includes audio/video/docs/archives/spreadsheets/images:
 For app-builder forms where sensitive user fields should stay in wallet-controlled flows, use the Citizen extension protocol-signing methods via the SDK helper:
 
 ```js
-import { signCitizenPayloadWithWallet } from "@citizen-protocol/nodejs-sdk";
+import { signCitizenPayloadWithWallet } from "@citizen-protocol/typescript-sdk";
 
 const signed = await signCitizenPayloadWithWallet({
   payload: {
@@ -104,7 +104,7 @@ await fetch("/api/forms/submit", {
 To anchor an encrypted form host reference on-chain as a commitment receipt, use the SDK namespace helper:
 
 ```js
-import { createFormCommitmentReceipt } from "@citizen-protocol/nodejs-sdk";
+import { createFormCommitmentReceipt } from "@citizen-protocol/typescript-sdk";
 
 const tx = createFormCommitmentReceipt({
   formId: "form-001",
@@ -138,7 +138,7 @@ For landing-page onboarding backends that enforce wallet-first submission, map t
 ## Server-side signer flow (optional)
 
 ```js
-import { CitizenNodeClient, Ed25519Signer } from "@citizen-protocol/nodejs-sdk";
+import { CitizenNodeClient, Ed25519Signer } from "@citizen-protocol/typescript-sdk";
 import { readFileSync } from "node:fs";
 
 const signer = new Ed25519Signer({
@@ -163,19 +163,19 @@ The release-gate smoke script supports both externally managed nodes and self-st
 
 ```bash
 # default: expect node already running at CITIZEN_NODE_URL
-node sdk/nodejs/scripts/live_node_smoke.mjs
+node sdk/typescript/scripts/live_node_smoke.mjs
 
 # start a local blockchain node without Docker (cargo run)
 CITIZEN_NODE_MODE=local \
 CITIZEN_LOCAL_PROTOCOL_DIR=citizen-protocol \
 CITIZEN_LOCAL_CONFIG_PATH=config/localnet/validator-alpha.toml \
-node sdk/nodejs/scripts/live_node_smoke.mjs
+node sdk/typescript/scripts/live_node_smoke.mjs
 
 # start/stop through custom commands (for Docker or other runtimes)
 CITIZEN_NODE_MODE=command \
 CITIZEN_NODE_START_COMMAND="docker compose -f my-stack.yml up -d citizen-node" \
 CITIZEN_NODE_STOP_COMMAND="docker compose -f my-stack.yml down" \
-node sdk/nodejs/scripts/live_node_smoke.mjs
+node sdk/typescript/scripts/live_node_smoke.mjs
 ```
 
 Environment variables:
