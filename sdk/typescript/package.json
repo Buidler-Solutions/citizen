@@ -22,8 +22,10 @@
     "test": "npm run build && npm run build:test && node --test dist-test/*.test.js",
     "build:test": "tsc -p tsconfig.test.json",
     "typecheck:public": "tsc -p tsconfig.types.json",
+    "lint": "eslint . --ext .ts,.mts --max-warnings=0",
+    "format:check": "prettier --check \"docs/**/*.md\" \"package.json\"",
     "smoke:live": "npm run build && node scripts/live_node_smoke.mjs",
-    "release:check": "npm run typecheck && npm test && npm run build && npm run api:check && npm run changelog:check",
+    "release:check": "npm run typecheck && npm test && npm run build && npm run lint && npm run format:check && npm run api:check && npm run changelog:check",
     "release:pack": "npm run release:check && npm pack --dry-run",
     "release:next": "npm run release:check && npm publish --tag next",
     "api:report": "npm run build && node scripts/generate_api_report.mjs --write",
@@ -40,6 +42,11 @@
   ],
   "module": "dist/esm/index.js",
   "devDependencies": {
+    "@eslint/js": "^9.39.1",
+    "@typescript-eslint/eslint-plugin": "^8.46.2",
+    "@typescript-eslint/parser": "^8.46.2",
+    "eslint": "^9.38.0",
+    "prettier": "^3.6.2",
     "typescript": "^5.6.3"
   }
 }

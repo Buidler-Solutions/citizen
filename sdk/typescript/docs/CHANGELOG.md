@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.0 - 2026-04-23
+
+- No user-facing SDK changes recorded.
+
 All notable changes to `@citizen-protocol/typescript-sdk` are tracked here.
 
 ## 0.1.0 - 2026-04-23
