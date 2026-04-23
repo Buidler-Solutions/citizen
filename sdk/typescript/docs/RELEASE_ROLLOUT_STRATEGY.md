@@ -32,7 +32,7 @@ npm run release:next
 
 Where:
 
-- `release:check` runs typecheck, tests, and production build gates.
+- `release:check` runs typecheck, tests, production build, API surface drift checks, and verifies that `docs/CHANGELOG.md` contains the current package version entry.
 - `release:next` publishes a prerelease package to npm with the `next` dist-tag for builder validation.
 
 For non-publishing validation in CI or local dry runs, use:
@@ -42,3 +42,15 @@ npm run release:pack
 ```
 
 This validates publishable contents via `npm pack --dry-run` after running release gates.
+
+## Changelog automation
+
+From `sdk/typescript/`:
+
+```bash
+npm run changelog:generate
+npm run changelog:check
+```
+
+- `changelog:generate` prepends a versioned changelog section using commit subjects since the latest tag (or full history when no tag exists).
+- `changelog:check` fails if `docs/CHANGELOG.md` does not yet include the current `package.json` version header.
