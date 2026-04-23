@@ -212,6 +212,7 @@ test("submitTransaction builds signed envelope and posts to runtime", async () =
   assert.equal(body.payload.action, "RECORD_EVENT");
   assert.equal(typeof body.signature, "string");
   assert.equal(typeof body.payload.signature, "string");
+  assert.equal(body.signature, body.payload.signature);
 });
 
 test("submitWithBrowserWallet requests account and signs through wallet provider", async () => {
@@ -252,8 +253,9 @@ test("submitWithBrowserWallet requests account and signs through wallet provider
   assert.equal(postedBody.payload.author, "0xabc123");
   assert.equal(postedBody.payload.signature, "0xwalletsig");
   assert.equal(postedBody.signature, "0xwalletsig");
+  assert.equal(postedBody.signature, postedBody.payload.signature);
   assert.equal(providerCalls[0].method, "citizen_requestAccounts");
-  assert.equal(providerCalls.filter((call) => call.method === "personal_sign").length, 2);
+  assert.equal(providerCalls.filter((call) => call.method === "personal_sign").length, 1);
 });
 
 test("submitEnvelopeBatch posts array payload to batch endpoint", async () => {
@@ -511,7 +513,7 @@ test("submitWithBrowserWallet supports custom wallet sign method", async () => {
     requestMethod: "citizen_signTypedEntry"
   });
 
-  assert.equal(providerCalls.filter((method) => method === "citizen_signTypedEntry").length, 2);
+  assert.equal(providerCalls.filter((method) => method === "citizen_signTypedEntry").length, 1);
 });
 
 

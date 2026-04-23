@@ -1,7 +1,8 @@
 import { spawn } from "node:child_process";
-import { readFileSync, rmSync } from "node:fs";
+import { generateKeyPairSync, sign as signDetached } from "node:crypto";
+import { existsSync, readFileSync, rmSync } from "node:fs";
 import path from "node:path";
-import { CitizenNodeClient } from "../src/index.js";
+import { CitizenNodeClient, createFormCommitmentReceipt } from "../dist/esm/index.js";
 
 const NODE_URL = process.env.CITIZEN_NODE_URL ?? "http://127.0.0.1:8081";
 const HEALTH_URL = `${NODE_URL}/health`;
@@ -18,20 +19,29 @@ const HEALTH_TIMEOUT_MS = Number(
   process.env.CITIZEN_NODE_HEALTH_TIMEOUT_MS ?? (NODE_MODE === "local" ? 120_000 : 30_000)
 );
 
-class DeterministicStubSigner {
-  constructor({ signerId = "did:ledger:builder:smoke", signature = "stub-signature" } = {}) {
+class DeterministicSubmissionSigner {
+  constructor({ signerId = "forms.commitment" } = {}) {
     this.signerId = signerId;
-    this.signature = signature;
+    const { privateKey, publicKey } = generateKeyPairSync("ed25519");
+    this.privateKey = privateKey;
+
+    const jwk = publicKey.export({ format: "jwk" });
+    if (!jwk.x) {
+      throw new Error("unable to export Ed25519 public key material for smoke signer");
+    }
+
+    this.publicKeyHex = Buffer.from(jwk.x, "base64url").toString("hex");
   }
 
   async getSignerId() {
     return this.signerId;
   }
 
-  async sign() {
-    return this.signature;
+  async sign(message) {
+    return signDetached(null, Buffer.from(message, "utf8"), this.privateKey).toString("hex");
   }
 }
+
 
 function sleep(ms) {
   return new Promise((resolve) => {
@@ -150,15 +160,25 @@ async function stopNodeForMode(mode, childProcess) {
 
 async function runSmoke() {
   const client = new CitizenNodeClient({ baseUrl: NODE_URL });
-  const signer = new DeterministicStubSigner();
+  const signer = new DeterministicSubmissionSigner();
+
+  const operation = createFormCommitmentReceipt({
+    formId: "smoke:form:1",
+    dataHash: "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+    encryptedFormUrl: "https://storage.citizen.local/forms/smoke-form-1.cipher",
+    commitmentReceipt: {
+      hosted_at: new Date().toISOString(),
+      host: "storage.citizen.local"
+    }
+  });
 
   const submission = await client.submitTransaction({
-    namespace: "audit.procurement",
-    action: "RECORD_EVENT",
-    objectId: "smoke:event:1",
+    namespace: operation.namespace,
+    action: operation.action,
+    objectId: operation.objectId,
     payload: {
-      event: "SDK_SMOKE",
-      document_hash: "sha256:smoke"
+      ...operation.payload,
+      author_public_key: signer.publicKeyHex
     },
     signer
   });
@@ -187,7 +207,17 @@ async function runSmoke() {
   console.log(`terminal_status=${terminalStatus}`);
 }
 
+function ensureBuiltSdk() {
+  const distEntrypoint = path.resolve(path.dirname(new URL(import.meta.url).pathname), "../dist/esm/index.js");
+  if (!existsSync(distEntrypoint)) {
+    throw new Error(
+      `SDK build artifacts not found at ${distEntrypoint}. Run "npm run build" in sdk/typescript first.`
+    );
+  }
+}
+
 async function main() {
+  ensureBuiltSdk();
   console.log(`node_mode=${NODE_MODE}`);
   const nodeProcess = await startNodeForMode(NODE_MODE);
 

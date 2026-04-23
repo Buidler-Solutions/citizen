@@ -13,7 +13,7 @@ sdk/typescript/scripts/live_node_smoke.mjs
 The smoke script verifies the minimum runtime integration path:
 
 1. Node health endpoint responds (`GET /health`).
-2. SDK submits one deterministic `audit.procurement` `RECORD_EVENT` entry.
+2. SDK submits one deterministic `forms.commitment` `SUBMIT_COMMITMENT_RECEIPT` entry.
 3. Submission includes `receipt.receipt_id`.
 4. SDK polls receipt endpoint to terminal state (`Accepted` or `Rejected`).
 
@@ -25,6 +25,13 @@ The smoke script verifies the minimum runtime integration path:
 ```bash
 cd sdk/typescript
 npm ci
+npm run build
+```
+
+Default command from `sdk/typescript/`:
+
+```bash
+npm run smoke:live
 ```
 
 ## Mode 1: External node (default)

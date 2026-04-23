@@ -159,7 +159,15 @@ const submission = await client.submitTransaction({
 
 ## Live smoke script modes
 
-The release-gate smoke script supports both externally managed nodes and self-started local runs:
+The release-gate smoke script supports both externally managed nodes and self-started local runs.
+
+From `sdk/typescript/`, run the default flow with:
+
+```bash
+npm run smoke:live
+```
+
+Equivalent direct invocations (from repo root) are:
 
 ```bash
 # default: expect node already running at CITIZEN_NODE_URL
