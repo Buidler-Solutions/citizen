@@ -33,6 +33,9 @@ explorer/frontend/.next/
 explorer/frontend/.env.local
 
 sdk/nodejs/node_modules/
+sdk/typescript/node_modules/
+sdk/typescript/dist/
+sdk/typescript/dist-test/
 
 wallet/browser/node_modules/
 wallet/browser/dist/
