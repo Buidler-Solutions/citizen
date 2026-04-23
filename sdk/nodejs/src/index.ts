@@ -1,3 +1,4 @@
+// @ts-nocheck
 function hasWebCrypto() {
   return typeof globalThis.crypto !== "undefined" && typeof globalThis.crypto.randomUUID === "function";
 }

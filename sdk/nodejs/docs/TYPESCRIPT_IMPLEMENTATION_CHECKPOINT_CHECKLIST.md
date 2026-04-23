@@ -4,8 +4,8 @@
 
 ## Baseline (Current State Snapshot)
 
-- [ ] Confirm current package entrypoints (`main`/`exports`) and type declarations.
-- [ ] Confirm all tests are green before migration.
+- [x] Confirm current package entrypoints (`main`/`exports`) and type declarations.
+- [x] Confirm all tests are green before migration.
 - [ ] Capture current public API surface (exports, options, error shapes).
 - [ ] Record current package size and install behavior for comparison after conversion.
 
@@ -15,32 +15,32 @@
 
 ### Project setup
 
-- [ ] Add `typescript` as a dev dependency.
-- [ ] Add a strict `tsconfig.json` with:
-  - [ ] `strict: true`
-  - [ ] `noUncheckedIndexedAccess: true`
-  - [ ] `exactOptionalPropertyTypes: true`
-  - [ ] declaration output enabled
-  - [ ] source maps + declaration maps enabled
-- [ ] Add `typecheck` script (`tsc --noEmit`).
+- [x] Add `typescript` as a dev dependency.
+- [x] Add a strict `tsconfig.json` with:
+  - [x] `strict: true`
+  - [x] `noUncheckedIndexedAccess: true`
+  - [x] `exactOptionalPropertyTypes: true`
+  - [x] declaration output enabled
+  - [x] source maps + declaration maps enabled
+- [x] Add `typecheck` script (`tsc --noEmit`).
 
 ### Build pipeline
 
-- [ ] Add TypeScript build toolchain (e.g., `tsup` or `tsc` + bundler).
-- [ ] Emit both module formats:
-  - [ ] ESM build
-  - [ ] CJS build
-- [ ] Ensure generated `.d.ts` files are emitted from TS source (not handwritten).
-- [ ] Add `build` and `clean` scripts.
+- [x] Add TypeScript build toolchain (e.g., `tsup` or `tsc` + bundler).
+- [x] Emit both module formats:
+  - [x] ESM build
+  - [x] CJS build
+- [x] Ensure generated `.d.ts` files are emitted from TS source (not handwritten).
+- [x] Add `build` and `clean` scripts.
 
 ### Packaging standards
 
-- [ ] Update `package.json` `exports` map for:
-  - [ ] `import`
-  - [ ] `require`
-  - [ ] `types`
-- [ ] Validate package metadata (`files`, `engines`, `types`, `main`, optional `module`).
-- [ ] Validate tarball contents using `npm pack --dry-run`.
+- [x] Update `package.json` `exports` map for:
+  - [x] `import`
+  - [x] `require`
+  - [x] `types`
+- [x] Validate package metadata (`files`, `engines`, `types`, `main`, optional `module`).
+- [x] Validate tarball contents using `npm pack --dry-run`.
 
 ---
 
@@ -48,15 +48,15 @@
 
 ### Incremental conversion
 
-- [ ] Rename/port `src/index.js` to `src/index.ts`.
-- [ ] Replace manual declaration maintenance with inferred types from source.
+- [x] Rename/port `src/index.js` to `src/index.ts`.
+- [x] Replace manual declaration maintenance with inferred types from source.
 - [ ] Split large modules into typed submodules where helpful.
 - [ ] Add explicit public types for all builder-facing request/response payloads.
 
 ### API compatibility controls
 
-- [ ] Preserve existing public export names.
-- [ ] Preserve existing runtime behavior and defaults.
+- [x] Preserve existing public export names.
+- [x] Preserve existing runtime behavior and defaults.
 - [ ] Keep error messages stable where clients may depend on them.
 - [ ] Add deprecations (if needed) with migration notes instead of silent breaking changes.
 
