@@ -250,11 +250,35 @@ npm run release:pack
 npm run release:next
 ```
 
-- `release:check` runs the stable quality gates (`typecheck`, `test`, `build`).
+- `release:check` runs the stable quality gates (`typecheck`, `test`, `build`, `api:check`).
 - `release:pack` validates publish contents with `npm pack --dry-run`.
 - `release:next` publishes a prerelease package under the npm `next` tag.
 
 Detailed bump/deprecation policy is documented in `docs/RELEASE_ROLLOUT_STRATEGY.md`.
+
+## Public API drift guard
+
+From `sdk/typescript/`:
+
+```bash
+npm run api:check
+npm run api:report
+```
+
+- `api:check` verifies `docs/PUBLIC_API_SURFACE_BASELINE.md` matches current source exports.
+- `api:report` regenerates the baseline file when intentional API changes are made.
+
+## Example TypeScript app
+
+A minimal compile-checked builder example lives at `examples/basic-client.ts`.
+
+From `sdk/typescript/`:
+
+```bash
+npm run example:build
+```
+
+This validates the integration pattern and type contracts without requiring a running node.
 
 ## Notes
 

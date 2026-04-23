@@ -1,39 +1,46 @@
 # TypeScript SDK Public API Surface Baseline
 
-Captured from `sdk/typescript/src/index.ts` exports.
+Captured from `sdk/typescript/src/index.ts` and `sdk/typescript/src/types.ts` exports.
 
 ## Runtime exports
 
+- `appendCoSignature`
+- `BrowserWalletSigner`
 - `canonicalizeJson`
-- `sha256DigestHex`
-- `OFFCHAIN_ATTACHMENT_ALLOWED_MIME_TYPES`
-- `signCitizenPayloadWithWallet`
+- `CitizenNodeClient`
 - `createFormCommitmentReceipt`
 - `createMultisigCreditGrant`
 - `createSponsorshipUsage`
+- `Ed25519Signer`
+- `finalizeEnvelope`
+- `OFFCHAIN_ATTACHMENT_ALLOWED_MIME_TYPES`
+- `sha256DigestHex`
+- `signCitizenPayloadWithWallet`
 - `validateBuilderCreditsPayload`
 - `wrapEnvelopeMulti`
-- `appendCoSignature`
-- `finalizeEnvelope`
-- `BrowserWalletSigner`
-- `Ed25519Signer`
-- `CitizenNodeClient`
 
 ## Public builder-facing types
 
-- `CitizenSigner`
-- `MultisigPolicy`
-- `EntryRecord`
-- `EnvelopeRecord`
-- `WrapEnvelopeMultiArgs`
 - `BrowserWalletProvider`
-- `WalletSignedPayload`
-- `SignCitizenPayloadWithWalletArgs`
+- `BuilderCreditsAction`
+- `BuilderCreditsPayload`
+- `CitizenNodeClientOptions`
+- `CitizenSigner`
+- `CoSignature`
 - `CreateFormCommitmentReceiptArgs`
 - `CreateMultisigCreditGrantArgs`
 - `CreateSponsorshipUsageArgs`
-- `BuilderCreditsAction`
-- `BuilderCreditsPayload`
-- `ValidateBuilderCreditsPayloadArgs`
-- `CitizenNodeClientOptions`
+- `EntryRecord`
+- `EnvelopeRecord`
+- `JsonObject`
+- `JsonPrimitive`
+- `JsonValue`
+- `MultisigPolicy`
+- `MultisigProof`
+- `SignCitizenPayloadWithWalletArgs`
 - `SubmitTransactionArgs`
+- `SubmitWithBrowserWalletArgs`
+- `ValidateBuilderCreditsPayloadArgs`
+- `WaitForReceiptOptions`
+- `WalletSignedPayload`
+- `WrapEnvelopeMultiArgs`
