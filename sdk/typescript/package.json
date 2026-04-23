@@ -22,7 +22,10 @@
     "test": "npm run build && npm run build:test && node --test dist-test/*.test.js",
     "build:test": "tsc -p tsconfig.test.json",
     "typecheck:public": "tsc -p tsconfig.types.json",
-    "smoke:live": "npm run build && node scripts/live_node_smoke.mjs"
+    "smoke:live": "npm run build && node scripts/live_node_smoke.mjs",
+    "release:check": "npm run typecheck && npm test && npm run build",
+    "release:pack": "npm run release:check && npm pack --dry-run",
+    "release:next": "npm run release:check && npm publish --tag next"
   },
   "license": "Apache-2.0",
   "types": "dist/esm/index.d.ts",
