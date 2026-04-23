@@ -4,7 +4,7 @@ import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { sha256DigestHex } from "../src/index.js";
+import { sha256DigestHex } from "../dist/index.js";
 
 import {
   appendCoSignature,
@@ -18,7 +18,7 @@ import {
   finalizeEnvelope,
   wrapEnvelopeMulti,
   signCitizenPayloadWithWallet
-} from "../src/index.js";
+} from "../dist/index.js";
 
 class StubSigner {
   constructor(id = "did:ledger:builder:demo") {
