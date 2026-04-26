@@ -67,3 +67,7 @@ explorer/frontend/.tmp-tests/tests.block-routes.test.js
 explorer/frontend/.tmp-tests/app/lib/blocks.js
 wallet/browser/dist/popup.js
 explorer/backend/.citizen/indexer-metrics-state.json
+
+# MemPalace per-project files (issue #185)
+mempalace.yaml
+entities.json
