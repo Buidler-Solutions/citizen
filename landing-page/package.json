@@ -21,21 +21,23 @@
   },
   "pnpm": {
     "overrides": {
-      "lodash": ">=4.18.0",
-      "webpack": "^5.104.1",
-      "tmp": "^0.2.4",
-      "file-type": "21.3.2",
-      "serialize-javascript": "^7.0.3",
-      "multer": "2.1.1",
-      "flatted": "3.4.2",
-      "minimatch": "^10.2.3",
-      "glob": "^10.5.0",
       "@angular-devkit/core>ajv": "^8.18.0",
       "@eslint/eslintrc>ajv": "6.14.0",
-      "flat-cache>flatted": "3.4.2",
-      "picomatch": "4.0.4",
       "brace-expansion": "5.0.5",
-      "express>path-to-regexp": "0.1.13"
+      "express>path-to-regexp": "0.1.13",
+      "file-type": "21.3.2",
+      "flat-cache>flatted": "3.4.2",
+      "flatted": "3.4.2",
+      "glob": "^10.5.0",
+      "lodash": ">=4.18.0",
+      "minimatch": "^10.2.3",
+      "multer": "2.1.1",
+      "picomatch": "4.0.4",
+      "postcss": "^8.5.10",
+      "serialize-javascript": "^7.0.3",
+      "tmp": "^0.2.4",
+      "uuid": "^14.0.0",
+      "webpack": "^5.104.1"
     }
   }
 }
