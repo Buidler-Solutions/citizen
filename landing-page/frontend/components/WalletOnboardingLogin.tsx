@@ -26,13 +26,15 @@ type CitizenChallengeSignature = {
   algorithm?: string;
 };
 
+const DID_KEY_PREFIX = 'did:key:ed25519:';
+
 const detectProvider = (): WalletProvider | null => {
   const candidate = (window as typeof window & { citizen?: WalletProvider; ctzn?: WalletProvider });
   return candidate.citizen ?? candidate.ctzn ?? null;
 };
 
 export function WalletOnboardingLogin() {
-  const [wallet, setWallet] = useState<string | null>(null);
+  const [walletPublicKey, setWalletPublicKey] = useState<string | null>(null);
   const [status, setStatus] = useState('Connect your wallet to continue onboarding.');
   const [busy, setBusy] = useState(false);
 
@@ -56,17 +58,41 @@ export function WalletOnboardingLogin() {
     return `ctzn:${digestHex.slice(0, 40)}`;
   }, []);
 
+  const normalizeSignerPublicKey = useCallback((publicKeyValue: string | undefined): string => {
+    const normalized = (publicKeyValue ?? '').trim().toLowerCase();
+    const withoutDidPrefix = normalized.startsWith(DID_KEY_PREFIX)
+      ? normalized.slice(DID_KEY_PREFIX.length)
+      : normalized;
+    if (!/^[a-f0-9]{64}$/.test(withoutDidPrefix)) {
+      throw new Error('Wallet returned an invalid Ed25519 public key.');
+    }
+    return withoutDidPrefix;
+  }, []);
+
+  const formatWalletButtonLabel = useCallback((didKeyPublicKey: string | null): string => {
+    if (!didKeyPublicKey) {
+      return 'Connect Wallet';
+    }
+
+    const trimmed = didKeyPublicKey.trim();
+    if (trimmed.length <= 28) {
+      return trimmed;
+    }
+
+    return `${trimmed.slice(0, 14)}...${trimmed.slice(-7)}`;
+  }, []);
+
   const syncWalletHandshakeState = useCallback(async () => {
     const provider = detectProvider();
     if (!provider) {
-      setWallet(null);
+      setWalletPublicKey(null);
       setStatus('Citizen wallet extension not detected. Install and unlock to continue.');
       return;
     }
 
     const token = window.localStorage.getItem('citizen.wallet.auth.session');
     if (!token) {
-      setWallet(null);
+      setWalletPublicKey(null);
       setStatus('Connect your wallet to continue onboarding.');
       return;
     }
@@ -74,18 +100,24 @@ export function WalletOnboardingLogin() {
     try {
       const signerResult = await provider.request({ method: 'ctzn_getCitizenSigner' }) as CitizenSigner;
       const signerDid = typeof signerResult?.did === 'string' ? signerResult.did.trim() : '';
+      const signerPublicKey = normalizeSignerPublicKey(signerResult?.verifyingKey);
       if (!signerDid) {
-        setWallet(null);
+        setWalletPublicKey(null);
         setStatus('Wallet session found, but no active protocol signer. Reconnect your wallet.');
         return;
       }
-      setWallet(signerDid);
+      if (!signerPublicKey) {
+        setWalletPublicKey(null);
+        setStatus('Wallet session found, but no active public key is available. Reconnect your wallet.');
+        return;
+      }
+      setWalletPublicKey(`${DID_KEY_PREFIX}${signerPublicKey}`);
       setStatus('Wallet login successful. Your onboarding session is active.');
     } catch {
-      setWallet(null);
+      setWalletPublicKey(null);
       setStatus('Wallet handshake check failed. Reconnect your wallet to continue.');
     }
-  }, []);
+  }, [normalizeSignerPublicKey]);
 
   useEffect(() => {
     void syncWalletHandshakeState();
@@ -103,9 +135,7 @@ export function WalletOnboardingLogin() {
 
       const signerResult = await provider.request({ method: 'ctzn_getCitizenSigner' }) as CitizenSigner;
       const signerDid = typeof signerResult?.did === 'string' ? signerResult.did.trim() : '';
-      const signerPublicKey = typeof signerResult?.verifyingKey === 'string'
-        ? signerResult.verifyingKey.trim().toLowerCase()
-        : '';
+      const signerPublicKey = normalizeSignerPublicKey(signerResult?.verifyingKey);
       if (!signerDid || !signerPublicKey) {
         throw new Error('Wallet did not return a protocol signer DID/public key.');
       }
@@ -113,6 +143,7 @@ export function WalletOnboardingLogin() {
         throw new Error('Wallet signer algorithm must be Ed25519.');
       }
       const citizenAddress = await deriveCitizenAddress(signerPublicKey);
+      setWalletPublicKey(`${DID_KEY_PREFIX}${signerPublicKey}`);
 
       const challengeResponse = await fetch(`${authApiUrl}/auth/challenge`, {
         method: 'POST',
@@ -165,7 +196,7 @@ export function WalletOnboardingLogin() {
       await syncWalletHandshakeState();
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown wallet login error.';
-      setStatus(`Wallet login failed: ${message}`);
+      setStatus(`Handshake with wallet a success, has issue with: ${message}`);
     } finally {
       setBusy(false);
     }
@@ -175,13 +206,14 @@ export function WalletOnboardingLogin() {
     <div className="flex flex-col items-end gap-2">
       <button
         type="button"
-        className="rounded-full border border-cyan-300/40 px-4 py-1.5 text-xs font-semibold tracking-[0.08em] text-cyan-200 transition-colors hover:border-cyan-200 hover:text-cyan-100 disabled:cursor-not-allowed disabled:opacity-70"
+        className="rounded-full border border-cyan-300/40 px-4 py-1.5 text-center text-xs font-semibold tracking-[0.08em] text-cyan-200 transition-colors hover:border-cyan-200 hover:text-cyan-100 disabled:cursor-not-allowed disabled:opacity-70"
         onClick={() => {
           void connectAndLogin();
         }}
         disabled={busy}
+        title={walletPublicKey ?? 'Connect Wallet'}
       >
-        {busy ? 'Connecting…' : wallet ? `Wallet · ${wallet.slice(0, 6)}…${wallet.slice(-4)}` : 'Connect Wallet'}
+        {busy ? 'Connecting…' : formatWalletButtonLabel(walletPublicKey)}
       </button>
       <p className="max-w-[20rem] text-right text-[0.65rem] leading-relaxed tracking-[0.04em] text-slate-300/80">{status}</p>
     </div>
