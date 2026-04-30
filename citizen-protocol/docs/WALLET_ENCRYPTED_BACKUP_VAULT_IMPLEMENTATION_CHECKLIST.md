@@ -216,11 +216,18 @@ This initiative should replicate key VeraCrypt-style operating properties while 
 
 For first mergeable implementation slice, require:
 
-- [ ] 2-slot vault support (`decoy` + `critical`) in CLI.
+- [x] 2-slot vault support (`decoy` + `critical`) in CLI.
 - [ ] Password-based encryption with audited parameter defaults.
-- [ ] Backup export + restore for wallet CLI credentials.
-- [ ] Integrity verification command and deterministic error codes.
+- [x] Backup export + restore for wallet CLI credentials.
+- [x] Integrity verification command and deterministic error codes.
 - [ ] Basic runbook and threat model document.
+
+### Implementation Status Notes (as of 2026-04-30)
+
+- `wallet backup` CLI command group is implemented with: `init`, `add-slot`, `export-credentials`, `verify`, and `restore`.
+- Vault schema scaffold `citizen.wallet.backup.v1` exists with role metadata for `decoy` and `critical`.
+- Backup export/restore path is wired to encrypted payload handling and checksum validation on restore.
+- Remaining work for this checklist still includes formal threat-model artifacts, audited parameter baselines, and operator runbook completion.
 
 ---
 
