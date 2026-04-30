@@ -172,10 +172,10 @@ This initiative should replicate key VeraCrypt-style operating properties while 
 
 ## Checkpoint 7 — Testing Matrix and Quality Gates
 
-- [ ] Unit tests: KDF params, AEAD envelopes, slot metadata parsing, manifest validation.
+- [x] Unit tests: KDF params, AEAD envelopes, slot metadata parsing, manifest validation.
 - [ ] Property/fuzz tests: malformed headers, truncated ciphertext, random bit flips.
-- [ ] Integration tests: create 2-slot vault on USB media, export credentials, delete local wallet, restore, verify identity continuity.
-- [ ] Adversarial tests: wrong-passphrase throttling behavior, tamper detection, replay/rollback attempts.
+- [x] Integration tests: create 2-slot vault on USB media, export credentials, delete local wallet, restore, verify identity continuity.
+- [x] Adversarial tests: wrong-passphrase throttling behavior, tamper detection, replay/rollback attempts.
 - [ ] Performance tests: unlock latency targets across workstation/laptop profiles.
 
 **Exit criteria**
@@ -230,6 +230,7 @@ For first mergeable implementation slice, require:
 - Backup export/restore path is wired to encrypted payload handling and checksum validation on restore.
 - `wallet backup verify` supports role-specific integrity validation (`--role` + passphrase/env var) that decrypts slot payloads and re-validates checksum deterministically.
 - CLI supports machine-readable output for `verify` and `restore` (`--json`) to enable deterministic operator automation pipelines.
+- Wallet CLI tests now include backup round-trip recovery and tamper-detection assertions for checksum mismatch handling.
 - Threat-model baseline document is now tracked in `citizen-protocol/docs/WALLET_ENCRYPTED_BACKUP_VAULT_THREAT_MODEL.md`; remaining work includes formal security sign-off and expanded operator runbook drills.
 
 ---
