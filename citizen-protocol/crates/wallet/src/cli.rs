@@ -404,6 +404,8 @@ struct BackupInitArgs {
     #[arg(long)]
     vault_path: PathBuf,
     #[arg(long)]
+    portable_label: Option<String>,
+    #[arg(long)]
     decoy_password: Option<String>,
     #[arg(long)]
     critical_password: Option<String>,
@@ -437,6 +439,10 @@ struct BackupExportArgs {
 struct BackupVerifyArgs {
     #[arg(long)]
     vault_path: PathBuf,
+    #[arg(long)]
+    role: Option<BackupSlotRole>,
+    #[arg(long)]
+    password: Option<String>,
     #[arg(long)]
     json: bool,
 }
@@ -474,6 +480,11 @@ enum BackupExportScope {
 struct BackupVaultFile {
     schema: String,
     version: u32,
+    #[serde(default)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    portable_label: Option<String>,
+    #[serde(default)]
+    created_at: i64,
     slots: Vec<BackupVaultSlot>,
 }
 
@@ -1940,6 +1951,8 @@ fn backup_init(args: BackupInitArgs) -> anyhow::Result<()> {
     let mut vault = BackupVaultFile {
         schema: "citizen.wallet.backup.v1".to_string(),
         version: 1,
+        portable_label: args.portable_label.clone(),
+        created_at: Utc::now().timestamp(),
         slots: vec![],
     };
     vault
@@ -1986,6 +1999,19 @@ fn backup_export_credentials(args: BackupExportArgs) -> anyhow::Result<()> {
 
 fn backup_verify(args: BackupVerifyArgs) -> anyhow::Result<()> {
     let vault = load_backup_vault(&args.vault_path)?;
+    if let Some(role) = args.role.clone() {
+        let password = load_backup_password(args.password, "CITIZEN_BACKUP_SLOT_PASSWORD")?;
+        let slot = vault
+            .slots
+            .iter()
+            .find(|slot| slot.role == role)
+            .ok_or_else(|| anyhow::anyhow!("slot not found for requested role"))?;
+        let payload_value = decrypt_payload(&slot.encrypted_payload, &password)?;
+        let payload = serde_json::to_vec(&payload_value)?;
+        if hash_hex(&payload) != slot.payload_sha256 {
+            return Err(anyhow::anyhow!("backup payload checksum mismatch"));
+        }
+    }
     let slots: Vec<Value> = vault
         .slots
         .iter()
@@ -2000,13 +2026,24 @@ fn backup_verify(args: BackupVerifyArgs) -> anyhow::Result<()> {
     if args.json {
         println!(
             "{}",
-            serde_json::to_string_pretty(
-                &json!({"schema": vault.schema, "version": vault.version, "slots": slots})
-            )?
+            serde_json::to_string_pretty(&json!({
+                "schema": vault.schema,
+                "version": vault.version,
+                "portable_label": vault.portable_label,
+                "created_at": vault.created_at,
+                "slots": slots
+            }))?
         );
     } else {
         println!("Backup vault schema: {}", vault.schema);
         println!("Version: {}", vault.version);
+        if let Some(portable_label) = vault.portable_label.as_deref() {
+            println!("Portable label: {portable_label}");
+        }
+        println!("Created at: {}", vault.created_at);
+        if args.role.is_some() {
+            println!("Integrity verification: ok");
+        }
         for slot in slots {
             println!(
                 "- role={} scopes={} exported_at={}",
