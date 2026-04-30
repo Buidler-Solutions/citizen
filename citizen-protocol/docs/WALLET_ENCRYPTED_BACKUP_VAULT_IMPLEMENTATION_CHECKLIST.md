@@ -132,8 +132,8 @@ This initiative should replicate key VeraCrypt-style operating properties while 
   - [x] `wallet backup verify`
   - [x] `wallet backup restore`
 - [x] Support selective export (identity keys, account keys, recovery metadata, consent receipts).
-- [ ] Enforce no-plaintext-on-disk policy by default (unless explicit override flag with warning).
-- [ ] Add non-interactive flags for operator automation with safe prompts disabled only by explicit consent flag.
+- [x] Enforce no-plaintext-on-disk policy by default (unless explicit override flag with warning).
+- [x] Add non-interactive flags for operator automation with safe prompts disabled only by explicit consent flag.
 - [x] Add deterministic JSON output mode for scripts.
 
 **Exit criteria**
@@ -158,7 +158,7 @@ This initiative should replicate key VeraCrypt-style operating properties while 
 
 ## Checkpoint 6 — Recovery Safety and Operator Runbooks
 
-- [ ] Define deterministic restore ordering when multiple backups exist.
+- [x] Define deterministic restore ordering when multiple backups exist.
 - [ ] Add checksum + signed manifest verification for backup bundles.
 - [ ] Add disaster-recovery runbook updates for wallet credential restoration.
 - [ ] Add corrupted/partial-backup recovery guidance.
@@ -230,6 +230,9 @@ For first mergeable implementation slice, require:
 - Backup export/restore path is wired to encrypted payload handling and checksum validation on restore.
 - `wallet backup verify` supports role-specific integrity validation (`--role` + passphrase/env var) that decrypts slot payloads and re-validates checksum deterministically.
 - CLI supports machine-readable output for `verify` and `restore` (`--json`) to enable deterministic operator automation pipelines.
+- CLI backup commands support non-interactive automation via explicit password arguments and environment variables (`CITIZEN_BACKUP_DECOY_PASSWORD`, `CITIZEN_BACKUP_CRITICAL_PASSWORD`, `CITIZEN_BACKUP_SLOT_PASSWORD`) without requiring interactive prompts.
+- CLI backup/restore flows keep payloads encrypted at rest by default and do not persist plaintext credential bundles as a separate artifact.
+- Restore behavior is deterministic by role: exports replace the existing slot for a given role and restore selects by explicit role, avoiding ambiguous “latest backup” selection.
 - Wallet CLI tests now include backup round-trip recovery and tamper-detection assertions for checksum mismatch handling.
 - Threat-model baseline document is now tracked in `citizen-protocol/docs/WALLET_ENCRYPTED_BACKUP_VAULT_THREAT_MODEL.md`; remaining work includes formal security sign-off and expanded operator runbook drills.
 - Threat model appendix and baseline operator controls are documented in `citizen-protocol/docs/WALLET_ENCRYPTED_BACKUP_VAULT_THREAT_MODEL.md`, including attacker classes, out-of-scope boundaries, and residual-risk tracking for the current CLI implementation.
