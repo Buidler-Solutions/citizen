@@ -13,10 +13,10 @@ use x25519_dalek::{PublicKey as X25519PublicKey, StaticSecret};
 
 use crate::{
     build_wrcp_msig_v1_proof, build_wrcp_msig_v1_signing_payload, compute_file_manifest_commitment,
-    decrypt_secret_key, dry_run_wrcp_msig_v1, encrypt_secret_key, generate_mnemonic_phrase,
-    parse_verifying_key, sign_entry, verify_entry_signature, verify_offchain_file_reconciliation,
-    ActionPolicy, EncryptedPayload, EncryptedSecretKey, EntryDraft, WalletKeypair, WrcpMsigV1Proof,
-    decrypt_payload, encrypt_payload,
+    decrypt_payload, decrypt_secret_key, dry_run_wrcp_msig_v1, encrypt_payload, encrypt_secret_key,
+    generate_mnemonic_phrase, parse_verifying_key, sign_entry, verify_entry_signature,
+    verify_offchain_file_reconciliation, ActionPolicy, EncryptedPayload, EncryptedSecretKey,
+    EntryDraft, WalletKeypair, WrcpMsigV1Proof,
 };
 
 #[derive(Debug, Parser)]
@@ -429,12 +429,16 @@ struct BackupExportArgs {
     role: BackupSlotRole,
     #[arg(long)]
     password: Option<String>,
+    #[arg(long, value_delimiter = ',', default_value = "keys")]
+    scopes: Vec<BackupExportScope>,
 }
 
 #[derive(Debug, Args)]
 struct BackupVerifyArgs {
     #[arg(long)]
     vault_path: PathBuf,
+    #[arg(long)]
+    json: bool,
 }
 
 #[derive(Debug, Args)]
@@ -447,6 +451,8 @@ struct BackupRestoreArgs {
     role: BackupSlotRole,
     #[arg(long)]
     password: Option<String>,
+    #[arg(long)]
+    json: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, ValueEnum, PartialEq, Eq)]
@@ -454,6 +460,14 @@ struct BackupRestoreArgs {
 enum BackupSlotRole {
     Decoy,
     Critical,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ValueEnum, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+enum BackupExportScope {
+    Keys,
+    RecoveryMetadata,
+    ConsentReceipts,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -466,6 +480,7 @@ struct BackupVaultFile {
 #[derive(Debug, Serialize, Deserialize)]
 struct BackupVaultSlot {
     role: BackupSlotRole,
+    scopes: Vec<BackupExportScope>,
     encrypted_payload: EncryptedPayload,
     exported_at: i64,
     payload_sha256: String,
@@ -1918,12 +1933,21 @@ fn hash_hex(payload: &[u8]) -> String {
 }
 
 fn backup_init(args: BackupInitArgs) -> anyhow::Result<()> {
-    let decoy_password = load_backup_password(args.decoy_password, "CITIZEN_BACKUP_DECOY_PASSWORD")?;
+    let decoy_password =
+        load_backup_password(args.decoy_password, "CITIZEN_BACKUP_DECOY_PASSWORD")?;
     let critical_password =
         load_backup_password(args.critical_password, "CITIZEN_BACKUP_CRITICAL_PASSWORD")?;
-    let mut vault = BackupVaultFile { schema: "citizen.wallet.backup.v1".to_string(), version: 1, slots: vec![] };
-    vault.slots.push(empty_slot(BackupSlotRole::Decoy, &decoy_password)?);
-    vault.slots.push(empty_slot(BackupSlotRole::Critical, &critical_password)?);
+    let mut vault = BackupVaultFile {
+        schema: "citizen.wallet.backup.v1".to_string(),
+        version: 1,
+        slots: vec![],
+    };
+    vault
+        .slots
+        .push(empty_slot(BackupSlotRole::Decoy, &decoy_password)?);
+    vault
+        .slots
+        .push(empty_slot(BackupSlotRole::Critical, &critical_password)?);
     save_backup_vault(&args.vault_path, &vault)?;
     println!("Initialized backup vault at {}", args.vault_path.display());
     Ok(())
@@ -1940,10 +1964,12 @@ fn backup_export_credentials(args: BackupExportArgs) -> anyhow::Result<()> {
     let mut vault = load_backup_vault(&args.vault_path)?;
     let password = load_backup_password(args.password, "CITIZEN_BACKUP_SLOT_PASSWORD")?;
     let keystore = Keystore::load_or_create(&args.path)?;
-    let payload = serde_json::to_vec(&keystore)?;
-    let encrypted_payload = encrypt_payload(&serde_json::to_value(&keystore)?, &password)?;
+    let payload_value = build_backup_export_payload(&keystore, &args.scopes)?;
+    let payload = serde_json::to_vec(&payload_value)?;
+    let encrypted_payload = encrypt_payload(&payload_value, &password)?;
     let slot = BackupVaultSlot {
         role: args.role,
+        scopes: args.scopes,
         encrypted_payload,
         exported_at: Utc::now().timestamp(),
         payload_sha256: hash_hex(&payload),
@@ -1951,14 +1977,45 @@ fn backup_export_credentials(args: BackupExportArgs) -> anyhow::Result<()> {
     vault.slots.retain(|existing| existing.role != slot.role);
     vault.slots.push(slot);
     save_backup_vault(&args.vault_path, &vault)?;
-    println!("Exported wallet credentials into vault {}", args.vault_path.display());
+    println!(
+        "Exported wallet credentials into vault {}",
+        args.vault_path.display()
+    );
     Ok(())
 }
 
 fn backup_verify(args: BackupVerifyArgs) -> anyhow::Result<()> {
     let vault = load_backup_vault(&args.vault_path)?;
-    let roles: Vec<String> = vault.slots.iter().map(|slot| format!("{:?}", slot.role).to_lowercase()).collect();
-    println!("{}", serde_json::to_string_pretty(&json!({"schema": vault.schema, "version": vault.version, "slots": roles}))?);
+    let slots: Vec<Value> = vault
+        .slots
+        .iter()
+        .map(|slot| {
+            json!({
+                "role": format!("{:?}", slot.role).to_lowercase(),
+                "scopes": slot.scopes,
+                "exported_at": slot.exported_at,
+            })
+        })
+        .collect();
+    if args.json {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(
+                &json!({"schema": vault.schema, "version": vault.version, "slots": slots})
+            )?
+        );
+    } else {
+        println!("Backup vault schema: {}", vault.schema);
+        println!("Version: {}", vault.version);
+        for slot in slots {
+            println!(
+                "- role={} scopes={} exported_at={}",
+                slot["role"].as_str().unwrap_or("unknown"),
+                slot["scopes"],
+                slot["exported_at"].as_i64().unwrap_or_default()
+            );
+        }
+    }
     Ok(())
 }
 
@@ -1975,9 +2032,21 @@ fn backup_restore(args: BackupRestoreArgs) -> anyhow::Result<()> {
     if hash_hex(&payload) != slot.payload_sha256 {
         return Err(anyhow::anyhow!("backup payload checksum mismatch"));
     }
-    let keystore: Keystore = serde_json::from_slice(&payload)?;
+    let keystore: Keystore = parse_backup_keystore(&payload)?;
     keystore.save(&args.output_path)?;
-    println!("Restored wallet to {}", args.output_path.display());
+    if args.json {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&json!({
+                "status": "restored",
+                "output_path": args.output_path,
+                "role": format!("{:?}", args.role).to_lowercase(),
+                "exported_at": slot.exported_at,
+            }))?
+        );
+    } else {
+        println!("Restored wallet to {}", args.output_path.display());
+    }
     Ok(())
 }
 
@@ -2006,17 +2075,53 @@ fn empty_slot(role: BackupSlotRole, password: &str) -> anyhow::Result<BackupVaul
     let encrypted_payload = encrypt_payload(&placeholder_value, password)?;
     Ok(BackupVaultSlot {
         role,
+        scopes: vec![BackupExportScope::Keys],
         encrypted_payload,
         exported_at: Utc::now().timestamp(),
         payload_sha256: hash_hex(&payload),
     })
 }
 
+fn build_backup_export_payload(
+    keystore: &Keystore,
+    scopes: &[BackupExportScope],
+) -> anyhow::Result<Value> {
+    let mut payload = serde_json::Map::new();
+    payload.insert(
+        "schema".to_string(),
+        json!("citizen.wallet.backup.export.v1"),
+    );
+    payload.insert("version".to_string(), json!(1));
+    payload.insert("scopes".to_string(), serde_json::to_value(scopes)?);
+    if scopes.contains(&BackupExportScope::Keys) {
+        payload.insert("keystore".to_string(), serde_json::to_value(keystore)?);
+    }
+    if scopes.contains(&BackupExportScope::RecoveryMetadata) {
+        payload.insert(
+            "recovery_metadata".to_string(),
+            json!({"exported_via": "wallet-cli"}),
+        );
+    }
+    if scopes.contains(&BackupExportScope::ConsentReceipts) {
+        payload.insert("consent_receipts".to_string(), json!([]));
+    }
+    Ok(Value::Object(payload))
+}
+
+fn parse_backup_keystore(payload: &[u8]) -> anyhow::Result<Keystore> {
+    let value: Value = serde_json::from_slice(payload)?;
+    if let Some(keystore) = value.get("keystore") {
+        return Ok(serde_json::from_value(keystore.clone())?);
+    }
+    Ok(serde_json::from_value(value)?)
+}
+
 fn load_backup_password(explicit: Option<String>, env_var: &str) -> anyhow::Result<String> {
     if let Some(password) = explicit {
         return Ok(password);
     }
-    std::env::var(env_var).map_err(|_| anyhow::anyhow!("password required (--password or {env_var})"))
+    std::env::var(env_var)
+        .map_err(|_| anyhow::anyhow!("password required (--password or {env_var})"))
 }
 
 #[cfg(test)]
