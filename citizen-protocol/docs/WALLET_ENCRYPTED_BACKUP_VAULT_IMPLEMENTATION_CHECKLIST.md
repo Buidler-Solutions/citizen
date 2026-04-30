@@ -37,7 +37,7 @@ This initiative should replicate key VeraCrypt-style operating properties while 
 ## USB-Centric Operating Requirements
 
 - [ ] Support vault creation directly on mounted removable drives (Linux/macOS/Windows path semantics in scope).
-- [ ] Add optional “portable mode” metadata for cross-machine restore checks.
+- [x] Add optional “portable mode” metadata for cross-machine restore checks.
 - [ ] Provide safe eject + write flush guidance in CLI and extension flows.
 - [ ] Detect common removable-media failure modes (unexpected removal, partial write, filesystem incompatibility).
 - [ ] Define minimum recommended USB durability/performance profile for operators.
@@ -226,7 +226,9 @@ For first mergeable implementation slice, require:
 
 - `wallet backup` CLI command group is implemented with: `init`, `add-slot`, `export-credentials`, `verify`, and `restore`.
 - Vault schema scaffold `citizen.wallet.backup.v1` exists with role metadata for `decoy` and `critical`.
+- `wallet backup init` now supports optional portable metadata (`--portable-label`) and records `created_at` for restore/runbook context.
 - Backup export/restore path is wired to encrypted payload handling and checksum validation on restore.
+- `wallet backup verify` supports role-specific integrity validation (`--role` + passphrase/env var) that decrypts slot payloads and re-validates checksum deterministically.
 - Threat-model baseline document is now tracked in `citizen-protocol/docs/WALLET_ENCRYPTED_BACKUP_VAULT_THREAT_MODEL.md`; remaining work includes formal security sign-off and expanded operator runbook drills.
 
 ---
