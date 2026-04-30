@@ -60,15 +60,15 @@ This initiative should replicate key VeraCrypt-style operating properties while 
 ## Checkpoint 0 — Discovery, Threat Model, and Requirements
 
 - [ ] Enumerate credential artifacts that need backup from CLI and extension (seed material, keypairs, metadata, consent receipts where relevant).
-- [ ] Define attacker classes (device theft, cloud sync compromise, coercion, malware with filesystem access, backup corruption).
-- [ ] Define plausible-deniability assumptions and limits for decoy vault behavior.
-- [ ] Define supported backup targets (USB/local filesystem required for GA-v1, optional cloud object-store adapter later).
-- [ ] Produce STRIDE/LINDDUN-lite threat model appendix tied to wallet recovery flows.
+- [x] Define attacker classes (device theft, cloud sync compromise, coercion, malware with filesystem access, backup corruption).
+- [x] Define plausible-deniability assumptions and limits for decoy vault behavior.
+- [x] Define supported backup targets (USB/local filesystem required for GA-v1, optional cloud object-store adapter later).
+- [x] Produce STRIDE/LINDDUN-lite threat model appendix tied to wallet recovery flows.
 - [ ] Define security and usability success criteria with measurable thresholds.
 
 **Exit criteria**
 - [ ] Requirements and threat model reviewed by wallet + crypto maintainers.
-- [ ] Risks accepted/rejected and explicitly tracked.
+- [x] Risks accepted/rejected and explicitly tracked.
 
 ---
 
@@ -186,11 +186,11 @@ This initiative should replicate key VeraCrypt-style operating properties while 
 
 ## Checkpoint 8 — Documentation and Developer Experience
 
-- [ ] Add implementation guide in `citizen-protocol/docs` for builders/operators.
+- [x] Add implementation guide in `citizen-protocol/docs` for builders/operators.
 - [ ] Update wallet generation/security docs with backup vault workflows.
 - [ ] Provide “quick start” examples for CLI and extension recovery.
 - [ ] Publish versioned vault format spec + migration strategy.
-- [ ] Add explicit “what this does not protect against” section.
+- [x] Add explicit “what this does not protect against” section.
 
 **Exit criteria**
 - [ ] Docs reviewed for consistency with architecture baseline and wallet security docs.
@@ -232,6 +232,8 @@ For first mergeable implementation slice, require:
 - CLI supports machine-readable output for `verify` and `restore` (`--json`) to enable deterministic operator automation pipelines.
 - Wallet CLI tests now include backup round-trip recovery and tamper-detection assertions for checksum mismatch handling.
 - Threat-model baseline document is now tracked in `citizen-protocol/docs/WALLET_ENCRYPTED_BACKUP_VAULT_THREAT_MODEL.md`; remaining work includes formal security sign-off and expanded operator runbook drills.
+- Threat model appendix and baseline operator controls are documented in `citizen-protocol/docs/WALLET_ENCRYPTED_BACKUP_VAULT_THREAT_MODEL.md`, including attacker classes, out-of-scope boundaries, and residual-risk tracking for the current CLI implementation.
+- Current implementation explicitly documents deniability limits: `decoy`/`critical` are role metadata, not hidden-volume semantics; hidden-volume deniability remains an open GA design decision.
 
 ---
 
