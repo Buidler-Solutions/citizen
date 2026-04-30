@@ -2165,6 +2165,15 @@ fn load_backup_password(explicit: Option<String>, env_var: &str) -> anyhow::Resu
 mod tests {
     use super::*;
     use serde_json::json;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn unique_test_path(name: &str) -> PathBuf {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("clock should be after unix epoch")
+            .as_nanos();
+        std::env::temp_dir().join(format!("citizen-wallet-{name}-{nanos}"))
+    }
 
     #[test]
     fn verifies_receipt_with_merkle_proof() {
@@ -2376,5 +2385,119 @@ mod tests {
         };
         let err = validate_envelope_signers(&envelope, true).expect_err("threshold");
         assert!(err.to_string().contains("threshold"));
+    }
+
+    #[test]
+    fn backup_vault_roundtrip_restore_recovers_keystore() {
+        let base = unique_test_path("backup-roundtrip");
+        let keystore_path = base.join("wallet.json");
+        let vault_path = base.join("vault.json");
+        let restored_path = base.join("wallet-restored.json");
+        fs::create_dir_all(&base).expect("create test directory");
+
+        let keypair = WalletKeypair::generate();
+        let mut keystore = Keystore {
+            version: 1,
+            keys: vec![],
+        };
+        keystore.add_key(KeyRecord {
+            key_id: keypair.key_id,
+            label: Some("primary".to_string()),
+            public_key_hex: hex::encode(keypair.signing_key.verifying_key().to_bytes()),
+            secret_key_hex: Some(hex::encode(keypair.signing_key.to_bytes())),
+            encrypted_secret_key: None,
+            created_at: Utc::now().timestamp(),
+        });
+        keystore.save(&keystore_path).expect("save keystore");
+
+        backup_init(BackupInitArgs {
+            vault_path: vault_path.clone(),
+            portable_label: Some("usb-a".to_string()),
+            decoy_password: Some("decoy-pass".to_string()),
+            critical_password: Some("critical-pass".to_string()),
+        })
+        .expect("init vault");
+        backup_export_credentials(BackupExportArgs {
+            path: keystore_path,
+            vault_path: vault_path.clone(),
+            role: BackupSlotRole::Critical,
+            password: Some("critical-pass".to_string()),
+            scopes: vec![BackupExportScope::Keys, BackupExportScope::RecoveryMetadata],
+        })
+        .expect("export credentials");
+        backup_verify(BackupVerifyArgs {
+            vault_path: vault_path.clone(),
+            role: Some(BackupSlotRole::Critical),
+            password: Some("critical-pass".to_string()),
+            json: true,
+        })
+        .expect("verify");
+        backup_restore(BackupRestoreArgs {
+            output_path: restored_path.clone(),
+            vault_path,
+            role: BackupSlotRole::Critical,
+            password: Some("critical-pass".to_string()),
+            json: true,
+        })
+        .expect("restore");
+
+        let restored = Keystore::load_or_create(&restored_path).expect("load restored keystore");
+        assert!(restored.has_key(keypair.key_id));
+    }
+
+    #[test]
+    fn backup_verify_detects_payload_checksum_tamper() {
+        let base = unique_test_path("backup-tamper");
+        let keystore_path = base.join("wallet.json");
+        let vault_path = base.join("vault.json");
+        fs::create_dir_all(&base).expect("create test directory");
+
+        let mut keystore = Keystore {
+            version: 1,
+            keys: vec![],
+        };
+        keystore.add_key(KeyRecord {
+            key_id: Uuid::new_v4(),
+            label: Some("tamper-check".to_string()),
+            public_key_hex: "aa".repeat(32),
+            secret_key_hex: Some("bb".repeat(32)),
+            encrypted_secret_key: None,
+            created_at: Utc::now().timestamp(),
+        });
+        keystore.save(&keystore_path).expect("save keystore");
+
+        backup_init(BackupInitArgs {
+            vault_path: vault_path.clone(),
+            portable_label: None,
+            decoy_password: Some("decoy-pass".to_string()),
+            critical_password: Some("critical-pass".to_string()),
+        })
+        .expect("init vault");
+        backup_export_credentials(BackupExportArgs {
+            path: keystore_path,
+            vault_path: vault_path.clone(),
+            role: BackupSlotRole::Critical,
+            password: Some("critical-pass".to_string()),
+            scopes: vec![BackupExportScope::Keys],
+        })
+        .expect("export credentials");
+
+        let mut vault = load_backup_vault(&vault_path).expect("load vault");
+        let slot = vault
+            .slots
+            .iter_mut()
+            .find(|slot| slot.role == BackupSlotRole::Critical)
+            .expect("critical slot exists");
+        slot.payload_sha256 = "deadbeef".to_string();
+        save_backup_vault(&vault_path, &vault).expect("save tampered vault");
+
+        let err = backup_verify(BackupVerifyArgs {
+            vault_path,
+            role: Some(BackupSlotRole::Critical),
+            password: Some("critical-pass".to_string()),
+            json: false,
+        })
+        .expect_err("tampered backup should fail");
+        assert!(err.to_string().contains("checksum mismatch"));
     }
 }
