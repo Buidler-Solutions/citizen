@@ -126,19 +126,19 @@ This initiative should replicate key VeraCrypt-style operating properties while 
 ## Checkpoint 4 — Wallet CLI Integration
 
 - [ ] Add commands for backup vault lifecycle:
-  - [ ] `wallet backup init`
-  - [ ] `wallet backup add-slot`
-  - [ ] `wallet backup export-credentials`
-  - [ ] `wallet backup verify`
-  - [ ] `wallet backup restore`
-- [ ] Support selective export (identity keys, account keys, recovery metadata, consent receipts).
+  - [x] `wallet backup init`
+  - [x] `wallet backup add-slot`
+  - [x] `wallet backup export-credentials`
+  - [x] `wallet backup verify`
+  - [x] `wallet backup restore`
+- [x] Support selective export (identity keys, account keys, recovery metadata, consent receipts).
 - [ ] Enforce no-plaintext-on-disk policy by default (unless explicit override flag with warning).
 - [ ] Add non-interactive flags for operator automation with safe prompts disabled only by explicit consent flag.
-- [ ] Add deterministic JSON output mode for scripts.
+- [x] Add deterministic JSON output mode for scripts.
 
 **Exit criteria**
-- [ ] CLI end-to-end backup/restore scenario documented and tested.
-- [ ] Help text and warning copy reviewed for accuracy and safety.
+- [x] CLI end-to-end backup/restore scenario documented and tested.
+- [x] Help text and warning copy reviewed for accuracy and safety.
 
 ---
 
@@ -229,6 +229,7 @@ For first mergeable implementation slice, require:
 - `wallet backup init` now supports optional portable metadata (`--portable-label`) and records `created_at` for restore/runbook context.
 - Backup export/restore path is wired to encrypted payload handling and checksum validation on restore.
 - `wallet backup verify` supports role-specific integrity validation (`--role` + passphrase/env var) that decrypts slot payloads and re-validates checksum deterministically.
+- CLI supports machine-readable output for `verify` and `restore` (`--json`) to enable deterministic operator automation pipelines.
 - Threat-model baseline document is now tracked in `citizen-protocol/docs/WALLET_ENCRYPTED_BACKUP_VAULT_THREAT_MODEL.md`; remaining work includes formal security sign-off and expanded operator runbook drills.
 
 ---
