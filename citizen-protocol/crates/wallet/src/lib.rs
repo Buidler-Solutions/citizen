@@ -1154,6 +1154,11 @@ fn chunk_nonce(prefix: &[u8; 4], chunk_index: u64) -> [u8; 12] {
     nonce
 }
 
+pub const BACKUP_ARGON2ID_MEMORY_KIB: u32 = 19_456;
+pub const BACKUP_ARGON2ID_ITERATIONS: u32 = 2;
+pub const BACKUP_ARGON2ID_PARALLELISM: u32 = 1;
+pub const BACKUP_ARGON2ID_OUTPUT_LENGTH: usize = 32;
+
 pub fn encrypt_payload(payload: &Value, passphrase: &str) -> Result<EncryptedPayload> {
     let canonical_payload = canonical_json(payload);
     let plaintext = canonical_payload.as_bytes();
@@ -1161,8 +1166,13 @@ pub fn encrypt_payload(payload: &Value, passphrase: &str) -> Result<EncryptedPay
     fill_os_random(&mut salt);
     let mut nonce = [0u8; 12];
     fill_os_random(&mut nonce);
-    let params = Params::new(19456, 2, 1, Some(32))
-        .map_err(|err| ProtocolError::crypto(format!("invalid kdf params: {err}")))?;
+    let params = Params::new(
+        BACKUP_ARGON2ID_MEMORY_KIB,
+        BACKUP_ARGON2ID_ITERATIONS,
+        BACKUP_ARGON2ID_PARALLELISM,
+        Some(BACKUP_ARGON2ID_OUTPUT_LENGTH),
+    )
+    .map_err(|err| ProtocolError::crypto(format!("invalid kdf params: {err}")))?;
     let mut derived_key = [0u8; 32];
     let kdf_params = KdfParams {
         memory_kib: params.m_cost(),
@@ -2299,6 +2309,17 @@ mod tests {
         assert_eq!(decrypted, payload);
     }
 
+
+    #[test]
+    fn encrypted_payload_uses_backup_argon2id_defaults() {
+        let payload = json!({"scope":"wallet-backup"});
+        let encrypted = encrypt_payload(&payload, "strong-test-passphrase").expect("encrypt payload");
+        assert_eq!(encrypted.kdf, "argon2id");
+        assert_eq!(encrypted.kdf_params.memory_kib, BACKUP_ARGON2ID_MEMORY_KIB);
+        assert_eq!(encrypted.kdf_params.iterations, BACKUP_ARGON2ID_ITERATIONS);
+        assert_eq!(encrypted.kdf_params.parallelism, BACKUP_ARGON2ID_PARALLELISM);
+        assert_eq!(encrypted.kdf_params.output_length as usize, BACKUP_ARGON2ID_OUTPUT_LENGTH);
+    }
     #[test]
     fn signs_and_verifies_private_entry() {
         let keypair = WalletKeypair::generate();
