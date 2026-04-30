@@ -1,7 +1,7 @@
 use chrono::Utc;
 use citizen_types::PrivacyMode;
 use citizen_types::{EnvelopeCoSignature, EnvelopeMultisigPolicy, LedgerEntry, SignedEnvelope};
-use clap::{Parser, Subcommand};
+use clap::{Args, Parser, Subcommand, ValueEnum};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
@@ -15,7 +15,8 @@ use crate::{
     build_wrcp_msig_v1_proof, build_wrcp_msig_v1_signing_payload, compute_file_manifest_commitment,
     decrypt_secret_key, dry_run_wrcp_msig_v1, encrypt_secret_key, generate_mnemonic_phrase,
     parse_verifying_key, sign_entry, verify_entry_signature, verify_offchain_file_reconciliation,
-    ActionPolicy, EncryptedSecretKey, EntryDraft, WalletKeypair, WrcpMsigV1Proof,
+    ActionPolicy, EncryptedPayload, EncryptedSecretKey, EntryDraft, WalletKeypair, WrcpMsigV1Proof,
+    decrypt_payload, encrypt_payload,
 };
 
 #[derive(Debug, Parser)]
@@ -27,6 +28,10 @@ struct Cli {
 
 #[derive(Debug, Subcommand)]
 enum Commands {
+    Backup {
+        #[command(subcommand)]
+        command: BackupCommands,
+    },
     Init {
         #[arg(long, default_value = "wallet.json")]
         path: PathBuf,
@@ -385,6 +390,87 @@ enum Commands {
     },
 }
 
+#[derive(Debug, Subcommand)]
+enum BackupCommands {
+    Init(BackupInitArgs),
+    AddSlot(BackupAddSlotArgs),
+    ExportCredentials(BackupExportArgs),
+    Verify(BackupVerifyArgs),
+    Restore(BackupRestoreArgs),
+}
+
+#[derive(Debug, Args)]
+struct BackupInitArgs {
+    #[arg(long)]
+    vault_path: PathBuf,
+    #[arg(long)]
+    decoy_password: Option<String>,
+    #[arg(long)]
+    critical_password: Option<String>,
+}
+
+#[derive(Debug, Args)]
+struct BackupAddSlotArgs {
+    #[arg(long)]
+    vault_path: PathBuf,
+    #[arg(long)]
+    role: BackupSlotRole,
+    #[arg(long)]
+    password: Option<String>,
+}
+
+#[derive(Debug, Args)]
+struct BackupExportArgs {
+    #[arg(long, default_value = "wallet.json")]
+    path: PathBuf,
+    #[arg(long)]
+    vault_path: PathBuf,
+    #[arg(long)]
+    role: BackupSlotRole,
+    #[arg(long)]
+    password: Option<String>,
+}
+
+#[derive(Debug, Args)]
+struct BackupVerifyArgs {
+    #[arg(long)]
+    vault_path: PathBuf,
+}
+
+#[derive(Debug, Args)]
+struct BackupRestoreArgs {
+    #[arg(long, default_value = "wallet-restored.json")]
+    output_path: PathBuf,
+    #[arg(long)]
+    vault_path: PathBuf,
+    #[arg(long)]
+    role: BackupSlotRole,
+    #[arg(long)]
+    password: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ValueEnum, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+enum BackupSlotRole {
+    Decoy,
+    Critical,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct BackupVaultFile {
+    schema: String,
+    version: u32,
+    slots: Vec<BackupVaultSlot>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct BackupVaultSlot {
+    role: BackupSlotRole,
+    encrypted_payload: EncryptedPayload,
+    exported_at: i64,
+    payload_sha256: String,
+}
+
 #[derive(Debug, Serialize)]
 struct BuilderCreditProof {
     #[serde(flatten)]
@@ -577,6 +663,13 @@ pub fn run() -> anyhow::Result<()> {
     let cli = Cli::parse();
 
     match cli.command {
+        Commands::Backup { command } => match command {
+            BackupCommands::Init(args) => backup_init(args)?,
+            BackupCommands::AddSlot(args) => backup_add_slot(args)?,
+            BackupCommands::ExportCredentials(args) => backup_export_credentials(args)?,
+            BackupCommands::Verify(args) => backup_verify(args)?,
+            BackupCommands::Restore(args) => backup_restore(args)?,
+        },
         Commands::Init { path } => {
             let store = Keystore {
                 version: 1,
@@ -1822,6 +1915,108 @@ fn hash_hex(payload: &[u8]) -> String {
     let mut hasher = Sha256::new();
     hasher.update(payload);
     hex::encode(hasher.finalize())
+}
+
+fn backup_init(args: BackupInitArgs) -> anyhow::Result<()> {
+    let decoy_password = load_backup_password(args.decoy_password, "CITIZEN_BACKUP_DECOY_PASSWORD")?;
+    let critical_password =
+        load_backup_password(args.critical_password, "CITIZEN_BACKUP_CRITICAL_PASSWORD")?;
+    let mut vault = BackupVaultFile { schema: "citizen.wallet.backup.v1".to_string(), version: 1, slots: vec![] };
+    vault.slots.push(empty_slot(BackupSlotRole::Decoy, &decoy_password)?);
+    vault.slots.push(empty_slot(BackupSlotRole::Critical, &critical_password)?);
+    save_backup_vault(&args.vault_path, &vault)?;
+    println!("Initialized backup vault at {}", args.vault_path.display());
+    Ok(())
+}
+
+fn backup_add_slot(args: BackupAddSlotArgs) -> anyhow::Result<()> {
+    let mut vault = load_backup_vault(&args.vault_path)?;
+    let password = load_backup_password(args.password, "CITIZEN_BACKUP_SLOT_PASSWORD")?;
+    vault.slots.push(empty_slot(args.role, &password)?);
+    save_backup_vault(&args.vault_path, &vault)
+}
+
+fn backup_export_credentials(args: BackupExportArgs) -> anyhow::Result<()> {
+    let mut vault = load_backup_vault(&args.vault_path)?;
+    let password = load_backup_password(args.password, "CITIZEN_BACKUP_SLOT_PASSWORD")?;
+    let keystore = Keystore::load_or_create(&args.path)?;
+    let payload = serde_json::to_vec(&keystore)?;
+    let encrypted_payload = encrypt_payload(&serde_json::to_value(&keystore)?, &password)?;
+    let slot = BackupVaultSlot {
+        role: args.role,
+        encrypted_payload,
+        exported_at: Utc::now().timestamp(),
+        payload_sha256: hash_hex(&payload),
+    };
+    vault.slots.retain(|existing| existing.role != slot.role);
+    vault.slots.push(slot);
+    save_backup_vault(&args.vault_path, &vault)?;
+    println!("Exported wallet credentials into vault {}", args.vault_path.display());
+    Ok(())
+}
+
+fn backup_verify(args: BackupVerifyArgs) -> anyhow::Result<()> {
+    let vault = load_backup_vault(&args.vault_path)?;
+    let roles: Vec<String> = vault.slots.iter().map(|slot| format!("{:?}", slot.role).to_lowercase()).collect();
+    println!("{}", serde_json::to_string_pretty(&json!({"schema": vault.schema, "version": vault.version, "slots": roles}))?);
+    Ok(())
+}
+
+fn backup_restore(args: BackupRestoreArgs) -> anyhow::Result<()> {
+    let vault = load_backup_vault(&args.vault_path)?;
+    let password = load_backup_password(args.password, "CITIZEN_BACKUP_SLOT_PASSWORD")?;
+    let slot = vault
+        .slots
+        .iter()
+        .find(|slot| slot.role == args.role)
+        .ok_or_else(|| anyhow::anyhow!("slot not found for requested role"))?;
+    let payload_value = decrypt_payload(&slot.encrypted_payload, &password)?;
+    let payload = serde_json::to_vec(&payload_value)?;
+    if hash_hex(&payload) != slot.payload_sha256 {
+        return Err(anyhow::anyhow!("backup payload checksum mismatch"));
+    }
+    let keystore: Keystore = serde_json::from_slice(&payload)?;
+    keystore.save(&args.output_path)?;
+    println!("Restored wallet to {}", args.output_path.display());
+    Ok(())
+}
+
+fn load_backup_vault(path: &Path) -> anyhow::Result<BackupVaultFile> {
+    let contents = fs::read_to_string(path)?;
+    let vault: BackupVaultFile = serde_json::from_str(&contents)?;
+    if vault.schema != "citizen.wallet.backup.v1" {
+        return Err(anyhow::anyhow!("unsupported backup vault schema"));
+    }
+    Ok(vault)
+}
+
+fn save_backup_vault(path: &Path, vault: &BackupVaultFile) -> anyhow::Result<()> {
+    if let Some(parent) = path.parent() {
+        if !parent.as_os_str().is_empty() {
+            fs::create_dir_all(parent)?;
+        }
+    }
+    fs::write(path, serde_json::to_string_pretty(vault)?)?;
+    Ok(())
+}
+
+fn empty_slot(role: BackupSlotRole, password: &str) -> anyhow::Result<BackupVaultSlot> {
+    let placeholder_value = json!({"placeholder": true, "role": format!("{role:?}")});
+    let payload = serde_json::to_vec(&placeholder_value)?;
+    let encrypted_payload = encrypt_payload(&placeholder_value, password)?;
+    Ok(BackupVaultSlot {
+        role,
+        encrypted_payload,
+        exported_at: Utc::now().timestamp(),
+        payload_sha256: hash_hex(&payload),
+    })
+}
+
+fn load_backup_password(explicit: Option<String>, env_var: &str) -> anyhow::Result<String> {
+    if let Some(password) = explicit {
+        return Ok(password);
+    }
+    std::env::var(env_var).map_err(|_| anyhow::anyhow!("password required (--password or {env_var})"))
 }
 
 #[cfg(test)]
