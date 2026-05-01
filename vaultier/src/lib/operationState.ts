@@ -19,6 +19,9 @@ export type ErrorIdentifier =
   | 'media_unavailable'
   | 'manifest_signature_missing'
   | 'manifest_signature_invalid'
+  | 'header_auth_failed'
+  | 'slot_table_tampered'
+  | 'rollback_counter_mismatch'
   | 'filesystem_incompatible'
   | 'critical_entropy_too_low';
 
@@ -105,5 +108,17 @@ export const ERROR_COPY: Record<ErrorIdentifier, { headline: string; nextAction:
   manifest_signature_invalid: {
     headline: 'Signed backup manifest verification failed.',
     nextAction: 'Stop recovery, quarantine this media, and use a previously verified duplicate backup.',
+  },
+  header_auth_failed: {
+    headline: 'Vault header authentication failed (tamper suspected).',
+    nextAction: 'Do not restore from this media; switch to a verified duplicate and preserve this drive for investigation.',
+  },
+  slot_table_tampered: {
+    headline: 'Slot metadata failed authentication and may be tampered.',
+    nextAction: 'Abort restore, capture diagnostics, and recover from a known-good backup copy.',
+  },
+  rollback_counter_mismatch: {
+    headline: 'Rollback counter mismatch detected for this vault container.',
+    nextAction: 'Treat this media as stale or replayed and restore only from the newest verified backup set.',
   },
 };

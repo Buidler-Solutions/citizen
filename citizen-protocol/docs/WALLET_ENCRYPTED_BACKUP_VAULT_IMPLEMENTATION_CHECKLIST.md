@@ -256,7 +256,7 @@ To translate the CLI-first vault implementation into a polished portable app exp
 
 - [x] Passphrase strength meter tied to documented entropy thresholds (not vanity score-only meters).
 - [x] Optional unlock delay/backoff UX aligned with CLI wrong-passphrase throttling semantics.
-- [ ] Human-readable tamper warnings mapped 1:1 to deterministic error codes from wallet core.
+- [x] Human-readable tamper warnings mapped 1:1 to deterministic error codes from wallet core (Vaultier verify flow now maps header/slot-table/rollback tamper signals to deterministic error taxonomy and operator-facing recovery guidance).
 - [ ] “What this cannot protect against” panel shown during setup and restore confirmation.
 
 ### Operator/Builder Ergonomics
