@@ -63,6 +63,23 @@ export function AppShell() {
   useEffect(() => { setReminderPolicy(loadReminderSettings()); }, []);
   useEffect(() => { saveReminderSettings(reminderPolicy); }, [reminderPolicy]);
   useEffect(() => { if (unlockDelayMs <= 0) return; const timer = setInterval(() => setUnlockDelayMs((v) => Math.max(0, v - 500)), 500); return () => clearInterval(timer); }, [unlockDelayMs]);
+  useEffect(() => {
+    if (!targetPath || discovery.drives.length === 0) return;
+    const stillMounted = discovery.drives.some((drive) => drive.mountPath === targetPath);
+    if (!stillMounted) {
+      setActiveError('media_unavailable');
+      setOperationState('action_required');
+      setLogs((current) => [
+        {
+          at: new Date().toISOString(),
+          action: 'media.disconnect.detected',
+          status: 'warn',
+          details: `Selected removable media ${targetPath} is no longer mounted. Reconnect before create/verify/restore.`,
+        },
+        ...current,
+      ]);
+    }
+  }, [discovery, targetPath]);
 
   const selectedDrive = useMemo(() => discovery.drives.find((d) => d.mountPath === targetPath), [discovery, targetPath]);
   const safeToEject = useMemo(() => Object.values(ejectChecks).every(Boolean), [ejectChecks]);
@@ -163,6 +180,13 @@ export function AppShell() {
   };
   const runFlushWrites = async () => { setOperationState('flushing'); const result = await flushPendingWritesWithStrategy(targetPath); appendLogs(result.logs); setFlushStrategy(result.strategy); setEjectChecks((p) => ({ ...p, flushComplete: true })); setOperationState('completed'); };
   const runExportDiagnostics = async () => { if (profile) setDiagnosticBundle(await exportDiagnosticBundle(profile, logs.slice(0, 12), errorHistory, performanceMeasurements)); };
+  const runRefreshDrives = async () => {
+    const result = await discoverRemovableDrives();
+    setDiscovery(result);
+    if (result.drives.length === 0) {
+      setActiveError('media_unavailable');
+    }
+  };
 
   useEffect(() => {
     if (!activeError) return;
@@ -177,6 +201,7 @@ export function AppShell() {
       <label className="inline-control"><input type="checkbox" checked={highContrast} onChange={() => setHighContrast(!highContrast)} />High contrast</label>
       <nav className="stages">{STAGES.map((item) => <button key={item} className={stage === item ? 'pill active' : 'pill'} onClick={() => setStage(item)} disabled={!profile && item !== 'create'}>{item}</button>)}</nav>
       <label>Detected removable drives<select value={targetPath} onChange={(e) => setTargetPath(e.target.value)}>{discovery.drives.map((d) => <option key={d.id} value={d.mountPath}>{d.label} · {d.mountPath} · {d.filesystem} · {d.estimatedFreeGb}GB free</option>)}</select></label>
+      <button onClick={runRefreshDrives} disabled={running}>Refresh media</button>
       {selectedDrive && <p className="hint">Filesystem policy: <strong>{isFilesystemRecommended(selectedDrive.filesystem) ? 'Recommended' : 'Higher risk'}</strong> · {selectedDrive.filesystem.toUpperCase()}</p>}
       {discovery.errors.length > 0 && <p className="summary warn">Adapter notices: {discovery.errors.map((err) => `${err.code} (${err.mountPath})`).join(', ')}.</p>}
 
