@@ -85,7 +85,14 @@ export async function createBackup(request: BackupRequest): Promise<BackupResult
 export async function verifyBackup(request: VerifyRequest): Promise<VerifyResult> {
   await wait(650);
   const verifiedAt = now();
-  const manifest = { signed: true, signatureKeyId: 'citizen-wallet-maintainers:v1', verified: true };
+  const manifest = {
+    signed: true,
+    signatureKeyId: request.manifestSignatureKeyId || 'citizen-wallet-maintainers:v1',
+    verified: true,
+  };
+  if (request.requireSignedManifest && !manifest.signatureKeyId) {
+    manifest.verified = false;
+  }
   return {
     verifiedAt,
     checks: [
@@ -93,7 +100,13 @@ export async function verifyBackup(request: VerifyRequest): Promise<VerifyResult
       { label: 'Slot inventory', status: 'ok', detail: 'Required decoy/critical metadata found.' },
       { label: 'Version compatibility', status: 'ok', detail: `Detected ${request.expectedVaultVersion}.` },
       { label: 'Portable profile', status: 'ok', detail: `Target ${request.targetPath} is portable-mode compatible.` },
-      { label: 'Signed manifest', status: manifest.verified ? 'ok' : 'warn', detail: manifest.verified ? `Verified using ${manifest.signatureKeyId}.` : 'Signature mismatch detected.' },
+      {
+        label: 'Signed manifest',
+        status: manifest.verified ? 'ok' : 'warn',
+        detail: manifest.verified
+          ? `Verified using ${manifest.signatureKeyId}.`
+          : 'Manifest signature verification policy failed.',
+      },
     ],
     manifest,
     log: [

@@ -17,6 +17,8 @@ export type BackupRequest = {
 export type VerifyRequest = {
   targetPath: string;
   expectedVaultVersion: string;
+  requireSignedManifest: boolean;
+  manifestSignatureKeyId?: string;
 };
 
 export type RestoreRequest = {
@@ -64,7 +66,13 @@ export type DiagnosticBundle = {
 
 export type HeadlessCommand =
   | { command: 'backup_init'; targetPath: string; roles: VaultRole[]; includeConsentReceipts: boolean; portableMode: boolean }
-  | { command: 'backup_verify'; targetPath: string; expectedVaultVersion: string }
+  | {
+      command: 'backup_verify';
+      targetPath: string;
+      expectedVaultVersion: string;
+      requireSignedManifest: boolean;
+      manifestSignatureKeyId?: string;
+    }
   | {
       command: 'backup_restore';
       targetPath: string;

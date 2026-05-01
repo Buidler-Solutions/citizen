@@ -93,7 +93,15 @@ export function AppShell() {
   const runVerify = async () => {
     if (!profile) return;
     setRunning(true); setActiveError(null); setOperationState('preflight');
-    try { const result = await verifyBackup({ targetPath, expectedVaultVersion: profile.vaultVersion }); appendLogs(result.log); setVerifyResult(result); setProfile({ ...profile, lastVerifiedAt: result.verifiedAt }); setEjectChecks((p) => ({ ...p, verified: true })); setStage('restore'); setOperationState('completed'); } finally { setRunning(false); }
+    try {
+      const result = await verifyBackup({
+        targetPath,
+        expectedVaultVersion: profile.vaultVersion,
+        requireSignedManifest: true,
+        manifestSignatureKeyId: 'citizen-wallet-maintainers:v1',
+      });
+      appendLogs(result.log); setVerifyResult(result); setProfile({ ...profile, lastVerifiedAt: result.verifiedAt }); setEjectChecks((p) => ({ ...p, verified: true })); setStage('restore'); setOperationState('completed');
+    } finally { setRunning(false); }
   };
 
   const runRestore = async () => {
