@@ -204,7 +204,7 @@ This initiative should replicate key VeraCrypt-style operating properties while 
 >
 > Maintenance reminder: whenever any task in this checklist is implemented, update this file in the same change set so status/exit criteria remain current.
 
-- [~] Finalize vault format/versioning contract and deterministic error taxonomy for all `wallet backup` commands (Vaultier headless adapter now emits explicit `contractVersion` + deterministic error codes; wallet CLI parity still pending).
+- [x] Finalize vault format/versioning contract and deterministic error taxonomy for all `wallet backup` commands (Vaultier headless adapter and wallet CLI now emit explicit contract-version fields alongside deterministic error codes for verify/restore automation paths).
 - [ ] Complete cryptography closure items:
   - [ ] finalized AEAD + nonce/IV policy documentation,
   - [ ] key-derivation parameter profile hardening guidance,
