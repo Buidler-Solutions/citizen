@@ -2055,6 +2055,7 @@ fn backup_verify(args: BackupVerifyArgs) -> anyhow::Result<()> {
         println!(
             "{}",
             serde_json::to_string_pretty(&json!({
+                "contract_version": BACKUP_JSON_CONTRACT_VERSION,
                 "schema": vault.schema,
                 "version": vault.version,
                 "portable_label": vault.portable_label,
@@ -2113,6 +2114,7 @@ fn backup_restore(args: BackupRestoreArgs) -> anyhow::Result<()> {
         println!(
             "{}",
             serde_json::to_string_pretty(&json!({
+                "contract_version": BACKUP_JSON_CONTRACT_VERSION,
                 "status": "restored",
                 "output_path": args.output_path,
                 "role": format!("{:?}", args.role).to_lowercase(),
@@ -2124,6 +2126,8 @@ fn backup_restore(args: BackupRestoreArgs) -> anyhow::Result<()> {
     }
     Ok(())
 }
+
+const BACKUP_JSON_CONTRACT_VERSION: &str = "citizen.wallet.backup.cli.v1";
 
 fn emit_removable_media_warning(command: &str, acknowledged: bool) {
     if acknowledged {
