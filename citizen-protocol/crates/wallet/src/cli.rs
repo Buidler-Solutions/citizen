@@ -1998,18 +1998,25 @@ fn backup_export_credentials(args: BackupExportArgs) -> anyhow::Result<()> {
 }
 
 fn backup_verify(args: BackupVerifyArgs) -> anyhow::Result<()> {
-    let vault = load_backup_vault(&args.vault_path)?;
+    let vault = load_backup_vault(&args.vault_path).map_err(|_| {
+        backup_error_anyhow(BackupErrorCode::UnsupportedSchema, "unsupported backup vault schema")
+    })?;
     if let Some(role) = args.role.clone() {
         let password = load_backup_password(args.password, "CITIZEN_BACKUP_SLOT_PASSWORD")?;
         let slot = vault
             .slots
             .iter()
             .find(|slot| slot.role == role)
-            .ok_or_else(|| anyhow::anyhow!("slot not found for requested role"))?;
-        let payload_value = decrypt_payload(&slot.encrypted_payload, &password)?;
-        let payload = serde_json::to_vec(&payload_value)?;
+            .ok_or_else(|| backup_error_anyhow(BackupErrorCode::SlotNotFound, "slot not found"))?;
+        let payload_value = decrypt_payload(&slot.encrypted_payload, &password)
+            .map_err(|_| backup_error_anyhow(BackupErrorCode::DecryptFailed, "decrypt failed"))?;
+        let payload = serde_json::to_vec(&payload_value)
+            .map_err(|_| backup_error_anyhow(BackupErrorCode::InvalidPayload, "invalid payload"))?;
         if hash_hex(&payload) != slot.payload_sha256 {
-            return Err(anyhow::anyhow!("backup payload checksum mismatch"));
+            return Err(backup_error_anyhow(
+                BackupErrorCode::ChecksumMismatch,
+                "backup payload checksum mismatch",
+            ));
         }
     }
     let slots: Vec<Value> = vault
@@ -2057,19 +2064,27 @@ fn backup_verify(args: BackupVerifyArgs) -> anyhow::Result<()> {
 }
 
 fn backup_restore(args: BackupRestoreArgs) -> anyhow::Result<()> {
-    let vault = load_backup_vault(&args.vault_path)?;
+    let vault = load_backup_vault(&args.vault_path).map_err(|_| {
+        backup_error_anyhow(BackupErrorCode::UnsupportedSchema, "unsupported backup vault schema")
+    })?;
     let password = load_backup_password(args.password, "CITIZEN_BACKUP_SLOT_PASSWORD")?;
     let slot = vault
         .slots
         .iter()
         .find(|slot| slot.role == args.role)
-        .ok_or_else(|| anyhow::anyhow!("slot not found for requested role"))?;
-    let payload_value = decrypt_payload(&slot.encrypted_payload, &password)?;
-    let payload = serde_json::to_vec(&payload_value)?;
+        .ok_or_else(|| backup_error_anyhow(BackupErrorCode::SlotNotFound, "slot not found"))?;
+    let payload_value = decrypt_payload(&slot.encrypted_payload, &password)
+        .map_err(|_| backup_error_anyhow(BackupErrorCode::DecryptFailed, "decrypt failed"))?;
+    let payload = serde_json::to_vec(&payload_value)
+        .map_err(|_| backup_error_anyhow(BackupErrorCode::InvalidPayload, "invalid payload"))?;
     if hash_hex(&payload) != slot.payload_sha256 {
-        return Err(anyhow::anyhow!("backup payload checksum mismatch"));
+        return Err(backup_error_anyhow(
+            BackupErrorCode::ChecksumMismatch,
+            "backup payload checksum mismatch",
+        ));
     }
-    let keystore: Keystore = parse_backup_keystore(&payload)?;
+    let keystore: Keystore = parse_backup_keystore(&payload)
+        .map_err(|_| backup_error_anyhow(BackupErrorCode::InvalidPayload, "invalid payload"))?;
     keystore.save(&args.output_path)?;
     if args.json {
         println!(
@@ -2085,6 +2100,31 @@ fn backup_restore(args: BackupRestoreArgs) -> anyhow::Result<()> {
         println!("Restored wallet to {}", args.output_path.display());
     }
     Ok(())
+}
+
+#[derive(Clone, Copy, Debug)]
+enum BackupErrorCode {
+    UnsupportedSchema,
+    SlotNotFound,
+    DecryptFailed,
+    ChecksumMismatch,
+    InvalidPayload,
+}
+
+impl BackupErrorCode {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::UnsupportedSchema => "unsupported_schema",
+            Self::SlotNotFound => "slot_not_found",
+            Self::DecryptFailed => "decrypt_failed",
+            Self::ChecksumMismatch => "checksum_mismatch",
+            Self::InvalidPayload => "invalid_payload",
+        }
+    }
+}
+
+fn backup_error_anyhow(code: BackupErrorCode, message: &str) -> anyhow::Error {
+    anyhow::anyhow!("{}: {}", code.as_str(), message)
 }
 
 fn load_backup_vault(path: &Path) -> anyhow::Result<BackupVaultFile> {
@@ -2498,6 +2538,36 @@ mod tests {
             json: false,
         })
         .expect_err("tampered backup should fail");
-        assert!(err.to_string().contains("checksum mismatch"));
+        assert!(err.to_string().contains("checksum_mismatch"));
+    }
+
+    #[test]
+    fn backup_restore_returns_slot_not_found_error_identifier() {
+        let base = unique_test_path("backup-slot-not-found");
+        let vault_path = base.join("vault.json");
+        let output_path = base.join("wallet-restored.json");
+        fs::create_dir_all(&base).expect("create test directory");
+
+        backup_init(BackupInitArgs {
+            vault_path: vault_path.clone(),
+            portable_label: None,
+            decoy_password: Some("decoy-pass".to_string()),
+            critical_password: Some("critical-pass".to_string()),
+        })
+        .expect("init vault");
+        let mut vault = load_backup_vault(&vault_path).expect("load vault");
+        vault.slots.retain(|slot| slot.role != BackupSlotRole::Decoy);
+        save_backup_vault(&vault_path, &vault).expect("save vault");
+
+        let err = backup_restore(BackupRestoreArgs {
+            output_path,
+            vault_path,
+            role: BackupSlotRole::Decoy,
+            password: Some("decoy-pass".to_string()),
+            json: true,
+        })
+        .expect_err("missing slot should fail");
+
+        assert!(err.to_string().contains("slot_not_found"));
     }
 }

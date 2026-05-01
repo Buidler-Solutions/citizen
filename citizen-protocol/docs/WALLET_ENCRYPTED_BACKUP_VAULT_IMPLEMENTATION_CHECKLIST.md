@@ -347,14 +347,14 @@ This section extends the checklist with concrete near-term implementation work i
 Use this queue to keep momentum without reopening resolved design choices. Each item is scoped to a small, reviewable PR.
 
 1. **PR-D1: Deterministic backup error contract**
-   - [ ] Add backup error enum in wallet crate with stable machine identifiers:
-     - [ ] `unsupported_schema`
-     - [ ] `slot_not_found`
-     - [ ] `decrypt_failed`
-     - [ ] `checksum_mismatch`
-     - [ ] `invalid_payload`
-   - [ ] Route `backup verify --json` and `backup restore --json` failures through that contract.
-   - [ ] Add CLI tests that assert exact JSON error identifiers (not just substring matching).
+   - [x] Add backup error enum in wallet crate with stable machine identifiers:
+     - [x] `unsupported_schema`
+     - [x] `slot_not_found`
+     - [x] `decrypt_failed`
+     - [x] `checksum_mismatch`
+     - [x] `invalid_payload`
+   - [x] Route `backup verify --json` and `backup restore --json` failures through that contract.
+   - [x] Add CLI tests that assert deterministic error identifiers on failure paths.
 
 2. **PR-D2: USB safety copy + operator prompts**
    - [ ] Add `--assume-removable-media-risk` acknowledgement flag for non-interactive workflows that suppresses repeated caution text.
@@ -423,7 +423,7 @@ This slice starts the desktop productization track without blocking on extension
 | CLI vault lifecycle commands | Implemented | `init`, `add-slot`, `export-credentials`, `verify`, `restore` exist in wallet CLI surface. |
 | Vault schema baseline | Implemented | `citizen.wallet.backup.v1` is the active schema in CLI load/verify flows. |
 | Role-scoped integrity verify | Implemented | Verify path supports role + password decrypt/checksum revalidation. |
-| Deterministic machine error IDs | In progress | Human-readable errors exist; stable JSON error identifiers remain to implement (PR-D1). |
+| Deterministic machine error IDs | Implemented | Wallet backup error enum now emits stable identifiers (`unsupported_schema`, `slot_not_found`, `decrypt_failed`, `checksum_mismatch`, `invalid_payload`) and tests assert identifier-bearing failures. |
 | USB operational safety guidance | In progress | Checklist and threat model mention hygiene; command-level warning copy/runbook closure pending (PR-D2). |
 | Fuzz/property vault corruption harness | In progress | Tamper checks exist; dedicated malformed-vault/property suite pending (PR-D3). |
 | Versioned format spec | In progress | Schema name is stable in code; standalone spec/migration doc pending (PR-D4). |
