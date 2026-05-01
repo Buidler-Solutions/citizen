@@ -8,6 +8,8 @@ This implementation advances the checklist in `citizen-protocol/docs/WALLET_ENCR
 
 - guided stage flow: `create -> verify -> restore -> eject`,
 - decoy/critical slot setup in the create flow,
+- verify + restore guidance with plain-language copy and expandable deterministic technical details,
+- safe-removal checklist in eject stage for portable media hygiene,
 - portable profile card (USB label, version, created, last verified),
 - deterministic operation log for operator review,
 - mock vault-core adapter boundaries ready for Rust/Tauri integration.
