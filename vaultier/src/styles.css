@@ -33,3 +33,29 @@ button:disabled { opacity: 0.6; cursor: not-allowed; }
 .stages { display: flex; gap: 0.5rem; margin-bottom: 1rem; flex-wrap: wrap; }
 .pill { background: #1e293b; color: #cbd5e1; border: 1px solid #334155; }
 .pill.active { background: #0ea5e9; color: #082f49; }
+
+.checklist {
+  list-style: none;
+  padding: 0;
+}
+
+.checklist li {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  margin: 0.5rem 0;
+}
+
+.log-list {
+  max-height: 300px;
+  overflow: auto;
+  padding-left: 1.1rem;
+}
+
+details {
+  margin-top: 0.75rem;
+  border: 1px solid #334155;
+  border-radius: 10px;
+  padding: 0.5rem 0.75rem;
+  background: #0f172a;
+}

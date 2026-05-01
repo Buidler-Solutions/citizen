@@ -66,7 +66,7 @@ export function AppShell() {
 
   return (
     <main className="shell">
-      <section className="card">
+      <section className="card" aria-live="polite">
         <h1>Vaultier</h1>
         <p className="subtitle">Portable encrypted backup vault for Citizen wallet recovery.</p>
         <nav className="stages" aria-label="Backup flow stages">
@@ -77,10 +77,11 @@ export function AppShell() {
           ))}
         </nav>
 
-        <label>
+        <label htmlFor="target-path">
           USB Target Path
-          <input value={targetPath} onChange={(e) => setTargetPath(e.target.value)} />
+          <input id="target-path" value={targetPath} onChange={(e) => setTargetPath(e.target.value)} aria-describedby="path-hint" />
         </label>
+        <p id="path-hint" className="hint">Use mounted removable media path (Linux/macOS/Windows semantics supported by core adapter).</p>
 
         {stage === 'create' && (
           <>
@@ -98,26 +99,45 @@ export function AppShell() {
 
         {stage === 'verify' && (
           <>
-            <p className="hint">Run guided integrity checks before relying on this backup.</p>
+            <p className="hint">Verify now to confirm vault integrity and version compatibility before relying on backup media.</p>
             <button disabled={running || !profile} onClick={runVerify}>{running ? 'Verifying...' : 'Verify Backup'}</button>
             {verifySummary && <p>{verifySummary}</p>}
+            <details>
+              <summary>Deterministic technical checks</summary>
+              <ul>
+                <li>vault.verify.header_auth</li>
+                <li>vault.verify.slot_inventory</li>
+                <li>vault.verify.version_compatibility</li>
+                <li>vault.verify.portable_profile</li>
+              </ul>
+            </details>
           </>
         )}
 
         {stage === 'restore' && (
           <>
-            <p className="hint">Simulate restore to validate deterministic recovery sequencing.</p>
+            <p className="hint">Run a test restore to validate ordering and confirm key/receipt recovery intent.</p>
             <button disabled={running || !profile} onClick={runRestore}>{running ? 'Running restore test...' : 'Test Restore'}</button>
             {restoreSummary && <p>{restoreSummary}</p>}
+            <details>
+              <summary>Restore sequence details</summary>
+              <ol>
+                <li>Unlock role-specific slot</li>
+                <li>Validate manifest checksums</li>
+                <li>Apply identity keys</li>
+                <li>Apply account keys</li>
+                <li>Apply consent artifacts</li>
+              </ol>
+            </details>
           </>
         )}
 
         {stage === 'eject' && (
-          <ul>
-            <li>Confirm verification completed on this media.</li>
-            <li>Confirm restore test passed with expected artifacts.</li>
-            <li>Flush pending writes before eject.</li>
-            <li>Store duplicate backup media in a separate location.</li>
+          <ul className="checklist">
+            <li><input type="checkbox" /> Verification completed on this media.</li>
+            <li><input type="checkbox" /> Restore test passed with expected artifacts.</li>
+            <li><input type="checkbox" /> Pending writes flushed before eject.</li>
+            <li><input type="checkbox" /> Duplicate backup media stored separately.</li>
           </ul>
         )}
       </section>
@@ -135,7 +155,7 @@ export function AppShell() {
           <p className="hint">Create a backup to generate a profile.</p>
         )}
         <h3>Operation log</h3>
-        <ul>
+        <ul className="log-list">
           {logs.map((log) => (
             <li key={`${log.at}-${log.action}`}>{log.at} · {log.action} · {log.status} · {log.details}</li>
           ))}
