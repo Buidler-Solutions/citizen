@@ -1,8 +1,17 @@
 import { useMemo, useState } from 'react';
 import { createBackup, testRestore, verifyBackup } from '../lib/mockVaultCore';
-import type { BackupRequest, OperationLog, PortableProfile, VaultRole } from '../lib/types';
+import type {
+  BackupRequest,
+  OperationLog,
+  PortableProfile,
+  RestoreResult,
+  VerifyResult,
+  VaultRole,
+} from '../lib/types';
 
 type Stage = 'create' | 'verify' | 'restore' | 'eject';
+
+const STAGES: Stage[] = ['create', 'verify', 'restore', 'eject'];
 
 export function AppShell() {
   const [stage, setStage] = useState<Stage>('create');
@@ -15,6 +24,8 @@ export function AppShell() {
   const [logs, setLogs] = useState<OperationLog[]>([]);
   const [verifySummary, setVerifySummary] = useState<string>('');
   const [restoreSummary, setRestoreSummary] = useState<string>('');
+  const [verifyResult, setVerifyResult] = useState<VerifyResult | null>(null);
+  const [restoreResult, setRestoreResult] = useState<RestoreResult | null>(null);
 
   const canProceed = useMemo(() => !!profile, [profile]);
 
@@ -31,37 +42,53 @@ export function AppShell() {
     setRunning(true);
     setVerifySummary('');
     setRestoreSummary('');
-    const result = await createBackup(request);
-    setProfile(result.profile);
-    appendLogs(result.log);
-    setStage('verify');
-    setRunning(false);
+    setVerifyResult(null);
+    setRestoreResult(null);
+
+    try {
+      const result = await createBackup(request);
+      setProfile(result.profile);
+      appendLogs(result.log);
+      setStage('verify');
+    } finally {
+      setRunning(false);
+    }
   };
 
   const runVerify = async () => {
     if (!profile) return;
     setRunning(true);
-    const result = await verifyBackup({ targetPath, expectedVaultVersion: profile.vaultVersion });
-    appendLogs(result.log);
-    setVerifySummary(`${result.checks.length} checks passed at ${result.verifiedAt}.`);
-    setProfile({ ...profile, lastVerifiedAt: result.verifiedAt });
-    setStage('restore');
-    setRunning(false);
+
+    try {
+      const result = await verifyBackup({ targetPath, expectedVaultVersion: profile.vaultVersion });
+      appendLogs(result.log);
+      setVerifyResult(result);
+      setVerifySummary(`${result.checks.length} checks passed at ${result.verifiedAt}.`);
+      setProfile({ ...profile, lastVerifiedAt: result.verifiedAt });
+      setStage('restore');
+    } finally {
+      setRunning(false);
+    }
   };
 
   const runRestore = async () => {
     setRunning(true);
-    const result = await testRestore({
-      targetPath,
-      role: 'critical',
-      restoreIdentityKeys: true,
-      restoreAccountKeys: true,
-      restoreConsentReceipts: includeConsentReceipts,
-    });
-    appendLogs(result.log);
-    setRestoreSummary(`Restore simulation completed for ${result.restoredRole} slot at ${result.restoredAt}.`);
-    setStage('eject');
-    setRunning(false);
+
+    try {
+      const result = await testRestore({
+        targetPath,
+        role: 'critical',
+        restoreIdentityKeys: true,
+        restoreAccountKeys: true,
+        restoreConsentReceipts: includeConsentReceipts,
+      });
+      appendLogs(result.log);
+      setRestoreResult(result);
+      setRestoreSummary(`Restore simulation completed for ${result.restoredRole} slot at ${result.restoredAt}.`);
+      setStage('eject');
+    } finally {
+      setRunning(false);
+    }
   };
 
   return (
@@ -70,8 +97,14 @@ export function AppShell() {
         <h1>Vaultier</h1>
         <p className="subtitle">Portable encrypted backup vault for Citizen wallet recovery.</p>
         <nav className="stages" aria-label="Backup flow stages">
-          {(['create', 'verify', 'restore', 'eject'] as Stage[]).map((item) => (
-            <button key={item} className={stage === item ? 'pill active' : 'pill'} onClick={() => setStage(item)} disabled={!canProceed && item !== 'create'}>
+          {STAGES.map((item) => (
+            <button
+              key={item}
+              className={stage === item ? 'pill active' : 'pill'}
+              onClick={() => setStage(item)}
+              disabled={!canProceed && item !== 'create'}
+              aria-current={stage === item ? 'step' : undefined}
+            >
               {item}
             </button>
           ))}
@@ -93,6 +126,7 @@ export function AppShell() {
               <label><input type="checkbox" checked={includeConsentReceipts} onChange={() => setIncludeConsentReceipts(!includeConsentReceipts)} /> Include consent artifacts</label>
               <label><input type="checkbox" checked={portableMode} onChange={() => setPortableMode(!portableMode)} /> Portable mode metadata</label>
             </div>
+            <p className="hint">Create flow target: under 3 minutes with deterministic logs for operator review.</p>
             <button disabled={running || selectedRoles.length === 0} onClick={runCreateBackup}>{running ? 'Creating backup...' : 'Create Backup'}</button>
           </>
         )}
@@ -101,7 +135,18 @@ export function AppShell() {
           <>
             <p className="hint">Verify now to confirm vault integrity and version compatibility before relying on backup media.</p>
             <button disabled={running || !profile} onClick={runVerify}>{running ? 'Verifying...' : 'Verify Backup'}</button>
-            {verifySummary && <p>{verifySummary}</p>}
+            {verifySummary && <p className="summary ok">{verifySummary}</p>}
+            {verifyResult && (
+              <div className="status-grid" role="status" aria-label="Verification checks">
+                {verifyResult.checks.map((check) => (
+                  <article key={check.label} className="status-card">
+                    <strong>{check.label}</strong>
+                    <p>{check.detail}</p>
+                    <span className={check.status === 'ok' ? 'badge ok' : 'badge warn'}>{check.status}</span>
+                  </article>
+                ))}
+              </div>
+            )}
             <details>
               <summary>Deterministic technical checks</summary>
               <ul>
@@ -118,7 +163,13 @@ export function AppShell() {
           <>
             <p className="hint">Run a test restore to validate ordering and confirm key/receipt recovery intent.</p>
             <button disabled={running || !profile} onClick={runRestore}>{running ? 'Running restore test...' : 'Test Restore'}</button>
-            {restoreSummary && <p>{restoreSummary}</p>}
+            {restoreSummary && <p className="summary ok">{restoreSummary}</p>}
+            {restoreResult && (
+              <div className="status-card">
+                <strong>Recovered artifacts</strong>
+                <p>{restoreResult.restoredArtifacts.join(', ') || 'No artifacts selected'}</p>
+              </div>
+            )}
             <details>
               <summary>Restore sequence details</summary>
               <ol>
@@ -133,12 +184,16 @@ export function AppShell() {
         )}
 
         {stage === 'eject' && (
-          <ul className="checklist">
-            <li><input type="checkbox" /> Verification completed on this media.</li>
-            <li><input type="checkbox" /> Restore test passed with expected artifacts.</li>
-            <li><input type="checkbox" /> Pending writes flushed before eject.</li>
-            <li><input type="checkbox" /> Duplicate backup media stored separately.</li>
-          </ul>
+          <>
+            <h2 className="h3">Safe removal checklist</h2>
+            <ul className="checklist">
+              <li><input type="checkbox" /> Verification completed on this media.</li>
+              <li><input type="checkbox" /> Restore test passed with expected artifacts.</li>
+              <li><input type="checkbox" /> Pending writes flushed before eject.</li>
+              <li><input type="checkbox" /> Duplicate backup media stored separately.</li>
+            </ul>
+            <p className="hint">Reminder: this vault does not protect against active malware on an unlocked host.</p>
+          </>
         )}
       </section>
 
