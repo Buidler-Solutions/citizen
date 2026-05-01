@@ -9,7 +9,7 @@
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "start": "vite",
-    "test:headless-contract": "node --experimental-strip-types src/lib/headlessContract.test.ts"
+    "test:headless-contract": "node headless-contract-check.mjs"
   },
   "dependencies": {
     "react": "^18.3.1",

@@ -472,7 +472,7 @@ Use this backlog to convert the portable app milestone tracker into small implem
 
 1. **PR-F1: Wallet core bridge crate + DTO lock-in**
    - [ ] Add a desktop-facing Rust bridge module (or crate) that wraps backup operations with typed DTOs matching CLI JSON fields.
-   - [~] Add schema tests that assert desktop DTO responses remain field-compatible with `wallet backup ... --json` for `init`, `verify`, and `restore` (Vaultier headless contract tests now assert deterministic field compatibility for `backup_init`, `backup_verify`, and `backup_restore`; Rust desktop bridge DTO parity harness remains pending).
+   - [~] Add schema tests that assert desktop DTO responses remain field-compatible with `wallet backup ... --json` for `init`, `verify`, and `restore` (Vaultier now ships a runnable `test:headless-contract` contract-marker gate validating pinned schema/contract versions and required init/verify/restore response fields; Rust desktop bridge DTO parity harness remains pending).
    - [ ] Add redaction tests proving no passphrase/secret fields are serializable in bridge response payloads.
 
 2. **PR-F2: Deterministic removable-drive preflight**
