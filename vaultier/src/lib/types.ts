@@ -115,10 +115,27 @@ export type RemovableDrive = {
 
 export type DriveDiscoveryResult = {
   drives: RemovableDrive[];
-  errors: Array<{ mountPath: string; code: 'mount_unwritable' | 'media_unavailable' | 'path_invalid'; detail: string }>;
+  errors: Array<{ mountPath: string; code: 'mount_unwritable' | 'media_unavailable' | 'path_invalid' | 'filesystem_incompatible' | 'insufficient_space'; detail: string }>;
 };
 
 export type RuntimeShell = 'tauri' | 'web-mock';
+
+export type RuntimePlatform = 'macos' | 'windows' | 'linux';
+
+export type DriveRecord = {
+  id: string;
+  label: string;
+  mountPath: string;
+  filesystem: RemovableDrive['filesystem'];
+  writable: boolean;
+  estimatedFreeGb: number;
+};
+
+export type DriveProbeIssue = {
+  mountPath: string;
+  code: 'mount_unwritable' | 'media_unavailable' | 'path_invalid' | 'filesystem_incompatible' | 'insufficient_space';
+  detail: string;
+};
 
 export type CrashSafeWriteStep = {
   step: 'temp_write' | 'fsync_file' | 'atomic_rename' | 'fsync_parent';
