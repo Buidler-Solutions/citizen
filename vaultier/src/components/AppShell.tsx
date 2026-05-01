@@ -82,8 +82,8 @@ export function AppShell() {
     if (!selectedDrive) return setActiveError('path_invalid');
     if (!selectedDrive.writable) return setActiveError('mount_unwritable');
     if (selectedDrive.estimatedFreeGb < 4) return setActiveError('insufficient_space');
-    if (selectedDrive && !isFilesystemRecommended(selectedDrive.filesystem)) return setActiveError('invalid_payload');
-    if (selectedRoles.includes('critical') && criticalEntropy < MIN_CRITICAL_ENTROPY) return setActiveError('decrypt_failed');
+    if (selectedDrive && !isFilesystemRecommended(selectedDrive.filesystem)) return setActiveError('filesystem_incompatible');
+    if (selectedRoles.includes('critical') && criticalEntropy < MIN_CRITICAL_ENTROPY) return setActiveError('critical_entropy_too_low');
 
     const request: BackupRequest = { targetPath, roles: selectedRoles, includeConsentReceipts, portableMode };
     setRunning(true); setActiveError(null); setOperationState('writing');
