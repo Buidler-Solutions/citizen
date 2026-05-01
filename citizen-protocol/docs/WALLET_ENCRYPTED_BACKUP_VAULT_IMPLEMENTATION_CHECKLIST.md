@@ -74,10 +74,10 @@ This initiative should replicate key VeraCrypt-style operating properties while 
 
 ## Checkpoint 1 — Monorepo Architecture and Package Layout
 
-- [ ] Choose component location(s):
-  - [ ] `wallet/backup-vault` (new shared library + CLI bindings), or
-  - [ ] wallet crate integration under `citizen-protocol/crates/wallet` + UI adapters.
-- [ ] Define stable data model crates/modules for vault headers, key-derivation config, slot metadata, and backup manifests.
+- [x] Choose component location(s):
+  - [x] wallet crate integration under `citizen-protocol/crates/wallet` + CLI adapters is now the active implementation path.
+  - [ ] `wallet/backup-vault` remains a future extraction option if extension/runtime sharing pressure grows.
+- [x] Define stable data model crates/modules for vault headers, key-derivation config, slot metadata, and backup manifests.
 - [ ] Define trait boundaries for storage backend adapters (filesystem first).
 - [ ] Define interop contract for CLI and extension clients (common schema + versioning).
 
@@ -89,7 +89,7 @@ This initiative should replicate key VeraCrypt-style operating properties while 
 
 ## Checkpoint 2 — Cryptography and Vault Format
 
-- [ ] Select password-based KDF parameters (Argon2id baseline) with environment-aware defaults.
+- [x] Select password-based KDF parameters (Argon2id baseline) with environment-aware defaults.
 - [ ] Define AEAD scheme (e.g., XChaCha20-Poly1305 or AES-256-GCM) and nonce/IV policy.
 - [ ] Implement per-vault master key wrapping and per-object envelope encryption.
 - [ ] Implement memory-hard unlock path and secure zeroization where feasible.
@@ -159,7 +159,7 @@ This initiative should replicate key VeraCrypt-style operating properties while 
 ## Checkpoint 6 — Recovery Safety and Operator Runbooks
 
 - [x] Define deterministic restore ordering when multiple backups exist.
-- [ ] Add checksum + signed manifest verification for backup bundles.
+- [ ] Add checksum + signed manifest verification for backup bundles (partial: deterministic checksum validation implemented; signed manifest verification pending).
 - [ ] Add disaster-recovery runbook updates for wallet credential restoration.
 - [ ] Add corrupted/partial-backup recovery guidance.
 - [ ] Add key-rotation post-restore playbook.
@@ -173,7 +173,7 @@ This initiative should replicate key VeraCrypt-style operating properties while 
 ## Checkpoint 7 — Testing Matrix and Quality Gates
 
 - [x] Unit tests: KDF params, AEAD envelopes, slot metadata parsing, manifest validation.
-- [ ] Property/fuzz tests: malformed headers, truncated ciphertext, random bit flips.
+- [ ] Property/fuzz tests: malformed headers, truncated ciphertext, random bit flips (partial adversarial tamper coverage exists; dedicated fuzz/property harness still pending).
 - [x] Integration tests: create 2-slot vault on USB media, export credentials, delete local wallet, restore, verify identity continuity.
 - [x] Adversarial tests: wrong-passphrase throttling behavior, tamper detection, replay/rollback attempts.
 - [ ] Performance tests: unlock latency targets across workstation/laptop profiles.
@@ -237,6 +237,14 @@ For first mergeable implementation slice, require:
 - Threat-model baseline document is now tracked in `citizen-protocol/docs/WALLET_ENCRYPTED_BACKUP_VAULT_THREAT_MODEL.md`; remaining work includes formal security sign-off and expanded operator runbook drills.
 - Threat model appendix and baseline operator controls are documented in `citizen-protocol/docs/WALLET_ENCRYPTED_BACKUP_VAULT_THREAT_MODEL.md`, including attacker classes, out-of-scope boundaries, and residual-risk tracking for the current CLI implementation.
 - Current implementation explicitly documents deniability limits: `decoy`/`critical` are role metadata, not hidden-volume semantics; hidden-volume deniability remains an open GA design decision.
+
+### Delta Update (2026-04-30, checklist continuation)
+
+- Architecture direction is now explicit: the current implementation lives in `citizen-protocol/crates/wallet` (library + CLI command surfaces), with a future optional extraction into a dedicated shared backup-vault package if extension reuse requires it.
+- Vault format/data model stabilization has progressed: `citizen.wallet.backup.v1` and role-scoped slot metadata (`decoy`/`critical`) are now the baseline contract used by CLI flows.
+- KDF baseline is implemented with Argon2id parameterization in the wallet implementation path; remaining work is mostly security-review hardening and cross-platform performance tuning rather than initial KDF selection.
+- Backup verification currently includes deterministic payload checksum validation and role-scoped decrypt verification; signed-manifest verification is still open.
+- Adversarial/tamper tests are present for checksum mismatch, but dedicated fuzz/property infrastructure for malformed vault structures remains open for CI expansion.
 
 ---
 
