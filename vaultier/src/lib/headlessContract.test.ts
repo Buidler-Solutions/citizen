@@ -47,7 +47,7 @@ async function main() {
   });
   assert(exportCredentials.ok === true, 'backup_export_credentials should succeed');
   assert(!!exportCredentials.result, 'backup_export_credentials result missing');
-  assertKeys(exportCredentials.result as Record<string, unknown>, ['exported_artifacts', 'log', 'role'], 'backup_export_credentials');
+  assertKeys(exportCredentials.result as Record<string, unknown>, ['exported_artifacts', 'log', 'performance', 'role'], 'backup_export_credentials');
 
   const verify = await runHeadlessCommand({
     command: 'backup_verify',
@@ -62,7 +62,7 @@ async function main() {
   assert(verify.command === 'backup_verify', 'backup_verify command mismatch');
   assert(verify.ok === true, 'backup_verify should succeed');
   assert(!!verify.result, 'backup_verify result missing');
-  assertKeys(verify.result as Record<string, unknown>, ['checks', 'log', 'manifest', 'verified_at'], 'backup_verify');
+  assertKeys(verify.result as Record<string, unknown>, ['checks', 'log', 'manifest', 'performance', 'verified_at'], 'backup_verify');
 
   const restore = await runHeadlessCommand({
     command: 'backup_restore',
@@ -82,7 +82,7 @@ async function main() {
   assert(restore.command === 'backup_restore', 'backup_restore command mismatch');
   assert(restore.ok === true, 'backup_restore should succeed');
   assert(!!restore.result, 'backup_restore result missing');
-  assertKeys(restore.result as Record<string, unknown>, ['log', 'restored_artifacts', 'restored_at', 'restored_role', 'selected_backup_id'], 'backup_restore');
+  assertKeys(restore.result as Record<string, unknown>, ['log', 'performance', 'restored_artifacts', 'restored_at', 'restored_role', 'selected_backup_id'], 'backup_restore');
   assert((restore.result as Record<string, unknown>).selected_backup_id === 'backup-a', 'backup_restore selected backup ordering drifted');
 
   const manifestPolicy = await runHeadlessCommand({

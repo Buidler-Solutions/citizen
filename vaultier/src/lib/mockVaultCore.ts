@@ -442,6 +442,11 @@ export async function runHeadlessCommand(command: HeadlessCommand): Promise<Head
       result: {
         role: command.role,
         exported_artifacts: exportedArtifacts,
+        performance: {
+          elapsed_ms: elapsedMs,
+          threshold_ms: targetMs,
+          status: perfStatus,
+        },
         log: [
           { at: now(), action: 'wallet.export', status: 'ok', details: `Exported: ${exportedArtifacts.join(', ') || 'none selected'}.` },
           {
@@ -478,6 +483,11 @@ export async function runHeadlessCommand(command: HeadlessCommand): Promise<Head
         verified_at: result.verifiedAt,
         manifest: result.manifest,
         checks: result.checks,
+        performance: {
+          elapsed_ms: elapsedMs,
+          threshold_ms: targetMs,
+          status: perfStatus,
+        },
         log: [
           ...result.log,
           {
@@ -534,6 +544,11 @@ export async function runHeadlessCommand(command: HeadlessCommand): Promise<Head
       restored_role: result.restoredRole,
       restored_artifacts: result.restoredArtifacts,
       selected_backup_id: result.selectedBackupId,
+      performance: {
+        elapsed_ms: elapsedMs,
+        threshold_ms: targetMs,
+        status: perfStatus,
+      },
       log: [
         ...result.log,
         {
