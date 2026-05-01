@@ -13,10 +13,10 @@ use x25519_dalek::{PublicKey as X25519PublicKey, StaticSecret};
 
 use crate::{
     build_wrcp_msig_v1_proof, build_wrcp_msig_v1_signing_payload, compute_file_manifest_commitment,
-    decrypt_payload, decrypt_secret_key, dry_run_wrcp_msig_v1, encrypt_payload, encrypt_secret_key,
-    generate_mnemonic_phrase, parse_verifying_key, sign_entry, verify_entry_signature,
-    verify_offchain_file_reconciliation, ActionPolicy, EncryptedPayload, EncryptedSecretKey,
-    EntryDraft, WalletKeypair, WrcpMsigV1Proof,
+    decrypt_payload, decrypt_secret_key, dry_run_wrcp_msig_v1, encrypt_payload,
+    encrypt_payload_with_kdf_params, encrypt_secret_key, generate_mnemonic_phrase,
+    parse_verifying_key, sign_entry, verify_entry_signature, verify_offchain_file_reconciliation,
+    ActionPolicy, EncryptedPayload, EncryptedSecretKey, EntryDraft, WalletKeypair, WrcpMsigV1Proof,
 };
 
 #[derive(Debug, Parser)]
@@ -409,8 +409,18 @@ struct BackupInitArgs {
     decoy_password: Option<String>,
     #[arg(long)]
     critical_password: Option<String>,
+    #[arg(long, default_value = "balanced")]
+    kdf_profile: BackupKdfProfile,
+    #[arg(long)]
+    json: bool,
     #[arg(long, default_value_t = false)]
     assume_removable_media_risk: bool,
+}
+
+#[derive(Debug, Clone, Copy, ValueEnum)]
+enum BackupKdfProfile {
+    Balanced,
+    CriticalHardened,
 }
 
 #[derive(Debug, Args)]
@@ -1973,14 +1983,57 @@ fn backup_init(args: BackupInitArgs) -> anyhow::Result<()> {
         created_at: Utc::now().timestamp(),
         slots: vec![],
     };
+    let (memory_kib, iterations, parallelism, output_length): (u32, u32, u32, usize) =
+        match args.kdf_profile {
+            BackupKdfProfile::Balanced => (19_456, 2, 1, 32),
+            BackupKdfProfile::CriticalHardened => (65_536, 3, 1, 32),
+    };
     vault
         .slots
-        .push(empty_slot(BackupSlotRole::Decoy, &decoy_password)?);
+        .push(empty_slot_with_kdf_profile(
+            BackupSlotRole::Decoy,
+            &decoy_password,
+            memory_kib,
+            iterations,
+            parallelism,
+            output_length,
+        )?);
     vault
         .slots
-        .push(empty_slot(BackupSlotRole::Critical, &critical_password)?);
+        .push(empty_slot_with_kdf_profile(
+            BackupSlotRole::Critical,
+            &critical_password,
+            memory_kib,
+            iterations,
+            parallelism,
+            output_length,
+        )?);
     save_backup_vault(&args.vault_path, &vault)?;
-    println!("Initialized backup vault at {}", args.vault_path.display());
+    if args.json {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&json!({
+                "contract_version": BACKUP_JSON_CONTRACT_VERSION,
+                "vault_path": args.vault_path.display().to_string(),
+                "schema": vault.schema,
+                "version": vault.version,
+                "portable_label": vault.portable_label,
+                "kdf_profile": match args.kdf_profile {
+                    BackupKdfProfile::Balanced => "balanced",
+                    BackupKdfProfile::CriticalHardened => "critical-hardened",
+                },
+                "kdf_params": {
+                    "kdf": "argon2id",
+                    "memory_kib": memory_kib,
+                    "iterations": iterations,
+                    "parallelism": parallelism,
+                    "output_length": output_length,
+                }
+            }))?
+        );
+    } else {
+        println!("Initialized backup vault at {}", args.vault_path.display());
+    }
     Ok(())
 }
 
@@ -2190,9 +2243,27 @@ fn save_backup_vault(path: &Path, vault: &BackupVaultFile) -> anyhow::Result<()>
 }
 
 fn empty_slot(role: BackupSlotRole, password: &str) -> anyhow::Result<BackupVaultSlot> {
+    empty_slot_with_kdf_profile(role, password, 19_456, 2, 1, 32)
+}
+
+fn empty_slot_with_kdf_profile(
+    role: BackupSlotRole,
+    password: &str,
+    memory_kib: u32,
+    iterations: u32,
+    parallelism: u32,
+    output_length: usize,
+) -> anyhow::Result<BackupVaultSlot> {
     let placeholder_value = json!({"placeholder": true, "role": format!("{role:?}")});
     let payload = serde_json::to_vec(&placeholder_value)?;
-    let encrypted_payload = encrypt_payload(&placeholder_value, password)?;
+    let encrypted_payload = encrypt_payload_with_kdf_params(
+        &placeholder_value,
+        password,
+        memory_kib,
+        iterations,
+        parallelism,
+        output_length,
+    )?;
     Ok(BackupVaultSlot {
         role,
         scopes: vec![BackupExportScope::Keys],
@@ -2536,6 +2607,8 @@ mod tests {
             portable_label: Some("usb-a".to_string()),
             decoy_password: Some("decoy-pass".to_string()),
             critical_password: Some("critical-pass".to_string()),
+            kdf_profile: BackupKdfProfile::Balanced,
+            json: false,
             assume_removable_media_risk: true,
         })
         .expect("init vault");
@@ -2595,6 +2668,8 @@ mod tests {
             portable_label: None,
             decoy_password: Some("decoy-pass".to_string()),
             critical_password: Some("critical-pass".to_string()),
+            kdf_profile: BackupKdfProfile::Balanced,
+            json: false,
             assume_removable_media_risk: true,
         })
         .expect("init vault");
@@ -2653,6 +2728,8 @@ mod tests {
             portable_label: None,
             decoy_password: Some("decoy-pass".to_string()),
             critical_password: Some("critical-pass".to_string()),
+            kdf_profile: BackupKdfProfile::Balanced,
+            json: false,
             assume_removable_media_risk: true,
         })
         .expect("init vault");
@@ -2697,6 +2774,8 @@ mod tests {
             portable_label: None,
             decoy_password: Some("decoy-pass".to_string()),
             critical_password: Some("critical-pass".to_string()),
+            kdf_profile: BackupKdfProfile::Balanced,
+            json: false,
             assume_removable_media_risk: true,
         })
         .expect("init vault");
@@ -2760,6 +2839,8 @@ mod tests {
             portable_label: None,
             decoy_password: Some("decoy-pass".to_string()),
             critical_password: Some("critical-pass".to_string()),
+            kdf_profile: BackupKdfProfile::Balanced,
+            json: false,
             assume_removable_media_risk: true,
         })
         .expect("init vault");
@@ -2818,6 +2899,8 @@ mod tests {
             portable_label: None,
             decoy_password: Some("decoy-pass".to_string()),
             critical_password: Some("critical-pass".to_string()),
+            kdf_profile: BackupKdfProfile::Balanced,
+            json: false,
             assume_removable_media_risk: true,
         })
         .expect("init vault");
