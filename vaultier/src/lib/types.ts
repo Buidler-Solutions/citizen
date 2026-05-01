@@ -55,6 +55,20 @@ export type RestoreResult = {
   log: OperationLog[];
 };
 
+
+export type PerformanceTarget = {
+  operation: 'create' | 'verify' | 'restore';
+  thresholdMs: number;
+};
+
+export type PerformanceMeasurement = {
+  operation: 'create' | 'verify' | 'restore';
+  elapsedMs: number;
+  thresholdMs: number;
+  status: 'ok' | 'warn';
+  measuredAt: string;
+};
+
 export type DiagnosticBundle = {
   generatedAt: string;
   platform: string;
@@ -62,6 +76,7 @@ export type DiagnosticBundle = {
   profile: PortableProfile;
   recentLogs: OperationLog[];
   recentErrors: string[];
+  performanceMeasurements: PerformanceMeasurement[];
 };
 
 export type HeadlessCommand =

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { createBackup, discoverRemovableDrives, exportDiagnosticBundle, flushPendingWritesWithStrategy, getRuntimeShell, testRestore, verifyBackup } from '../lib/mockVaultCore';
-import type { BackupRequest, CrashSafeWriteStep, DiagnosticBundle, DriveDiscoveryResult, OperationLog, PortableProfile, RestoreResult, RuntimeShell, VerifyResult, VaultRole } from '../lib/types';
+import type { BackupRequest, CrashSafeWriteStep, DiagnosticBundle, DriveDiscoveryResult, OperationLog, PerformanceMeasurement, PortableProfile, RestoreResult, RuntimeShell, VerifyResult, VaultRole } from '../lib/types';
 import { ERROR_COPY, OPERATION_STATE_COPY, type ErrorIdentifier, type OperationState } from '../lib/operationState';
 import { defaultReminderPolicy, getNextReminderAt, isReminderDue, loadReminderSettings, saveReminderSettings, type ReminderPolicy } from '../lib/reminders';
 
@@ -8,6 +8,7 @@ type Stage = 'create' | 'verify' | 'restore' | 'eject';
 const STAGES: Stage[] = ['create', 'verify', 'restore', 'eject'];
 const MIN_CRITICAL_ENTROPY = 80;
 const BACKOFF_STEPS_MS = [1000, 2000, 4000, 8000];
+const PERFORMANCE_TARGETS = { create: 2000, verify: 1500, restore: 2500 } as const;
 
 const estimateEntropyBits = (value: string) => {
   if (!value) return 0;
@@ -55,6 +56,7 @@ export function AppShell() {
   const [reminderPolicy, setReminderPolicy] = useState<ReminderPolicy>(defaultReminderPolicy());
   const [runtimeShell, setRuntimeShell] = useState<RuntimeShell>('web-mock');
   const [flushStrategy, setFlushStrategy] = useState<CrashSafeWriteStep[]>([]);
+  const [performanceMeasurements, setPerformanceMeasurements] = useState<PerformanceMeasurement[]>([]);
 
   useEffect(() => { discoverRemovableDrives().then(setDiscovery); }, []);
   useEffect(() => { setRuntimeShell(getRuntimeShell()); }, []);
@@ -69,6 +71,17 @@ export function AppShell() {
   const appendLogs = (next: OperationLog[]) => setLogs((current) => [...next, ...current]);
   const nextReminderAt = useMemo(() => profile?.lastVerifiedAt ? getNextReminderAt(profile.lastVerifiedAt, reminderPolicy) : null, [profile, reminderPolicy]);
   const reminderDue = useMemo(() => nextReminderAt ? isReminderDue(nextReminderAt) : false, [nextReminderAt]);
+
+  const recordPerformance = (operation: PerformanceMeasurement['operation'], elapsedMs: number, thresholdMs: number) => {
+    const measurement: PerformanceMeasurement = {
+      operation,
+      elapsedMs,
+      thresholdMs,
+      status: elapsedMs <= thresholdMs ? 'ok' : 'warn',
+      measuredAt: new Date().toISOString(),
+    };
+    setPerformanceMeasurements((current) => [measurement, ...current].slice(0, 12));
+  };
 
   const downloadDiagnosticBundle = () => {
     if (!diagnosticBundle) return;
@@ -90,12 +103,17 @@ export function AppShell() {
 
     const request: BackupRequest = { targetPath, roles: selectedRoles, includeConsentReceipts, portableMode };
     setRunning(true); setActiveError(null); setOperationState('writing');
-    try { const result = await createBackup(request); setProfile(result.profile); appendLogs(result.log); setStage('verify'); setOperationState('verify_required'); } finally { setRunning(false); }
+    const startedAt = performance.now();
+    try { const result = await createBackup(request); setProfile(result.profile); appendLogs(result.log); setStage('verify'); setOperationState('verify_required');
+      const elapsedMs = Math.round(performance.now() - startedAt);
+      recordPerformance('create', elapsedMs, PERFORMANCE_TARGETS.create);
+    } finally { setRunning(false); }
   };
 
   const runVerify = async () => {
     if (!profile) return;
     setRunning(true); setActiveError(null); setOperationState('preflight');
+    const startedAt = performance.now();
     try {
       const result = await verifyBackup({
         targetPath,
@@ -110,6 +128,8 @@ export function AppShell() {
       if (tamperSignal?.label === 'Rollback counter') setActiveError('rollback_counter_mismatch');
       setEjectChecks((p) => ({ ...p, verified: result.manifest.verified }));
       setStage('restore'); setOperationState(result.manifest.verified ? 'completed' : 'action_required');
+      const elapsedMs = Math.round(performance.now() - startedAt);
+      recordPerformance('verify', elapsedMs, PERFORMANCE_TARGETS.verify);
     } finally { setRunning(false); }
   };
 
@@ -127,7 +147,11 @@ export function AppShell() {
       return;
     }
     setRunning(true); setActiveError(null);
-    try { const result = await testRestore({ targetPath, role: 'critical', restoreIdentityKeys: true, restoreAccountKeys: true, restoreConsentReceipts: includeConsentReceipts }); appendLogs(result.log); setRestoreResult(result); setUnlockFailures(0); setEjectChecks((p) => ({ ...p, restoreTest: true })); setStage('eject'); } finally { setRunning(false); }
+    const startedAt = performance.now();
+    try { const result = await testRestore({ targetPath, role: 'critical', restoreIdentityKeys: true, restoreAccountKeys: true, restoreConsentReceipts: includeConsentReceipts }); appendLogs(result.log); setRestoreResult(result); setUnlockFailures(0); setEjectChecks((p) => ({ ...p, restoreTest: true })); setStage('eject');
+      const elapsedMs = Math.round(performance.now() - startedAt);
+      recordPerformance('restore', elapsedMs, PERFORMANCE_TARGETS.restore);
+    } finally { setRunning(false); }
   };
 
   const simulateFailedUnlock = () => {
@@ -138,7 +162,7 @@ export function AppShell() {
     setActiveError('decrypt_failed');
   };
   const runFlushWrites = async () => { setOperationState('flushing'); const result = await flushPendingWritesWithStrategy(targetPath); appendLogs(result.logs); setFlushStrategy(result.strategy); setEjectChecks((p) => ({ ...p, flushComplete: true })); setOperationState('completed'); };
-  const runExportDiagnostics = async () => { if (profile) setDiagnosticBundle(await exportDiagnosticBundle(profile, logs.slice(0, 12), errorHistory)); };
+  const runExportDiagnostics = async () => { if (profile) setDiagnosticBundle(await exportDiagnosticBundle(profile, logs.slice(0, 12), errorHistory, performanceMeasurements)); };
 
   useEffect(() => {
     if (!activeError) return;
@@ -172,6 +196,7 @@ export function AppShell() {
       <h3>Reminder policy</h3>
       <label className="inline-control"><input type="checkbox" checked={reminderPolicy.enabled} onChange={() => setReminderPolicy((p) => ({ ...p, enabled: !p.enabled }))} />Enable verification reminders</label>
       <label>Reminder cadence (days)<input type="number" min={7} max={365} value={reminderPolicy.cadenceDays} onChange={(e) => setReminderPolicy((p) => ({ ...p, cadenceDays: Number(e.target.value) || p.cadenceDays }))} /></label>
+      <h3>Performance envelope</h3><p className="hint">Targets: create ≤ {PERFORMANCE_TARGETS.create}ms, verify ≤ {PERFORMANCE_TARGETS.verify}ms, restore ≤ {PERFORMANCE_TARGETS.restore}ms.</p>{performanceMeasurements.length > 0 ? <ul className="log-list">{performanceMeasurements.map((m) => <li key={`${m.operation}-${m.measuredAt}`}>{m.measuredAt} · {m.operation} · {m.elapsedMs}ms / {m.thresholdMs}ms · {m.status.toUpperCase()}</li>)}</ul> : <p className="hint">Run create/verify/restore to collect deterministic timing evidence logs.</p>}
       <h3>Operation log</h3><ul className="log-list">{logs.map((entry) => <li key={`${entry.at}-${entry.action}`}>{entry.at} · {entry.action} · {entry.status} · {entry.details}</li>)}</ul><div className="row"><button disabled={!profile} onClick={runExportDiagnostics}>Export diagnostics</button><button disabled={!diagnosticBundle} onClick={downloadDiagnosticBundle}>Download JSON</button></div>{diagnosticBundle && <details><summary>Latest diagnostic bundle</summary><pre>{JSON.stringify(diagnosticBundle, null, 2)}</pre></details>}</section>
     <section className="card">
       <h2>What this cannot protect against</h2>

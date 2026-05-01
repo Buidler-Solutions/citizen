@@ -17,6 +17,7 @@ import type {
   RuntimePlatform,
   DriveProbeIssue,
   DriveRecord,
+  PerformanceMeasurement,
 } from './types';
 
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -227,7 +228,7 @@ export async function testRestore(request: RestoreRequest): Promise<RestoreResul
   };
 }
 
-export async function exportDiagnosticBundle(profile: PortableProfile, recentLogs: OperationLog[], recentErrors: string[]): Promise<DiagnosticBundle> {
+export async function exportDiagnosticBundle(profile: PortableProfile, recentLogs: OperationLog[], recentErrors: string[], performanceMeasurements: PerformanceMeasurement[]): Promise<DiagnosticBundle> {
   await wait(250);
   return {
     generatedAt: now(),
@@ -236,6 +237,7 @@ export async function exportDiagnosticBundle(profile: PortableProfile, recentLog
     profile,
     recentLogs,
     recentErrors,
+    performanceMeasurements,
   };
 }
 
