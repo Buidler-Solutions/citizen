@@ -1208,6 +1208,11 @@ pub fn decrypt_payload(encrypted: &EncryptedPayload, passphrase: &str) -> Result
         .map_err(|err| ProtocolError::crypto(format!("invalid salt hex: {err}")))?;
     let nonce = hex::decode(&encrypted.nonce_hex)
         .map_err(|err| ProtocolError::crypto(format!("invalid nonce hex: {err}")))?;
+    if nonce.len() != 12 {
+        return Err(ProtocolError::crypto(
+            "nonce must be 12 bytes for ChaCha20-Poly1305".to_string(),
+        ));
+    }
     let ciphertext = hex::decode(&encrypted.ciphertext_hex)
         .map_err(|err| ProtocolError::crypto(format!("invalid ciphertext hex: {err}")))?;
     let params = Params::new(
@@ -2319,6 +2324,29 @@ mod tests {
         assert_eq!(encrypted.kdf_params.iterations, BACKUP_ARGON2ID_ITERATIONS);
         assert_eq!(encrypted.kdf_params.parallelism, BACKUP_ARGON2ID_PARALLELISM);
         assert_eq!(encrypted.kdf_params.output_length as usize, BACKUP_ARGON2ID_OUTPUT_LENGTH);
+    }
+
+    #[test]
+    fn decrypt_payload_rejects_invalid_nonce_length() {
+        let payload = json!({"scope":"wallet-backup"});
+        let mut encrypted =
+            encrypt_payload(&payload, "strong-test-passphrase").expect("encrypt payload");
+        encrypted.nonce_hex = "0011".to_string();
+        let err = decrypt_payload(&encrypted, "strong-test-passphrase")
+            .expect_err("invalid nonce length must fail");
+        assert!(err
+            .to_string()
+            .contains("nonce must be 12 bytes for ChaCha20-Poly1305"));
+    }
+
+    #[test]
+    fn decrypt_payload_rejects_tampered_ciphertext() {
+        let payload = json!({"scope":"wallet-backup","kind":"critical"});
+        let mut encrypted = encrypt_payload(&payload, "tamper-test-passphrase").expect("encrypt");
+        encrypted.ciphertext_hex.push('0');
+        let err = decrypt_payload(&encrypted, "tamper-test-passphrase")
+            .expect_err("tampered ciphertext should fail");
+        assert!(err.to_string().contains("invalid ciphertext hex"));
     }
     #[test]
     fn signs_and_verifies_private_entry() {
