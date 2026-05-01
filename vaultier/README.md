@@ -18,6 +18,8 @@ This implementation advances the checklist in `citizen-protocol/docs/WALLET_ENCR
 - persisted verification reminder policy with next-check timestamp + due-state warning,
 - deterministic operation log and mock diagnostic export bundle,
 - mock vault-core adapter boundaries ready for Rust/Tauri integration.
+- explicit runtime-shell signal (`web-mock` now, `tauri` target) for deterministic bridge behavior.
+- crash-safe write strategy trace (temp write, fsync, atomic rename, parent fsync) surfaced in safe-removal flow.
 
 ## Package manager
 
