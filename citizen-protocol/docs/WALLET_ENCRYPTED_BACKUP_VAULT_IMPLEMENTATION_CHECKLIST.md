@@ -375,6 +375,47 @@ Use this queue to keep momentum without reopening resolved design choices. Each 
 - [ ] PR-D1 through PR-D4 merged with passing wallet crate tests.
 - [ ] Remaining open items in this checklist are reduced to extension integration, optional hardware-assisted key wrapping, and rollout governance sign-off.
 
+
+### Next Slice E — Portable application foundation (working + sleek)
+
+This slice starts the desktop productization track without blocking on extension parity. It reuses the existing wallet crate crypto/format logic and treats the desktop shell as an orchestration + UX layer.
+
+1. **PR-E1: Desktop shell bootstrap (Tauri-first)**
+   - [ ] Create `wallet/desktop` scaffold with Tauri runtime and workspace-level build wiring.
+   - [ ] Expose minimal command bridge for `backup init`, `backup add-slot`, `backup export-credentials`, `backup verify`, `backup restore` using typed request/response DTOs.
+   - [ ] Enforce “no secret in UI logs” guardrails in bridge layer with redaction helpers and deny-list tests.
+
+2. **PR-E2: Removable media discovery + safe-write pipeline**
+   - [ ] Implement cross-platform removable-drive discovery abstraction with deterministic adapter error mapping.
+   - [ ] Add crash-safe write path (`.tmp` write -> fsync -> atomic rename -> parent fsync when supported).
+   - [ ] Add UI-facing operation state machine (`preflight`, `writing`, `flushing`, `verified`, `action_required`) for deterministic progress copy.
+
+3. **PR-E3: Sleek guided flows (MVP UX)**
+   - [ ] Ship single-screen “Create Backup” flow with decoy + critical setup, passphrase strength guidance, and progress timeline.
+   - [ ] Ship “Verify Backup” quick action and “Test Restore” wizard with expandable technical details panel.
+   - [ ] Add portable profile card (label, schema version, created-at, last verified-at) and safe-removal checklist drawer.
+
+4. **PR-E4: Headless parity + diagnostics**
+   - [ ] Add desktop headless mode that mirrors `wallet backup ... --json` contract for CI/recovery labs.
+   - [ ] Add diagnostic export bundle (non-secret): app version, OS, vault header metadata, deterministic error history.
+   - [ ] Publish app↔CLI compatibility table in docs per release.
+
+**Exit criteria**
+- [ ] Desktop smoke suite passes on Linux/macOS/Windows runners for create/add-slot/export/verify/restore happy paths.
+- [ ] UX acceptance validates “working + sleek” baseline: first-time backup flow under 3 minutes with no ambiguous error language.
+- [ ] Security review confirms no plaintext material crosses UI bridge, logs, crash dumps, or telemetry payloads.
+
+### Portable App Milestone Tracker (updated 2026-05-01)
+
+| Milestone | Status | Target outcome |
+| --- | --- | --- |
+| M0 — Runtime decision + shell bootstrap | Planned | Tauri scaffold + typed command bridge to wallet crate backup APIs. |
+| M1 — Reliable removable-media writes | Planned | Deterministic mount detection, flush/fsync behavior, atomic update semantics. |
+| M2 — Guided backup UX | Planned | One-screen decoy/critical creation flow with visible progress and safety cues. |
+| M3 — Restore confidence UX | Planned | Verify + test-restore flows with deterministic technical detail panel. |
+| M4 — Operator/CI parity | Planned | Headless mode and diagnostics aligned with CLI JSON contract. |
+| M5 — Release hardening | Planned | Signed builds, compatibility matrix, cross-platform smoke + security sign-off. |
+
 ### Execution Tracker (updated 2026-05-01)
 
 | Workstream | Status | Notes |
