@@ -3222,6 +3222,88 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "manual performance evidence harness for wallet backup command path"]
+    fn backup_command_path_performance_evidence_harness() {
+        let iterations = std::env::var("CITIZEN_WALLET_BACKUP_PERF_ITERATIONS")
+            .ok()
+            .and_then(|value| value.parse::<usize>().ok())
+            .filter(|value| *value > 0)
+            .unwrap_or(5);
+
+        let mut samples = Vec::with_capacity(iterations);
+        for iteration in 0..iterations {
+            let base = unique_test_path(&format!("backup-command-perf-evidence-{iteration}"));
+            let keystore_path = base.join("wallet.json");
+            let vault_path = base.join("vault.json");
+            let restored_path = base.join("wallet-restored.json");
+            fs::create_dir_all(&base).expect("create test directory");
+
+            let mut keystore = Keystore { version: 1, keys: vec![] };
+            keystore.add_key(KeyRecord {
+                key_id: Uuid::new_v4(),
+                label: Some(format!("perf-evidence-{iteration}")),
+                public_key_hex: "ab".repeat(32),
+                secret_key_hex: Some("cd".repeat(32)),
+                encrypted_secret_key: None,
+                created_at: Utc::now().timestamp(),
+            });
+            keystore.save(&keystore_path).expect("save keystore");
+
+            let init_started = Instant::now();
+            backup_init(BackupInitArgs {
+                vault_path: vault_path.clone(),
+                portable_label: Some("perf-usb".to_string()),
+                decoy_password: Some("decoy-pass".to_string()),
+                critical_password: Some("critical-pass".to_string()),
+                kdf_profile: BackupKdfProfile::Balanced,
+                json: true,
+                assume_removable_media_risk: true,
+            }).expect("init vault");
+            let init_ms = init_started.elapsed().as_millis();
+
+            let export_started = Instant::now();
+            backup_export_credentials(BackupExportArgs {
+                path: keystore_path,
+                vault_path: vault_path.clone(),
+                role: BackupSlotRole::Critical,
+                password: Some("critical-pass".to_string()),
+                scopes: vec![BackupExportScope::Keys, BackupExportScope::RecoveryMetadata],
+                assume_removable_media_risk: true,
+            }).expect("export credentials");
+            let export_ms = export_started.elapsed().as_millis();
+
+            let verify_started = Instant::now();
+            backup_verify(BackupVerifyArgs {
+                vault_path: vault_path.clone(),
+                role: Some(BackupSlotRole::Critical),
+                password: Some("critical-pass".to_string()),
+                json: true,
+            }).expect("verify");
+            let verify_ms = verify_started.elapsed().as_millis();
+
+            let restore_started = Instant::now();
+            backup_restore(BackupRestoreArgs {
+                output_path: restored_path,
+                vault_path,
+                role: BackupSlotRole::Critical,
+                password: Some("critical-pass".to_string()),
+                json: true,
+                assume_removable_media_risk: true,
+            }).expect("restore");
+            let restore_ms = restore_started.elapsed().as_millis();
+
+            samples.push(serde_json::json!({
+                "iteration": iteration,
+                "init_ms": init_ms,
+                "export_ms": export_ms,
+                "verify_ms": verify_ms,
+                "restore_ms": restore_ms,
+            }));
+        }
+
+        eprintln!("wallet backup performance evidence: {}", serde_json::to_string_pretty(&samples).expect("serialize performance samples"));
+    }
+    #[test]
     fn backup_command_path_latency_envelope_stays_within_thresholds() {
         let base = unique_test_path("backup-command-latency-envelope");
         let keystore_path = base.join("wallet.json");
