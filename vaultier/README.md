@@ -11,6 +11,7 @@ This implementation advances the checklist in `citizen-protocol/docs/WALLET_ENCR
 - passphrase entropy guidance for decoy and critical roles,
 - verify + restore guidance with deterministic checks and restore summaries,
 - simulated wrong-passphrase unlock backoff behavior,
+- optional restore-stage unlock backoff toggle aligned to CLI throttling semantics, with deterministic delay schedule,
 - detected removable drive picker with macOS/Linux/Windows-style mount path examples,
 - filesystem advisory on detected removable media (recommended vs higher-risk formats),
 - safe-removal checklist with an explicit `flush pending writes` action,
