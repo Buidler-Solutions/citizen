@@ -2,9 +2,9 @@ import type {
   BackupRequest,
   BackupResult,
   DiagnosticBundle,
+  DriveDiscoveryResult,
   PortableProfile,
   OperationLog,
-  RemovableDrive,
   RestoreRequest,
   RestoreResult,
   VerifyRequest,
@@ -12,16 +12,20 @@ import type {
 } from './types';
 
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-
 const now = () => new Date().toISOString();
 
-export async function discoverRemovableDrives(): Promise<RemovableDrive[]> {
+export async function discoverRemovableDrives(): Promise<DriveDiscoveryResult> {
   await wait(180);
-  return [
-    { id: 'usb-1', label: 'CITIZEN_USB', mountPath: '/Volumes/CITIZEN_USB', platform: 'macos', filesystem: 'exfat' },
-    { id: 'usb-2', label: 'RECOVERY_KEY', mountPath: 'E:\\', platform: 'windows', filesystem: 'ntfs' },
-    { id: 'usb-3', label: 'ops_backup', mountPath: '/media/ops/ops_backup', platform: 'linux', filesystem: 'ext4' },
-  ];
+  return {
+    drives: [
+      { id: 'usb-1', label: 'CITIZEN_USB', mountPath: '/Volumes/CITIZEN_USB', platform: 'macos', filesystem: 'exfat', writable: true, estimatedFreeGb: 58 },
+      { id: 'usb-2', label: 'RECOVERY_KEY', mountPath: 'E:\\', platform: 'windows', filesystem: 'ntfs', writable: true, estimatedFreeGb: 24 },
+      { id: 'usb-3', label: 'ops_backup', mountPath: '/media/ops/ops_backup', platform: 'linux', filesystem: 'ext4', writable: false, estimatedFreeGb: 3 },
+    ],
+    errors: [
+      { mountPath: '/media/ops/ops_backup', code: 'mount_unwritable', detail: 'Drive is mounted read-only; remount with write permissions.' },
+    ],
+  };
 }
 
 export async function flushPendingWrites(targetPath: string): Promise<OperationLog[]> {
