@@ -22,7 +22,7 @@ It is the format-level companion to:
 - Vault version: `1`
 - Signed manifest schema: `citizen.wallet.backup.manifest.v1`
 
-CLI JSON automation contract references this format via `contract_version: "wallet-backup-cli.v1"` in `--json` outputs.
+CLI JSON automation contract references this format via `contract_version: "citizen.wallet.backup.cli.v1"` in `--json` outputs.
 
 ## Top-level vault object (`v1`)
 
@@ -94,4 +94,3 @@ Validation behavior:
 - Fixture contract: `crates/wallet/tests/fixtures/backup_vault_schema_v1_fixture.json`
 - Compatibility test: `backup_vault_schema_fixture_remains_compatible`
 - CLI parsing/enforcement: `crates/wallet/src/cli.rs` backup load/verify/restore paths
-
