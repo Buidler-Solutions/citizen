@@ -24,7 +24,7 @@ body { margin: 0; }
 }
 
 label { display: block; margin-bottom: 0.65rem; }
-input { width: 100%; padding: 0.5rem; border-radius: 8px; border: 1px solid #334155; background: #0b1220; color: #dbeafe; }
+input, select { width: 100%; padding: 0.5rem; border-radius: 8px; border: 1px solid #334155; background: #0b1220; color: #dbeafe; }
 .row { display: flex; gap: 1rem; flex-wrap: wrap; }
 button { background: #38bdf8; border: none; border-radius: 10px; padding: 0.6rem 0.9rem; font-weight: 600; cursor: pointer; text-transform: capitalize; }
 button:disabled { opacity: 0.6; cursor: not-allowed; }
@@ -73,9 +73,26 @@ details { margin-top: 0.75rem; border: 1px solid #334155; border-radius: 10px; p
 .inline-control { display: inline-flex; align-items: center; gap: 0.45rem; }
 .controls-row { justify-content: flex-end; }
 .summary.warn { color: #fbbf24; }
-button:focus-visible, input:focus-visible, summary:focus-visible { outline: 2px solid #38bdf8; outline-offset: 2px; }
+button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visible { outline: 2px solid #38bdf8; outline-offset: 2px; }
 .high-contrast .card { background: #000; border-color: #fff; }
 .high-contrast .hint, .high-contrast .subtitle { color: #e5e7eb; }
-.high-contrast input, .high-contrast .pill { background: #000; color: #fff; border-color: #fff; }
+.high-contrast input, .high-contrast select, .high-contrast .pill { background: #000; color: #fff; border-color: #fff; }
 .high-contrast .pill.active { background: #fff; color: #000; }
 .high-contrast .status-card, .high-contrast details { background: #000; border-color: #fff; }
+.summary.bad { color: #f87171; }
+.note-panel {
+  margin: 0.8rem 0;
+  padding: 0.65rem 0.8rem;
+  border: 1px solid #475569;
+  border-radius: 10px;
+  background: #111827;
+}
+pre {
+  white-space: pre-wrap;
+  word-break: break-word;
+  background: #020617;
+  border: 1px solid #334155;
+  border-radius: 8px;
+  padding: 0.6rem;
+  font-size: 0.8rem;
+}

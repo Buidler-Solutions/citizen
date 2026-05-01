@@ -51,3 +51,19 @@ export type RestoreResult = {
   restoredArtifacts: string[];
   log: OperationLog[];
 };
+
+export type DiagnosticBundle = {
+  generatedAt: string;
+  platform: string;
+  appVersion: string;
+  profile: PortableProfile;
+  recentLogs: OperationLog[];
+};
+
+export type RemovableDrive = {
+  id: string;
+  label: string;
+  mountPath: string;
+  platform: 'macos' | 'windows' | 'linux';
+  filesystem: 'exfat' | 'ntfs' | 'fat32' | 'ext4' | 'apfs';
+};

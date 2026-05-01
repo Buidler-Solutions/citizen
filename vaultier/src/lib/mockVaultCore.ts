@@ -1,7 +1,10 @@
 import type {
   BackupRequest,
   BackupResult,
+  DiagnosticBundle,
+  PortableProfile,
   OperationLog,
+  RemovableDrive,
   RestoreRequest,
   RestoreResult,
   VerifyRequest,
@@ -11,6 +14,24 @@ import type {
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const now = () => new Date().toISOString();
+
+export async function discoverRemovableDrives(): Promise<RemovableDrive[]> {
+  await wait(180);
+  return [
+    { id: 'usb-1', label: 'CITIZEN_USB', mountPath: '/Volumes/CITIZEN_USB', platform: 'macos', filesystem: 'exfat' },
+    { id: 'usb-2', label: 'RECOVERY_KEY', mountPath: 'E:\\', platform: 'windows', filesystem: 'ntfs' },
+    { id: 'usb-3', label: 'ops_backup', mountPath: '/media/ops/ops_backup', platform: 'linux', filesystem: 'ext4' },
+  ];
+}
+
+export async function flushPendingWrites(targetPath: string): Promise<OperationLog[]> {
+  await wait(220);
+  const at = now();
+  return [
+    { at, action: 'vault.flush.begin', status: 'ok', details: `Flushing buffered writes for ${targetPath}.` },
+    { at, action: 'vault.flush.complete', status: 'ok', details: 'All writes synced with fsync + atomic rename policy.' },
+  ];
+}
 
 export async function createBackup(request: BackupRequest): Promise<BackupResult> {
   await wait(800);
@@ -67,5 +88,16 @@ export async function testRestore(request: RestoreRequest): Promise<RestoreResul
       { at: restoredAt, action: 'vault.restore.simulation', status: 'ok', details: `Restore simulation completed using ${request.role} slot.` },
       { at: restoredAt, action: 'wallet.recover', status: 'ok', details: `Recovered artifacts: ${restoredArtifacts.join(', ') || 'none selected'}.` },
     ],
+  };
+}
+
+export async function exportDiagnosticBundle(profile: PortableProfile, recentLogs: OperationLog[]): Promise<DiagnosticBundle> {
+  await wait(250);
+  return {
+    generatedAt: now(),
+    platform: navigator.userAgent,
+    appVersion: 'vaultier-dev',
+    profile,
+    recentLogs,
   };
 }
