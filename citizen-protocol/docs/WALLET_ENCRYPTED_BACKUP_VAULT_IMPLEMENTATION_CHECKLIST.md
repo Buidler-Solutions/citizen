@@ -481,9 +481,9 @@ Use this backlog to convert the portable app milestone tracker into small implem
    - [ ] Add tests for Linux/macOS/Windows path-shape normalization and cross-platform error parity.
 
 3. **PR-F3: UX state contract + copy pack v1**
-   - [ ] Define a shared operation-state contract for app flows (`idle`, `preflight`, `writing`, `flushing`, `verify_required`, `completed`, `action_required`).
-   - [ ] Add deterministic human-copy mapping for each state + each deterministic error identifier from wallet core.
-   - [ ] Add snapshot tests to prevent accidental drift in warning copy, especially safe-removal and corruption warnings.
+   - [x] Define a shared operation-state contract for app flows (`idle`, `preflight`, `writing`, `flushing`, `verify_required`, `completed`, `action_required`) (`vaultier/src/lib/operationState.ts` now exports the contract type and keeps stage copy keyed by the same deterministic states used by the guided flow shell).
+   - [x] Add deterministic human-copy mapping for each state + each deterministic error identifier from wallet core (`vaultier/src/lib/operationState.ts` now maintains a complete state/error copy map including recovery-safe next actions for tamper/media failures).
+   - [x] Add snapshot tests to prevent accidental drift in warning copy, especially safe-removal and corruption warnings (`vaultier/operation-copy-check.mjs` now gates required operation/error copy markers and critical warning strings via deterministic source assertions in CI/local checks).
 
 4. **PR-F4: Portable profile + verification cadence reminders**
    - [ ] Persist non-secret profile metadata (`portable_label`, `created_at`, `last_verified_at`, `schema_version`) in app-local settings.
