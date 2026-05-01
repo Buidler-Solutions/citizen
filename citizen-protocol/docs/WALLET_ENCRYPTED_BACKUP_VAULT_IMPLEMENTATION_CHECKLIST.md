@@ -395,9 +395,9 @@ Use this queue to keep momentum without reopening resolved design choices. Each 
    - [ ] Add docs snippet with safe-eject checklist and expected fsync/write-completion behavior.
 
 3. **PR-D3: Vault structure adversarial harness**
-   - [ ] Add malformed-vault fixture set (missing schema, wrong version type, empty slots, duplicated role entries, invalid ciphertext envelope).
-   - [ ] Add property tests for randomized metadata mutation and truncated payload handling.
-   - [ ] Ensure tests assert deterministic error identifiers from PR-D1.
+   - [~] Add malformed-vault fixture set (missing schema, wrong version type, empty slots, duplicated role entries, invalid ciphertext envelope). (now includes automated missing-schema and invalid/truncated ciphertext coverage in wallet CLI tests)
+   - [~] Add property tests for randomized metadata mutation and truncated payload handling. (truncated ciphertext handling is now covered; randomized metadata mutation property harness remains open)
+   - [x] Ensure tests assert deterministic error identifiers from PR-D1.
 
 4. **PR-D4: Format stability + migration note**
    - [ ] Add dedicated `WALLET_BACKUP_VAULT_FORMAT.md` with v1 field contract and migration policy.

@@ -2712,4 +2712,79 @@ mod tests {
 
         assert!(err.to_string().contains("slot_not_found"));
     }
+
+    #[test]
+    fn backup_verify_rejects_missing_schema_with_deterministic_error() {
+        let base = unique_test_path("backup-missing-schema");
+        let vault_path = base.join("vault.json");
+        fs::create_dir_all(&base).expect("create test directory");
+        fs::write(&vault_path, r#"{"version":1,"slots":[]}"#).expect("write malformed vault");
+
+        let err = backup_verify(BackupVerifyArgs {
+            vault_path,
+            role: None,
+            password: None,
+            json: true,
+        })
+        .expect_err("missing schema should fail");
+        assert!(err.to_string().contains("unsupported_schema"));
+    }
+
+    #[test]
+    fn backup_verify_rejects_truncated_ciphertext_with_decrypt_failed() {
+        let base = unique_test_path("backup-truncated-ciphertext");
+        let keystore_path = base.join("wallet.json");
+        let vault_path = base.join("vault.json");
+        fs::create_dir_all(&base).expect("create test directory");
+
+        let mut keystore = Keystore {
+            version: 1,
+            keys: vec![],
+        };
+        keystore.add_key(KeyRecord {
+            key_id: Uuid::new_v4(),
+            label: Some("truncate-check".to_string()),
+            public_key_hex: "aa".repeat(32),
+            secret_key_hex: Some("bb".repeat(32)),
+            encrypted_secret_key: None,
+            created_at: Utc::now().timestamp(),
+        });
+        keystore.save(&keystore_path).expect("save keystore");
+
+        backup_init(BackupInitArgs {
+            vault_path: vault_path.clone(),
+            portable_label: None,
+            decoy_password: Some("decoy-pass".to_string()),
+            critical_password: Some("critical-pass".to_string()),
+            assume_removable_media_risk: true,
+        })
+        .expect("init vault");
+        backup_export_credentials(BackupExportArgs {
+            path: keystore_path,
+            vault_path: vault_path.clone(),
+            role: BackupSlotRole::Critical,
+            password: Some("critical-pass".to_string()),
+            scopes: vec![BackupExportScope::Keys],
+            assume_removable_media_risk: true,
+        })
+        .expect("export credentials");
+
+        let mut vault = load_backup_vault(&vault_path).expect("load vault");
+        let slot = vault
+            .slots
+            .iter_mut()
+            .find(|slot| slot.role == BackupSlotRole::Critical)
+            .expect("critical slot exists");
+        slot.encrypted_payload.ciphertext_hex = "00".to_string();
+        save_backup_vault(&vault_path, &vault).expect("save tampered vault");
+
+        let err = backup_verify(BackupVerifyArgs {
+            vault_path,
+            role: Some(BackupSlotRole::Critical),
+            password: Some("critical-pass".to_string()),
+            json: true,
+        })
+        .expect_err("truncated ciphertext should fail");
+        assert!(err.to_string().contains("decrypt_failed"));
+    }
 }
