@@ -48,6 +48,14 @@ const platformEjectGuidance: Record<string, string> = {
   linux: 'Run a desktop eject action or `udisksctl power-off -b <device>` after unmount confirmation.',
 };
 
+const usbDurabilityProfile = [
+  'Capacity headroom: keep at least 2x projected backup size free (minimum 4 GB free).',
+  'Endurance: prefer high-endurance or enterprise-grade USB flash media rated for frequent rewrite cycles.',
+  'Filesystem support: exFAT for cross-platform portability, APFS/ext4/NTFS for single-platform fleets.',
+  'Write performance target: sustained sequential write >= 20 MB/s to reduce exposure window during flush.',
+  'Operational policy: maintain two verified copies on separate devices with independent storage locations.',
+];
+
 export function AppShell() {
   const [stage, setStage] = useState<Stage>('create');
   const [targetPath, setTargetPath] = useState('/Volumes/CITIZEN_USB');
@@ -248,6 +256,10 @@ export function AppShell() {
       <label>Detected removable drives<select value={targetPath} onChange={(e) => setTargetPath(e.target.value)}>{discovery.drives.map((d) => <option key={d.id} value={d.mountPath}>{d.label} · {d.mountPath} · {d.filesystem} · {d.estimatedFreeGb}GB free</option>)}</select></label>
       <button onClick={runRefreshDrives} disabled={running}>Refresh media</button>
       {selectedDrive && <p className="hint">Filesystem policy: <strong>{isFilesystemRecommended(selectedDrive.filesystem) ? 'Recommended' : 'Higher risk'}</strong> · {selectedDrive.filesystem.toUpperCase()}</p>}
+      <details>
+        <summary>Recommended USB durability profile</summary>
+        <ul className="log-list">{usbDurabilityProfile.map((item) => <li key={item}>{item}</li>)}</ul>
+      </details>
       {discovery.errors.length > 0 && <p className="summary warn">Adapter notices: {discovery.errors.map((err) => `${err.code} (${err.mountPath})`).join(', ')}.</p>}
 
       {stage === 'create' && <><div className="row"><label className="inline-control"><input type="checkbox" checked={selectedRoles.includes('decoy')} onChange={() => setSelectedRoles((c) => c.includes('decoy') ? c.filter((x) => x !== 'decoy') : [...c, 'decoy'])} />Decoy slot</label><label className="inline-control"><input type="checkbox" checked={selectedRoles.includes('critical')} onChange={() => setSelectedRoles((c) => c.includes('critical') ? c.filter((x) => x !== 'critical') : [...c, 'critical'])} />Critical slot</label></div>

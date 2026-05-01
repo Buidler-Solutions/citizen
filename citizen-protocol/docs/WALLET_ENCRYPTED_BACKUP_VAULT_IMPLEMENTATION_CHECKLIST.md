@@ -40,7 +40,7 @@ This initiative should replicate key VeraCrypt-style operating properties while 
 - [x] Add optional “portable mode” metadata for cross-machine restore checks.
 - [ ] Provide safe eject + write flush guidance in CLI and extension flows.
 - [~] Detect common removable-media failure modes (Vaultier now surfaces deterministic `media_unavailable` disconnect detection + refresh checks, existing filesystem compatibility warnings, and flush-strategy completeness enforcement before marking safe-eject complete; true runtime-backed partial-write prevention in desktop adapters remains pending).
-- [ ] Define minimum recommended USB durability/performance profile for operators.
+- [~] Define minimum recommended USB durability/performance profile for operators (Vaultier now surfaces an explicit operator-facing USB durability profile panel with capacity headroom, endurance, filesystem, throughput, and duplicate-media guidance; wallet CLI/help parity still pending).
 
 **Exit criteria**
 - [ ] End-to-end USB create/export/verify/restore drills pass on representative OS environments.
