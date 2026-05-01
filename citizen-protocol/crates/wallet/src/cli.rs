@@ -3046,6 +3046,67 @@ mod tests {
         }
     }
 
+
+
+    #[test]
+    fn backup_verify_rejects_malformed_vault_structure_matrix() {
+        let base = unique_test_path("backup-malformed-structure-matrix");
+        fs::create_dir_all(&base).expect("create test directory");
+
+        let fixture = include_str!("../tests/fixtures/backup_vault_schema_v1_fixture.json");
+        let base_value: Value = serde_json::from_str(fixture).expect("parse fixture");
+
+        let mut cases: Vec<(&str, Value)> = Vec::new();
+
+        let mut missing_schema = base_value.clone();
+        missing_schema
+            .as_object_mut()
+            .expect("object")
+            .remove("schema");
+        cases.push(("missing-schema", missing_schema));
+
+        let mut wrong_version_type = base_value.clone();
+        wrong_version_type
+            .as_object_mut()
+            .expect("object")
+            .insert("version".to_string(), Value::String("one".to_string()));
+        cases.push(("wrong-version-type", wrong_version_type));
+
+        let mut empty_slots = base_value.clone();
+        empty_slots
+            .as_object_mut()
+            .expect("object")
+            .insert("slots".to_string(), Value::Array(vec![]));
+        cases.push(("empty-slots", empty_slots));
+
+        let mut bad_ciphertext = base_value.clone();
+        let slots = bad_ciphertext["slots"].as_array_mut().expect("slots array");
+        slots[0]["encrypted_payload"]["ciphertext_hex"] = Value::String("zz-not-hex".to_string());
+        cases.push(("invalid-ciphertext-envelope", bad_ciphertext));
+
+        for (label, case_value) in cases {
+            let path = base.join(format!("{label}.json"));
+            fs::write(&path, serde_json::to_vec_pretty(&case_value).expect("serialize case"))
+                .expect("write case vault");
+
+            let err = backup_verify(BackupVerifyArgs {
+                vault_path: path,
+                role: Some(BackupSlotRole::Critical),
+                password: Some("critical-pass".to_string()),
+                json: true,
+            })
+            .expect_err("malformed vault should fail");
+
+            let rendered = err.to_string();
+            assert!(
+                rendered.contains("unsupported_schema")
+                    || rendered.contains("slot_not_found")
+                    || rendered.contains("decrypt_failed"),
+                "{label} should map to deterministic malformed-vault failure, got: {rendered}"
+            );
+        }
+    }
+
     #[test]
     fn backup_vault_schema_fixture_remains_compatible() {
         let fixture = include_str!("../tests/fixtures/backup_vault_schema_v1_fixture.json");
