@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { createBackup, discoverRemovableDrives, exportDiagnosticBundle, flushPendingWrites, testRestore, verifyBackup } from '../lib/mockVaultCore';
 import type { BackupRequest, DiagnosticBundle, DriveDiscoveryResult, OperationLog, PortableProfile, RestoreResult, VerifyResult, VaultRole } from '../lib/types';
 import { ERROR_COPY, OPERATION_STATE_COPY, type ErrorIdentifier, type OperationState } from '../lib/operationState';
+import { defaultReminderPolicy, getNextReminderAt, isReminderDue, loadReminderSettings, saveReminderSettings, type ReminderPolicy } from '../lib/reminders';
 
 type Stage = 'create' | 'verify' | 'restore' | 'eject';
 const STAGES: Stage[] = ['create', 'verify', 'restore', 'eject'];
@@ -40,8 +41,11 @@ export function AppShell() {
   const [activeError, setActiveError] = useState<ErrorIdentifier | null>(null);
   const [operationState, setOperationState] = useState<OperationState>('idle');
   const [ejectChecks, setEjectChecks] = useState({ verified: false, restoreTest: false, flushComplete: false, duplicateMedia: false });
+  const [reminderPolicy, setReminderPolicy] = useState<ReminderPolicy>(defaultReminderPolicy());
 
   useEffect(() => { discoverRemovableDrives().then(setDiscovery); }, []);
+  useEffect(() => { setReminderPolicy(loadReminderSettings()); }, []);
+  useEffect(() => { saveReminderSettings(reminderPolicy); }, [reminderPolicy]);
   useEffect(() => { if (unlockDelayMs <= 0) return; const timer = setInterval(() => setUnlockDelayMs((v) => Math.max(0, v - 500)), 500); return () => clearInterval(timer); }, [unlockDelayMs]);
 
   const selectedDrive = useMemo(() => discovery.drives.find((d) => d.mountPath === targetPath), [discovery, targetPath]);
@@ -49,6 +53,8 @@ export function AppShell() {
   const decoyEntropy = estimateEntropyBits(decoyPassphrase);
   const criticalEntropy = estimateEntropyBits(criticalPassphrase);
   const appendLogs = (next: OperationLog[]) => setLogs((current) => [...next, ...current]);
+  const nextReminderAt = useMemo(() => profile?.lastVerifiedAt ? getNextReminderAt(profile.lastVerifiedAt, reminderPolicy) : null, [profile, reminderPolicy]);
+  const reminderDue = useMemo(() => nextReminderAt ? isReminderDue(nextReminderAt) : false, [nextReminderAt]);
 
   const runCreateBackup = async () => {
     if (!selectedDrive) return setActiveError('path_invalid');
@@ -80,19 +86,24 @@ export function AppShell() {
 
   return <main className={highContrast ? 'shell high-contrast' : 'shell'}>
     <section className="card" aria-live="polite"><h1>Vaultier</h1><p className="subtitle">Portable encrypted backup vault for Citizen wallet recovery.</p>
-      <article className="state-panel"><strong>{OPERATION_STATE_COPY[operationState].title}</strong><p className="hint">{OPERATION_STATE_COPY[operationState].detail}</p>{activeError && <div className="error-panel"><strong>Error code: {activeError}</strong><p>{ERROR_COPY[activeError].headline}</p></div>}</article>
+      <article className="state-panel"><strong>{OPERATION_STATE_COPY[operationState].title}</strong><p className="hint">{OPERATION_STATE_COPY[operationState].detail}</p>{activeError && <div className="error-panel"><strong>Error code: {activeError}</strong><p>{ERROR_COPY[activeError].headline}</p><p className="hint">Next action: {ERROR_COPY[activeError].nextAction}</p></div>}</article>
+      {reminderDue && <p className="summary warn">Verification reminder is due. Run verify before relying on this media.</p>}
       <label className="inline-control"><input type="checkbox" checked={highContrast} onChange={() => setHighContrast(!highContrast)} />High contrast</label>
       <nav className="stages">{STAGES.map((item) => <button key={item} className={stage === item ? 'pill active' : 'pill'} onClick={() => setStage(item)} disabled={!profile && item !== 'create'}>{item}</button>)}</nav>
       <label>Detected removable drives<select value={targetPath} onChange={(e) => setTargetPath(e.target.value)}>{discovery.drives.map((d) => <option key={d.id} value={d.mountPath}>{d.label} · {d.mountPath} · {d.filesystem} · {d.estimatedFreeGb}GB free</option>)}</select></label>
       {discovery.errors.length > 0 && <p className="summary warn">Adapter notices: {discovery.errors.map((err) => `${err.code} (${err.mountPath})`).join(', ')}.</p>}
 
       {stage === 'create' && <><div className="row"><label className="inline-control"><input type="checkbox" checked={selectedRoles.includes('decoy')} onChange={() => setSelectedRoles((c) => c.includes('decoy') ? c.filter((x) => x !== 'decoy') : [...c, 'decoy'])} />Decoy slot</label><label className="inline-control"><input type="checkbox" checked={selectedRoles.includes('critical')} onChange={() => setSelectedRoles((c) => c.includes('critical') ? c.filter((x) => x !== 'critical') : [...c, 'critical'])} />Critical slot</label></div>
-      <div className="status-grid"><article className="status-card"><label>Decoy passphrase<input type="password" value={decoyPassphrase} onChange={(e) => setDecoyPassphrase(e.target.value)} /></label><p className={`summary ${entropyBand(decoyEntropy).className}`}>Entropy {decoyEntropy} bits</p></article><article className="status-card"><label>Critical passphrase<input type="password" value={criticalPassphrase} onChange={(e) => setCriticalPassphrase(e.target.value)} /></label><p className={`summary ${entropyBand(criticalEntropy).className}`}>Entropy {criticalEntropy} bits</p></article></div>
+      <div className="status-grid"><article className="status-card"><label>Decoy passphrase<input type="password" value={decoyPassphrase} onChange={(e) => setDecoyPassphrase(e.target.value)} /></label><p className={`summary ${entropyBand(decoyEntropy).className}`}>Entropy {decoyEntropy} bits · {entropyBand(decoyEntropy).label}</p></article><article className="status-card"><label>Critical passphrase<input type="password" value={criticalPassphrase} onChange={(e) => setCriticalPassphrase(e.target.value)} /></label><p className={`summary ${entropyBand(criticalEntropy).className}`}>Entropy {criticalEntropy} bits · {entropyBand(criticalEntropy).label}</p></article></div>
       <button disabled={running || selectedRoles.length === 0} onClick={runCreateBackup}>Create Backup</button></>}
       {stage === 'verify' && <><button disabled={running || !profile} onClick={runVerify}>Verify Backup</button>{verifyResult && <p className="summary ok">{verifyResult.checks.length} checks passed at {verifyResult.verifiedAt}.</p>}</>}
       {stage === 'restore' && <><div className="row"><button onClick={simulateFailedUnlock}>Simulate wrong passphrase</button><button disabled={running || unlockDelayMs > 0} onClick={runRestore}>Test Restore</button></div>{unlockDelayMs > 0 && <p className="summary warn">Backoff active: {unlockDelayMs}ms</p>}{restoreResult && <p className="summary ok">Recovered: {restoreResult.restoredArtifacts.join(', ')}</p>}</>}
       {stage === 'eject' && <><button onClick={runFlushWrites}>Flush pending writes</button><label className="inline-control"><input type="checkbox" checked={ejectChecks.duplicateMedia} onChange={() => setEjectChecks((p) => ({ ...p, duplicateMedia: !p.duplicateMedia }))} />Duplicate backup stored separately</label><p className={safeToEject ? 'summary ok' : 'summary warn'}>{safeToEject ? 'Checklist complete. Safe to eject.' : 'Complete all checklist steps before ejection.'}</p></>}
     </section>
-    <section className="card"><h2>Portable profile</h2>{profile ? <ul><li>USB Label: {profile.usbLabel}</li><li>Vault Format: {profile.vaultVersion}</li><li>Created: {profile.createdAt}</li><li>Last Verification: {profile.lastVerifiedAt}</li></ul> : <p className="hint">Create a backup to generate a profile.</p>}<h3>Operation log</h3><ul className="log-list">{logs.map((entry) => <li key={`${entry.at}-${entry.action}`}>{entry.at} · {entry.action} · {entry.status} · {entry.details}</li>)}</ul><button disabled={!profile} onClick={runExportDiagnostics}>Export diagnostics</button>{diagnosticBundle && <details><summary>Latest diagnostic bundle</summary><pre>{JSON.stringify(diagnosticBundle, null, 2)}</pre></details>}</section>
+    <section className="card"><h2>Portable profile</h2>{profile ? <ul><li>USB Label: {profile.usbLabel}</li><li>Vault Format: {profile.vaultVersion}</li><li>Created: {profile.createdAt}</li><li>Last Verification: {profile.lastVerifiedAt}</li><li>Next verification reminder: {nextReminderAt ?? 'Pending first verify'}</li></ul> : <p className="hint">Create a backup to generate a profile.</p>}
+      <h3>Reminder policy</h3>
+      <label className="inline-control"><input type="checkbox" checked={reminderPolicy.enabled} onChange={() => setReminderPolicy((p) => ({ ...p, enabled: !p.enabled }))} />Enable verification reminders</label>
+      <label>Reminder cadence (days)<input type="number" min={7} max={365} value={reminderPolicy.cadenceDays} onChange={(e) => setReminderPolicy((p) => ({ ...p, cadenceDays: Number(e.target.value) || p.cadenceDays }))} /></label>
+      <h3>Operation log</h3><ul className="log-list">{logs.map((entry) => <li key={`${entry.at}-${entry.action}`}>{entry.at} · {entry.action} · {entry.status} · {entry.details}</li>)}</ul><button disabled={!profile} onClick={runExportDiagnostics}>Export diagnostics</button>{diagnosticBundle && <details><summary>Latest diagnostic bundle</summary><pre>{JSON.stringify(diagnosticBundle, null, 2)}</pre></details>}</section>
   </main>;
 }
