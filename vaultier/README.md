@@ -8,10 +8,13 @@ This implementation advances the checklist in `citizen-protocol/docs/WALLET_ENCR
 
 - guided stage flow: `create -> verify -> restore -> eject`,
 - decoy/critical slot setup in the create flow,
-- verify + restore guidance with plain-language copy and expandable deterministic technical details,
-- safe-removal checklist in eject stage for portable media hygiene,
+- passphrase entropy guidance for decoy and critical roles,
+- verify + restore guidance with deterministic checks and restore summaries,
+- simulated wrong-passphrase unlock backoff behavior,
+- detected removable drive picker with macOS/Linux/Windows-style mount path examples,
+- safe-removal checklist with an explicit `flush pending writes` action,
 - portable profile card (USB label, version, created, last verified),
-- deterministic operation log for operator review,
+- deterministic operation log and mock diagnostic export bundle,
 - mock vault-core adapter boundaries ready for Rust/Tauri integration.
 
 ## Package manager
@@ -26,9 +29,12 @@ pnpm install
 pnpm dev
 ```
 
-## Next implementation steps
+## Direction update
 
-- replace mock vault core with `citizen-protocol` wallet backup APIs,
-- add removable drive discovery + deterministic error mapping,
-- introduce crash-safe writes and safe-eject platform adapters,
-- package signed portable desktop builds (Tauri target).
+The near-term direction is to keep Vaultier implementation-first and portable-ops focused:
+
+1. Replace mock adapters with `citizen-protocol` wallet backup APIs.
+2. Implement real removable-drive discovery and deterministic error mapping per OS.
+3. Add crash-safe write strategy (temp file + fsync + atomic rename) in the desktop bridge.
+4. Add safe-eject adapters for macOS, Windows, and Linux.
+5. Package signed portable desktop builds (Tauri target).
