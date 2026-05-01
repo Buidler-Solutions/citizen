@@ -74,3 +74,16 @@ export type DriveDiscoveryResult = {
   drives: RemovableDrive[];
   errors: Array<{ mountPath: string; code: 'mount_unwritable' | 'media_unavailable' | 'path_invalid'; detail: string }>;
 };
+
+export type RuntimeShell = 'tauri' | 'web-mock';
+
+export type CrashSafeWriteStep = {
+  step: 'temp_write' | 'fsync_file' | 'atomic_rename' | 'fsync_parent';
+  status: 'ok' | 'warn';
+  detail: string;
+};
+
+export type FlushResult = {
+  logs: OperationLog[];
+  strategy: CrashSafeWriteStep[];
+};

@@ -1,6 +1,7 @@
 import type {
   BackupRequest,
   BackupResult,
+  FlushResult,
   DiagnosticBundle,
   DriveDiscoveryResult,
   PortableProfile,
@@ -9,10 +10,17 @@ import type {
   RestoreResult,
   VerifyRequest,
   VerifyResult,
+  RuntimeShell,
 } from './types';
 
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 const now = () => new Date().toISOString();
+
+const ACTIVE_RUNTIME: RuntimeShell = 'web-mock';
+
+export function getRuntimeShell(): RuntimeShell {
+  return ACTIVE_RUNTIME;
+}
 
 export async function discoverRemovableDrives(): Promise<DriveDiscoveryResult> {
   await wait(180);
@@ -31,10 +39,24 @@ export async function discoverRemovableDrives(): Promise<DriveDiscoveryResult> {
 export async function flushPendingWrites(targetPath: string): Promise<OperationLog[]> {
   await wait(220);
   const at = now();
-  return [
+  const logs: OperationLog[] = [
     { at, action: 'vault.flush.begin', status: 'ok', details: `Flushing buffered writes for ${targetPath}.` },
     { at, action: 'vault.flush.complete', status: 'ok', details: 'All writes synced with fsync + atomic rename policy.' },
   ];
+  return logs;
+}
+
+export async function flushPendingWritesWithStrategy(targetPath: string): Promise<FlushResult> {
+  const logs = await flushPendingWrites(targetPath);
+  return {
+    logs,
+    strategy: [
+      { step: 'temp_write', status: 'ok', detail: 'Write encrypted payload to .tmp container file.' },
+      { step: 'fsync_file', status: 'ok', detail: 'Sync temporary file bytes before rename.' },
+      { step: 'atomic_rename', status: 'ok', detail: 'Replace prior container atomically where supported.' },
+      { step: 'fsync_parent', status: 'ok', detail: 'Sync parent directory metadata for crash consistency.' },
+    ],
+  };
 }
 
 export async function createBackup(request: BackupRequest): Promise<BackupResult> {

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import { createBackup, discoverRemovableDrives, exportDiagnosticBundle, flushPendingWrites, testRestore, verifyBackup } from '../lib/mockVaultCore';
-import type { BackupRequest, DiagnosticBundle, DriveDiscoveryResult, OperationLog, PortableProfile, RestoreResult, VerifyResult, VaultRole } from '../lib/types';
+import { createBackup, discoverRemovableDrives, exportDiagnosticBundle, flushPendingWritesWithStrategy, getRuntimeShell, testRestore, verifyBackup } from '../lib/mockVaultCore';
+import type { BackupRequest, CrashSafeWriteStep, DiagnosticBundle, DriveDiscoveryResult, OperationLog, PortableProfile, RestoreResult, RuntimeShell, VerifyResult, VaultRole } from '../lib/types';
 import { ERROR_COPY, OPERATION_STATE_COPY, type ErrorIdentifier, type OperationState } from '../lib/operationState';
 import { defaultReminderPolicy, getNextReminderAt, isReminderDue, loadReminderSettings, saveReminderSettings, type ReminderPolicy } from '../lib/reminders';
 
@@ -42,8 +42,11 @@ export function AppShell() {
   const [operationState, setOperationState] = useState<OperationState>('idle');
   const [ejectChecks, setEjectChecks] = useState({ verified: false, restoreTest: false, flushComplete: false, duplicateMedia: false });
   const [reminderPolicy, setReminderPolicy] = useState<ReminderPolicy>(defaultReminderPolicy());
+  const [runtimeShell, setRuntimeShell] = useState<RuntimeShell>('web-mock');
+  const [flushStrategy, setFlushStrategy] = useState<CrashSafeWriteStep[]>([]);
 
   useEffect(() => { discoverRemovableDrives().then(setDiscovery); }, []);
+  useEffect(() => { setRuntimeShell(getRuntimeShell()); }, []);
   useEffect(() => { setReminderPolicy(loadReminderSettings()); }, []);
   useEffect(() => { saveReminderSettings(reminderPolicy); }, [reminderPolicy]);
   useEffect(() => { if (unlockDelayMs <= 0) return; const timer = setInterval(() => setUnlockDelayMs((v) => Math.max(0, v - 500)), 500); return () => clearInterval(timer); }, [unlockDelayMs]);
@@ -81,12 +84,12 @@ export function AppShell() {
   };
 
   const simulateFailedUnlock = () => { const nextFailures = unlockFailures + 1; const delay = Math.min(2 ** nextFailures * 500, 8000); setUnlockFailures(nextFailures); setUnlockDelayMs(delay); setActiveError('decrypt_failed'); };
-  const runFlushWrites = async () => { setOperationState('flushing'); appendLogs(await flushPendingWrites(targetPath)); setEjectChecks((p) => ({ ...p, flushComplete: true })); setOperationState('completed'); };
+  const runFlushWrites = async () => { setOperationState('flushing'); const result = await flushPendingWritesWithStrategy(targetPath); appendLogs(result.logs); setFlushStrategy(result.strategy); setEjectChecks((p) => ({ ...p, flushComplete: true })); setOperationState('completed'); };
   const runExportDiagnostics = async () => { if (profile) setDiagnosticBundle(await exportDiagnosticBundle(profile, logs.slice(0, 12))); };
 
   return <main className={highContrast ? 'shell high-contrast' : 'shell'}>
     <section className="card" aria-live="polite"><h1>Vaultier</h1><p className="subtitle">Portable encrypted backup vault for Citizen wallet recovery.</p>
-      <article className="state-panel"><strong>{OPERATION_STATE_COPY[operationState].title}</strong><p className="hint">{OPERATION_STATE_COPY[operationState].detail}</p>{activeError && <div className="error-panel"><strong>Error code: {activeError}</strong><p>{ERROR_COPY[activeError].headline}</p><p className="hint">Next action: {ERROR_COPY[activeError].nextAction}</p></div>}</article>
+      <article className="state-panel"><strong>{OPERATION_STATE_COPY[operationState].title}</strong><p className="hint">{OPERATION_STATE_COPY[operationState].detail}</p><p className="hint">Runtime shell: {runtimeShell === 'tauri' ? 'Tauri bridge' : 'Web mock adapter'}.</p>{activeError && <div className="error-panel"><strong>Error code: {activeError}</strong><p>{ERROR_COPY[activeError].headline}</p><p className="hint">Next action: {ERROR_COPY[activeError].nextAction}</p></div>}</article>
       {reminderDue && <p className="summary warn">Verification reminder is due. Run verify before relying on this media.</p>}
       <label className="inline-control"><input type="checkbox" checked={highContrast} onChange={() => setHighContrast(!highContrast)} />High contrast</label>
       <nav className="stages">{STAGES.map((item) => <button key={item} className={stage === item ? 'pill active' : 'pill'} onClick={() => setStage(item)} disabled={!profile && item !== 'create'}>{item}</button>)}</nav>
@@ -98,7 +101,7 @@ export function AppShell() {
       <button disabled={running || selectedRoles.length === 0} onClick={runCreateBackup}>Create Backup</button></>}
       {stage === 'verify' && <><button disabled={running || !profile} onClick={runVerify}>Verify Backup</button>{verifyResult && <p className="summary ok">{verifyResult.checks.length} checks passed at {verifyResult.verifiedAt}.</p>}</>}
       {stage === 'restore' && <><div className="row"><button onClick={simulateFailedUnlock}>Simulate wrong passphrase</button><button disabled={running || unlockDelayMs > 0} onClick={runRestore}>Test Restore</button></div>{unlockDelayMs > 0 && <p className="summary warn">Backoff active: {unlockDelayMs}ms</p>}{restoreResult && <p className="summary ok">Recovered: {restoreResult.restoredArtifacts.join(', ')}</p>}</>}
-      {stage === 'eject' && <><button onClick={runFlushWrites}>Flush pending writes</button><label className="inline-control"><input type="checkbox" checked={ejectChecks.duplicateMedia} onChange={() => setEjectChecks((p) => ({ ...p, duplicateMedia: !p.duplicateMedia }))} />Duplicate backup stored separately</label><p className={safeToEject ? 'summary ok' : 'summary warn'}>{safeToEject ? 'Checklist complete. Safe to eject.' : 'Complete all checklist steps before ejection.'}</p></>}
+      {stage === 'eject' && <><button onClick={runFlushWrites}>Flush pending writes</button><label className="inline-control"><input type="checkbox" checked={ejectChecks.duplicateMedia} onChange={() => setEjectChecks((p) => ({ ...p, duplicateMedia: !p.duplicateMedia }))} />Duplicate backup stored separately</label><p className={safeToEject ? 'summary ok' : 'summary warn'}>{safeToEject ? 'Checklist complete. Safe to eject.' : 'Complete all checklist steps before ejection.'}</p>{flushStrategy.length > 0 && <details><summary>Crash-safe write strategy</summary><ul>{flushStrategy.map((step) => <li key={step.step}>{step.step} · {step.status} · {step.detail}</li>)}</ul></details>}</>}
     </section>
     <section className="card"><h2>Portable profile</h2>{profile ? <ul><li>USB Label: {profile.usbLabel}</li><li>Vault Format: {profile.vaultVersion}</li><li>Created: {profile.createdAt}</li><li>Last Verification: {profile.lastVerifiedAt}</li><li>Next verification reminder: {nextReminderAt ?? 'Pending first verify'}</li></ul> : <p className="hint">Create a backup to generate a profile.</p>}
       <h3>Reminder policy</h3>
