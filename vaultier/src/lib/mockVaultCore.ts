@@ -41,6 +41,7 @@ const REQUIRED_CRASH_SAFE_STEPS: CrashSafeWriteStep['step'][] = ['temp_write', '
 const SECRET_FIELD_MARKERS = ['passphrase', 'password', 'secret', 'seed', 'private_key', 'mnemonic'];
 const COMMAND_PERFORMANCE_TARGETS_MS = {
   backup_export_credentials: 1_500,
+  backup_verify: 2_000,
   backup_restore: 2_500,
 } as const;
 
@@ -460,7 +461,11 @@ export async function runHeadlessCommand(command: HeadlessCommand): Promise<Head
     if (command.requireSignedManifest && !command.manifestSignatureKeyId) {
       return fail('manifest_signature_missing', 'Signed manifest key id is required when policy is enforced.');
     }
+    const startedAt = Date.now();
     const result = await verifyBackup(command);
+    const elapsedMs = Date.now() - startedAt;
+    const targetMs = COMMAND_PERFORMANCE_TARGETS_MS.backup_verify;
+    const perfStatus = elapsedMs <= targetMs ? 'ok' : 'warn';
     if (!result.manifest.verified) {
       return fail('manifest_signature_invalid', 'Manifest signature verification failed.');
     }
@@ -473,7 +478,15 @@ export async function runHeadlessCommand(command: HeadlessCommand): Promise<Head
         verified_at: result.verifiedAt,
         manifest: result.manifest,
         checks: result.checks,
-        log: result.log,
+        log: [
+          ...result.log,
+          {
+            at: now(),
+            action: 'wallet.verify.performance',
+            status: perfStatus,
+            details: `Elapsed ${elapsedMs}ms (target <= ${targetMs}ms).`,
+          },
+        ],
       },
     };
     const redaction = scanForSecretFields(response.result);
