@@ -9,5 +9,7 @@ assert.match(source, /command === 'backup_init'/, 'backup_init command branch mi
 assert.match(source, /command === 'backup_verify'/, 'backup_verify command branch missing');
 assert.match(source, /restored_role/, 'backup_restore contract payload missing restored_role');
 assert.match(source, /manifest_signature_missing/, 'deterministic manifest signature error missing');
+assert.match(source, /scanForSecretFields/, 'headless response redaction scan missing');
+assert.match(source, /invalid_payload/, 'deterministic invalid_payload code missing');
 
 console.log('headless-contract-check: contract markers validated');
