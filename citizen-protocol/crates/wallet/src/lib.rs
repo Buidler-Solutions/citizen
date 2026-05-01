@@ -2348,6 +2348,36 @@ mod tests {
             .expect_err("tampered ciphertext should fail");
         assert!(err.to_string().contains("invalid ciphertext hex"));
     }
+
+    #[test]
+    fn backup_encrypt_decrypt_meets_latency_envelope() {
+        let payload = json!({
+            "scope":"wallet-backup",
+            "slot":"critical",
+            "material":{"did":"did:citizen:wallet:123","key_alias":"identity-root"}
+        });
+        let started = std::time::Instant::now();
+        let encrypted = encrypt_payload(&payload, "latency-envelope-passphrase")
+            .expect("encrypt payload for latency envelope");
+        let encrypt_elapsed_ms = started.elapsed().as_millis() as u64;
+
+        let started = std::time::Instant::now();
+        let decrypted = decrypt_payload(&encrypted, "latency-envelope-passphrase")
+            .expect("decrypt payload for latency envelope");
+        let decrypt_elapsed_ms = started.elapsed().as_millis() as u64;
+
+        assert_eq!(decrypted, payload);
+        // Priority-gate parity target for CLI/runtime evidence: each operation should complete
+        // well below a conservative 1500ms threshold on CI baseline machines.
+        assert!(
+            encrypt_elapsed_ms <= 1_500,
+            "encrypt latency exceeded envelope: {encrypt_elapsed_ms}ms"
+        );
+        assert!(
+            decrypt_elapsed_ms <= 1_500,
+            "decrypt latency exceeded envelope: {decrypt_elapsed_ms}ms"
+        );
+    }
     #[test]
     fn signs_and_verifies_private_entry() {
         let keypair = WalletKeypair::generate();
