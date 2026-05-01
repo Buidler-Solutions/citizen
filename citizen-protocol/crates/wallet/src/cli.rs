@@ -392,10 +392,25 @@ enum Commands {
 
 #[derive(Debug, Subcommand)]
 enum BackupCommands {
+    /// Initialize a backup vault container (USB/removable-media friendly).
+    ///
+    /// Removable-media guidance:
+    /// - Keep at least 2x the expected vault size as free space headroom.
+    /// - Prefer durable filesystems (exFAT/NTFS/APFS/ext4) and avoid FAT32 for large vaults.
+    /// - Do not unplug during writes; always flush and safe-eject before device removal.
     Init(BackupInitArgs),
+    /// Add a new role-bound slot (for example: decoy or critical) to an existing backup vault.
     AddSlot(BackupAddSlotArgs),
+    /// Export wallet credentials into an encrypted slot payload.
+    ///
+    /// This command enforces a plaintext-on-disk guardrail by default and is intended for
+    /// operator workflows on removable media where safe-eject discipline is required.
     ExportCredentials(BackupExportArgs),
+    /// Verify slot integrity, signed-manifest checks, and deterministic schema compatibility.
     Verify(BackupVerifyArgs),
+    /// Restore credentials from an encrypted backup slot into a local wallet file.
+    ///
+    /// After restore, rotate high-impact keys according to the disaster-recovery runbook.
     Restore(BackupRestoreArgs),
 }
 

@@ -210,7 +210,7 @@ This initiative should replicate key VeraCrypt-style operating properties while 
   - [x] key-derivation parameter profile hardening guidance (maintainer/operator guidance now documented in `citizen-protocol/docs/WALLET_BACKUP_CRYPTO_POLICY.md`, with `balanced` vs `critical-hardened` Argon2id profile expectations aligned to CLI/Vaultier JSON contract output),
   - [x] committed test vectors for encrypt/decrypt/tamper failure paths (wallet crate now includes a deterministic Argon2id + ChaCha20-Poly1305 backup payload vector assertion with decrypt success + tamper-failure coverage).
 - [x] Add signed manifest verification for backup bundles and verify-path enforcement (Vaultier verify flow and `wallet backup verify`/`wallet backup restore` now enforce required per-slot signed manifest presence + deterministic key-id/schema/hash checks).
-- [~] Add removable-media safety hardening in command help/output:
+- [x] Add removable-media safety hardening in command help/output (wallet CLI backup subcommand help now includes explicit removable-media headroom/filesystem/safe-eject guidance alongside existing Vaultier eject-flow warnings):
   - [x] explicit unplug-during-write risk warning (Vaultier eject flow UX),
   - [x] explicit flush/safe-eject guidance (Vaultier stage guidance + crash-safe flush trace),
   - [x] filesystem compatibility warning copy (Vaultier removable-media advisory).
