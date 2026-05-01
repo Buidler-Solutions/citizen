@@ -3322,4 +3322,87 @@ mod tests {
             restore_max
         );
     }
+
+    #[test]
+    fn backup_verify_rejects_byte_level_mutation_corpus_without_panics() {
+        let base = unique_test_path("backup-byte-level-mutation-corpus");
+        let keystore_path = base.join("wallet.json");
+        let vault_path = base.join("vault.json");
+        fs::create_dir_all(&base).expect("create test directory");
+
+        let mut keystore = Keystore {
+            version: 1,
+            keys: vec![],
+        };
+        keystore.add_key(KeyRecord {
+            key_id: Uuid::new_v4(),
+            label: Some("byte-fuzz".to_string()),
+            public_key_hex: "33".repeat(32),
+            secret_key_hex: Some("44".repeat(32)),
+            encrypted_secret_key: None,
+            created_at: Utc::now().timestamp(),
+        });
+        keystore.save(&keystore_path).expect("save keystore");
+
+        backup_init(BackupInitArgs {
+            vault_path: vault_path.clone(),
+            portable_label: Some("usb-byte-fuzz".to_string()),
+            decoy_password: Some("decoy-pass".to_string()),
+            critical_password: Some("critical-pass".to_string()),
+            kdf_profile: BackupKdfProfile::Balanced,
+            json: true,
+            assume_removable_media_risk: true,
+        })
+        .expect("init vault");
+        backup_export_credentials(BackupExportArgs {
+            path: keystore_path,
+            vault_path: vault_path.clone(),
+            role: BackupSlotRole::Critical,
+            password: Some("critical-pass".to_string()),
+            scopes: vec![BackupExportScope::Keys],
+            assume_removable_media_risk: true,
+        })
+        .expect("export credentials");
+
+        let original_bytes = fs::read(&vault_path).expect("read baseline vault bytes");
+        let mutation_positions = [0usize, 1, 7, 15, 31, 63, 127, 255];
+        let mut covered_cases = 0usize;
+        let mut failure_cases = 0usize;
+
+        for position in mutation_positions {
+            if position >= original_bytes.len() {
+                continue;
+            }
+            covered_cases += 1;
+            let mut mutated = original_bytes.clone();
+            mutated[position] ^= 0b0101_1010;
+
+            let case_path = base.join(format!("mutated-byte-{position}.json"));
+            fs::write(&case_path, &mutated).expect("write mutated vault");
+
+            let result = backup_verify(BackupVerifyArgs {
+                vault_path: case_path,
+                role: Some(BackupSlotRole::Critical),
+                password: Some("critical-pass".to_string()),
+                json: true,
+            });
+            if let Err(err) = result {
+                failure_cases += 1;
+                let rendered = err.to_string();
+                assert!(
+                    rendered.contains("unsupported_schema")
+                        || rendered.contains("decrypt_failed")
+                        || rendered.contains("invalid_payload")
+                        || rendered.contains("checksum_mismatch"),
+                    "byte mutation should map to deterministic failure codes, got: {rendered}"
+                );
+            }
+        }
+
+        assert!(covered_cases > 0, "expected at least one mutation case");
+        assert!(
+            failure_cases > 0,
+            "expected at least one byte mutation case to fail deterministically"
+        );
+    }
 }
