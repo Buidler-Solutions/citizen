@@ -84,10 +84,24 @@ export type HeadlessCommand =
 
 export type HeadlessResponse = {
   schemaVersion: 'v1alpha1';
-  ok: true;
+  contractVersion: '2026-05-01';
+  ok: boolean;
   command: HeadlessCommand['command'];
-  result: Record<string, unknown>;
+  result?: Record<string, unknown>;
+  error?: {
+    code: VaultierErrorCode;
+    message: string;
+  };
 };
+
+export type VaultierErrorCode =
+  | 'path_invalid'
+  | 'mount_unwritable'
+  | 'insufficient_space'
+  | 'filesystem_incompatible'
+  | 'critical_entropy_too_low'
+  | 'manifest_signature_missing'
+  | 'manifest_signature_invalid';
 
 export type RemovableDrive = {
   id: string;
