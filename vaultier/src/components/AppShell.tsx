@@ -19,15 +19,23 @@ export function AppShell() {
   const [selectedRoles, setSelectedRoles] = useState<VaultRole[]>(['decoy', 'critical']);
   const [includeConsentReceipts, setIncludeConsentReceipts] = useState(true);
   const [portableMode, setPortableMode] = useState(true);
+  const [highContrast, setHighContrast] = useState(false);
   const [running, setRunning] = useState(false);
   const [profile, setProfile] = useState<PortableProfile | null>(null);
   const [logs, setLogs] = useState<OperationLog[]>([]);
-  const [verifySummary, setVerifySummary] = useState<string>('');
-  const [restoreSummary, setRestoreSummary] = useState<string>('');
+  const [verifySummary, setVerifySummary] = useState('');
+  const [restoreSummary, setRestoreSummary] = useState('');
   const [verifyResult, setVerifyResult] = useState<VerifyResult | null>(null);
   const [restoreResult, setRestoreResult] = useState<RestoreResult | null>(null);
+  const [ejectChecks, setEjectChecks] = useState({
+    verified: false,
+    restoreTest: false,
+    flushComplete: false,
+    duplicateMedia: false,
+  });
 
   const canProceed = useMemo(() => !!profile, [profile]);
+  const safeToEject = useMemo(() => Object.values(ejectChecks).every(Boolean), [ejectChecks]);
 
   const toggleRole = (role: VaultRole) => {
     setSelectedRoles((current) =>
@@ -63,8 +71,9 @@ export function AppShell() {
       const result = await verifyBackup({ targetPath, expectedVaultVersion: profile.vaultVersion });
       appendLogs(result.log);
       setVerifyResult(result);
-      setVerifySummary(`${result.checks.length} checks passed at ${result.verifiedAt}.`);
+      setVerifySummary(`Backup verified. ${result.checks.length} deterministic checks passed at ${result.verifiedAt}.`);
       setProfile({ ...profile, lastVerifiedAt: result.verifiedAt });
+      setEjectChecks((prev) => ({ ...prev, verified: true }));
       setStage('restore');
     } finally {
       setRunning(false);
@@ -85,6 +94,7 @@ export function AppShell() {
       appendLogs(result.log);
       setRestoreResult(result);
       setRestoreSummary(`Restore simulation completed for ${result.restoredRole} slot at ${result.restoredAt}.`);
+      setEjectChecks((prev) => ({ ...prev, restoreTest: true }));
       setStage('eject');
     } finally {
       setRunning(false);
@@ -92,10 +102,15 @@ export function AppShell() {
   };
 
   return (
-    <main className="shell">
+    <main className={highContrast ? 'shell high-contrast' : 'shell'}>
       <section className="card" aria-live="polite">
         <h1>Vaultier</h1>
         <p className="subtitle">Portable encrypted backup vault for Citizen wallet recovery.</p>
+        <div className="row controls-row">
+          <label className="inline-control">
+            <input type="checkbox" checked={highContrast} onChange={() => setHighContrast(!highContrast)} /> High contrast
+          </label>
+        </div>
         <nav className="stages" aria-label="Backup flow stages">
           {STAGES.map((item) => (
             <button
@@ -119,12 +134,12 @@ export function AppShell() {
         {stage === 'create' && (
           <>
             <div className="row">
-              <label><input type="checkbox" checked={selectedRoles.includes('decoy')} onChange={() => toggleRole('decoy')} /> Decoy slot</label>
-              <label><input type="checkbox" checked={selectedRoles.includes('critical')} onChange={() => toggleRole('critical')} /> Critical slot</label>
+              <label className="inline-control"><input type="checkbox" checked={selectedRoles.includes('decoy')} onChange={() => toggleRole('decoy')} /> Decoy slot</label>
+              <label className="inline-control"><input type="checkbox" checked={selectedRoles.includes('critical')} onChange={() => toggleRole('critical')} /> Critical slot</label>
             </div>
             <div className="row">
-              <label><input type="checkbox" checked={includeConsentReceipts} onChange={() => setIncludeConsentReceipts(!includeConsentReceipts)} /> Include consent artifacts</label>
-              <label><input type="checkbox" checked={portableMode} onChange={() => setPortableMode(!portableMode)} /> Portable mode metadata</label>
+              <label className="inline-control"><input type="checkbox" checked={includeConsentReceipts} onChange={() => setIncludeConsentReceipts(!includeConsentReceipts)} /> Include consent artifacts</label>
+              <label className="inline-control"><input type="checkbox" checked={portableMode} onChange={() => setPortableMode(!portableMode)} /> Portable mode metadata</label>
             </div>
             <p className="hint">Create flow target: under 3 minutes with deterministic logs for operator review.</p>
             <button disabled={running || selectedRoles.length === 0} onClick={runCreateBackup}>{running ? 'Creating backup...' : 'Create Backup'}</button>
@@ -187,11 +202,14 @@ export function AppShell() {
           <>
             <h2 className="h3">Safe removal checklist</h2>
             <ul className="checklist">
-              <li><input type="checkbox" /> Verification completed on this media.</li>
-              <li><input type="checkbox" /> Restore test passed with expected artifacts.</li>
-              <li><input type="checkbox" /> Pending writes flushed before eject.</li>
-              <li><input type="checkbox" /> Duplicate backup media stored separately.</li>
+              <li><label className="inline-control"><input type="checkbox" checked={ejectChecks.verified} onChange={() => setEjectChecks((prev) => ({ ...prev, verified: !prev.verified }))} /> Verification completed on this media.</label></li>
+              <li><label className="inline-control"><input type="checkbox" checked={ejectChecks.restoreTest} onChange={() => setEjectChecks((prev) => ({ ...prev, restoreTest: !prev.restoreTest }))} /> Restore test passed with expected artifacts.</label></li>
+              <li><label className="inline-control"><input type="checkbox" checked={ejectChecks.flushComplete} onChange={() => setEjectChecks((prev) => ({ ...prev, flushComplete: !prev.flushComplete }))} /> Pending writes flushed before eject.</label></li>
+              <li><label className="inline-control"><input type="checkbox" checked={ejectChecks.duplicateMedia} onChange={() => setEjectChecks((prev) => ({ ...prev, duplicateMedia: !prev.duplicateMedia }))} /> Duplicate backup media stored separately.</label></li>
             </ul>
+            <p className={safeToEject ? 'summary ok' : 'summary warn'}>
+              {safeToEject ? 'Checklist complete. Media is ready for safe removal.' : 'Complete all checklist items before removing media.'}
+            </p>
             <p className="hint">Reminder: this vault does not protect against active malware on an unlocked host.</p>
           </>
         )}

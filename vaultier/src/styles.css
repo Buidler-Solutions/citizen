@@ -69,3 +69,13 @@ details { margin-top: 0.75rem; border: 1px solid #334155; border-radius: 10px; p
 .badge.warn { color: #fbbf24; border-color: #fbbf24; }
 .summary.ok { color: #86efac; }
 .h3 { margin-top: 0; }
+
+.inline-control { display: inline-flex; align-items: center; gap: 0.45rem; }
+.controls-row { justify-content: flex-end; }
+.summary.warn { color: #fbbf24; }
+button:focus-visible, input:focus-visible, summary:focus-visible { outline: 2px solid #38bdf8; outline-offset: 2px; }
+.high-contrast .card { background: #000; border-color: #fff; }
+.high-contrast .hint, .high-contrast .subtitle { color: #e5e7eb; }
+.high-contrast input, .high-contrast .pill { background: #000; color: #fff; border-color: #fff; }
+.high-contrast .pill.active { background: #fff; color: #000; }
+.high-contrast .status-card, .high-contrast details { background: #000; border-color: #fff; }
