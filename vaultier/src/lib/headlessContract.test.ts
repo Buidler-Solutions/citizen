@@ -93,6 +93,31 @@ async function main() {
   });
   assert(manifestPolicy.ok === false, 'manifest policy failure should return error');
   assert(manifestPolicy.error?.code === 'manifest_signature_missing', 'expected manifest_signature_missing error code');
+
+  const diagnostics = await runHeadlessCommand({
+    command: 'backup_diagnostics',
+    targetPath: '/Volumes/CITIZEN_USB',
+    profile: {
+      usbLabel: 'CITIZEN_USB',
+      vaultVersion: 'v1alpha1',
+      createdAt: '2026-05-01T00:00:00.000Z',
+      lastVerifiedAt: '2026-05-01T00:30:00.000Z',
+    },
+    recentLogs: [
+      { at: '2026-05-01T00:30:00.000Z', action: 'vault.verify', status: 'ok', details: 'Deterministic verification checks completed.' },
+    ],
+    recentErrors: [],
+    performanceMeasurements: [
+      { operation: 'verify', elapsedMs: 620, thresholdMs: 2000, status: 'ok', measuredAt: '2026-05-01T00:30:00.000Z' },
+    ],
+  });
+  assert(diagnostics.ok === true, 'backup_diagnostics should succeed');
+  assert(!!diagnostics.result, 'backup_diagnostics result missing');
+  assertKeys(
+    diagnostics.result as Record<string, unknown>,
+    ['app_version', 'generated_at', 'performance_measurements', 'platform', 'profile', 'recent_errors', 'recent_logs'],
+    'backup_diagnostics',
+  );
 }
 
 void main();

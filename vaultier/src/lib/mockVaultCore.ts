@@ -493,6 +493,32 @@ export async function runHeadlessCommand(command: HeadlessCommand): Promise<Head
     return redaction.ok ? response : fail('invalid_payload', `Response contained redaction-blocked fields: ${redaction.redactedFields.join(', ')}`);
   }
 
+  if (command.command === 'backup_diagnostics') {
+    const diagnostics = await exportDiagnosticBundle(
+      command.profile,
+      command.recentLogs,
+      command.recentErrors,
+      command.performanceMeasurements,
+    );
+    const response: HeadlessResponse = {
+      schemaVersion: 'v1alpha1',
+      contractVersion: '2026-05-01',
+      ok: true,
+      command: command.command,
+      result: {
+        generated_at: diagnostics.generatedAt,
+        platform: diagnostics.platform,
+        app_version: diagnostics.appVersion,
+        profile: diagnostics.profile,
+        recent_logs: diagnostics.recentLogs,
+        recent_errors: diagnostics.recentErrors,
+        performance_measurements: diagnostics.performanceMeasurements,
+      },
+    };
+    const redaction = scanForSecretFields(response.result);
+    return redaction.ok ? response : fail('invalid_payload', `Response contained redaction-blocked fields: ${redaction.redactedFields.join(', ')}`);
+  }
+
   const startedAt = Date.now();
   const result = await testRestore(command);
   const elapsedMs = Date.now() - startedAt;
