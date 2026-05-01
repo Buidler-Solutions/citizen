@@ -2357,7 +2357,7 @@ fn load_backup_password(explicit: Option<String>, env_var: &str) -> anyhow::Resu
 mod tests {
     use super::*;
     use serde_json::json;
-    use std::time::{SystemTime, UNIX_EPOCH};
+    use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
     fn unique_test_path(name: &str) -> PathBuf {
         let nanos = SystemTime::now()
@@ -3146,6 +3146,108 @@ mod tests {
                 .iter()
                 .all(|slot| slot.signed_manifest.is_some()),
             "fixture slots must include signed manifests"
+        );
+    }
+
+    #[test]
+    fn backup_command_path_latency_envelope_stays_within_thresholds() {
+        let base = unique_test_path("backup-command-latency-envelope");
+        let keystore_path = base.join("wallet.json");
+        let vault_path = base.join("vault.json");
+        let restored_path = base.join("wallet-restored.json");
+        fs::create_dir_all(&base).expect("create test directory");
+
+        let mut keystore = Keystore {
+            version: 1,
+            keys: vec![],
+        };
+        keystore.add_key(KeyRecord {
+            key_id: Uuid::new_v4(),
+            label: Some("latency-envelope".to_string()),
+            public_key_hex: "11".repeat(32),
+            secret_key_hex: Some("22".repeat(32)),
+            encrypted_secret_key: None,
+            created_at: Utc::now().timestamp(),
+        });
+        keystore.save(&keystore_path).expect("save keystore");
+
+        let init_start = Instant::now();
+        backup_init(BackupInitArgs {
+            vault_path: vault_path.clone(),
+            portable_label: Some("usb-latency".to_string()),
+            decoy_password: Some("decoy-pass".to_string()),
+            critical_password: Some("critical-pass".to_string()),
+            kdf_profile: BackupKdfProfile::Balanced,
+            json: true,
+            assume_removable_media_risk: true,
+        })
+        .expect("init vault");
+        let init_elapsed = init_start.elapsed();
+
+        let export_start = Instant::now();
+        backup_export_credentials(BackupExportArgs {
+            path: keystore_path,
+            vault_path: vault_path.clone(),
+            role: BackupSlotRole::Critical,
+            password: Some("critical-pass".to_string()),
+            scopes: vec![BackupExportScope::Keys, BackupExportScope::RecoveryMetadata],
+            assume_removable_media_risk: true,
+        })
+        .expect("export credentials");
+        let export_elapsed = export_start.elapsed();
+
+        let verify_start = Instant::now();
+        backup_verify(BackupVerifyArgs {
+            vault_path: vault_path.clone(),
+            role: Some(BackupSlotRole::Critical),
+            password: Some("critical-pass".to_string()),
+            json: true,
+        })
+        .expect("verify");
+        let verify_elapsed = verify_start.elapsed();
+
+        let restore_start = Instant::now();
+        backup_restore(BackupRestoreArgs {
+            output_path: restored_path.clone(),
+            vault_path: vault_path.clone(),
+            role: BackupSlotRole::Critical,
+            password: Some("critical-pass".to_string()),
+            json: true,
+            assume_removable_media_risk: true,
+        })
+        .expect("restore");
+        let restore_elapsed = restore_start.elapsed();
+
+        let restored = Keystore::load_or_create(&restored_path).expect("load restored keystore");
+        assert_eq!(restored.keys.len(), 1, "restore should preserve key count");
+
+        let init_max = Duration::from_millis(5_000);
+        let export_max = Duration::from_millis(8_000);
+        let verify_max = Duration::from_millis(8_000);
+        let restore_max = Duration::from_millis(8_000);
+        assert!(
+            init_elapsed <= init_max,
+            "init latency {:?} exceeded threshold {:?}",
+            init_elapsed,
+            init_max
+        );
+        assert!(
+            export_elapsed <= export_max,
+            "export latency {:?} exceeded threshold {:?}",
+            export_elapsed,
+            export_max
+        );
+        assert!(
+            verify_elapsed <= verify_max,
+            "verify latency {:?} exceeded threshold {:?}",
+            verify_elapsed,
+            verify_max
+        );
+        assert!(
+            restore_elapsed <= restore_max,
+            "restore latency {:?} exceeded threshold {:?}",
+            restore_elapsed,
+            restore_max
         );
     }
 }
