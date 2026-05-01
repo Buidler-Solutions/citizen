@@ -108,10 +108,16 @@ export async function discoverRemovableDrives(): Promise<DriveDiscoveryResult> {
   await wait(180);
   if (getRuntimeShell() === 'tauri') {
     const tauriResult = await discoverDrivesViaTauri();
-    return {
-      drives: tauriResult.drives,
-      errors: tauriResult.issues,
-    };
+    const tauriValidated = tauriResult.drives.reduce<DriveDiscoveryResult>(
+      (acc, drive) => {
+        const validated = validateDriveRecords(drive.platform, [drive]);
+        acc.drives.push(...validated.drives.map((safeDrive) => ({ ...safeDrive, platform: drive.platform })));
+        acc.errors.push(...validated.issues);
+        return acc;
+      },
+      { drives: [], errors: [...tauriResult.issues] },
+    );
+    return tauriValidated;
   }
   const results = await Promise.all(mockDiscoveryAdapters.map((adapter) => adapter.discover().then((result) => ({ platform: adapter.platform, ...result }))));
   return results.reduce<DriveDiscoveryResult>(
