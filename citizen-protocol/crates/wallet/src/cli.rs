@@ -2787,4 +2787,71 @@ mod tests {
         .expect_err("truncated ciphertext should fail");
         assert!(err.to_string().contains("decrypt_failed"));
     }
+
+    #[test]
+    fn backup_verify_rejects_random_bit_flip_tamper_with_deterministic_error() {
+        let base = unique_test_path("backup-bitflip-tamper");
+        let keystore_path = base.join("wallet.json");
+        let vault_path = base.join("vault.json");
+        fs::create_dir_all(&base).expect("create test directory");
+
+        let mut keystore = Keystore {
+            version: 1,
+            keys: vec![],
+        };
+        keystore.add_key(KeyRecord {
+            key_id: Uuid::new_v4(),
+            label: Some("bitflip-check".to_string()),
+            public_key_hex: "cc".repeat(32),
+            secret_key_hex: Some("dd".repeat(32)),
+            encrypted_secret_key: None,
+            created_at: Utc::now().timestamp(),
+        });
+        keystore.save(&keystore_path).expect("save keystore");
+
+        backup_init(BackupInitArgs {
+            vault_path: vault_path.clone(),
+            portable_label: None,
+            decoy_password: Some("decoy-pass".to_string()),
+            critical_password: Some("critical-pass".to_string()),
+            assume_removable_media_risk: true,
+        })
+        .expect("init vault");
+        backup_export_credentials(BackupExportArgs {
+            path: keystore_path,
+            vault_path: vault_path.clone(),
+            role: BackupSlotRole::Critical,
+            password: Some("critical-pass".to_string()),
+            scopes: vec![BackupExportScope::Keys],
+            assume_removable_media_risk: true,
+        })
+        .expect("export credentials");
+
+        let mut vault = load_backup_vault(&vault_path).expect("load vault");
+        let slot = vault
+            .slots
+            .iter_mut()
+            .find(|slot| slot.role == BackupSlotRole::Critical)
+            .expect("critical slot exists");
+        let mut ciphertext = slot.encrypted_payload.ciphertext_hex.clone().into_bytes();
+        assert!(!ciphertext.is_empty(), "ciphertext should not be empty");
+        let tamper_index = ciphertext.len() / 2;
+        ciphertext[tamper_index] = if ciphertext[tamper_index] == b'0' { b'1' } else { b'0' };
+        slot.encrypted_payload.ciphertext_hex =
+            String::from_utf8(ciphertext).expect("tampered ciphertext remains utf8");
+        save_backup_vault(&vault_path, &vault).expect("save tampered vault");
+
+        let err = backup_verify(BackupVerifyArgs {
+            vault_path,
+            role: Some(BackupSlotRole::Critical),
+            password: Some("critical-pass".to_string()),
+            json: true,
+        })
+        .expect_err("bit-flipped ciphertext should fail");
+        let rendered = err.to_string();
+        assert!(
+            rendered.contains("decrypt_failed") || rendered.contains("checksum_mismatch"),
+            "unexpected deterministic error: {rendered}"
+        );
+    }
 }

@@ -173,7 +173,7 @@ This initiative should replicate key VeraCrypt-style operating properties while 
 ## Checkpoint 7 — Testing Matrix and Quality Gates
 
 - [x] Unit tests: KDF params, AEAD envelopes, slot metadata parsing, manifest validation.
-- [ ] Property/fuzz tests: malformed headers, truncated ciphertext, random bit flips (partial adversarial tamper coverage exists; dedicated fuzz/property harness still pending).
+- [~] Property/fuzz tests: malformed headers, truncated ciphertext, random bit flips (wallet CLI adversarial tests now cover deterministic failures for truncated ciphertext + random bit-flip tampering; dedicated fuzz/property harness still pending).
 - [x] Integration tests: create 2-slot vault on USB media, export credentials, delete local wallet, restore, verify identity continuity.
 - [x] Adversarial tests: wrong-passphrase throttling behavior, tamper detection, replay/rollback attempts.
 - [ ] Performance tests: unlock latency targets across workstation/laptop profiles.
@@ -214,7 +214,7 @@ This initiative should replicate key VeraCrypt-style operating properties while 
   - [x] explicit unplug-during-write risk warning (Vaultier eject flow UX),
   - [x] explicit flush/safe-eject guidance (Vaultier stage guidance + crash-safe flush trace),
   - [x] filesystem compatibility warning copy (Vaultier removable-media advisory).
-- [ ] Add property/fuzz coverage for malformed headers, truncated ciphertext, and random bit-flip tamper cases.
+- [~] Add property/fuzz coverage for malformed headers, truncated ciphertext, and random bit-flip tamper cases (wallet CLI deterministic adversarial tests now include truncated ciphertext + random bit-flip tamper paths; dedicated fuzz/property harness pending).
 - [ ] Add unlock/export/restore performance targets with measurable thresholds and evidence logs.
 - [ ] Add CI regression fixtures + compatibility gate for vault format/schema stability.
 - [ ] Complete disaster-recovery runbook closure for:
