@@ -26,7 +26,7 @@ Vaultier uses **pnpm**.
 ```bash
 cd vaultier
 pnpm install
-pnpm dev
+pnpm start  # alias for dev
 ```
 
 ## Direction update
