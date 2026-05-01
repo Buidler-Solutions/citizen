@@ -301,3 +301,49 @@ This section extends the checklist with concrete near-term implementation work i
 **Exit criteria**
 - [ ] CI gate includes unit + integration + adversarial + fuzz/property coverage for backup-vault code paths.
 - [ ] No unresolved critical severity findings remain in wallet backup security review notes.
+
+
+### Next Slice D — Immediate implementation PR queue (ordered)
+
+Use this queue to keep momentum without reopening resolved design choices. Each item is scoped to a small, reviewable PR.
+
+1. **PR-D1: Deterministic backup error contract**
+   - [ ] Add backup error enum in wallet crate with stable machine identifiers:
+     - [ ] `unsupported_schema`
+     - [ ] `slot_not_found`
+     - [ ] `decrypt_failed`
+     - [ ] `checksum_mismatch`
+     - [ ] `invalid_payload`
+   - [ ] Route `backup verify --json` and `backup restore --json` failures through that contract.
+   - [ ] Add CLI tests that assert exact JSON error identifiers (not just substring matching).
+
+2. **PR-D2: USB safety copy + operator prompts**
+   - [ ] Add `--assume-removable-media-risk` acknowledgement flag for non-interactive workflows that suppresses repeated caution text.
+   - [ ] Add explicit warning blocks for unplug/flush risk in `init`, `export-credentials`, and `restore` help text.
+   - [ ] Add docs snippet with safe-eject checklist and expected fsync/write-completion behavior.
+
+3. **PR-D3: Vault structure adversarial harness**
+   - [ ] Add malformed-vault fixture set (missing schema, wrong version type, empty slots, duplicated role entries, invalid ciphertext envelope).
+   - [ ] Add property tests for randomized metadata mutation and truncated payload handling.
+   - [ ] Ensure tests assert deterministic error identifiers from PR-D1.
+
+4. **PR-D4: Format stability + migration note**
+   - [ ] Add dedicated `WALLET_BACKUP_VAULT_FORMAT.md` with v1 field contract and migration policy.
+   - [ ] Cross-link checklist, threat model, and CLI docs to the format note.
+   - [ ] Document v1 compatibility guarantees (forward-reject behavior + explicit migration command requirement for future versions).
+
+**Exit criteria**
+- [ ] PR-D1 through PR-D4 merged with passing wallet crate tests.
+- [ ] Remaining open items in this checklist are reduced to extension integration, optional hardware-assisted key wrapping, and rollout governance sign-off.
+
+### Execution Tracker (updated 2026-05-01)
+
+| Workstream | Status | Notes |
+| --- | --- | --- |
+| CLI vault lifecycle commands | Implemented | `init`, `add-slot`, `export-credentials`, `verify`, `restore` exist in wallet CLI surface. |
+| Vault schema baseline | Implemented | `citizen.wallet.backup.v1` is the active schema in CLI load/verify flows. |
+| Role-scoped integrity verify | Implemented | Verify path supports role + password decrypt/checksum revalidation. |
+| Deterministic machine error IDs | In progress | Human-readable errors exist; stable JSON error identifiers remain to implement (PR-D1). |
+| USB operational safety guidance | In progress | Checklist and threat model mention hygiene; command-level warning copy/runbook closure pending (PR-D2). |
+| Fuzz/property vault corruption harness | In progress | Tamper checks exist; dedicated malformed-vault/property suite pending (PR-D3). |
+| Versioned format spec | In progress | Schema name is stable in code; standalone spec/migration doc pending (PR-D4). |
