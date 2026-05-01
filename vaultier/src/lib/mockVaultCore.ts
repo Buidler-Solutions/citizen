@@ -14,6 +14,9 @@ import type {
   HeadlessCommand,
   HeadlessResponse,
   VaultierErrorCode,
+  RuntimePlatform,
+  DriveProbeIssue,
+  DriveRecord,
 } from './types';
 
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -25,18 +28,86 @@ export function getRuntimeShell(): RuntimeShell {
   return ACTIVE_RUNTIME;
 }
 
+type DriveDiscoveryAdapter = {
+  platform: RuntimePlatform;
+  discover: () => Promise<{ drives: DriveRecord[]; issues: DriveProbeIssue[] }>;
+};
+
+const supportedFilesystems: Array<DriveRecord['filesystem']> = ['exfat', 'ntfs', 'apfs', 'ext4'];
+
+function validateDriveRecords(platform: RuntimePlatform, drives: DriveRecord[]): { drives: DriveRecord[]; issues: DriveProbeIssue[] } {
+  const issues: DriveProbeIssue[] = [];
+  const safeDrives = drives.filter((drive) => {
+    if (!supportedFilesystems.includes(drive.filesystem)) {
+      issues.push({
+        mountPath: drive.mountPath,
+        code: 'filesystem_incompatible',
+        detail: `${platform}: ${drive.filesystem.toUpperCase()} is higher-risk for portable backup containers.`,
+      });
+      return false;
+    }
+    if (drive.estimatedFreeGb < 4) {
+      issues.push({
+        mountPath: drive.mountPath,
+        code: 'insufficient_space',
+        detail: `${platform}: at least 4GB free space is recommended for backup + verify workflows.`,
+      });
+      return false;
+    }
+    if (!drive.writable) {
+      issues.push({
+        mountPath: drive.mountPath,
+        code: 'mount_unwritable',
+        detail: `${platform}: drive is mounted read-only; remount with write permissions.`,
+      });
+      return false;
+    }
+    return true;
+  });
+  return { drives: safeDrives, issues };
+}
+
+const mockDiscoveryAdapters: DriveDiscoveryAdapter[] = [
+  {
+    platform: 'macos',
+    discover: async () => {
+      const drives: DriveRecord[] = [
+        { id: 'usb-1', label: 'CITIZEN_USB', mountPath: '/Volumes/CITIZEN_USB', filesystem: 'exfat', writable: true, estimatedFreeGb: 58 },
+      ];
+      return validateDriveRecords('macos', drives);
+    },
+  },
+  {
+    platform: 'windows',
+    discover: async () => {
+      const drives: DriveRecord[] = [
+        { id: 'usb-2', label: 'RECOVERY_KEY', mountPath: 'E:\\', filesystem: 'ntfs', writable: true, estimatedFreeGb: 24 },
+      ];
+      return validateDriveRecords('windows', drives);
+    },
+  },
+  {
+    platform: 'linux',
+    discover: async () => {
+      const drives: DriveRecord[] = [
+        { id: 'usb-3', label: 'ops_backup', mountPath: '/media/ops/ops_backup', filesystem: 'ext4', writable: false, estimatedFreeGb: 3 },
+      ];
+      return validateDriveRecords('linux', drives);
+    },
+  },
+];
+
 export async function discoverRemovableDrives(): Promise<DriveDiscoveryResult> {
   await wait(180);
-  return {
-    drives: [
-      { id: 'usb-1', label: 'CITIZEN_USB', mountPath: '/Volumes/CITIZEN_USB', platform: 'macos', filesystem: 'exfat', writable: true, estimatedFreeGb: 58 },
-      { id: 'usb-2', label: 'RECOVERY_KEY', mountPath: 'E:\\', platform: 'windows', filesystem: 'ntfs', writable: true, estimatedFreeGb: 24 },
-      { id: 'usb-3', label: 'ops_backup', mountPath: '/media/ops/ops_backup', platform: 'linux', filesystem: 'ext4', writable: false, estimatedFreeGb: 3 },
-    ],
-    errors: [
-      { mountPath: '/media/ops/ops_backup', code: 'mount_unwritable', detail: 'Drive is mounted read-only; remount with write permissions.' },
-    ],
-  };
+  const results = await Promise.all(mockDiscoveryAdapters.map((adapter) => adapter.discover().then((result) => ({ platform: adapter.platform, ...result }))));
+  return results.reduce<DriveDiscoveryResult>(
+    (acc, result) => {
+      acc.drives.push(...result.drives.map((drive) => ({ ...drive, platform: result.platform })));
+      acc.errors.push(...result.issues);
+      return acc;
+    },
+    { drives: [], errors: [] },
+  );
 }
 
 export async function flushPendingWrites(targetPath: string): Promise<OperationLog[]> {
