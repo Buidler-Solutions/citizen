@@ -50,6 +50,10 @@ async function main() {
     restoreIdentityKeys: true,
     restoreAccountKeys: true,
     restoreConsentReceipts: false,
+    backupCandidates: [
+      { id: 'backup-z', createdAt: '2026-04-01T00:00:00.000Z', verifiedAt: '2026-04-02T00:00:00.000Z' },
+      { id: 'backup-a', createdAt: '2026-04-02T00:00:00.000Z', verifiedAt: '2026-04-02T00:00:00.000Z' },
+    ],
   });
 
   assert(restore.schemaVersion === 'v1alpha1', 'backup_restore schema version drifted');
@@ -57,7 +61,8 @@ async function main() {
   assert(restore.command === 'backup_restore', 'backup_restore command mismatch');
   assert(restore.ok === true, 'backup_restore should succeed');
   assert(!!restore.result, 'backup_restore result missing');
-  assertKeys(restore.result as Record<string, unknown>, ['log', 'restored_artifacts', 'restored_at', 'restored_role'], 'backup_restore');
+  assertKeys(restore.result as Record<string, unknown>, ['log', 'restored_artifacts', 'restored_at', 'restored_role', 'selected_backup_id'], 'backup_restore');
+  assert((restore.result as Record<string, unknown>).selected_backup_id === 'backup-a', 'backup_restore selected backup ordering drifted');
 
   const manifestPolicy = await runHeadlessCommand({
     command: 'backup_verify',

@@ -217,9 +217,9 @@ This initiative should replicate key VeraCrypt-style operating properties while 
 - [~] Add property/fuzz coverage for malformed headers, truncated ciphertext, and random bit-flip tamper cases (wallet CLI deterministic adversarial tests now include truncated ciphertext + random bit-flip tamper paths; dedicated fuzz/property harness pending).
 - [~] Add unlock/export/restore performance targets with measurable thresholds and evidence logs (Vaultier now captures deterministic create/verify/restore latency evidence against explicit thresholds and includes measurements in diagnostic exports; wallet crate now includes a deterministic encrypt/decrypt latency envelope regression test to keep CLI-runtime parity on backup crypto primitives, with dedicated export/restore command-path benchmarks still pending).
 - [x] Add CI regression fixtures + compatibility gate for vault format/schema stability (wallet crate now ships a pinned `backup_vault_schema_v1_fixture.json` plus compatibility test assertions for required top-level keys/schema/version and signed-manifest slot presence).
-- [ ] Complete disaster-recovery runbook closure for:
+- [~] Complete disaster-recovery runbook closure for (Vaultier headless restore flow now deterministically selects multi-backup candidates by `verified_at DESC`, then `created_at DESC`, then `id ASC`; CLI runbook and key-rotation/corruption guidance still pending):
   - [ ] corrupted/partial backup recovery,
-  - [ ] deterministic restore ordering in multi-backup scenarios,
+  - [x] deterministic restore ordering in multi-backup scenarios,
   - [ ] key rotation guidance after restore.
 - [ ] Execute wallet+crypto maintainer review and record production-security sign-off outcome.
 

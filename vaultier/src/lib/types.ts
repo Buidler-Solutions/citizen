@@ -27,6 +27,13 @@ export type RestoreRequest = {
   restoreIdentityKeys: boolean;
   restoreAccountKeys: boolean;
   restoreConsentReceipts: boolean;
+  backupCandidates?: BackupCandidate[];
+};
+
+export type BackupCandidate = {
+  id: string;
+  createdAt: string;
+  verifiedAt?: string;
 };
 
 export type OperationLog = {
@@ -59,6 +66,7 @@ export type RestoreResult = {
   restoredAt: string;
   restoredRole: VaultRole;
   restoredArtifacts: string[];
+  selectedBackupId?: string;
   log: OperationLog[];
 };
 
@@ -102,6 +110,7 @@ export type HeadlessCommand =
       restoreIdentityKeys: boolean;
       restoreAccountKeys: boolean;
       restoreConsentReceipts: boolean;
+      backupCandidates?: BackupCandidate[];
     };
 
 export type HeadlessResponse = {
