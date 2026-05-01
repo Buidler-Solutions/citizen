@@ -26,7 +26,7 @@ async function main() {
   assert(init.command === 'backup_init', 'backup_init command mismatch');
   assert(init.ok === true, 'backup_init should succeed');
   assert(!!init.result, 'backup_init result missing');
-  assertKeys(init.result as Record<string, unknown>, ['log', 'profile'], 'backup_init');
+  assertKeys(init.result as Record<string, unknown>, ['kdf_profile', 'log', 'profile'], 'backup_init');
 
   const verify = await runHeadlessCommand({
     command: 'backup_verify',

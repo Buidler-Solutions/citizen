@@ -182,6 +182,13 @@ export async function createBackup(request: BackupRequest): Promise<BackupResult
       createdAt: timestamp,
       lastVerifiedAt: timestamp,
     },
+    kdfProfile: {
+      algorithm: 'argon2id',
+      profile: request.roles.includes('critical') ? 'hardened' : 'balanced',
+      memoryKiB: request.roles.includes('critical') ? 262_144 : 131_072,
+      iterations: request.roles.includes('critical') ? 4 : 3,
+      parallelism: 1,
+    },
     log,
   };
 }
@@ -297,6 +304,7 @@ export async function runHeadlessCommand(command: HeadlessCommand): Promise<Head
       command: command.command,
       result: {
         profile: result.profile,
+        kdf_profile: result.kdfProfile,
         log: result.log,
       },
     };
