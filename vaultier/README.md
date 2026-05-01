@@ -12,6 +12,7 @@ This implementation advances the checklist in `citizen-protocol/docs/WALLET_ENCR
 - verify + restore guidance with deterministic checks and restore summaries,
 - simulated wrong-passphrase unlock backoff behavior,
 - detected removable drive picker with macOS/Linux/Windows-style mount path examples,
+- filesystem advisory on detected removable media (recommended vs higher-risk formats),
 - safe-removal checklist with an explicit `flush pending writes` action,
 - portable profile card (USB label, version, created, last verified),
 - deterministic operation log and mock diagnostic export bundle,
