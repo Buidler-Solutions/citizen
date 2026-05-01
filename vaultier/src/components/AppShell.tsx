@@ -17,6 +17,7 @@ import type {
   VerifyResult,
   VaultRole,
 } from '../lib/types';
+import { ERROR_COPY, OPERATION_STATE_COPY, type ErrorIdentifier, type OperationState } from '../lib/operationState';
 
 type Stage = 'create' | 'verify' | 'restore' | 'eject';
 
@@ -58,6 +59,9 @@ export function AppShell() {
   const [unlockFailures, setUnlockFailures] = useState(0);
   const [unlockDelayMs, setUnlockDelayMs] = useState(0);
   const [diagnosticBundle, setDiagnosticBundle] = useState<DiagnosticBundle | null>(null);
+
+  const [operationState, setOperationState] = useState<OperationState>('idle');
+  const [activeError, setActiveError] = useState<ErrorIdentifier | null>(null);
   const [ejectChecks, setEjectChecks] = useState({
     verified: false,
     restoreTest: false,
@@ -100,16 +104,20 @@ export function AppShell() {
     };
 
     setRunning(true);
+    setActiveError(null);
+    setOperationState('preflight');
     setVerifySummary('');
     setRestoreSummary('');
     setVerifyResult(null);
     setRestoreResult(null);
 
     try {
+      setOperationState('writing');
       const result = await createBackup(request);
       setProfile(result.profile);
       appendLogs(result.log);
       setStage('verify');
+      setOperationState('verify_required');
     } finally {
       setRunning(false);
     }
@@ -118,6 +126,8 @@ export function AppShell() {
   const runVerify = async () => {
     if (!profile) return;
     setRunning(true);
+    setActiveError(null);
+    setOperationState('preflight');
 
     try {
       const result = await verifyBackup({
@@ -132,6 +142,7 @@ export function AppShell() {
       setProfile({ ...profile, lastVerifiedAt: result.verifiedAt });
       setEjectChecks((prev) => ({ ...prev, verified: true }));
       setStage('restore');
+      setOperationState('completed');
     } finally {
       setRunning(false);
     }
@@ -142,6 +153,8 @@ export function AppShell() {
     const delay = Math.min(2 ** nextFailures * 500, 8000);
     setUnlockFailures(nextFailures);
     setUnlockDelayMs(delay);
+
+    setActiveError('decrypt_failed');
 
     appendLogs([
       {
@@ -156,6 +169,8 @@ export function AppShell() {
   const runRestore = async () => {
     if (unlockDelayMs > 0) return;
     setRunning(true);
+    setActiveError(null);
+    setOperationState('preflight');
 
     try {
       const result = await testRestore({
@@ -173,15 +188,18 @@ export function AppShell() {
       setUnlockFailures(0);
       setEjectChecks((prev) => ({ ...prev, restoreTest: true }));
       setStage('eject');
+      setOperationState('verify_required');
     } finally {
       setRunning(false);
     }
   };
 
   const runFlushWrites = async () => {
+    setOperationState('flushing');
     const flushLog = await flushPendingWrites(targetPath);
     appendLogs(flushLog);
     setEjectChecks((prev) => ({ ...prev, flushComplete: true }));
+    setOperationState('completed');
   };
 
   const runExportDiagnostics = async () => {
@@ -195,6 +213,18 @@ export function AppShell() {
       <section className="card" aria-live="polite">
         <h1>Vaultier</h1>
         <p className="subtitle">Portable encrypted backup vault for Citizen wallet recovery.</p>
+
+        <article className="state-panel" role="status" aria-label="Current operation state">
+          <strong>{OPERATION_STATE_COPY[operationState].title}</strong>
+          <p className="hint">{OPERATION_STATE_COPY[operationState].detail}</p>
+          {activeError && (
+            <div className="error-panel">
+              <strong>Error code: {activeError}</strong>
+              <p>{ERROR_COPY[activeError].headline}</p>
+              <p className="hint">Next action: {ERROR_COPY[activeError].nextAction}</p>
+            </div>
+          )}
+        </article>
 
         <div className="row controls-row">
           <label className="inline-control">
