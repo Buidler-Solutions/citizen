@@ -17,8 +17,15 @@ const estimateEntropyBits = (value: string) => {
   if (/[^A-Za-z0-9]/.test(value)) charset += 32;
   return Math.round(value.length * Math.log2(Math.max(charset, 1)));
 };
+
 const entropyBand = (bits: number) => bits >= 80 ? { label: 'Strong (recommended >=80 bits)', className: 'ok' as const } : bits >= 60 ? { label: 'Moderate (minimum for decoy)', className: 'warn' as const } : { label: 'Weak (increase length + symbol variety)', className: 'bad' as const };
 const isFilesystemRecommended = (fs: string) => ['exfat', 'ntfs', 'ext4', 'apfs'].includes(fs);
+
+const platformEjectGuidance: Record<string, string> = {
+  macos: 'In Finder, click eject next to the USB volume and wait for disappear confirmation.',
+  windows: 'Use Safely Remove Hardware in the system tray and wait for the safe-to-remove toast.',
+  linux: 'Run a desktop eject action or `udisksctl power-off -b <device>` after unmount confirmation.',
+};
 
 export function AppShell() {
   const [stage, setStage] = useState<Stage>('create');
@@ -59,6 +66,17 @@ export function AppShell() {
   const nextReminderAt = useMemo(() => profile?.lastVerifiedAt ? getNextReminderAt(profile.lastVerifiedAt, reminderPolicy) : null, [profile, reminderPolicy]);
   const reminderDue = useMemo(() => nextReminderAt ? isReminderDue(nextReminderAt) : false, [nextReminderAt]);
 
+  const downloadDiagnosticBundle = () => {
+    if (!diagnosticBundle) return;
+    const file = new Blob([JSON.stringify(diagnosticBundle, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(file);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `vaultier-diagnostics-${new Date().toISOString().replace(/[:.]/g, '-')}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
   const runCreateBackup = async () => {
     if (!selectedDrive) return setActiveError('path_invalid');
     if (!selectedDrive.writable) return setActiveError('mount_unwritable');
@@ -94,20 +112,24 @@ export function AppShell() {
       <label className="inline-control"><input type="checkbox" checked={highContrast} onChange={() => setHighContrast(!highContrast)} />High contrast</label>
       <nav className="stages">{STAGES.map((item) => <button key={item} className={stage === item ? 'pill active' : 'pill'} onClick={() => setStage(item)} disabled={!profile && item !== 'create'}>{item}</button>)}</nav>
       <label>Detected removable drives<select value={targetPath} onChange={(e) => setTargetPath(e.target.value)}>{discovery.drives.map((d) => <option key={d.id} value={d.mountPath}>{d.label} · {d.mountPath} · {d.filesystem} · {d.estimatedFreeGb}GB free</option>)}</select></label>
+      {selectedDrive && <p className="hint">Filesystem policy: <strong>{isFilesystemRecommended(selectedDrive.filesystem) ? 'Recommended' : 'Higher risk'}</strong> · {selectedDrive.filesystem.toUpperCase()}</p>}
       {discovery.errors.length > 0 && <p className="summary warn">Adapter notices: {discovery.errors.map((err) => `${err.code} (${err.mountPath})`).join(', ')}.</p>}
 
       {stage === 'create' && <><div className="row"><label className="inline-control"><input type="checkbox" checked={selectedRoles.includes('decoy')} onChange={() => setSelectedRoles((c) => c.includes('decoy') ? c.filter((x) => x !== 'decoy') : [...c, 'decoy'])} />Decoy slot</label><label className="inline-control"><input type="checkbox" checked={selectedRoles.includes('critical')} onChange={() => setSelectedRoles((c) => c.includes('critical') ? c.filter((x) => x !== 'critical') : [...c, 'critical'])} />Critical slot</label></div>
-      <div className="status-grid"><article className="status-card"><label>Decoy passphrase<input type="password" value={decoyPassphrase} onChange={(e) => setDecoyPassphrase(e.target.value)} /></label><p className={`summary ${entropyBand(decoyEntropy).className}`}>Entropy {decoyEntropy} bits · {entropyBand(decoyEntropy).label}</p></article><article className="status-card"><label>Critical passphrase<input type="password" value={criticalPassphrase} onChange={(e) => setCriticalPassphrase(e.target.value)} /></label><p className={`summary ${entropyBand(criticalEntropy).className}`}>Entropy {criticalEntropy} bits · {entropyBand(criticalEntropy).label}</p></article></div>
+      <div className="row"><label className="inline-control"><input type="checkbox" checked={includeConsentReceipts} onChange={() => setIncludeConsentReceipts((v) => !v)} />Include consent receipts</label><label className="inline-control"><input type="checkbox" checked={portableMode} onChange={() => setPortableMode((v) => !v)} />Portable mode metadata</label></div>
+      <div className="status-grid"><article className="status-card"><label>Decoy passphrase<input type="password" value={decoyPassphrase} onChange={(e) => setDecoyPassphrase(e.target.value)} /></label><progress max={100} value={Math.min(decoyEntropy, 100)} /><p className={`summary ${entropyBand(decoyEntropy).className}`}>Entropy {decoyEntropy} bits · {entropyBand(decoyEntropy).label}</p></article><article className="status-card"><label>Critical passphrase<input type="password" value={criticalPassphrase} onChange={(e) => setCriticalPassphrase(e.target.value)} /></label><progress max={100} value={Math.min(criticalEntropy, 100)} /><p className={`summary ${entropyBand(criticalEntropy).className}`}>Entropy {criticalEntropy} bits · {entropyBand(criticalEntropy).label}</p></article></div>
       <button disabled={running || selectedRoles.length === 0} onClick={runCreateBackup}>Create Backup</button></>}
       {stage === 'verify' && <><button disabled={running || !profile} onClick={runVerify}>Verify Backup</button>{verifyResult && <p className="summary ok">{verifyResult.checks.length} checks passed at {verifyResult.verifiedAt}.</p>}</>}
-      {stage === 'restore' && <><div className="row"><button onClick={simulateFailedUnlock}>Simulate wrong passphrase</button><button disabled={running || unlockDelayMs > 0} onClick={runRestore}>Test Restore</button></div>{unlockDelayMs > 0 && <p className="summary warn">Backoff active: {unlockDelayMs}ms</p>}{restoreResult && <p className="summary ok">Recovered: {restoreResult.restoredArtifacts.join(', ')}</p>}</>}
-      {stage === 'eject' && <><button onClick={runFlushWrites}>Flush pending writes</button><label className="inline-control"><input type="checkbox" checked={ejectChecks.duplicateMedia} onChange={() => setEjectChecks((p) => ({ ...p, duplicateMedia: !p.duplicateMedia }))} />Duplicate backup stored separately</label><p className={safeToEject ? 'summary ok' : 'summary warn'}>{safeToEject ? 'Checklist complete. Safe to eject.' : 'Complete all checklist steps before ejection.'}</p>{flushStrategy.length > 0 && <details><summary>Crash-safe write strategy</summary><ul>{flushStrategy.map((step) => <li key={step.step}>{step.step} · {step.status} · {step.detail}</li>)}</ul></details>}</>}
+      {stage === 'restore' && <><div className="row"><button onClick={simulateFailedUnlock}>Simulate wrong passphrase</button><button disabled={running || unlockDelayMs > 0} onClick={runRestore}>Test Restore</button></div>{unlockDelayMs > 0 && <p className="summary warn">Backoff active: {unlockDelayMs}ms. Repeated failures intentionally slow unlock retries.</p>}{restoreResult && <p className="summary ok">Recovered: {restoreResult.restoredArtifacts.join(', ')}</p>}</>}
+      {stage === 'eject' && <><button onClick={runFlushWrites}>Flush pending writes</button><label className="inline-control"><input type="checkbox" checked={ejectChecks.duplicateMedia} onChange={() => setEjectChecks((p) => ({ ...p, duplicateMedia: !p.duplicateMedia }))} />Duplicate backup stored separately</label><p className={safeToEject ? 'summary ok' : 'summary warn'}>{safeToEject ? 'Checklist complete. Safe to eject.' : 'Complete all checklist steps before ejection.'}</p>
+      {selectedDrive && <p className="hint">Safe eject guidance: {platformEjectGuidance[selectedDrive.platform]}</p>}
+      {flushStrategy.length > 0 && <details><summary>Crash-safe write strategy</summary><ul>{flushStrategy.map((step) => <li key={step.step}>{step.step} · {step.status} · {step.detail}</li>)}</ul></details>}</>}
     </section>
     <section className="card"><h2>Portable profile</h2>{profile ? <ul><li>USB Label: {profile.usbLabel}</li><li>Vault Format: {profile.vaultVersion}</li><li>Created: {profile.createdAt}</li><li>Last Verification: {profile.lastVerifiedAt}</li><li>Next verification reminder: {nextReminderAt ?? 'Pending first verify'}</li></ul> : <p className="hint">Create a backup to generate a profile.</p>}
       <h3>Reminder policy</h3>
       <label className="inline-control"><input type="checkbox" checked={reminderPolicy.enabled} onChange={() => setReminderPolicy((p) => ({ ...p, enabled: !p.enabled }))} />Enable verification reminders</label>
       <label>Reminder cadence (days)<input type="number" min={7} max={365} value={reminderPolicy.cadenceDays} onChange={(e) => setReminderPolicy((p) => ({ ...p, cadenceDays: Number(e.target.value) || p.cadenceDays }))} /></label>
-      <h3>Operation log</h3><ul className="log-list">{logs.map((entry) => <li key={`${entry.at}-${entry.action}`}>{entry.at} · {entry.action} · {entry.status} · {entry.details}</li>)}</ul><button disabled={!profile} onClick={runExportDiagnostics}>Export diagnostics</button>{diagnosticBundle && <details><summary>Latest diagnostic bundle</summary><pre>{JSON.stringify(diagnosticBundle, null, 2)}</pre></details>}</section>
+      <h3>Operation log</h3><ul className="log-list">{logs.map((entry) => <li key={`${entry.at}-${entry.action}`}>{entry.at} · {entry.action} · {entry.status} · {entry.details}</li>)}</ul><div className="row"><button disabled={!profile} onClick={runExportDiagnostics}>Export diagnostics</button><button disabled={!diagnosticBundle} onClick={downloadDiagnosticBundle}>Download JSON</button></div>{diagnosticBundle && <details><summary>Latest diagnostic bundle</summary><pre>{JSON.stringify(diagnosticBundle, null, 2)}</pre></details>}</section>
     <section className="card">
       <h2>What this cannot protect against</h2>
       <ul className="log-list">
