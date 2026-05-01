@@ -254,15 +254,15 @@ To translate the CLI-first vault implementation into a polished portable app exp
 
 ### Security & Integrity UX
 
-- [ ] Passphrase strength meter tied to documented entropy thresholds (not vanity score-only meters).
+- [x] Passphrase strength meter tied to documented entropy thresholds (not vanity score-only meters).
 - [ ] Optional unlock delay/backoff UX aligned with CLI wrong-passphrase throttling semantics.
 - [ ] Human-readable tamper warnings mapped 1:1 to deterministic error codes from wallet core.
 - [ ] “What this cannot protect against” panel shown during setup and restore confirmation.
 
 ### Operator/Builder Ergonomics
 
-- [ ] Export diagnostic bundle (non-secret) containing version, platform, vault header metadata, and recent operation logs.
-- [ ] Add scriptable headless mode parity for CI/recovery labs using the same command contract as `wallet backup ... --json`.
+- [x] Export diagnostic bundle (non-secret) containing version, platform, vault header metadata, and recent operation logs.
+- [x] Add scriptable headless mode parity for CI/recovery labs using the same command contract as `wallet backup ... --json`.
 - [ ] Publish app-to-CLI compatibility matrix per release (vault format version, schema version, migration notes).
 
 **Exit criteria**

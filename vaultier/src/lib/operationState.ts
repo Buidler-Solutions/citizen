@@ -17,7 +17,10 @@ export type ErrorIdentifier =
   | 'insufficient_space'
   | 'path_invalid'
   | 'media_unavailable'
-  | 'manifest_signature_invalid';
+  | 'manifest_signature_missing'
+  | 'manifest_signature_invalid'
+  | 'filesystem_incompatible'
+  | 'critical_entropy_too_low';
 
 export const OPERATION_STATE_COPY: Record<OperationState, { title: string; detail: string }> = {
   idle: {
@@ -63,6 +66,10 @@ export const ERROR_COPY: Record<ErrorIdentifier, { headline: string; nextAction:
     headline: 'Decryption failed for the selected slot.',
     nextAction: 'Re-enter the slot passphrase and confirm you selected the intended slot role.',
   },
+  critical_entropy_too_low: {
+    headline: 'Critical passphrase entropy is below the required threshold.',
+    nextAction: 'Increase passphrase length and character variety until entropy reaches at least 80 bits.',
+  },
   checksum_mismatch: {
     headline: 'Integrity check failed due to checksum mismatch.',
     nextAction: 'Stop restore and switch to a known-good duplicate media backup.',
@@ -70,6 +77,10 @@ export const ERROR_COPY: Record<ErrorIdentifier, { headline: string; nextAction:
   invalid_payload: {
     headline: 'Vault payload is malformed or incomplete.',
     nextAction: 'Run verify and use diagnostics to identify corruption before any recovery attempt.',
+  },
+  filesystem_incompatible: {
+    headline: 'Selected filesystem is not in the recommended compatibility set.',
+    nextAction: 'Use exFAT, NTFS, APFS, or ext4 for better cross-machine recovery compatibility.',
   },
   mount_unwritable: {
     headline: 'Selected media path is not writable.',
@@ -86,6 +97,10 @@ export const ERROR_COPY: Record<ErrorIdentifier, { headline: string; nextAction:
   media_unavailable: {
     headline: 'Removable media became unavailable during operation.',
     nextAction: 'Reconnect media, run verification, and only continue if integrity checks pass.',
+  },
+  manifest_signature_missing: {
+    headline: 'Signed backup manifest is required but no key identifier was provided.',
+    nextAction: 'Provide the deterministic manifest key identifier before verify or restore operations.',
   },
   manifest_signature_invalid: {
     headline: 'Signed backup manifest verification failed.',
