@@ -434,8 +434,8 @@ This slice starts the desktop productization track without blocking on extension
    - [ ] Add portable profile card (label, schema version, created-at, last verified-at) and safe-removal checklist drawer.
 
 4. **PR-E4: Headless parity + diagnostics**
-   - [ ] Add desktop headless mode that mirrors `wallet backup ... --json` contract for CI/recovery labs.
-   - [ ] Add diagnostic export bundle (non-secret): app version, OS, vault header metadata, deterministic error history.
+   - [~] Add desktop headless mode that mirrors `wallet backup ... --json` contract for CI/recovery labs. (Vaultier headless command surface now includes `backup_diagnostics` and contract tests for diagnostics payload shape; remaining work is wiring real desktop runtime adapters.)
+   - [x] Add diagnostic export bundle (non-secret): app version, OS, vault header metadata, deterministic error history.
    - [ ] Publish app↔CLI compatibility table in docs per release.
 
 **Exit criteria**

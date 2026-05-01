@@ -10,6 +10,7 @@ type TauriBridgeApi = {
   backup_export_credentials: (payload: Omit<Extract<HeadlessCommand, { command: 'backup_export_credentials' }>, 'command'>) => Promise<HeadlessResponse>;
   backup_verify: (payload: Omit<Extract<HeadlessCommand, { command: 'backup_verify' }>, 'command'>) => Promise<HeadlessResponse>;
   backup_restore: (payload: Omit<Extract<HeadlessCommand, { command: 'backup_restore' }>, 'command'>) => Promise<HeadlessResponse>;
+  backup_diagnostics: (payload: Omit<Extract<HeadlessCommand, { command: 'backup_diagnostics' }>, 'command'>) => Promise<HeadlessResponse>;
 };
 
 const hasTauriRuntime = () => typeof window !== 'undefined' && '__TAURI__' in window;

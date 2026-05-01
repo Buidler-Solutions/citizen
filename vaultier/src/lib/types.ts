@@ -120,6 +120,14 @@ export type HeadlessCommand =
       restoreAccountKeys: boolean;
       restoreConsentReceipts: boolean;
       backupCandidates?: BackupCandidate[];
+    }
+  | {
+      command: 'backup_diagnostics';
+      targetPath: string;
+      profile: PortableProfile;
+      recentLogs: OperationLog[];
+      recentErrors: string[];
+      performanceMeasurements: PerformanceMeasurement[];
     };
 
 export type HeadlessResponse = {
