@@ -62,7 +62,7 @@ When `verify` or `restore` fails, use deterministic codes to guide response:
 - `media_unavailable`: media disconnected; remount and retry from step 1.
 - `invalid_payload` / `decrypt_failed`: treat slot as tampered, truncated, or wrong passphrase.
 - `checksum_mismatch`: ciphertext or payload integrity failure.
-- `slot_missing`: requested role slot is absent.
+- `slot_not_found`: requested role slot is absent.
 - `unsupported_schema`: restore using compatible CLI/runtime version.
 
 Recovery sequence:

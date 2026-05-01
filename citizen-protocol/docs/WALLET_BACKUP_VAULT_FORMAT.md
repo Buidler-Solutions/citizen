@@ -24,6 +24,69 @@ It is the format-level companion to:
 
 CLI JSON automation contract references this format via `contract_version: "citizen.wallet.backup.cli.v1"` in `--json` outputs.
 
+
+## CLI JSON contract examples (`citizen.wallet.backup.cli.v1`)
+
+The following examples mirror the implemented `--json` output fields from `wallet backup init`, `wallet backup verify`, and `wallet backup restore`.
+
+### `wallet backup init --json`
+
+```json
+{
+  "contract_version": "citizen.wallet.backup.cli.v1",
+  "vault_path": "/media/usb/citizen-backup-vault.json",
+  "schema": "citizen.wallet.backup.v1",
+  "version": 1,
+  "portable_label": "operator-usb-a",
+  "kdf_profile": "balanced",
+  "kdf_params": {
+    "kdf": "argon2id",
+    "memory_kib": 65536,
+    "iterations": 3,
+    "parallelism": 1,
+    "output_length": 32
+  }
+}
+```
+
+### `wallet backup verify --json`
+
+```json
+{
+  "contract_version": "citizen.wallet.backup.cli.v1",
+  "schema": "citizen.wallet.backup.v1",
+  "version": 1,
+  "portable_label": "operator-usb-a",
+  "created_at": 1760000000,
+  "slots": [
+    {
+      "role": "critical",
+      "status": "ok",
+      "exported_at": 1760000100,
+      "payload_sha256": "<sha256>",
+      "signed_manifest": {
+        "schema": "citizen.wallet.backup.manifest.v1",
+        "key_id": "ops-manifest-key-1",
+        "signed_at": 1760000090,
+        "payload_sha256": "<sha256>"
+      }
+    }
+  ]
+}
+```
+
+### `wallet backup restore --json`
+
+```json
+{
+  "contract_version": "citizen.wallet.backup.cli.v1",
+  "status": "restored",
+  "output_path": "/tmp/restored-wallet.json",
+  "role": "critical",
+  "exported_at": 1760000100
+}
+```
+
 ## Top-level vault object (`v1`)
 
 Required top-level keys:
