@@ -101,7 +101,10 @@ export type VaultierErrorCode =
   | 'filesystem_incompatible'
   | 'critical_entropy_too_low'
   | 'manifest_signature_missing'
-  | 'manifest_signature_invalid';
+  | 'manifest_signature_invalid'
+  | 'header_auth_failed'
+  | 'slot_table_tampered'
+  | 'rollback_counter_mismatch';
 
 export type RemovableDrive = {
   id: string;

@@ -157,10 +157,17 @@ export async function createBackup(request: BackupRequest): Promise<BackupResult
 export async function verifyBackup(request: VerifyRequest): Promise<VerifyResult> {
   await wait(650);
   const verifiedAt = now();
+  const tamperCode = request.targetPath.includes('tamper-header')
+    ? 'header_auth_failed'
+    : request.targetPath.includes('tamper-slot-table')
+      ? 'slot_table_tampered'
+      : request.targetPath.includes('tamper-rollback')
+        ? 'rollback_counter_mismatch'
+        : null;
   const manifest = {
     signed: true,
     signatureKeyId: request.manifestSignatureKeyId || 'citizen-wallet-maintainers:v1',
-    verified: true,
+    verified: tamperCode === null,
   };
   if (request.requireSignedManifest && !manifest.signatureKeyId) {
     manifest.verified = false;
@@ -168,8 +175,21 @@ export async function verifyBackup(request: VerifyRequest): Promise<VerifyResult
   return {
     verifiedAt,
     checks: [
-      { label: 'Header integrity', status: 'ok', detail: 'Vault header authenticated.' },
-      { label: 'Slot inventory', status: 'ok', detail: 'Required decoy/critical metadata found.' },
+      {
+        label: 'Header integrity',
+        status: tamperCode === 'header_auth_failed' ? 'warn' : 'ok',
+        detail: tamperCode === 'header_auth_failed' ? 'Header authentication failed.' : 'Vault header authenticated.',
+      },
+      {
+        label: 'Slot inventory',
+        status: tamperCode === 'slot_table_tampered' ? 'warn' : 'ok',
+        detail: tamperCode === 'slot_table_tampered' ? 'Authenticated slot table mismatch detected.' : 'Required decoy/critical metadata found.',
+      },
+      {
+        label: 'Rollback counter',
+        status: tamperCode === 'rollback_counter_mismatch' ? 'warn' : 'ok',
+        detail: tamperCode === 'rollback_counter_mismatch' ? 'Counter mismatch indicates stale/replayed container.' : 'Monotonic rollback counter verified.',
+      },
       { label: 'Version compatibility', status: 'ok', detail: `Detected ${request.expectedVaultVersion}.` },
       { label: 'Portable profile', status: 'ok', detail: `Target ${request.targetPath} is portable-mode compatible.` },
       {
@@ -177,7 +197,7 @@ export async function verifyBackup(request: VerifyRequest): Promise<VerifyResult
         status: manifest.verified ? 'ok' : 'warn',
         detail: manifest.verified
           ? `Verified using ${manifest.signatureKeyId}.`
-          : 'Manifest signature verification policy failed.',
+          : tamperCode ? `Tamper signal mapped to deterministic code: ${tamperCode}.` : 'Manifest signature verification policy failed.',
       },
     ],
     manifest,
