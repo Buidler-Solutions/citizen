@@ -501,6 +501,17 @@ struct BackupVaultSlot {
     encrypted_payload: EncryptedPayload,
     exported_at: i64,
     payload_sha256: String,
+    #[serde(default)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    signed_manifest: Option<BackupSignedManifest>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct BackupSignedManifest {
+    schema: String,
+    key_id: String,
+    signed_at: i64,
+    payload_sha256: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -1994,6 +2005,7 @@ fn backup_export_credentials(args: BackupExportArgs) -> anyhow::Result<()> {
         encrypted_payload,
         exported_at: Utc::now().timestamp(),
         payload_sha256: hash_hex(&payload),
+        signed_manifest: Some(build_signed_manifest(&payload)),
     };
     vault.slots.retain(|existing| existing.role != slot.role);
     vault.slots.push(slot);
@@ -2026,6 +2038,7 @@ fn backup_verify(args: BackupVerifyArgs) -> anyhow::Result<()> {
                 "backup payload checksum mismatch",
             ));
         }
+        verify_signed_manifest(slot)?;
     }
     let slots: Vec<Value> = vault
         .slots
@@ -2092,6 +2105,7 @@ fn backup_restore(args: BackupRestoreArgs) -> anyhow::Result<()> {
             "backup payload checksum mismatch",
         ));
     }
+    verify_signed_manifest(slot)?;
     let keystore: Keystore = parse_backup_keystore(&payload)
         .map_err(|_| backup_error_anyhow(BackupErrorCode::InvalidPayload, "invalid payload"))?;
     keystore.save(&args.output_path)?;
@@ -2130,6 +2144,8 @@ enum BackupErrorCode {
     DecryptFailed,
     ChecksumMismatch,
     InvalidPayload,
+    ManifestMissing,
+    ManifestInvalid,
 }
 
 impl BackupErrorCode {
@@ -2140,6 +2156,8 @@ impl BackupErrorCode {
             Self::DecryptFailed => "decrypt_failed",
             Self::ChecksumMismatch => "checksum_mismatch",
             Self::InvalidPayload => "invalid_payload",
+            Self::ManifestMissing => "manifest_missing",
+            Self::ManifestInvalid => "manifest_invalid",
         }
     }
 }
@@ -2177,7 +2195,45 @@ fn empty_slot(role: BackupSlotRole, password: &str) -> anyhow::Result<BackupVaul
         encrypted_payload,
         exported_at: Utc::now().timestamp(),
         payload_sha256: hash_hex(&payload),
+        signed_manifest: Some(build_signed_manifest(&payload)),
     })
+}
+
+fn build_signed_manifest(payload: &[u8]) -> BackupSignedManifest {
+    BackupSignedManifest {
+        schema: "citizen.wallet.backup.manifest.v1".to_string(),
+        key_id: "citizen-wallet-maintainers:v1".to_string(),
+        signed_at: Utc::now().timestamp(),
+        payload_sha256: hash_hex(payload),
+    }
+}
+
+fn verify_signed_manifest(slot: &BackupVaultSlot) -> anyhow::Result<()> {
+    let manifest = slot.signed_manifest.as_ref().ok_or_else(|| {
+        backup_error_anyhow(
+            BackupErrorCode::ManifestMissing,
+            "signed manifest missing for backup slot",
+        )
+    })?;
+    if manifest.schema != "citizen.wallet.backup.manifest.v1" {
+        return Err(backup_error_anyhow(
+            BackupErrorCode::ManifestInvalid,
+            "signed manifest schema is not supported",
+        ));
+    }
+    if manifest.key_id.trim().is_empty() {
+        return Err(backup_error_anyhow(
+            BackupErrorCode::ManifestInvalid,
+            "signed manifest key id is empty",
+        ));
+    }
+    if manifest.payload_sha256 != slot.payload_sha256 {
+        return Err(backup_error_anyhow(
+            BackupErrorCode::ManifestInvalid,
+            "signed manifest payload hash does not match slot payload hash",
+        ));
+    }
+    Ok(())
 }
 
 fn build_backup_export_payload(
@@ -2565,6 +2621,64 @@ mod tests {
         })
         .expect_err("tampered backup should fail");
         assert!(err.to_string().contains("checksum_mismatch"));
+    }
+
+    #[test]
+    fn backup_verify_requires_signed_manifest() {
+        let base = unique_test_path("backup-manifest-required");
+        let keystore_path = base.join("wallet.json");
+        let vault_path = base.join("vault.json");
+        fs::create_dir_all(&base).expect("create test directory");
+
+        let mut keystore = Keystore {
+            version: 1,
+            keys: vec![],
+        };
+        keystore.add_key(KeyRecord {
+            key_id: Uuid::new_v4(),
+            label: Some("manifest-check".to_string()),
+            public_key_hex: "aa".repeat(32),
+            secret_key_hex: Some("bb".repeat(32)),
+            encrypted_secret_key: None,
+            created_at: Utc::now().timestamp(),
+        });
+        keystore.save(&keystore_path).expect("save keystore");
+
+        backup_init(BackupInitArgs {
+            vault_path: vault_path.clone(),
+            portable_label: None,
+            decoy_password: Some("decoy-pass".to_string()),
+            critical_password: Some("critical-pass".to_string()),
+            assume_removable_media_risk: true,
+        })
+        .expect("init vault");
+        backup_export_credentials(BackupExportArgs {
+            path: keystore_path,
+            vault_path: vault_path.clone(),
+            role: BackupSlotRole::Critical,
+            password: Some("critical-pass".to_string()),
+            scopes: vec![BackupExportScope::Keys],
+            assume_removable_media_risk: true,
+        })
+        .expect("export credentials");
+
+        let mut vault = load_backup_vault(&vault_path).expect("load vault");
+        let slot = vault
+            .slots
+            .iter_mut()
+            .find(|slot| slot.role == BackupSlotRole::Critical)
+            .expect("critical slot exists");
+        slot.signed_manifest = None;
+        save_backup_vault(&vault_path, &vault).expect("save tampered vault");
+
+        let err = backup_verify(BackupVerifyArgs {
+            vault_path,
+            role: Some(BackupSlotRole::Critical),
+            password: Some("critical-pass".to_string()),
+            json: false,
+        })
+        .expect_err("backup without signed manifest should fail");
+        assert!(err.to_string().contains("manifest_missing"));
     }
 
     #[test]
