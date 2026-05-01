@@ -209,11 +209,11 @@ This initiative should replicate key VeraCrypt-style operating properties while 
   - [ ] finalized AEAD + nonce/IV policy documentation,
   - [ ] key-derivation parameter profile hardening guidance,
   - [ ] committed test vectors for encrypt/decrypt/tamper failure paths.
-- [ ] Add signed manifest verification for backup bundles and verify-path enforcement.
-- [ ] Add removable-media safety hardening in command help/output:
-  - [ ] explicit unplug-during-write risk warning,
-  - [ ] explicit flush/safe-eject guidance,
-  - [ ] filesystem compatibility warning copy.
+- [~] Add signed manifest verification for backup bundles and verify-path enforcement (Vaultier mock verify path now surfaces deterministic signed-manifest checks; CLI/runtime enforcement remains pending).
+- [~] Add removable-media safety hardening in command help/output:
+  - [x] explicit unplug-during-write risk warning (Vaultier eject flow UX),
+  - [x] explicit flush/safe-eject guidance (Vaultier stage guidance + crash-safe flush trace),
+  - [x] filesystem compatibility warning copy (Vaultier removable-media advisory).
 - [ ] Add property/fuzz coverage for malformed headers, truncated ciphertext, and random bit-flip tamper cases.
 - [ ] Add unlock/export/restore performance targets with measurable thresholds and evidence logs.
 - [ ] Add CI regression fixtures + compatibility gate for vault format/schema stability.

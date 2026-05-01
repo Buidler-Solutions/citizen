@@ -16,7 +16,8 @@ export type ErrorIdentifier =
   | 'mount_unwritable'
   | 'insufficient_space'
   | 'path_invalid'
-  | 'media_unavailable';
+  | 'media_unavailable'
+  | 'manifest_signature_invalid';
 
 export const OPERATION_STATE_COPY: Record<OperationState, { title: string; detail: string }> = {
   idle: {
@@ -85,5 +86,9 @@ export const ERROR_COPY: Record<ErrorIdentifier, { headline: string; nextAction:
   media_unavailable: {
     headline: 'Removable media became unavailable during operation.',
     nextAction: 'Reconnect media, run verification, and only continue if integrity checks pass.',
+  },
+  manifest_signature_invalid: {
+    headline: 'Signed backup manifest verification failed.',
+    nextAction: 'Stop recovery, quarantine this media, and use a previously verified duplicate backup.',
   },
 };

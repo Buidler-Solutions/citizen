@@ -42,6 +42,7 @@ export type BackupResult = {
 export type VerifyResult = {
   verifiedAt: string;
   checks: Array<{ label: string; status: 'ok' | 'warn'; detail: string }>;
+  manifest: { signed: boolean; signatureKeyId: string; verified: boolean };
   log: OperationLog[];
 };
 
@@ -74,6 +75,7 @@ export type HeadlessCommand =
     };
 
 export type HeadlessResponse = {
+  schemaVersion: 'v1alpha1';
   ok: true;
   command: HeadlessCommand['command'];
   result: Record<string, unknown>;
