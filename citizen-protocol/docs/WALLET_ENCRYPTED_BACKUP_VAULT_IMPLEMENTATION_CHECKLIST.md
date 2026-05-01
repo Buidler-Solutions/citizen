@@ -367,7 +367,7 @@ This section extends the checklist with concrete near-term implementation work i
 
 - [x] Add fuzz/property harness for malformed/truncated vault files and randomized metadata mutation. (proptest-based randomized metadata mutation harness + byte-level fuzz-style mutation corpus runner implemented in wallet CLI tests.)
 - [x] Add performance bench for unlock/verify latency with the default Argon2id profile (`cargo test -p citizen-wallet backup_command_path_performance_evidence_harness -- --ignored --nocapture`, configurable with `CITIZEN_WALLET_BACKUP_PERF_ITERATIONS`).
-- [ ] Add regression fixtures for role mismatch and cross-slot password confusion cases.
+- [x] Add regression fixtures for role mismatch and cross-slot password confusion cases. (wallet CLI adversarial suite now includes malformed duplicated-role-entry fixture coverage and deterministic cross-slot password confusion failure mapping to `decrypt_failed`.)
 - [ ] Ensure backup-vault suite is wired into CI for wallet crate changes.
 
 **Exit criteria**
@@ -395,7 +395,7 @@ Use this queue to keep momentum without reopening resolved design choices. Each 
    - [x] Add docs snippet with safe-eject checklist and expected fsync/write-completion behavior (`WALLET_ENCRYPTED_BACKUP_VAULT_THREAT_MODEL.md` now includes explicit removable-media write-completion + safe-eject operator checklist and cadence guidance).
 
 3. **PR-D3: Vault structure adversarial harness**
-   - [~] Add malformed-vault fixture set (missing schema, wrong version type, empty slots, duplicated role entries, invalid ciphertext envelope). (now includes automated missing-schema and invalid/truncated ciphertext coverage in wallet CLI tests)
+   - [x] Add malformed-vault fixture set (missing schema, wrong version type, empty slots, duplicated role entries, invalid ciphertext envelope). (wallet CLI malformed structure matrix now enforces deterministic failure coverage for missing-schema, wrong-version-type, empty-slot, duplicated-role-entry, and invalid-ciphertext-envelope fixtures.)
    - [~] Add property tests for randomized metadata mutation and truncated payload handling. (truncated ciphertext handling is now covered; randomized metadata mutation property harness is now implemented)
    - [x] Ensure tests assert deterministic error identifiers from PR-D1.
 

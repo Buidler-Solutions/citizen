@@ -3131,6 +3131,17 @@ mod tests {
         slots[0]["encrypted_payload"]["ciphertext_hex"] = Value::String("zz-not-hex".to_string());
         cases.push(("invalid-ciphertext-envelope", bad_ciphertext));
 
+        let mut duplicate_role_entries = base_value.clone();
+        if let Some(slots) = duplicate_role_entries
+            .get_mut("slots")
+            .and_then(Value::as_array_mut)
+        {
+            if slots.len() > 1 {
+                slots[1]["role"] = slots[0]["role"].clone();
+            }
+        }
+        cases.push(("duplicated-role-entries", duplicate_role_entries));
+
         for (label, case_value) in cases {
             let path = base.join(format!("{label}.json"));
             fs::write(&path, serde_json::to_vec_pretty(&case_value).expect("serialize case"))
@@ -3148,10 +3159,66 @@ mod tests {
             assert!(
                 rendered.contains("unsupported_schema")
                     || rendered.contains("slot_not_found")
-                    || rendered.contains("decrypt_failed"),
+                    || rendered.contains("decrypt_failed")
+                    || rendered.contains("invalid_payload"),
                 "{label} should map to deterministic malformed-vault failure, got: {rendered}"
             );
         }
+    }
+
+    #[test]
+    fn backup_verify_rejects_cross_slot_password_confusion_with_decrypt_failed() {
+        let base = unique_test_path("backup-cross-slot-password-confusion");
+        let keystore_path = base.join("wallet.json");
+        let vault_path = base.join("vault.json");
+        fs::create_dir_all(&base).expect("create test directory");
+
+        let mut keystore = Keystore {
+            version: 1,
+            keys: vec![],
+        };
+        keystore.add_key(KeyRecord {
+            key_id: Uuid::new_v4(),
+            label: Some("cross-slot-password".to_string()),
+            public_key_hex: "66".repeat(32),
+            secret_key_hex: Some("77".repeat(32)),
+            encrypted_secret_key: None,
+            created_at: Utc::now().timestamp(),
+        });
+        keystore.save(&keystore_path).expect("save keystore");
+
+        backup_init(BackupInitArgs {
+            vault_path: vault_path.clone(),
+            portable_label: Some("usb-cross-slot".to_string()),
+            decoy_password: Some("decoy-pass".to_string()),
+            critical_password: Some("critical-pass".to_string()),
+            kdf_profile: BackupKdfProfile::Balanced,
+            json: true,
+            assume_removable_media_risk: true,
+        })
+        .expect("init vault");
+        backup_export_credentials(BackupExportArgs {
+            path: keystore_path,
+            vault_path: vault_path.clone(),
+            role: BackupSlotRole::Critical,
+            password: Some("critical-pass".to_string()),
+            scopes: vec![BackupExportScope::Keys],
+            assume_removable_media_risk: true,
+        })
+        .expect("export credentials");
+
+        let err = backup_verify(BackupVerifyArgs {
+            vault_path,
+            role: Some(BackupSlotRole::Critical),
+            password: Some("decoy-pass".to_string()),
+            json: true,
+        })
+        .expect_err("cross-slot password confusion should fail");
+
+        assert!(
+            err.to_string().contains("decrypt_failed"),
+            "expected deterministic decrypt_failed error identifier, got: {err}"
+        );
     }
 
     proptest! {
