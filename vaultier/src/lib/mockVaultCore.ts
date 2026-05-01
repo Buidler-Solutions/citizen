@@ -85,6 +85,7 @@ export async function createBackup(request: BackupRequest): Promise<BackupResult
 export async function verifyBackup(request: VerifyRequest): Promise<VerifyResult> {
   await wait(650);
   const verifiedAt = now();
+  const manifest = { signed: true, signatureKeyId: 'citizen-wallet-maintainers:v1', verified: true };
   return {
     verifiedAt,
     checks: [
@@ -92,7 +93,9 @@ export async function verifyBackup(request: VerifyRequest): Promise<VerifyResult
       { label: 'Slot inventory', status: 'ok', detail: 'Required decoy/critical metadata found.' },
       { label: 'Version compatibility', status: 'ok', detail: `Detected ${request.expectedVaultVersion}.` },
       { label: 'Portable profile', status: 'ok', detail: `Target ${request.targetPath} is portable-mode compatible.` },
+      { label: 'Signed manifest', status: manifest.verified ? 'ok' : 'warn', detail: manifest.verified ? `Verified using ${manifest.signatureKeyId}.` : 'Signature mismatch detected.' },
     ],
+    manifest,
     log: [
       { at: verifiedAt, action: 'vault.verify', status: 'ok', details: 'Deterministic verification checks completed.' },
     ],
@@ -135,6 +138,7 @@ export async function runHeadlessCommand(command: HeadlessCommand): Promise<Head
   if (command.command === 'backup_init') {
     const result = await createBackup(command);
     return {
+      schemaVersion: 'v1alpha1',
       ok: true,
       command: command.command,
       result: {
@@ -147,10 +151,12 @@ export async function runHeadlessCommand(command: HeadlessCommand): Promise<Head
   if (command.command === 'backup_verify') {
     const result = await verifyBackup(command);
     return {
+      schemaVersion: 'v1alpha1',
       ok: true,
       command: command.command,
       result: {
         verified_at: result.verifiedAt,
+        manifest: result.manifest,
         checks: result.checks,
         log: result.log,
       },
@@ -159,6 +165,7 @@ export async function runHeadlessCommand(command: HeadlessCommand): Promise<Head
 
   const result = await testRestore(command);
   return {
+    schemaVersion: 'v1alpha1',
     ok: true,
     command: command.command,
     result: {
