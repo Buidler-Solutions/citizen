@@ -39,7 +39,7 @@ This initiative should replicate key VeraCrypt-style operating properties while 
 - [ ] Support vault creation directly on mounted removable drives (Linux/macOS/Windows path semantics in scope).
 - [x] Add optional “portable mode” metadata for cross-machine restore checks.
 - [ ] Provide safe eject + write flush guidance in CLI and extension flows.
-- [~] Detect common removable-media failure modes (Vaultier now surfaces deterministic `media_unavailable` disconnect detection + refresh checks and existing filesystem compatibility warnings; partial-write runtime enforcement remains pending).
+- [~] Detect common removable-media failure modes (Vaultier now surfaces deterministic `media_unavailable` disconnect detection + refresh checks, existing filesystem compatibility warnings, and flush-strategy completeness enforcement before marking safe-eject complete; true runtime-backed partial-write prevention in desktop adapters remains pending).
 - [ ] Define minimum recommended USB durability/performance profile for operators.
 
 **Exit criteria**
@@ -249,7 +249,7 @@ To translate the CLI-first vault implementation into a polished portable app exp
 - [ ] Choose runtime shell (Tauri preferred for Rust-native crypto reuse; Electron only if extension parity requires it).
 - [ ] Package signed builds for macOS/Windows/Linux with reproducible build metadata.
 - [~] Implement removable-drive discovery abstraction with platform-specific adapters and deterministic error mapping (Vaultier now routes discovery through explicit per-platform adapter boundaries, deterministic media disconnect detection (`media_unavailable`), and a Tauri runtime bridge contract with deterministic compatibility/space/writability + bridge-unavailable error mapping; real OS-native adapters still pending).
-- [~] Add crash-safe write strategy (temp file + fsync + atomic rename) for vault container updates (Vaultier now exposes explicit flush workflow in UX plus a Tauri bridge contract for crash-safe strategy reporting; true runtime-backed write-path enforcement remains pending).
+- [~] Add crash-safe write strategy (temp file + fsync + atomic rename) for vault container updates (Vaultier now exposes explicit flush workflow in UX, validates required crash-safe steps before allowing safe-eject completion, and includes a Tauri bridge contract for strategy reporting; true runtime-backed write-path enforcement remains pending).
 - [ ] Add secure memory handling audit for desktop bridge boundaries (Rust core <-> UI layer).
 
 ### Security & Integrity UX
