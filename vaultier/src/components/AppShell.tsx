@@ -108,5 +108,15 @@ export function AppShell() {
       <label className="inline-control"><input type="checkbox" checked={reminderPolicy.enabled} onChange={() => setReminderPolicy((p) => ({ ...p, enabled: !p.enabled }))} />Enable verification reminders</label>
       <label>Reminder cadence (days)<input type="number" min={7} max={365} value={reminderPolicy.cadenceDays} onChange={(e) => setReminderPolicy((p) => ({ ...p, cadenceDays: Number(e.target.value) || p.cadenceDays }))} /></label>
       <h3>Operation log</h3><ul className="log-list">{logs.map((entry) => <li key={`${entry.at}-${entry.action}`}>{entry.at} · {entry.action} · {entry.status} · {entry.details}</li>)}</ul><button disabled={!profile} onClick={runExportDiagnostics}>Export diagnostics</button>{diagnosticBundle && <details><summary>Latest diagnostic bundle</summary><pre>{JSON.stringify(diagnosticBundle, null, 2)}</pre></details>}</section>
+    <section className="card">
+      <h2>What this cannot protect against</h2>
+      <ul className="log-list">
+        <li>Malware running on an unlocked host that captures passphrases or screenshots.</li>
+        <li>Coercion or legal compulsion; decoy workflows reduce disclosure pressure but are not absolute protection.</li>
+        <li>Destructive media failure without a second verified backup copy on separate hardware.</li>
+        <li>Operator mistakes after restore (e.g., not rotating credentials for suspected compromise scenarios).</li>
+      </ul>
+      <p className="hint">Always keep at least two verified removable backups stored in different physical locations.</p>
+    </section>
   </main>;
 }
