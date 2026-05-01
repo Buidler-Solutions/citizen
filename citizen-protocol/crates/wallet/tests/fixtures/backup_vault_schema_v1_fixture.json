@@ -1,0 +1,63 @@
+{
+  "schema": "citizen.wallet.backup.v1",
+  "version": 1,
+  "portable_label": "usb-primary-a",
+  "created_at": 1736500000,
+  "slots": [
+    {
+      "role": "decoy",
+      "scopes": [
+        "keys"
+      ],
+      "encrypted_payload": {
+        "algorithm": "argon2id-aes256gcm",
+        "ciphertext_hex": "00",
+        "nonce_hex": "00112233445566778899aabb",
+        "salt_hex": "00112233445566778899aabbccddeeff",
+        "kdf_params": {
+          "memory_kib": 65536,
+          "iterations": 3,
+          "parallelism": 1,
+          "output_length": 32
+        },
+        "kdf": "argon2id"
+      },
+      "exported_at": 1736500001,
+      "payload_sha256": "abcd",
+      "signed_manifest": {
+        "schema": "citizen.wallet.backup.manifest.v1",
+        "key_id": "citizen-wallet-maintainers:v1",
+        "signed_at": 1736500002,
+        "payload_sha256": "abcd"
+      }
+    },
+    {
+      "role": "critical",
+      "scopes": [
+        "keys",
+        "recovery-metadata"
+      ],
+      "encrypted_payload": {
+        "algorithm": "argon2id-aes256gcm",
+        "ciphertext_hex": "11",
+        "nonce_hex": "ffeeddccbbaa998877665544",
+        "salt_hex": "ffeeddccbbaa99887766554433221100",
+        "kdf_params": {
+          "memory_kib": 65536,
+          "iterations": 3,
+          "parallelism": 1,
+          "output_length": 32
+        },
+        "kdf": "argon2id"
+      },
+      "exported_at": 1736500003,
+      "payload_sha256": "ef01",
+      "signed_manifest": {
+        "schema": "citizen.wallet.backup.manifest.v1",
+        "key_id": "citizen-wallet-maintainers:v1",
+        "signed_at": 1736500004,
+        "payload_sha256": "ef01"
+      }
+    }
+  ]
+}
