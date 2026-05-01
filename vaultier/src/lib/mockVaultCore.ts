@@ -20,6 +20,7 @@ import type {
   PerformanceMeasurement,
   CrashSafeWriteStep,
   RedactionScanResult,
+  BackupCandidate,
 } from './types';
 import { detectRuntimeShell, discoverDrivesViaTauri, flushViaTauri } from './runtimeBridge';
 
@@ -277,6 +278,7 @@ export async function verifyBackup(request: VerifyRequest): Promise<VerifyResult
 export async function testRestore(request: RestoreRequest): Promise<RestoreResult> {
   await wait(900);
   const restoredAt = now();
+  const selectedBackup = selectDeterministicRestoreCandidate(request.backupCandidates);
   const restoredArtifacts = [
     request.restoreIdentityKeys && 'identity_keys',
     request.restoreAccountKeys && 'account_keys',
@@ -288,10 +290,40 @@ export async function testRestore(request: RestoreRequest): Promise<RestoreResul
     restoredRole: request.role,
     restoredArtifacts,
     log: [
+      ...(selectedBackup
+        ? [
+            {
+              at: restoredAt,
+              action: 'vault.restore.selection',
+              status: 'ok' as const,
+              details: `Selected ${selectedBackup.id} by deterministic ordering (verified_at DESC, created_at DESC, id ASC).`,
+            },
+          ]
+        : []),
       { at: restoredAt, action: 'vault.restore.simulation', status: 'ok', details: `Restore simulation completed using ${request.role} slot.` },
       { at: restoredAt, action: 'wallet.recover', status: 'ok', details: `Recovered artifacts: ${restoredArtifacts.join(', ') || 'none selected'}.` },
     ],
+    selectedBackupId: selectedBackup?.id,
   };
+}
+
+function selectDeterministicRestoreCandidate(candidates?: BackupCandidate[]): BackupCandidate | undefined {
+  if (!candidates?.length) {
+    return undefined;
+  }
+  return [...candidates].sort((a, b) => {
+    const aVerified = a.verifiedAt ? Date.parse(a.verifiedAt) : Number.NEGATIVE_INFINITY;
+    const bVerified = b.verifiedAt ? Date.parse(b.verifiedAt) : Number.NEGATIVE_INFINITY;
+    if (aVerified !== bVerified) {
+      return bVerified - aVerified;
+    }
+    const aCreated = Date.parse(a.createdAt);
+    const bCreated = Date.parse(b.createdAt);
+    if (aCreated !== bCreated) {
+      return bCreated - aCreated;
+    }
+    return a.id.localeCompare(b.id);
+  })[0];
 }
 
 export async function exportDiagnosticBundle(profile: PortableProfile, recentLogs: OperationLog[], recentErrors: string[], performanceMeasurements: PerformanceMeasurement[]): Promise<DiagnosticBundle> {
@@ -374,6 +406,7 @@ export async function runHeadlessCommand(command: HeadlessCommand): Promise<Head
       restored_at: result.restoredAt,
       restored_role: result.restoredRole,
       restored_artifacts: result.restoredArtifacts,
+      selected_backup_id: result.selectedBackupId,
       log: result.log,
     },
   };
