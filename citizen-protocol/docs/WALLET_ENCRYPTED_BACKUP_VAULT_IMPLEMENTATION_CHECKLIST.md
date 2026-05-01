@@ -255,3 +255,49 @@ For first mergeable implementation slice, require:
 - [ ] Remote backup adapter requirements and trust boundaries.
 - [ ] Enterprise policy hooks (mandatory periodic verify, escrow prohibitions, audit evidence).
 - [ ] Long-term cryptographic agility strategy.
+
+---
+
+## Implementation Continuation Plan (2026-05-01)
+
+This section extends the checklist with concrete near-term implementation work items so the next slices can be merged without reopening architecture decisions already settled in the current CLI-first baseline.
+
+### Next Slice A — Format/crypto hardening in current wallet crate scope
+
+- [ ] Finalize AEAD selection and document nonce policy in code comments + vault format notes (target: `XChaCha20-Poly1305`, unless wallet maintainers decide otherwise during review).
+- [ ] Add explicit authenticated header fields for:
+  - [ ] schema version
+  - [ ] slot role
+  - [ ] KDF parameter set identifier
+  - [ ] payload checksum algorithm identifier
+- [ ] Add deterministic vault corruption error mapping (`unsupported_schema`, `invalid_header`, `auth_failed`, `checksum_mismatch`, `slot_missing`) and ensure `--json` output uses stable identifiers.
+- [ ] Add anti-rollback monotonic counter field in slot metadata with deterministic validation behavior.
+
+**Exit criteria**
+- [ ] CLI round-trip fixtures pass across two independently generated vaults using the finalized format contract.
+- [ ] A short “format stability” note is added to this document and linked from wallet CLI docs.
+
+### Next Slice B — USB/operator reliability and runbook closure
+
+- [ ] Add CLI warnings and guidance for removable-media risks (partial write, unplug during flush, filesystem limits) in `init`, `export-credentials`, and `restore` command output/help text.
+- [ ] Add operator drill: “create on USB A, verify on machine 1, restore on machine 2”.
+- [ ] Add explicit duplicate-media procedure (primary + sealed backup + verification cadence).
+- [ ] Document minimum operator profile recommendations:
+  - [ ] removable media class/durability expectations
+  - [ ] expected free space margin
+  - [ ] integrity recheck interval guidance
+
+**Exit criteria**
+- [ ] USB hygiene section is present in wallet runbook docs and cross-linked from this checklist.
+- [ ] At least one end-to-end drill record is captured in docs with observed caveats.
+
+### Next Slice C — Test matrix closure for GA-v1 candidate
+
+- [ ] Add fuzz/property harness for malformed/truncated vault files and randomized metadata mutation.
+- [ ] Add performance bench for unlock/verify latency with the default Argon2id profile.
+- [ ] Add regression fixtures for role mismatch and cross-slot password confusion cases.
+- [ ] Ensure backup-vault suite is wired into CI for wallet crate changes.
+
+**Exit criteria**
+- [ ] CI gate includes unit + integration + adversarial + fuzz/property coverage for backup-vault code paths.
+- [ ] No unresolved critical severity findings remain in wallet backup security review notes.
