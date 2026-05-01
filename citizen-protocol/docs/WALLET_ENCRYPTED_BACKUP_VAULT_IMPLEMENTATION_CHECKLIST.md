@@ -198,6 +198,45 @@ This initiative should replicate key VeraCrypt-style operating properties while 
 
 ---
 
+
+## Portable Application Track (Working + Sleek)
+
+To translate the CLI-first vault implementation into a polished portable app experience, execute this cross-platform track in parallel with Checkpoints 5–9.
+
+### UX/Product Requirements
+
+- [ ] Single-screen “Create Backup” flow with explicit decoy/critical slot setup and progress feedback.
+- [ ] Guided “Verify Backup” and “Test Restore” flows with plain-language status + deterministic technical details (expandable).
+- [ ] Portable-mode profile card showing USB label, vault version, created timestamp, and last verification timestamp.
+- [ ] Safe-removal checklist before app exit (flush complete, verification complete, duplicate media recommendation).
+- [ ] Accessibility baseline: keyboard-first navigation, screen-reader labels, and high-contrast compatible theme tokens.
+
+### Desktop Packaging & Runtime
+
+- [ ] Choose runtime shell (Tauri preferred for Rust-native crypto reuse; Electron only if extension parity requires it).
+- [ ] Package signed builds for macOS/Windows/Linux with reproducible build metadata.
+- [ ] Implement removable-drive discovery abstraction with platform-specific adapters and deterministic error mapping.
+- [ ] Add crash-safe write strategy (temp file + fsync + atomic rename) for vault container updates.
+- [ ] Add secure memory handling audit for desktop bridge boundaries (Rust core <-> UI layer).
+
+### Security & Integrity UX
+
+- [ ] Passphrase strength meter tied to documented entropy thresholds (not vanity score-only meters).
+- [ ] Optional unlock delay/backoff UX aligned with CLI wrong-passphrase throttling semantics.
+- [ ] Human-readable tamper warnings mapped 1:1 to deterministic error codes from wallet core.
+- [ ] “What this cannot protect against” panel shown during setup and restore confirmation.
+
+### Operator/Builder Ergonomics
+
+- [ ] Export diagnostic bundle (non-secret) containing version, platform, vault header metadata, and recent operation logs.
+- [ ] Add scriptable headless mode parity for CI/recovery labs using the same command contract as `wallet backup ... --json`.
+- [ ] Publish app-to-CLI compatibility matrix per release (vault format version, schema version, migration notes).
+
+**Exit criteria**
+- [ ] Portable app passes cross-platform smoke suite (create/add-slot/export/verify/restore/eject guidance).
+- [ ] UX review sign-off confirms “working and sleek” bar: <3 minute guided backup, no ambiguous error copy, consistent visual hierarchy.
+- [ ] Security review confirms no plaintext secret exposure across UI bridge, logs, or crash artifacts.
+
 ## Checkpoint 9 — Rollout Plan
 
 - [ ] Phase 1: feature-flagged alpha for internal maintainers.
@@ -222,7 +261,7 @@ For first mergeable implementation slice, require:
 - [x] Integrity verification command and deterministic error codes.
 - [x] Basic runbook and threat model document.
 
-### Implementation Status Notes (as of 2026-04-30)
+### Implementation Status Notes (as of 2026-05-01)
 
 - `wallet backup` CLI command group is implemented with: `init`, `add-slot`, `export-credentials`, `verify`, and `restore`.
 - Vault schema scaffold `citizen.wallet.backup.v1` exists with role metadata for `decoy` and `critical`.
