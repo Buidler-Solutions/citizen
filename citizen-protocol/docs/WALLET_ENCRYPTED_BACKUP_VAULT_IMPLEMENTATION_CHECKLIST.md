@@ -206,7 +206,7 @@ This initiative should replicate key VeraCrypt-style operating properties while 
 
 - [x] Finalize vault format/versioning contract and deterministic error taxonomy for all `wallet backup` commands (Vaultier headless adapter and wallet CLI now emit explicit contract-version fields alongside deterministic error codes for verify/restore automation paths).
 - [ ] Complete cryptography closure items:
-  - [ ] finalized AEAD + nonce/IV policy documentation,
+  - [~] finalized AEAD + nonce/IV policy documentation (wallet decrypt-path now enforces deterministic ChaCha20-Poly1305 nonce length validation and tamper-failure coverage; consolidated policy doc update still pending),
   - [ ] key-derivation parameter profile hardening guidance,
   - [ ] committed test vectors for encrypt/decrypt/tamper failure paths.
 - [x] Add signed manifest verification for backup bundles and verify-path enforcement (Vaultier verify flow and `wallet backup verify`/`wallet backup restore` now enforce required per-slot signed manifest presence + deterministic key-id/schema/hash checks).
