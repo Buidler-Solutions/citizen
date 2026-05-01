@@ -66,4 +66,11 @@ export type RemovableDrive = {
   mountPath: string;
   platform: 'macos' | 'windows' | 'linux';
   filesystem: 'exfat' | 'ntfs' | 'fat32' | 'ext4' | 'apfs';
+  writable: boolean;
+  estimatedFreeGb: number;
+};
+
+export type DriveDiscoveryResult = {
+  drives: RemovableDrive[];
+  errors: Array<{ mountPath: string; code: 'mount_unwritable' | 'media_unavailable' | 'path_invalid'; detail: string }>;
 };
