@@ -198,6 +198,39 @@ This initiative should replicate key VeraCrypt-style operating properties while 
 
 ---
 
+## Checkpoint 8.5 — Priority Gate: CLI Production-Grade Readiness (Blocker Before Vaultier Continuation)
+
+> Priority directive: complete this checkpoint before continuing Vaultier real-runtime integration beyond mock adapter boundaries.
+>
+> Maintenance reminder: whenever any task in this checklist is implemented, update this file in the same change set so status/exit criteria remain current.
+
+- [ ] Finalize vault format/versioning contract and deterministic error taxonomy for all `wallet backup` commands.
+- [ ] Complete cryptography closure items:
+  - [ ] finalized AEAD + nonce/IV policy documentation,
+  - [ ] key-derivation parameter profile hardening guidance,
+  - [ ] committed test vectors for encrypt/decrypt/tamper failure paths.
+- [ ] Add signed manifest verification for backup bundles and verify-path enforcement.
+- [ ] Add removable-media safety hardening in command help/output:
+  - [ ] explicit unplug-during-write risk warning,
+  - [ ] explicit flush/safe-eject guidance,
+  - [ ] filesystem compatibility warning copy.
+- [ ] Add property/fuzz coverage for malformed headers, truncated ciphertext, and random bit-flip tamper cases.
+- [ ] Add unlock/export/restore performance targets with measurable thresholds and evidence logs.
+- [ ] Add CI regression fixtures + compatibility gate for vault format/schema stability.
+- [ ] Complete disaster-recovery runbook closure for:
+  - [ ] corrupted/partial backup recovery,
+  - [ ] deterministic restore ordering in multi-backup scenarios,
+  - [ ] key rotation guidance after restore.
+- [ ] Execute wallet+crypto maintainer review and record production-security sign-off outcome.
+
+**Exit criteria**
+- [ ] `wallet backup` command suite has no open critical/high security findings.
+- [ ] Required CI suite (unit + integration + fuzz/property + performance envelope checks) is green.
+- [ ] CLI JSON contract is versioned and validated against documentation examples.
+- [ ] Vaultier integration track may proceed to real runtime bridge only after this checkpoint is accepted.
+
+---
+
 
 ## Portable Application Track (Working + Sleek)
 
