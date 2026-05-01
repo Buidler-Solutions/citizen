@@ -116,6 +116,11 @@ export type HeadlessResponse = {
   };
 };
 
+export type RedactionScanResult = {
+  ok: boolean;
+  redactedFields: string[];
+};
+
 export type VaultierErrorCode =
   | 'path_invalid'
   | 'mount_unwritable'
@@ -126,7 +131,8 @@ export type VaultierErrorCode =
   | 'manifest_signature_invalid'
   | 'header_auth_failed'
   | 'slot_table_tampered'
-  | 'rollback_counter_mismatch';
+  | 'rollback_counter_mismatch'
+  | 'invalid_payload';
 
 export type RemovableDrive = {
   id: string;

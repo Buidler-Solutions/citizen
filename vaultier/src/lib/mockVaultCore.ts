@@ -19,6 +19,7 @@ import type {
   DriveRecord,
   PerformanceMeasurement,
   CrashSafeWriteStep,
+  RedactionScanResult,
 } from './types';
 import { detectRuntimeShell, discoverDrivesViaTauri, flushViaTauri } from './runtimeBridge';
 
@@ -36,6 +37,27 @@ type DriveDiscoveryAdapter = {
 
 const supportedFilesystems: Array<DriveRecord['filesystem']> = ['exfat', 'ntfs', 'apfs', 'ext4'];
 const REQUIRED_CRASH_SAFE_STEPS: CrashSafeWriteStep['step'][] = ['temp_write', 'fsync_file', 'atomic_rename', 'fsync_parent'];
+const SECRET_FIELD_MARKERS = ['passphrase', 'password', 'secret', 'seed', 'private_key', 'mnemonic'];
+
+function scanForSecretFields(payload: unknown): RedactionScanResult {
+  const redactedFields: string[] = [];
+
+  const walk = (value: unknown, path: string) => {
+    if (!value || typeof value !== 'object') {
+      return;
+    }
+    for (const [key, nested] of Object.entries(value as Record<string, unknown>)) {
+      const lower = key.toLowerCase();
+      if (SECRET_FIELD_MARKERS.some((marker) => lower.includes(marker))) {
+        redactedFields.push(path ? `${path}.${key}` : key);
+      }
+      walk(nested, path ? `${path}.${key}` : key);
+    }
+  };
+
+  walk(payload, '');
+  return { ok: redactedFields.length === 0, redactedFields };
+}
 
 function isCrashSafeStrategyComplete(strategy: CrashSafeWriteStep[]): boolean {
   const seen = new Set(strategy.filter((item) => item.status === 'ok').map((item) => item.step));
@@ -303,7 +325,7 @@ export async function runHeadlessCommand(command: HeadlessCommand): Promise<Head
       return fail('critical_entropy_too_low', 'At least one slot role is required.');
     }
     const result = await createBackup(command);
-    return {
+    const response: HeadlessResponse = {
       schemaVersion: 'v1alpha1',
       contractVersion: '2026-05-01',
       ok: true,
@@ -314,6 +336,8 @@ export async function runHeadlessCommand(command: HeadlessCommand): Promise<Head
         log: result.log,
       },
     };
+    const redaction = scanForSecretFields(response.result);
+    return redaction.ok ? response : fail('invalid_payload', `Response contained redaction-blocked fields: ${redaction.redactedFields.join(', ')}`);
   }
 
   if (command.command === 'backup_verify') {
@@ -324,7 +348,7 @@ export async function runHeadlessCommand(command: HeadlessCommand): Promise<Head
     if (!result.manifest.verified) {
       return fail('manifest_signature_invalid', 'Manifest signature verification failed.');
     }
-    return {
+    const response: HeadlessResponse = {
       schemaVersion: 'v1alpha1',
       contractVersion: '2026-05-01',
       ok: true,
@@ -336,10 +360,12 @@ export async function runHeadlessCommand(command: HeadlessCommand): Promise<Head
         log: result.log,
       },
     };
+    const redaction = scanForSecretFields(response.result);
+    return redaction.ok ? response : fail('invalid_payload', `Response contained redaction-blocked fields: ${redaction.redactedFields.join(', ')}`);
   }
 
   const result = await testRestore(command);
-  return {
+  const response: HeadlessResponse = {
     schemaVersion: 'v1alpha1',
     contractVersion: '2026-05-01',
     ok: true,
@@ -351,4 +377,6 @@ export async function runHeadlessCommand(command: HeadlessCommand): Promise<Head
       log: result.log,
     },
   };
+  const redaction = scanForSecretFields(response.result);
+  return redaction.ok ? response : fail('invalid_payload', `Response contained redaction-blocked fields: ${redaction.redactedFields.join(', ')}`);
 }
