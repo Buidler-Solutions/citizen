@@ -1,10 +1,15 @@
-import type { CrashSafeWriteStep, DriveProbeIssue, DriveRecord, RuntimePlatform, RuntimeShell } from './types';
+import type { CrashSafeWriteStep, DriveProbeIssue, DriveRecord, HeadlessCommand, HeadlessResponse, RuntimePlatform, RuntimeShell } from './types';
 
 type BridgeDrive = DriveRecord & { platform: RuntimePlatform };
 
 type TauriBridgeApi = {
   discover_removable_drives: () => Promise<{ drives: BridgeDrive[] }>;
   flush_vault_writes: (payload: { targetPath: string }) => Promise<{ strategy: CrashSafeWriteStep[] }>;
+  backup_init: (payload: Omit<Extract<HeadlessCommand, { command: 'backup_init' }>, 'command'>) => Promise<HeadlessResponse>;
+  backup_add_slot: (payload: Omit<Extract<HeadlessCommand, { command: 'backup_add_slot' }>, 'command'>) => Promise<HeadlessResponse>;
+  backup_export_credentials: (payload: Omit<Extract<HeadlessCommand, { command: 'backup_export_credentials' }>, 'command'>) => Promise<HeadlessResponse>;
+  backup_verify: (payload: Omit<Extract<HeadlessCommand, { command: 'backup_verify' }>, 'command'>) => Promise<HeadlessResponse>;
+  backup_restore: (payload: Omit<Extract<HeadlessCommand, { command: 'backup_restore' }>, 'command'>) => Promise<HeadlessResponse>;
 };
 
 const hasTauriRuntime = () => typeof window !== 'undefined' && '__TAURI__' in window;
@@ -54,4 +59,9 @@ export async function flushViaTauri(targetPath: string): Promise<{ strategy: Cra
       },
     };
   }
+}
+
+export async function invokeBackupCommandViaTauri(command: HeadlessCommand): Promise<HeadlessResponse> {
+  const { command: commandName, ...payload } = command;
+  return invokeTauri<HeadlessResponse>(commandName, payload);
 }

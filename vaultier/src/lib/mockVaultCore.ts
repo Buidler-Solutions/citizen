@@ -22,7 +22,7 @@ import type {
   RedactionScanResult,
   BackupCandidate,
 } from './types';
-import { detectRuntimeShell, discoverDrivesViaTauri, flushViaTauri } from './runtimeBridge';
+import { detectRuntimeShell, discoverDrivesViaTauri, flushViaTauri, invokeBackupCommandViaTauri } from './runtimeBridge';
 
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 const now = () => new Date().toISOString();
@@ -340,6 +340,23 @@ export async function exportDiagnosticBundle(profile: PortableProfile, recentLog
 }
 
 export async function runHeadlessCommand(command: HeadlessCommand): Promise<HeadlessResponse> {
+  if (getRuntimeShell() === 'tauri') {
+    try {
+      return await invokeBackupCommandViaTauri(command);
+    } catch {
+      return {
+        schemaVersion: 'v1alpha1',
+        contractVersion: '2026-05-01',
+        ok: false,
+        command: command.command,
+        error: {
+          code: 'invalid_payload',
+          message: `Runtime bridge call failed for ${command.command}.`,
+        },
+      };
+    }
+  }
+
   const fail = (code: VaultierErrorCode, message: string): HeadlessResponse => ({
     schemaVersion: 'v1alpha1',
     contractVersion: '2026-05-01',
@@ -370,6 +387,41 @@ export async function runHeadlessCommand(command: HeadlessCommand): Promise<Head
     };
     const redaction = scanForSecretFields(response.result);
     return redaction.ok ? response : fail('invalid_payload', `Response contained redaction-blocked fields: ${redaction.redactedFields.join(', ')}`);
+  }
+
+  if (command.command === 'backup_add_slot') {
+    const response: HeadlessResponse = {
+      schemaVersion: 'v1alpha1',
+      contractVersion: '2026-05-01',
+      ok: true,
+      command: command.command,
+      result: {
+        added_role: command.role,
+        target_path: command.targetPath,
+        log: [{ at: now(), action: 'vault.slot.add', status: 'ok', details: `Added ${command.role} slot metadata.` }],
+      },
+    };
+    return response;
+  }
+
+  if (command.command === 'backup_export_credentials') {
+    const exportedArtifacts = [
+      command.includeIdentityKeys && 'identity_keys',
+      command.includeAccountKeys && 'account_keys',
+      command.includeConsentReceipts && 'consent_receipts',
+    ].filter(Boolean) as string[];
+    const response: HeadlessResponse = {
+      schemaVersion: 'v1alpha1',
+      contractVersion: '2026-05-01',
+      ok: true,
+      command: command.command,
+      result: {
+        role: command.role,
+        exported_artifacts: exportedArtifacts,
+        log: [{ at: now(), action: 'wallet.export', status: 'ok', details: `Exported: ${exportedArtifacts.join(', ') || 'none selected'}.` }],
+      },
+    };
+    return response;
   }
 
   if (command.command === 'backup_verify') {

@@ -96,6 +96,15 @@ export type DiagnosticBundle = {
 
 export type HeadlessCommand =
   | { command: 'backup_init'; targetPath: string; roles: VaultRole[]; includeConsentReceipts: boolean; portableMode: boolean }
+  | { command: 'backup_add_slot'; targetPath: string; role: VaultRole }
+  | {
+      command: 'backup_export_credentials';
+      targetPath: string;
+      role: VaultRole;
+      includeIdentityKeys: boolean;
+      includeAccountKeys: boolean;
+      includeConsentReceipts: boolean;
+    }
   | {
       command: 'backup_verify';
       targetPath: string;

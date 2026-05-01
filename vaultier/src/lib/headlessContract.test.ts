@@ -28,6 +28,27 @@ async function main() {
   assert(!!init.result, 'backup_init result missing');
   assertKeys(init.result as Record<string, unknown>, ['kdf_profile', 'log', 'profile'], 'backup_init');
 
+  const addSlot = await runHeadlessCommand({
+    command: 'backup_add_slot',
+    targetPath: '/Volumes/CITIZEN_USB',
+    role: 'critical',
+  });
+  assert(addSlot.ok === true, 'backup_add_slot should succeed');
+  assert(!!addSlot.result, 'backup_add_slot result missing');
+  assertKeys(addSlot.result as Record<string, unknown>, ['added_role', 'log', 'target_path'], 'backup_add_slot');
+
+  const exportCredentials = await runHeadlessCommand({
+    command: 'backup_export_credentials',
+    targetPath: '/Volumes/CITIZEN_USB',
+    role: 'critical',
+    includeIdentityKeys: true,
+    includeAccountKeys: true,
+    includeConsentReceipts: false,
+  });
+  assert(exportCredentials.ok === true, 'backup_export_credentials should succeed');
+  assert(!!exportCredentials.result, 'backup_export_credentials result missing');
+  assertKeys(exportCredentials.result as Record<string, unknown>, ['exported_artifacts', 'log', 'role'], 'backup_export_credentials');
+
   const verify = await runHeadlessCommand({
     command: 'backup_verify',
     targetPath: '/Volumes/CITIZEN_USB',
