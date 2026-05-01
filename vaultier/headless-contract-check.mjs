@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
 const source = readFileSync(new URL('./src/lib/mockVaultCore.ts', import.meta.url), 'utf8');
+assert.match(readFileSync(new URL('./src/lib/runtimeBridge.ts', import.meta.url), 'utf8'), /sanitizeTauriPayloadForLogs/, 'tauri payload sanitization helper missing');
 
 assert.match(source, /contractVersion:\s*'2026-05-01'/, 'contractVersion must remain pinned');
 assert.match(source, /schemaVersion:\s*'v1alpha1'/, 'schemaVersion must remain pinned');

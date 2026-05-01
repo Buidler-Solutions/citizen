@@ -14,6 +14,29 @@ type TauriBridgeApi = {
 
 const hasTauriRuntime = () => typeof window !== 'undefined' && '__TAURI__' in window;
 
+const SECRET_KEY_MARKERS = ['passphrase', 'password', 'secret', 'seed', 'mnemonic', 'privatekey', 'private_key'];
+
+function sanitizePayload(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map((item) => sanitizePayload(item));
+  }
+  if (!value || typeof value !== 'object') {
+    return value;
+  }
+
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>).map(([key, nested]) => {
+      const lowered = key.toLowerCase();
+      const isSecret = SECRET_KEY_MARKERS.some((marker) => lowered.includes(marker));
+      return [key, isSecret ? '[REDACTED]' : sanitizePayload(nested)];
+    }),
+  );
+}
+
+export function sanitizeTauriPayloadForLogs(payload: unknown): unknown {
+  return sanitizePayload(payload);
+}
+
 async function invokeTauri<T>(command: keyof TauriBridgeApi, payload?: unknown): Promise<T> {
   const tauri = (window as unknown as { __TAURI__?: { core?: { invoke?: <R>(name: string, args?: unknown) => Promise<R> } } }).__TAURI__;
   const invoke = tauri?.core?.invoke;
@@ -63,5 +86,14 @@ export async function flushViaTauri(targetPath: string): Promise<{ strategy: Cra
 
 export async function invokeBackupCommandViaTauri(command: HeadlessCommand): Promise<HeadlessResponse> {
   const { command: commandName, ...payload } = command;
-  return invokeTauri<HeadlessResponse>(commandName, payload);
+  const sanitizedPayload = sanitizePayload(payload);
+
+  try {
+    return await invokeTauri<HeadlessResponse>(commandName, payload);
+  } catch (error) {
+    const details = JSON.stringify(sanitizedPayload);
+    const wrapped = new Error(`tauri_${commandName}_failed:${details}`);
+    (wrapped as Error & { cause?: unknown }).cause = error;
+    throw wrapped;
+  }
 }
