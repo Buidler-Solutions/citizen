@@ -206,8 +206,8 @@ This initiative should replicate key VeraCrypt-style operating properties while 
 
 - [x] Finalize vault format/versioning contract and deterministic error taxonomy for all `wallet backup` commands (Vaultier headless adapter and wallet CLI now emit explicit contract-version fields alongside deterministic error codes for verify/restore automation paths).
 - [ ] Complete cryptography closure items:
-  - [~] finalized AEAD + nonce/IV policy documentation (wallet decrypt-path now enforces deterministic ChaCha20-Poly1305 nonce length validation and tamper-failure coverage; consolidated policy doc update still pending),
-  - [~] key-derivation parameter profile hardening guidance (Vaultier headless `backup_init` now emits deterministic Argon2id profile/parameter metadata for balanced vs critical-hardened workflows with explicit `critical-hardened` profile naming, and wallet CLI now mirrors profile selection/JSON emission via `wallet backup init --kdf-profile ... --json`; final maintainer guidance doc is still pending),
+  - [x] finalized AEAD + nonce/IV policy documentation (consolidated policy now captured in `citizen-protocol/docs/WALLET_BACKUP_CRYPTO_POLICY.md`, aligned with deterministic ChaCha20-Poly1305 nonce-length validation and tamper-failure coverage),
+  - [x] key-derivation parameter profile hardening guidance (maintainer/operator guidance now documented in `citizen-protocol/docs/WALLET_BACKUP_CRYPTO_POLICY.md`, with `balanced` vs `critical-hardened` Argon2id profile expectations aligned to CLI/Vaultier JSON contract output),
   - [x] committed test vectors for encrypt/decrypt/tamper failure paths (wallet crate now includes a deterministic Argon2id + ChaCha20-Poly1305 backup payload vector assertion with decrypt success + tamper-failure coverage).
 - [x] Add signed manifest verification for backup bundles and verify-path enforcement (Vaultier verify flow and `wallet backup verify`/`wallet backup restore` now enforce required per-slot signed manifest presence + deterministic key-id/schema/hash checks).
 - [~] Add removable-media safety hardening in command help/output:
