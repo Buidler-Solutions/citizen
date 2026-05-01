@@ -72,3 +72,4 @@ explorer/backend/.citizen/indexer-metrics-state.json
 mempalace.yaml
 entities.json
 vaultier/node_modules/
+vaultier/dist/
