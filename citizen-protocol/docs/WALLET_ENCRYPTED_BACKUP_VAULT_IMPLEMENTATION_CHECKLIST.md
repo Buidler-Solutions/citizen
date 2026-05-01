@@ -205,9 +205,9 @@ To translate the CLI-first vault implementation into a polished portable app exp
 
 ### UX/Product Requirements
 
-- [ ] Single-screen “Create Backup” flow with explicit decoy/critical slot setup and progress feedback.
+- [x] Single-screen “Create Backup” flow with explicit decoy/critical slot setup and progress feedback (initial `vaultier/` scaffold).
 - [ ] Guided “Verify Backup” and “Test Restore” flows with plain-language status + deterministic technical details (expandable).
-- [ ] Portable-mode profile card showing USB label, vault version, created timestamp, and last verification timestamp.
+- [x] Portable-mode profile card showing USB label, vault version, created timestamp, and last verification timestamp (initial `vaultier/` scaffold).
 - [ ] Safe-removal checklist before app exit (flush complete, verification complete, duplicate media recommendation).
 - [ ] Accessibility baseline: keyboard-first navigation, screen-reader labels, and high-contrast compatible theme tokens.
 

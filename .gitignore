@@ -71,3 +71,4 @@ explorer/backend/.citizen/indexer-metrics-state.json
 # MemPalace per-project files (issue #185)
 mempalace.yaml
 entities.json
+vaultier/node_modules/
