@@ -427,3 +427,55 @@ This slice starts the desktop productization track without blocking on extension
 | USB operational safety guidance | In progress | Checklist and threat model mention hygiene; command-level warning copy/runbook closure pending (PR-D2). |
 | Fuzz/property vault corruption harness | In progress | Tamper checks exist; dedicated malformed-vault/property suite pending (PR-D3). |
 | Versioned format spec | In progress | Schema name is stable in code; standalone spec/migration doc pending (PR-D4). |
+
+### Next Slice F — Portable app implementation backlog (execution-ready)
+
+Use this backlog to convert the portable app milestone tracker into small implementation PRs that can land continuously while preserving the existing CLI contract as source-of-truth.
+
+1. **PR-F1: Wallet core bridge crate + DTO lock-in**
+   - [ ] Add a desktop-facing Rust bridge module (or crate) that wraps backup operations with typed DTOs matching CLI JSON fields.
+   - [ ] Add schema tests that assert desktop DTO responses remain field-compatible with `wallet backup ... --json` for `init`, `verify`, and `restore`.
+   - [ ] Add redaction tests proving no passphrase/secret fields are serializable in bridge response payloads.
+
+2. **PR-F2: Deterministic removable-drive preflight**
+   - [ ] Implement preflight checks: writable mount, minimum free space threshold, filename/path compatibility checks, and explicit “removable media likely/unknown” classification.
+   - [ ] Map preflight failures into deterministic UI-safe error identifiers (`mount_unwritable`, `insufficient_space`, `path_invalid`, `media_unavailable`).
+   - [ ] Add tests for Linux/macOS/Windows path-shape normalization and cross-platform error parity.
+
+3. **PR-F3: UX state contract + copy pack v1**
+   - [ ] Define a shared operation-state contract for app flows (`idle`, `preflight`, `writing`, `flushing`, `verify_required`, `completed`, `action_required`).
+   - [ ] Add deterministic human-copy mapping for each state + each deterministic error identifier from wallet core.
+   - [ ] Add snapshot tests to prevent accidental drift in warning copy, especially safe-removal and corruption warnings.
+
+4. **PR-F4: Portable profile + verification cadence reminders**
+   - [ ] Persist non-secret profile metadata (`portable_label`, `created_at`, `last_verified_at`, `schema_version`) in app-local settings.
+   - [ ] Add reminder policy defaults (for example: 30-day verify prompt) with user-configurable cadence and explicit opt-out logging.
+   - [ ] Add reminder tests covering timezone-safe date arithmetic and deterministic next-reminder calculation.
+
+5. **PR-F5: Desktop smoke and packaging gate**
+   - [ ] Add CI smoke workflow that runs create/add-slot/export/verify/restore against ephemeral temp volumes per OS runner.
+   - [ ] Produce signed/nightly artifacts with reproducible build metadata attached to release notes.
+   - [ ] Add “known limitations” section in desktop docs for unsigned local dev builds and removable-media emulation caveats.
+
+**Exit criteria**
+- [ ] PR-F1 through PR-F5 merged with green cross-platform smoke checks.
+- [ ] Portable app roadmap status can advance M0→M2 from Planned to In Progress/Implemented with linked evidence PRs.
+- [ ] Desktop docs explicitly reference deterministic error contract and recovery runbook procedures.
+
+### Portable App UX Acceptance Rubric (for “working + sleek” sign-off)
+
+Use this rubric during UX and maintainer review so “sleek” is measurable, not subjective.
+
+| Dimension | Pass threshold | Validation method |
+| --- | --- | --- |
+| Setup speed | First-time decoy+critical backup completes in <= 3 minutes on baseline hardware. | Timed scripted walkthrough + screen recording review. |
+| Error clarity | 100% of blocking errors show deterministic code + plain-language next action. | Error catalog checklist against injected failure scenarios. |
+| Safety confidence | Safe-removal checklist shown before exit whenever last operation wrote data. | UI state transition tests + manual smoke. |
+| Accessibility baseline | Full keyboard path for create/verify/restore and screen-reader labels on primary controls. | Accessibility test pass + manual keyboard-only run. |
+| Operator parity | Headless output matches CLI JSON contract fields for verify/restore outcomes. | Contract tests comparing desktop headless and CLI fixtures. |
+
+### Dependency/Sequencing Notes
+
+- PR-F1 should land before PR-F3 to prevent UI contract churn.
+- PR-F2 should land before PR-F5 so smoke runners validate real preflight behavior.
+- PR-D2 and PR-D3 remain blockers for final portable-app hardening because UX copy and corruption handling must align to deterministic wallet-core semantics.
