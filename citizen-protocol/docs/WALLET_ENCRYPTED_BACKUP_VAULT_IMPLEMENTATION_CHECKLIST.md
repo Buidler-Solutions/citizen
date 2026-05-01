@@ -215,7 +215,7 @@ This initiative should replicate key VeraCrypt-style operating properties while 
   - [x] explicit flush/safe-eject guidance (Vaultier stage guidance + crash-safe flush trace),
   - [x] filesystem compatibility warning copy (Vaultier removable-media advisory).
 - [~] Add property/fuzz coverage for malformed headers, truncated ciphertext, and random bit-flip tamper cases (wallet CLI deterministic adversarial tests now include truncated ciphertext + random bit-flip tamper paths; dedicated fuzz/property harness pending).
-- [ ] Add unlock/export/restore performance targets with measurable thresholds and evidence logs.
+- [~] Add unlock/export/restore performance targets with measurable thresholds and evidence logs (Vaultier now captures deterministic create/verify/restore latency evidence against explicit thresholds and includes measurements in diagnostic exports; wallet CLI benchmark parity still pending).
 - [ ] Add CI regression fixtures + compatibility gate for vault format/schema stability.
 - [ ] Complete disaster-recovery runbook closure for:
   - [ ] corrupted/partial backup recovery,
@@ -257,7 +257,7 @@ To translate the CLI-first vault implementation into a polished portable app exp
 - [x] Passphrase strength meter tied to documented entropy thresholds (not vanity score-only meters).
 - [x] Optional unlock delay/backoff UX aligned with CLI wrong-passphrase throttling semantics.
 - [x] Human-readable tamper warnings mapped 1:1 to deterministic error codes from wallet core (Vaultier verify flow now maps header/slot-table/rollback tamper signals to deterministic error taxonomy and operator-facing recovery guidance).
-- [ ] “What this cannot protect against” panel shown during setup and restore confirmation.
+- [x] “What this cannot protect against” panel shown during setup and restore confirmation.
 
 ### Operator/Builder Ergonomics
 
