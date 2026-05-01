@@ -15,6 +15,7 @@ This implementation advances the checklist in `citizen-protocol/docs/WALLET_ENCR
 - filesystem advisory on detected removable media (recommended vs higher-risk formats),
 - safe-removal checklist with an explicit `flush pending writes` action,
 - portable profile card (USB label, version, created, last verified),
+- persisted verification reminder policy with next-check timestamp + due-state warning,
 - deterministic operation log and mock diagnostic export bundle,
 - mock vault-core adapter boundaries ready for Rust/Tauri integration.
 
