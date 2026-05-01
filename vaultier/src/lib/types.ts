@@ -58,6 +58,25 @@ export type DiagnosticBundle = {
   appVersion: string;
   profile: PortableProfile;
   recentLogs: OperationLog[];
+  recentErrors: string[];
+};
+
+export type HeadlessCommand =
+  | { command: 'backup_init'; targetPath: string; roles: VaultRole[]; includeConsentReceipts: boolean; portableMode: boolean }
+  | { command: 'backup_verify'; targetPath: string; expectedVaultVersion: string }
+  | {
+      command: 'backup_restore';
+      targetPath: string;
+      role: VaultRole;
+      restoreIdentityKeys: boolean;
+      restoreAccountKeys: boolean;
+      restoreConsentReceipts: boolean;
+    };
+
+export type HeadlessResponse = {
+  ok: true;
+  command: HeadlessCommand['command'];
+  result: Record<string, unknown>;
 };
 
 export type RemovableDrive = {

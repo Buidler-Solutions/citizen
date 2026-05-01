@@ -17,9 +17,11 @@ This implementation advances the checklist in `citizen-protocol/docs/WALLET_ENCR
 - portable profile card (USB label, version, created, last verified),
 - persisted verification reminder policy with next-check timestamp + due-state warning,
 - deterministic operation log and mock diagnostic export bundle,
+- diagnostic bundle now captures deterministic recent error identifiers (non-secret),
 - mock vault-core adapter boundaries ready for Rust/Tauri integration.
 - explicit runtime-shell signal (`web-mock` now, `tauri` target) for deterministic bridge behavior.
 - crash-safe write strategy trace (temp write, fsync, atomic rename, parent fsync) surfaced in safe-removal flow.
+- headless command adapter for init/verify/restore parity with CLI-style JSON responses.
 
 ## Package manager
 

@@ -46,6 +46,7 @@ export function AppShell() {
   const [unlockDelayMs, setUnlockDelayMs] = useState(0);
   const [diagnosticBundle, setDiagnosticBundle] = useState<DiagnosticBundle | null>(null);
   const [activeError, setActiveError] = useState<ErrorIdentifier | null>(null);
+  const [errorHistory, setErrorHistory] = useState<ErrorIdentifier[]>([]);
   const [operationState, setOperationState] = useState<OperationState>('idle');
   const [ejectChecks, setEjectChecks] = useState({ verified: false, restoreTest: false, flushComplete: false, duplicateMedia: false });
   const [reminderPolicy, setReminderPolicy] = useState<ReminderPolicy>(defaultReminderPolicy());
@@ -103,7 +104,13 @@ export function AppShell() {
 
   const simulateFailedUnlock = () => { const nextFailures = unlockFailures + 1; const delay = Math.min(2 ** nextFailures * 500, 8000); setUnlockFailures(nextFailures); setUnlockDelayMs(delay); setActiveError('decrypt_failed'); };
   const runFlushWrites = async () => { setOperationState('flushing'); const result = await flushPendingWritesWithStrategy(targetPath); appendLogs(result.logs); setFlushStrategy(result.strategy); setEjectChecks((p) => ({ ...p, flushComplete: true })); setOperationState('completed'); };
-  const runExportDiagnostics = async () => { if (profile) setDiagnosticBundle(await exportDiagnosticBundle(profile, logs.slice(0, 12))); };
+  const runExportDiagnostics = async () => { if (profile) setDiagnosticBundle(await exportDiagnosticBundle(profile, logs.slice(0, 12), errorHistory)); };
+
+  useEffect(() => {
+    if (!activeError) return;
+    setOperationState('action_required');
+    setErrorHistory((current) => [activeError, ...current].slice(0, 10));
+  }, [activeError]);
 
   return <main className={highContrast ? 'shell high-contrast' : 'shell'}>
     <section className="card" aria-live="polite"><h1>Vaultier</h1><p className="subtitle">Portable encrypted backup vault for Citizen wallet recovery.</p>

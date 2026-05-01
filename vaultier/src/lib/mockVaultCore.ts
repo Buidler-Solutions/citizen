@@ -11,6 +11,8 @@ import type {
   VerifyRequest,
   VerifyResult,
   RuntimeShell,
+  HeadlessCommand,
+  HeadlessResponse,
 } from './types';
 
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -117,7 +119,7 @@ export async function testRestore(request: RestoreRequest): Promise<RestoreResul
   };
 }
 
-export async function exportDiagnosticBundle(profile: PortableProfile, recentLogs: OperationLog[]): Promise<DiagnosticBundle> {
+export async function exportDiagnosticBundle(profile: PortableProfile, recentLogs: OperationLog[], recentErrors: string[]): Promise<DiagnosticBundle> {
   await wait(250);
   return {
     generatedAt: now(),
@@ -125,5 +127,45 @@ export async function exportDiagnosticBundle(profile: PortableProfile, recentLog
     appVersion: 'vaultier-dev',
     profile,
     recentLogs,
+    recentErrors,
+  };
+}
+
+export async function runHeadlessCommand(command: HeadlessCommand): Promise<HeadlessResponse> {
+  if (command.command === 'backup_init') {
+    const result = await createBackup(command);
+    return {
+      ok: true,
+      command: command.command,
+      result: {
+        profile: result.profile,
+        log: result.log,
+      },
+    };
+  }
+
+  if (command.command === 'backup_verify') {
+    const result = await verifyBackup(command);
+    return {
+      ok: true,
+      command: command.command,
+      result: {
+        verified_at: result.verifiedAt,
+        checks: result.checks,
+        log: result.log,
+      },
+    };
+  }
+
+  const result = await testRestore(command);
+  return {
+    ok: true,
+    command: command.command,
+    result: {
+      restored_at: result.restoredAt,
+      restored_role: result.restoredRole,
+      restored_artifacts: result.restoredArtifacts,
+      log: result.log,
+    },
   };
 }
