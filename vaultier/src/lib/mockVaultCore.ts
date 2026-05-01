@@ -13,6 +13,7 @@ import type {
   RuntimeShell,
   HeadlessCommand,
   HeadlessResponse,
+  VaultierErrorCode,
 } from './types';
 
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -148,10 +149,26 @@ export async function exportDiagnosticBundle(profile: PortableProfile, recentLog
 }
 
 export async function runHeadlessCommand(command: HeadlessCommand): Promise<HeadlessResponse> {
+  const fail = (code: VaultierErrorCode, message: string): HeadlessResponse => ({
+    schemaVersion: 'v1alpha1',
+    contractVersion: '2026-05-01',
+    ok: false,
+    command: command.command,
+    error: { code, message },
+  });
+
+  if (!command.targetPath.trim()) {
+    return fail('path_invalid', 'Target path is required.');
+  }
+
   if (command.command === 'backup_init') {
+    if (!command.roles.length) {
+      return fail('critical_entropy_too_low', 'At least one slot role is required.');
+    }
     const result = await createBackup(command);
     return {
       schemaVersion: 'v1alpha1',
+      contractVersion: '2026-05-01',
       ok: true,
       command: command.command,
       result: {
@@ -162,9 +179,16 @@ export async function runHeadlessCommand(command: HeadlessCommand): Promise<Head
   }
 
   if (command.command === 'backup_verify') {
+    if (command.requireSignedManifest && !command.manifestSignatureKeyId) {
+      return fail('manifest_signature_missing', 'Signed manifest key id is required when policy is enforced.');
+    }
     const result = await verifyBackup(command);
+    if (!result.manifest.verified) {
+      return fail('manifest_signature_invalid', 'Manifest signature verification failed.');
+    }
     return {
       schemaVersion: 'v1alpha1',
+      contractVersion: '2026-05-01',
       ok: true,
       command: command.command,
       result: {
@@ -179,6 +203,7 @@ export async function runHeadlessCommand(command: HeadlessCommand): Promise<Head
   const result = await testRestore(command);
   return {
     schemaVersion: 'v1alpha1',
+    contractVersion: '2026-05-01',
     ok: true,
     command: command.command,
     result: {
