@@ -25,6 +25,7 @@ This implementation advances the checklist in `citizen-protocol/docs/WALLET_ENCR
 - headless command adapter for init/verify/restore parity with CLI-style JSON responses.
 - deterministic headless contract/version metadata + error taxonomy (`contractVersion=2026-05-01`) for backup init/verify/restore automation.
 - deterministic performance envelope targets + evidence log capture for create/verify/restore, included in diagnostic bundle export.
+- deterministic Argon2id KDF profile metadata emitted in headless `backup_init` responses (balanced vs critical-hardened params) for operator automation evidence.
 
 ## Package manager
 

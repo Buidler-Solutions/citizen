@@ -38,6 +38,13 @@ export type OperationLog = {
 
 export type BackupResult = {
   profile: PortableProfile;
+  kdfProfile: {
+    algorithm: 'argon2id';
+    profile: 'interactive' | 'balanced' | 'hardened';
+    memoryKiB: number;
+    iterations: number;
+    parallelism: number;
+  };
   log: OperationLog[];
 };
 
