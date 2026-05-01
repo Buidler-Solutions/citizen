@@ -34,28 +34,38 @@ button:disabled { opacity: 0.6; cursor: not-allowed; }
 .pill { background: #1e293b; color: #cbd5e1; border: 1px solid #334155; }
 .pill.active { background: #0ea5e9; color: #082f49; }
 
-.checklist {
-  list-style: none;
-  padding: 0;
+.checklist { list-style: none; padding: 0; }
+.checklist li { display: flex; gap: 0.5rem; align-items: center; margin: 0.5rem 0; }
+
+.log-list { max-height: 300px; overflow: auto; padding-left: 1.1rem; }
+
+details { margin-top: 0.75rem; border: 1px solid #334155; border-radius: 10px; padding: 0.5rem 0.75rem; background: #0f172a; }
+
+.status-grid {
+  margin-top: 0.85rem;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 0.7rem;
 }
 
-.checklist li {
-  display: flex;
-  gap: 0.5rem;
-  align-items: center;
-  margin: 0.5rem 0;
-}
-
-.log-list {
-  max-height: 300px;
-  overflow: auto;
-  padding-left: 1.1rem;
-}
-
-details {
-  margin-top: 0.75rem;
+.status-card {
+  background: #0f172a;
   border: 1px solid #334155;
   border-radius: 10px;
-  padding: 0.5rem 0.75rem;
-  background: #0f172a;
+  padding: 0.7rem;
 }
+
+.status-card p { margin: 0.35rem 0; }
+
+.badge {
+  display: inline-flex;
+  border-radius: 999px;
+  padding: 0.1rem 0.55rem;
+  font-size: 0.8rem;
+  border: 1px solid;
+}
+
+.badge.ok { color: #4ade80; border-color: #4ade80; }
+.badge.warn { color: #fbbf24; border-color: #fbbf24; }
+.summary.ok { color: #86efac; }
+.h3 { margin-top: 0; }
