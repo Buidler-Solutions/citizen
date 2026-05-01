@@ -405,7 +405,8 @@ export async function runHeadlessCommand(command: HeadlessCommand): Promise<Head
         log: [{ at: now(), action: 'vault.slot.add', status: 'ok', details: `Added ${command.role} slot metadata.` }],
       },
     };
-    return response;
+    const redaction = scanForSecretFields(response.result);
+    return redaction.ok ? response : fail('invalid_payload', `Response contained redaction-blocked fields: ${redaction.redactedFields.join(', ')}`);
   }
 
   if (command.command === 'backup_export_credentials') {
@@ -437,7 +438,8 @@ export async function runHeadlessCommand(command: HeadlessCommand): Promise<Head
         ],
       },
     };
-    return response;
+    const redaction = scanForSecretFields(response.result);
+    return redaction.ok ? response : fail('invalid_payload', `Response contained redaction-blocked fields: ${redaction.redactedFields.join(', ')}`);
   }
 
   if (command.command === 'backup_verify') {
