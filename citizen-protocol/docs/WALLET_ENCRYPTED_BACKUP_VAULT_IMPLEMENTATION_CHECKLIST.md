@@ -216,7 +216,7 @@ This initiative should replicate key VeraCrypt-style operating properties while 
   - [x] filesystem compatibility warning copy (Vaultier removable-media advisory).
 - [~] Add property/fuzz coverage for malformed headers, truncated ciphertext, and random bit-flip tamper cases (wallet CLI deterministic adversarial tests now include truncated ciphertext + random bit-flip tamper paths; dedicated fuzz/property harness pending).
 - [~] Add unlock/export/restore performance targets with measurable thresholds and evidence logs (Vaultier now captures deterministic create/verify/restore latency evidence against explicit thresholds and includes measurements in diagnostic exports; wallet CLI benchmark parity still pending).
-- [ ] Add CI regression fixtures + compatibility gate for vault format/schema stability.
+- [x] Add CI regression fixtures + compatibility gate for vault format/schema stability (wallet crate now ships a pinned `backup_vault_schema_v1_fixture.json` plus compatibility test assertions for required top-level keys/schema/version and signed-manifest slot presence).
 - [ ] Complete disaster-recovery runbook closure for:
   - [ ] corrupted/partial backup recovery,
   - [ ] deterministic restore ordering in multi-backup scenarios,

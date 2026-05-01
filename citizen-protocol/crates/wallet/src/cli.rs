@@ -2858,4 +2858,46 @@ mod tests {
             "unexpected deterministic error: {rendered}"
         );
     }
+
+    #[test]
+    fn backup_vault_schema_fixture_remains_compatible() {
+        let fixture = include_str!("../tests/fixtures/backup_vault_schema_v1_fixture.json");
+        let value: Value = serde_json::from_str(fixture).expect("parse fixture json");
+        let object = value.as_object().expect("fixture should be a json object");
+
+        let mut keys: Vec<&str> = object.keys().map(String::as_str).collect();
+        keys.sort_unstable();
+        assert_eq!(
+            keys,
+            vec!["created_at", "portable_label", "schema", "slots", "version"],
+            "fixture top-level keys changed; review compatibility impact"
+        );
+
+        assert_eq!(
+            object
+                .get("schema")
+                .and_then(Value::as_str)
+                .expect("schema string"),
+            "citizen.wallet.backup.v1"
+        );
+        assert_eq!(
+            object
+                .get("version")
+                .and_then(Value::as_u64)
+                .expect("version number"),
+            1
+        );
+
+        let vault: BackupVaultFile = serde_json::from_value(value).expect("deserialize vault fixture");
+        assert_eq!(vault.schema, "citizen.wallet.backup.v1");
+        assert_eq!(vault.version, 1);
+        assert_eq!(vault.slots.len(), 2, "fixture should include decoy+critical slots");
+        assert!(
+            vault
+                .slots
+                .iter()
+                .all(|slot| slot.signed_manifest.is_some()),
+            "fixture slots must include signed manifests"
+        );
+    }
 }
