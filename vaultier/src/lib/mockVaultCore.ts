@@ -39,6 +39,10 @@ type DriveDiscoveryAdapter = {
 const supportedFilesystems: Array<DriveRecord['filesystem']> = ['exfat', 'ntfs', 'apfs', 'ext4'];
 const REQUIRED_CRASH_SAFE_STEPS: CrashSafeWriteStep['step'][] = ['temp_write', 'fsync_file', 'atomic_rename', 'fsync_parent'];
 const SECRET_FIELD_MARKERS = ['passphrase', 'password', 'secret', 'seed', 'private_key', 'mnemonic'];
+const COMMAND_PERFORMANCE_TARGETS_MS = {
+  backup_export_credentials: 1_500,
+  backup_restore: 2_500,
+} as const;
 
 function scanForSecretFields(payload: unknown): RedactionScanResult {
   const redactedFields: string[] = [];
@@ -405,11 +409,15 @@ export async function runHeadlessCommand(command: HeadlessCommand): Promise<Head
   }
 
   if (command.command === 'backup_export_credentials') {
+    const startedAt = Date.now();
     const exportedArtifacts = [
       command.includeIdentityKeys && 'identity_keys',
       command.includeAccountKeys && 'account_keys',
       command.includeConsentReceipts && 'consent_receipts',
     ].filter(Boolean) as string[];
+    const elapsedMs = Date.now() - startedAt;
+    const targetMs = COMMAND_PERFORMANCE_TARGETS_MS.backup_export_credentials;
+    const perfStatus = elapsedMs <= targetMs ? 'ok' : 'warn';
     const response: HeadlessResponse = {
       schemaVersion: 'v1alpha1',
       contractVersion: '2026-05-01',
@@ -418,7 +426,15 @@ export async function runHeadlessCommand(command: HeadlessCommand): Promise<Head
       result: {
         role: command.role,
         exported_artifacts: exportedArtifacts,
-        log: [{ at: now(), action: 'wallet.export', status: 'ok', details: `Exported: ${exportedArtifacts.join(', ') || 'none selected'}.` }],
+        log: [
+          { at: now(), action: 'wallet.export', status: 'ok', details: `Exported: ${exportedArtifacts.join(', ') || 'none selected'}.` },
+          {
+            at: now(),
+            action: 'wallet.export.performance',
+            status: perfStatus,
+            details: `Elapsed ${elapsedMs}ms (target <= ${targetMs}ms).`,
+          },
+        ],
       },
     };
     return response;
@@ -448,7 +464,11 @@ export async function runHeadlessCommand(command: HeadlessCommand): Promise<Head
     return redaction.ok ? response : fail('invalid_payload', `Response contained redaction-blocked fields: ${redaction.redactedFields.join(', ')}`);
   }
 
+  const startedAt = Date.now();
   const result = await testRestore(command);
+  const elapsedMs = Date.now() - startedAt;
+  const targetMs = COMMAND_PERFORMANCE_TARGETS_MS.backup_restore;
+  const perfStatus = elapsedMs <= targetMs ? 'ok' : 'warn';
   const response: HeadlessResponse = {
     schemaVersion: 'v1alpha1',
     contractVersion: '2026-05-01',
@@ -459,7 +479,15 @@ export async function runHeadlessCommand(command: HeadlessCommand): Promise<Head
       restored_role: result.restoredRole,
       restored_artifacts: result.restoredArtifacts,
       selected_backup_id: result.selectedBackupId,
-      log: result.log,
+      log: [
+        ...result.log,
+        {
+          at: now(),
+          action: 'wallet.restore.performance',
+          status: perfStatus,
+          details: `Elapsed ${elapsedMs}ms (target <= ${targetMs}ms).`,
+        },
+      ],
     },
   };
   const redaction = scanForSecretFields(response.result);
