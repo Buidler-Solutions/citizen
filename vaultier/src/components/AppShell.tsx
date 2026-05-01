@@ -23,6 +23,24 @@ const estimateEntropyBits = (value: string) => {
 const entropyBand = (bits: number) => bits >= 80 ? { label: 'Strong (recommended >=80 bits)', className: 'ok' as const } : bits >= 60 ? { label: 'Moderate (minimum for decoy)', className: 'warn' as const } : { label: 'Weak (increase length + symbol variety)', className: 'bad' as const };
 const isFilesystemRecommended = (fs: string) => ['exfat', 'ntfs', 'ext4', 'apfs'].includes(fs);
 
+
+const toUiError = (code: DriveDiscoveryResult['errors'][number]['code']): ErrorIdentifier => {
+  switch (code) {
+    case 'mount_unwritable':
+      return 'mount_unwritable';
+    case 'insufficient_space':
+      return 'insufficient_space';
+    case 'path_invalid':
+      return 'path_invalid';
+    case 'media_unavailable':
+      return 'media_unavailable';
+    case 'filesystem_incompatible':
+      return 'filesystem_incompatible';
+    default:
+      return 'media_unavailable';
+  }
+};
+
 const platformEjectGuidance: Record<string, string> = {
   macos: 'In Finder, click eject next to the USB volume and wait for disappear confirmation.',
   windows: 'Use Safely Remove Hardware in the system tray and wait for the safe-to-remove toast.',
@@ -58,7 +76,12 @@ export function AppShell() {
   const [flushStrategy, setFlushStrategy] = useState<CrashSafeWriteStep[]>([]);
   const [performanceMeasurements, setPerformanceMeasurements] = useState<PerformanceMeasurement[]>([]);
 
-  useEffect(() => { discoverRemovableDrives().then(setDiscovery); }, []);
+  useEffect(() => {
+    discoverRemovableDrives().then((result) => {
+      setDiscovery(result);
+      if (result.errors.length > 0) setActiveError(toUiError(result.errors[0].code));
+    });
+  }, []);
   useEffect(() => { setRuntimeShell(getRuntimeShell()); }, []);
   useEffect(() => { setReminderPolicy(loadReminderSettings()); }, []);
   useEffect(() => { saveReminderSettings(reminderPolicy); }, [reminderPolicy]);
@@ -183,6 +206,10 @@ export function AppShell() {
   const runRefreshDrives = async () => {
     const result = await discoverRemovableDrives();
     setDiscovery(result);
+    if (result.errors.length > 0) {
+      setActiveError(toUiError(result.errors[0].code));
+      return;
+    }
     if (result.drives.length === 0) {
       setActiveError('media_unavailable');
     }

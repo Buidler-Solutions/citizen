@@ -477,7 +477,7 @@ Use this backlog to convert the portable app milestone tracker into small implem
 
 2. **PR-F2: Deterministic removable-drive preflight**
    - [ ] Implement preflight checks: writable mount, minimum free space threshold, filename/path compatibility checks, and explicit “removable media likely/unknown” classification.
-   - [ ] Map preflight failures into deterministic UI-safe error identifiers (`mount_unwritable`, `insufficient_space`, `path_invalid`, `media_unavailable`).
+   - [~] Map preflight failures into deterministic UI-safe error identifiers (`mount_unwritable`, `insufficient_space`, `path_invalid`, `media_unavailable`) (Vaultier now maps discovery/preflight adapter failures into deterministic UI error identifiers; OS-native runtime bridge parity tests remain pending).
    - [ ] Add tests for Linux/macOS/Windows path-shape normalization and cross-platform error parity.
 
 3. **PR-F3: UX state contract + copy pack v1**
