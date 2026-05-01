@@ -19,14 +19,13 @@ import type {
   DriveRecord,
   PerformanceMeasurement,
 } from './types';
+import { detectRuntimeShell, discoverDrivesViaTauri, flushViaTauri } from './runtimeBridge';
 
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 const now = () => new Date().toISOString();
 
-const ACTIVE_RUNTIME: RuntimeShell = 'web-mock';
-
 export function getRuntimeShell(): RuntimeShell {
-  return ACTIVE_RUNTIME;
+  return detectRuntimeShell();
 }
 
 type DriveDiscoveryAdapter = {
@@ -100,6 +99,13 @@ const mockDiscoveryAdapters: DriveDiscoveryAdapter[] = [
 
 export async function discoverRemovableDrives(): Promise<DriveDiscoveryResult> {
   await wait(180);
+  if (getRuntimeShell() === 'tauri') {
+    const tauriResult = await discoverDrivesViaTauri();
+    return {
+      drives: tauriResult.drives,
+      errors: tauriResult.issues,
+    };
+  }
   const results = await Promise.all(mockDiscoveryAdapters.map((adapter) => adapter.discover().then((result) => ({ platform: adapter.platform, ...result }))));
   return results.reduce<DriveDiscoveryResult>(
     (acc, result) => {
@@ -123,6 +129,15 @@ export async function flushPendingWrites(targetPath: string): Promise<OperationL
 
 export async function flushPendingWritesWithStrategy(targetPath: string): Promise<FlushResult> {
   const logs = await flushPendingWrites(targetPath);
+  if (getRuntimeShell() === 'tauri') {
+    const tauri = await flushViaTauri(targetPath);
+    if (tauri.bridgeIssue) {
+      logs.unshift({ at: now(), action: 'vault.flush.bridge', status: 'warn', details: tauri.bridgeIssue.detail });
+    }
+    if (tauri.strategy.length > 0) {
+      return { logs, strategy: tauri.strategy };
+    }
+  }
   return {
     logs,
     strategy: [
