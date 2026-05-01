@@ -2356,6 +2356,7 @@ fn load_backup_password(explicit: Option<String>, env_var: &str) -> anyhow::Resu
 #[cfg(test)]
 mod tests {
     use super::*;
+    use proptest::prelude::*;
     use serde_json::json;
     use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
@@ -3103,6 +3104,77 @@ mod tests {
                     || rendered.contains("slot_not_found")
                     || rendered.contains("decrypt_failed"),
                 "{label} should map to deterministic malformed-vault failure, got: {rendered}"
+            );
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn backup_verify_rejects_randomized_metadata_mutations(
+            remove_schema in any::<bool>(),
+            corrupt_version in any::<bool>(),
+            empty_slots in any::<bool>(),
+            slot_index_seed in 0usize..8usize,
+            mutate_key_id in any::<bool>(),
+            mutate_manifest_schema in any::<bool>(),
+            bad_hash in any::<bool>(),
+        ) {
+            let base = unique_test_path("backup-random-metadata-mutation");
+            fs::create_dir_all(&base).expect("create test directory");
+
+            let fixture = include_str!("../tests/fixtures/backup_vault_schema_v1_fixture.json");
+            let mut case_value: Value = serde_json::from_str(fixture).expect("parse fixture");
+
+            if remove_schema {
+                case_value.as_object_mut().expect("object").remove("schema");
+            }
+            if corrupt_version {
+                case_value
+                    .as_object_mut()
+                    .expect("object")
+                    .insert("version".to_string(), Value::String("broken".to_string()));
+            }
+            if empty_slots {
+                case_value
+                    .as_object_mut()
+                    .expect("object")
+                    .insert("slots".to_string(), Value::Array(vec![]));
+            } else if let Some(slots) = case_value.get_mut("slots").and_then(Value::as_array_mut) {
+                if !slots.is_empty() {
+                    let slot_index = slot_index_seed % slots.len();
+                    if mutate_key_id {
+                        slots[slot_index]["signed_manifest"]["key_id"] = Value::String(String::new());
+                    }
+                    if mutate_manifest_schema {
+                        slots[slot_index]["signed_manifest"]["schema"] =
+                            Value::String("citizen.wallet.backup.manifest.v999".to_string());
+                    }
+                    if bad_hash {
+                        slots[slot_index]["payload_sha256"] = Value::String("00".repeat(32));
+                    }
+                }
+            }
+
+            let path = base.join("metadata-mutation.json");
+            fs::write(&path, serde_json::to_vec_pretty(&case_value).expect("serialize case"))
+                .expect("write case vault");
+
+            let err = backup_verify(BackupVerifyArgs {
+                vault_path: path,
+                role: Some(BackupSlotRole::Critical),
+                password: Some("critical-pass".to_string()),
+                json: true,
+            })
+            .expect_err("mutated vault should fail verification");
+
+            let rendered = err.to_string();
+            prop_assert!(
+                rendered.contains("unsupported_schema")
+                    || rendered.contains("slot_not_found")
+                    || rendered.contains("invalid_payload")
+                    || rendered.contains("decrypt_failed")
+                    || rendered.contains("checksum_mismatch"),
+                "unexpected deterministic mutation error: {rendered}"
             );
         }
     }

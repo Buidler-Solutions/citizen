@@ -173,7 +173,7 @@ This initiative should replicate key VeraCrypt-style operating properties while 
 ## Checkpoint 7 — Testing Matrix and Quality Gates
 
 - [x] Unit tests: KDF params, AEAD envelopes, slot metadata parsing, manifest validation.
-- [~] Property/fuzz tests: malformed headers, truncated ciphertext, random bit flips (wallet CLI adversarial tests now cover deterministic failures for truncated ciphertext + random bit-flip tampering; dedicated fuzz/property harness still pending).
+- [~] Property/fuzz tests: malformed headers, truncated ciphertext, random bit flips (wallet CLI adversarial tests cover deterministic failures for truncated ciphertext + random bit-flip tampering, and proptest-based randomized metadata mutation coverage now verifies deterministic failures for malformed schema/version/manifest/hash permutations; dedicated byte-level fuzz harness remains pending).
 - [x] Integration tests: create 2-slot vault on USB media, export credentials, delete local wallet, restore, verify identity continuity.
 - [x] Adversarial tests: wrong-passphrase throttling behavior, tamper detection, replay/rollback attempts.
 - [ ] Performance tests: unlock latency targets across workstation/laptop profiles.
@@ -214,7 +214,7 @@ This initiative should replicate key VeraCrypt-style operating properties while 
   - [x] explicit unplug-during-write risk warning (Vaultier eject flow UX),
   - [x] explicit flush/safe-eject guidance (Vaultier stage guidance + crash-safe flush trace),
   - [x] filesystem compatibility warning copy (Vaultier removable-media advisory).
-- [~] Add property/fuzz coverage for malformed headers, truncated ciphertext, and random bit-flip tamper cases (wallet CLI deterministic adversarial tests now include truncated ciphertext + random bit-flip tamper paths across multiple tamper offsets, plus a malformed-vault structure matrix for missing schema, wrong version type, empty slots, and invalid ciphertext envelope; dedicated fuzz/property harness pending).
+- [~] Add property/fuzz coverage for malformed headers, truncated ciphertext, and random bit-flip tamper cases (wallet CLI deterministic adversarial tests now include truncated ciphertext + random bit-flip tamper paths across multiple tamper offsets, plus a malformed-vault structure matrix for missing schema, wrong version type, empty slots, and invalid ciphertext envelope; proptest-based property harness now active; dedicated byte-level fuzz harness pending).
 - [~] Add unlock/export/restore performance targets with measurable thresholds and evidence logs (Vaultier now captures deterministic create/verify/restore latency evidence against explicit thresholds and includes measurements in diagnostic exports, and the headless command contract now emits explicit export/restore latency target checks (`wallet.export.performance`, `wallet.restore.performance`) in operation logs; wallet crate now also includes a deterministic `wallet backup` command-path latency envelope regression test (`backup_command_path_latency_envelope_stays_within_thresholds`) covering init/export/verify/restore timing thresholds, with dedicated standalone benchmark harnesses still pending).
 - [x] Add CI regression fixtures + compatibility gate for vault format/schema stability (wallet crate now ships a pinned `backup_vault_schema_v1_fixture.json` plus compatibility test assertions for required top-level keys/schema/version and signed-manifest slot presence).
 - [x] Complete disaster-recovery runbook closure for (Vaultier headless restore flow now deterministically selects multi-backup candidates by `verified_at DESC`, then `created_at DESC`, then `id ASC`; CLI runbook + key-rotation/corruption guidance now documented in `citizen-protocol/docs/WALLET_BACKUP_DISASTER_RECOVERY_RUNBOOK.md`):
@@ -316,7 +316,7 @@ For first mergeable implementation slice, require:
 - Vault format/data model stabilization has progressed: `citizen.wallet.backup.v1` and role-scoped slot metadata (`decoy`/`critical`) are now the baseline contract used by CLI flows.
 - KDF baseline is implemented with Argon2id parameterization in the wallet implementation path; remaining work is mostly security-review hardening and cross-platform performance tuning rather than initial KDF selection.
 - Backup verification currently includes deterministic payload checksum validation and role-scoped decrypt verification; signed-manifest verification is still open.
-- Adversarial/tamper tests are present for checksum mismatch, but dedicated fuzz/property infrastructure for malformed vault structures remains open for CI expansion.
+- Adversarial/tamper tests are present for checksum mismatch, and proptest-based malformed-vault mutation coverage is now in place; dedicated byte-level fuzz infrastructure remains open for CI expansion.
 
 ---
 
@@ -365,7 +365,7 @@ This section extends the checklist with concrete near-term implementation work i
 
 ### Next Slice C — Test matrix closure for GA-v1 candidate
 
-- [ ] Add fuzz/property harness for malformed/truncated vault files and randomized metadata mutation.
+- [~] Add fuzz/property harness for malformed/truncated vault files and randomized metadata mutation. (proptest-based randomized metadata mutation harness implemented; dedicated byte-level fuzz corpus runner pending)
 - [ ] Add performance bench for unlock/verify latency with the default Argon2id profile.
 - [ ] Add regression fixtures for role mismatch and cross-slot password confusion cases.
 - [ ] Ensure backup-vault suite is wired into CI for wallet crate changes.
@@ -396,7 +396,7 @@ Use this queue to keep momentum without reopening resolved design choices. Each 
 
 3. **PR-D3: Vault structure adversarial harness**
    - [~] Add malformed-vault fixture set (missing schema, wrong version type, empty slots, duplicated role entries, invalid ciphertext envelope). (now includes automated missing-schema and invalid/truncated ciphertext coverage in wallet CLI tests)
-   - [~] Add property tests for randomized metadata mutation and truncated payload handling. (truncated ciphertext handling is now covered; randomized metadata mutation property harness remains open)
+   - [~] Add property tests for randomized metadata mutation and truncated payload handling. (truncated ciphertext handling is now covered; randomized metadata mutation property harness is now implemented)
    - [x] Ensure tests assert deterministic error identifiers from PR-D1.
 
 4. **PR-D4: Format stability + migration note**
@@ -463,7 +463,7 @@ This slice starts the desktop productization track without blocking on extension
 | Role-scoped integrity verify | Implemented | Verify path supports role + password decrypt/checksum revalidation. |
 | Deterministic machine error IDs | Implemented | Wallet backup error enum now emits stable identifiers (`unsupported_schema`, `slot_not_found`, `decrypt_failed`, `checksum_mismatch`, `invalid_payload`) and tests assert identifier-bearing failures. |
 | USB operational safety guidance | Implemented | CLI warning copy and `--assume-removable-media-risk` are active; threat model now includes safe-eject/write-completion checklist and duplicate-media cadence guidance (PR-D2 complete). |
-| Fuzz/property vault corruption harness | In progress | Tamper checks exist; dedicated malformed-vault/property suite pending (PR-D3). |
+| Fuzz/property vault corruption harness | In progress | Tamper checks + proptest malformed-vault mutation suite now exist; dedicated byte-level fuzz corpus runner pending (PR-D3). |
 | Versioned format spec | Implemented | `WALLET_BACKUP_VAULT_FORMAT.md` now defines v1 field contract, forward-reject behavior, and explicit migration requirements for future schema versions (PR-D4 complete). |
 
 ### Next Slice F — Portable app implementation backlog (execution-ready)
