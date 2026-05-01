@@ -18,6 +18,7 @@ import type {
   DriveProbeIssue,
   DriveRecord,
   PerformanceMeasurement,
+  CrashSafeWriteStep,
 } from './types';
 import { detectRuntimeShell, discoverDrivesViaTauri, flushViaTauri } from './runtimeBridge';
 
@@ -34,6 +35,12 @@ type DriveDiscoveryAdapter = {
 };
 
 const supportedFilesystems: Array<DriveRecord['filesystem']> = ['exfat', 'ntfs', 'apfs', 'ext4'];
+const REQUIRED_CRASH_SAFE_STEPS: CrashSafeWriteStep['step'][] = ['temp_write', 'fsync_file', 'atomic_rename', 'fsync_parent'];
+
+function isCrashSafeStrategyComplete(strategy: CrashSafeWriteStep[]): boolean {
+  const seen = new Set(strategy.filter((item) => item.status === 'ok').map((item) => item.step));
+  return REQUIRED_CRASH_SAFE_STEPS.every((step) => seen.has(step));
+}
 
 function validateDriveRecords(platform: RuntimePlatform, drives: DriveRecord[]): { drives: DriveRecord[]; issues: DriveProbeIssue[] } {
   const issues: DriveProbeIssue[] = [];
@@ -135,17 +142,26 @@ export async function flushPendingWritesWithStrategy(targetPath: string): Promis
       logs.unshift({ at: now(), action: 'vault.flush.bridge', status: 'warn', details: tauri.bridgeIssue.detail });
     }
     if (tauri.strategy.length > 0) {
+      if (!isCrashSafeStrategyComplete(tauri.strategy)) {
+        logs.unshift({
+          at: now(),
+          action: 'vault.flush.strategy.incomplete',
+          status: 'warn',
+          details: 'Runtime bridge strategy omitted one or more crash-safe write steps; do not eject until complete.',
+        });
+      }
       return { logs, strategy: tauri.strategy };
     }
   }
+  const fallbackStrategy: CrashSafeWriteStep[] = [
+    { step: 'temp_write', status: 'ok', detail: 'Write encrypted payload to .tmp container file.' },
+    { step: 'fsync_file', status: 'ok', detail: 'Sync temporary file bytes before rename.' },
+    { step: 'atomic_rename', status: 'ok', detail: 'Replace prior container atomically where supported.' },
+    { step: 'fsync_parent', status: 'ok', detail: 'Sync parent directory metadata for crash consistency.' },
+  ];
   return {
     logs,
-    strategy: [
-      { step: 'temp_write', status: 'ok', detail: 'Write encrypted payload to .tmp container file.' },
-      { step: 'fsync_file', status: 'ok', detail: 'Sync temporary file bytes before rename.' },
-      { step: 'atomic_rename', status: 'ok', detail: 'Replace prior container atomically where supported.' },
-      { step: 'fsync_parent', status: 'ok', detail: 'Sync parent directory metadata for crash consistency.' },
-    ],
+    strategy: fallbackStrategy,
   };
 }
 

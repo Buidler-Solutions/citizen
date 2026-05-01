@@ -9,6 +9,7 @@ const STAGES: Stage[] = ['create', 'verify', 'restore', 'eject'];
 const MIN_CRITICAL_ENTROPY = 80;
 const BACKOFF_STEPS_MS = [1000, 2000, 4000, 8000];
 const PERFORMANCE_TARGETS = { create: 2000, verify: 1500, restore: 2500 } as const;
+const REQUIRED_CRASH_SAFE_STEPS: CrashSafeWriteStep['step'][] = ['temp_write', 'fsync_file', 'atomic_rename', 'fsync_parent'];
 
 const estimateEntropyBits = (value: string) => {
   if (!value) return 0;
@@ -122,6 +123,10 @@ export function AppShell() {
     };
     setPerformanceMeasurements((current) => [measurement, ...current].slice(0, 12));
   };
+  const hasCompleteFlushStrategy = (strategy: CrashSafeWriteStep[]) => {
+    const seen = new Set(strategy.filter((step) => step.status === 'ok').map((step) => step.step));
+    return REQUIRED_CRASH_SAFE_STEPS.every((step) => seen.has(step));
+  };
 
   const downloadDiagnosticBundle = () => {
     if (!diagnosticBundle) return;
@@ -201,7 +206,20 @@ export function AppShell() {
     setUnlockDelayMs(delay);
     setActiveError('decrypt_failed');
   };
-  const runFlushWrites = async () => { setOperationState('flushing'); const result = await flushPendingWritesWithStrategy(targetPath); appendLogs(result.logs); setFlushStrategy(result.strategy); setEjectChecks((p) => ({ ...p, flushComplete: true })); setOperationState('completed'); };
+  const runFlushWrites = async () => {
+    setOperationState('flushing');
+    const result = await flushPendingWritesWithStrategy(targetPath);
+    appendLogs(result.logs);
+    setFlushStrategy(result.strategy);
+    const strategyComplete = hasCompleteFlushStrategy(result.strategy);
+    setEjectChecks((p) => ({ ...p, flushComplete: strategyComplete }));
+    if (!strategyComplete) {
+      setActiveError('media_unavailable');
+      setOperationState('action_required');
+      return;
+    }
+    setOperationState('completed');
+  };
   const runExportDiagnostics = async () => { if (profile) setDiagnosticBundle(await exportDiagnosticBundle(profile, logs.slice(0, 12), errorHistory, performanceMeasurements)); };
   const runRefreshDrives = async () => {
     const result = await discoverRemovableDrives();
