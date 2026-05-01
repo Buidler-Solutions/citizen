@@ -208,7 +208,7 @@ This initiative should replicate key VeraCrypt-style operating properties while 
 - [ ] Complete cryptography closure items:
   - [~] finalized AEAD + nonce/IV policy documentation (wallet decrypt-path now enforces deterministic ChaCha20-Poly1305 nonce length validation and tamper-failure coverage; consolidated policy doc update still pending),
   - [~] key-derivation parameter profile hardening guidance (Vaultier headless `backup_init` now emits deterministic Argon2id profile/parameter metadata for balanced vs critical-hardened workflows with explicit `critical-hardened` profile naming; wallet CLI parity + final maintainer guidance doc still pending),
-  - [ ] committed test vectors for encrypt/decrypt/tamper failure paths.
+  - [x] committed test vectors for encrypt/decrypt/tamper failure paths (wallet crate now includes a deterministic Argon2id + ChaCha20-Poly1305 backup payload vector assertion with decrypt success + tamper-failure coverage).
 - [x] Add signed manifest verification for backup bundles and verify-path enforcement (Vaultier verify flow and `wallet backup verify`/`wallet backup restore` now enforce required per-slot signed manifest presence + deterministic key-id/schema/hash checks).
 - [~] Add removable-media safety hardening in command help/output:
   - [x] explicit unplug-during-write risk warning (Vaultier eject flow UX),

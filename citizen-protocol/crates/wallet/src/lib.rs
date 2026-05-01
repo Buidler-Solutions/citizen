@@ -2350,6 +2350,55 @@ mod tests {
     }
 
     #[test]
+    fn backup_payload_test_vector_decrypt_and_tamper_failure() {
+        let payload = json!({"scope":"wallet-backup","slot":"critical","version":1});
+        let payload_bytes = serde_json::to_vec(&payload).expect("serialize payload");
+        let passphrase = "vector-passphrase";
+        let salt = [0x0f_u8, 0x0e, 0x0d, 0x0c, 0x0b, 0x0a, 0x09, 0x08, 0x07, 0x06, 0x05, 0x04, 0x03, 0x02, 0x01, 0x00];
+        let nonce = [0x01_u8, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c];
+        let params = Params::new(65536, 3, 1, Some(32)).expect("valid params");
+        let mut derived_key = [0u8; 32];
+        Argon2::new(Algorithm::Argon2id, Version::V0x13, params)
+            .hash_password_into(passphrase.as_bytes(), &salt, &mut derived_key)
+            .expect("derive key");
+        let ciphertext = ChaCha20Poly1305::new(Key::from_slice(&derived_key))
+            .encrypt(Nonce::from_slice(&nonce), payload_bytes.as_slice())
+            .expect("encrypt test vector");
+        let ciphertext_hex = hex::encode(ciphertext);
+        assert_eq!(
+            ciphertext_hex,
+            "512dcf57133809dbc5db6b57a209a467b8ef635e3c14785adba7acc3cbc46b0b7f1ed193459148b1731eb4108f51df572641d6e2c741ad96202bef646a2d6fbc57a4b970f1a22c"
+        );
+
+        let vector = EncryptedPayload {
+            ciphertext_hex,
+            nonce_hex: hex::encode(nonce),
+            salt_hex: hex::encode(salt),
+            kdf: "argon2id".to_string(),
+            kdf_params: KdfParams {
+                memory_kib: 65536,
+                iterations: 3,
+                parallelism: 1,
+                output_length: 32,
+            },
+        };
+        let decrypted = decrypt_payload(&vector, "vector-passphrase").expect("decrypt vector payload");
+        assert_eq!(
+            decrypted,
+            payload
+        );
+
+        let mut tampered = vector;
+        tampered.ciphertext_hex.replace_range(0..2, "ff");
+        let err = decrypt_payload(&tampered, "vector-passphrase")
+            .expect_err("tampered vector ciphertext should fail");
+        assert!(
+            err.to_string().contains("failed to decrypt payload"),
+            "unexpected tamper error: {err}"
+        );
+    }
+
+    #[test]
     fn backup_encrypt_decrypt_meets_latency_envelope() {
         let payload = json!({
             "scope":"wallet-backup",
