@@ -255,7 +255,7 @@ To translate the CLI-first vault implementation into a polished portable app exp
 ### Security & Integrity UX
 
 - [x] Passphrase strength meter tied to documented entropy thresholds (not vanity score-only meters).
-- [ ] Optional unlock delay/backoff UX aligned with CLI wrong-passphrase throttling semantics.
+- [x] Optional unlock delay/backoff UX aligned with CLI wrong-passphrase throttling semantics.
 - [ ] Human-readable tamper warnings mapped 1:1 to deterministic error codes from wallet core.
 - [ ] “What this cannot protect against” panel shown during setup and restore confirmation.
 

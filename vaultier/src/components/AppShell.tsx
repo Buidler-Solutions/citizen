@@ -7,6 +7,7 @@ import { defaultReminderPolicy, getNextReminderAt, isReminderDue, loadReminderSe
 type Stage = 'create' | 'verify' | 'restore' | 'eject';
 const STAGES: Stage[] = ['create', 'verify', 'restore', 'eject'];
 const MIN_CRITICAL_ENTROPY = 80;
+const BACKOFF_STEPS_MS = [1000, 2000, 4000, 8000];
 
 const estimateEntropyBits = (value: string) => {
   if (!value) return 0;
@@ -44,6 +45,8 @@ export function AppShell() {
   const [criticalPassphrase, setCriticalPassphrase] = useState('');
   const [unlockFailures, setUnlockFailures] = useState(0);
   const [unlockDelayMs, setUnlockDelayMs] = useState(0);
+  const [restorePassphrase, setRestorePassphrase] = useState('');
+  const [restoreBackoffEnabled, setRestoreBackoffEnabled] = useState(true);
   const [diagnosticBundle, setDiagnosticBundle] = useState<DiagnosticBundle | null>(null);
   const [activeError, setActiveError] = useState<ErrorIdentifier | null>(null);
   const [errorHistory, setErrorHistory] = useState<ErrorIdentifier[]>([]);
@@ -106,11 +109,28 @@ export function AppShell() {
 
   const runRestore = async () => {
     if (unlockDelayMs > 0) return;
+    const expectedPassphrase = selectedRoles.includes('critical') ? criticalPassphrase : decoyPassphrase;
+    if (!restorePassphrase || restorePassphrase !== expectedPassphrase) {
+      if (restoreBackoffEnabled) {
+        const nextFailures = unlockFailures + 1;
+        const delay = BACKOFF_STEPS_MS[Math.min(nextFailures - 1, BACKOFF_STEPS_MS.length - 1)];
+        setUnlockFailures(nextFailures);
+        setUnlockDelayMs(delay);
+      }
+      setActiveError('decrypt_failed');
+      return;
+    }
     setRunning(true); setActiveError(null);
     try { const result = await testRestore({ targetPath, role: 'critical', restoreIdentityKeys: true, restoreAccountKeys: true, restoreConsentReceipts: includeConsentReceipts }); appendLogs(result.log); setRestoreResult(result); setUnlockFailures(0); setEjectChecks((p) => ({ ...p, restoreTest: true })); setStage('eject'); } finally { setRunning(false); }
   };
 
-  const simulateFailedUnlock = () => { const nextFailures = unlockFailures + 1; const delay = Math.min(2 ** nextFailures * 500, 8000); setUnlockFailures(nextFailures); setUnlockDelayMs(delay); setActiveError('decrypt_failed'); };
+  const simulateFailedUnlock = () => {
+    const nextFailures = unlockFailures + 1;
+    const delay = BACKOFF_STEPS_MS[Math.min(nextFailures - 1, BACKOFF_STEPS_MS.length - 1)];
+    setUnlockFailures(nextFailures);
+    setUnlockDelayMs(delay);
+    setActiveError('decrypt_failed');
+  };
   const runFlushWrites = async () => { setOperationState('flushing'); const result = await flushPendingWritesWithStrategy(targetPath); appendLogs(result.logs); setFlushStrategy(result.strategy); setEjectChecks((p) => ({ ...p, flushComplete: true })); setOperationState('completed'); };
   const runExportDiagnostics = async () => { if (profile) setDiagnosticBundle(await exportDiagnosticBundle(profile, logs.slice(0, 12), errorHistory)); };
 
@@ -135,7 +155,7 @@ export function AppShell() {
       <div className="status-grid"><article className="status-card"><label>Decoy passphrase<input type="password" value={decoyPassphrase} onChange={(e) => setDecoyPassphrase(e.target.value)} /></label><progress max={100} value={Math.min(decoyEntropy, 100)} /><p className={`summary ${entropyBand(decoyEntropy).className}`}>Entropy {decoyEntropy} bits · {entropyBand(decoyEntropy).label}</p></article><article className="status-card"><label>Critical passphrase<input type="password" value={criticalPassphrase} onChange={(e) => setCriticalPassphrase(e.target.value)} /></label><progress max={100} value={Math.min(criticalEntropy, 100)} /><p className={`summary ${entropyBand(criticalEntropy).className}`}>Entropy {criticalEntropy} bits · {entropyBand(criticalEntropy).label}</p></article></div>
       <button disabled={running || selectedRoles.length === 0} onClick={runCreateBackup}>Create Backup</button></>}
       {stage === 'verify' && <><button disabled={running || !profile} onClick={runVerify}>Verify Backup</button>{verifyResult && <><p className="summary ok">{verifyResult.checks.length} checks passed at {verifyResult.verifiedAt}.</p><p className={verifyResult.manifest.verified ? 'summary ok' : 'summary warn'}>Signed manifest: {verifyResult.manifest.verified ? `verified (${verifyResult.manifest.signatureKeyId})` : 'verification failed'}.</p></>}</>}
-      {stage === 'restore' && <><div className="row"><button onClick={simulateFailedUnlock}>Simulate wrong passphrase</button><button disabled={running || unlockDelayMs > 0} onClick={runRestore}>Test Restore</button></div>{unlockDelayMs > 0 && <p className="summary warn">Backoff active: {unlockDelayMs}ms. Repeated failures intentionally slow unlock retries.</p>}{restoreResult && <p className="summary ok">Recovered: {restoreResult.restoredArtifacts.join(', ')}</p>}</>}
+      {stage === 'restore' && <><label>Restore passphrase<input type="password" value={restorePassphrase} onChange={(e) => setRestorePassphrase(e.target.value)} /></label><label className="inline-control"><input type="checkbox" checked={restoreBackoffEnabled} onChange={() => setRestoreBackoffEnabled((value) => !value)} />Enable unlock retry backoff (CLI-aligned default)</label><div className="row"><button onClick={simulateFailedUnlock}>Simulate wrong passphrase</button><button disabled={running || unlockDelayMs > 0} onClick={runRestore}>Test Restore</button></div>{unlockDelayMs > 0 && <p className="summary warn">Backoff active: {unlockDelayMs}ms. Repeated failures intentionally slow unlock retries.</p>}<p className="hint">Backoff schedule: {BACKOFF_STEPS_MS.join('ms -> ')}ms.</p>{restoreResult && <p className="summary ok">Recovered: {restoreResult.restoredArtifacts.join(', ')}</p>}</>}
       {stage === 'eject' && <><button onClick={runFlushWrites}>Flush pending writes</button><label className="inline-control"><input type="checkbox" checked={ejectChecks.duplicateMedia} onChange={() => setEjectChecks((p) => ({ ...p, duplicateMedia: !p.duplicateMedia }))} />Duplicate backup stored separately</label><p className={safeToEject ? 'summary ok' : 'summary warn'}>{safeToEject ? 'Checklist complete. Safe to eject.' : 'Complete all checklist steps before ejection.'}</p>
       <p className="summary warn">Do not unplug during write/flush operations. Unexpected removal can corrupt vault headers and slot metadata.</p>
       {selectedDrive && <p className="hint">Safe eject guidance: {platformEjectGuidance[selectedDrive.platform]}</p>}
