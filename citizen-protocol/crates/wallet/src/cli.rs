@@ -2010,26 +2010,18 @@ fn backup_init(args: BackupInitArgs) -> anyhow::Result<()> {
         )?);
     save_backup_vault(&args.vault_path, &vault)?;
     if args.json {
+        let init_json = backup_init_json_output(
+            &args.vault_path,
+            &vault,
+            args.kdf_profile,
+            memory_kib,
+            iterations,
+            parallelism,
+            output_length,
+        );
         println!(
             "{}",
-            serde_json::to_string_pretty(&json!({
-                "contract_version": BACKUP_JSON_CONTRACT_VERSION,
-                "vault_path": args.vault_path.display().to_string(),
-                "schema": vault.schema,
-                "version": vault.version,
-                "portable_label": vault.portable_label,
-                "kdf_profile": match args.kdf_profile {
-                    BackupKdfProfile::Balanced => "balanced",
-                    BackupKdfProfile::CriticalHardened => "critical-hardened",
-                },
-                "kdf_params": {
-                    "kdf": "argon2id",
-                    "memory_kib": memory_kib,
-                    "iterations": iterations,
-                    "parallelism": parallelism,
-                    "output_length": output_length,
-                }
-            }))?
+            serde_json::to_string_pretty(&init_json)?
         );
     } else {
         println!("Initialized backup vault at {}", args.vault_path.display());
@@ -2105,16 +2097,10 @@ fn backup_verify(args: BackupVerifyArgs) -> anyhow::Result<()> {
         })
         .collect();
     if args.json {
+        let verify_json = backup_verify_json_output(&vault, &slots);
         println!(
             "{}",
-            serde_json::to_string_pretty(&json!({
-                "contract_version": BACKUP_JSON_CONTRACT_VERSION,
-                "schema": vault.schema,
-                "version": vault.version,
-                "portable_label": vault.portable_label,
-                "created_at": vault.created_at,
-                "slots": slots
-            }))?
+            serde_json::to_string_pretty(&verify_json)?
         );
     } else {
         println!("Backup vault schema: {}", vault.schema);
@@ -2164,15 +2150,10 @@ fn backup_restore(args: BackupRestoreArgs) -> anyhow::Result<()> {
         .map_err(|_| backup_error_anyhow(BackupErrorCode::InvalidPayload, "invalid payload"))?;
     keystore.save(&args.output_path)?;
     if args.json {
+        let restore_json = backup_restore_json_output(&args.output_path, args.role, slot.exported_at);
         println!(
             "{}",
-            serde_json::to_string_pretty(&json!({
-                "contract_version": BACKUP_JSON_CONTRACT_VERSION,
-                "status": "restored",
-                "output_path": args.output_path,
-                "role": format!("{:?}", args.role).to_lowercase(),
-                "exported_at": slot.exported_at,
-            }))?
+            serde_json::to_string_pretty(&restore_json)?
         );
     } else {
         println!("Restored wallet to {}", args.output_path.display());
@@ -2181,6 +2162,56 @@ fn backup_restore(args: BackupRestoreArgs) -> anyhow::Result<()> {
 }
 
 const BACKUP_JSON_CONTRACT_VERSION: &str = "citizen.wallet.backup.cli.v1";
+
+fn backup_init_json_output(
+    vault_path: &Path,
+    vault: &BackupVaultFile,
+    kdf_profile: BackupKdfProfile,
+    memory_kib: u32,
+    iterations: u32,
+    parallelism: u32,
+    output_length: usize,
+) -> Value {
+    json!({
+        "contract_version": BACKUP_JSON_CONTRACT_VERSION,
+        "vault_path": vault_path.display().to_string(),
+        "schema": vault.schema,
+        "version": vault.version,
+        "portable_label": vault.portable_label,
+        "kdf_profile": match kdf_profile {
+            BackupKdfProfile::Balanced => "balanced",
+            BackupKdfProfile::CriticalHardened => "critical-hardened",
+        },
+        "kdf_params": {
+            "kdf": "argon2id",
+            "memory_kib": memory_kib,
+            "iterations": iterations,
+            "parallelism": parallelism,
+            "output_length": output_length,
+        }
+    })
+}
+
+fn backup_verify_json_output(vault: &BackupVaultFile, slots: &[Value]) -> Value {
+    json!({
+        "contract_version": BACKUP_JSON_CONTRACT_VERSION,
+        "schema": vault.schema,
+        "version": vault.version,
+        "portable_label": vault.portable_label,
+        "created_at": vault.created_at,
+        "slots": slots
+    })
+}
+
+fn backup_restore_json_output(output_path: &Path, role: BackupSlotRole, exported_at: i64) -> Value {
+    json!({
+        "contract_version": BACKUP_JSON_CONTRACT_VERSION,
+        "status": "restored",
+        "output_path": output_path,
+        "role": format!("{:?}", role).to_lowercase(),
+        "exported_at": exported_at,
+    })
+}
 
 fn emit_removable_media_warning(command: &str, acknowledged: bool) {
     if acknowledged {
@@ -3486,5 +3517,41 @@ mod tests {
             failure_cases > 0,
             "expected at least one byte mutation case to fail deterministically"
         );
+    }
+
+    #[test]
+    fn backup_json_contract_examples_match_v1_schema() {
+        let vault = BackupVaultFile {
+            schema: "citizen.wallet.backup.v1".to_string(),
+            version: 1,
+            portable_label: Some("usb-primary".to_string()),
+            created_at: 1_736_500_000,
+            slots: vec![],
+        };
+        let init = backup_init_json_output(
+            Path::new("/tmp/vault.json"),
+            &vault,
+            BackupKdfProfile::Balanced,
+            19_456,
+            2,
+            1,
+            32,
+        );
+        let verify = backup_verify_json_output(&vault, &[]);
+        let restore = backup_restore_json_output(
+            Path::new("/tmp/wallet-restored.json"),
+            BackupSlotRole::Critical,
+            1_736_500_100,
+        );
+
+        for output in [&init, &verify, &restore] {
+            assert_eq!(
+                output["contract_version"].as_str(),
+                Some(BACKUP_JSON_CONTRACT_VERSION)
+            );
+        }
+        assert_eq!(init["kdf_params"]["kdf"].as_str(), Some("argon2id"));
+        assert_eq!(verify["schema"].as_str(), Some("citizen.wallet.backup.v1"));
+        assert_eq!(restore["status"].as_str(), Some("restored"));
     }
 }

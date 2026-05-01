@@ -226,7 +226,7 @@ This initiative should replicate key VeraCrypt-style operating properties while 
 **Exit criteria**
 - [ ] `wallet backup` command suite has no open critical/high security findings.
 - [ ] Required CI suite (unit + integration + fuzz/property + performance envelope checks) is green.
-- [ ] CLI JSON contract is versioned and validated against documentation examples.
+- [~] CLI JSON contract is versioned and validated against documentation examples (wallet CLI now centralizes deterministic JSON contract output builders for `init`/`verify`/`restore`, with regression assertions that enforce `citizen.wallet.backup.cli.v1` and required schema fields; remaining work is to mirror these examples into operator-facing docs verbatim).
 - [ ] Vaultier integration track may proceed to real runtime bridge only after this checkpoint is accepted.
 
 ---
