@@ -390,8 +390,8 @@ Use this queue to keep momentum without reopening resolved design choices. Each 
    - [x] Add CLI tests that assert deterministic error identifiers on failure paths.
 
 2. **PR-D2: USB safety copy + operator prompts**
-   - [ ] Add `--assume-removable-media-risk` acknowledgement flag for non-interactive workflows that suppresses repeated caution text.
-   - [ ] Add explicit warning blocks for unplug/flush risk in `init`, `export-credentials`, and `restore` help text.
+   - [x] Add `--assume-removable-media-risk` acknowledgement flag for non-interactive workflows that suppresses repeated caution text.
+   - [x] Add explicit warning blocks for unplug/flush risk in `init`, `export-credentials`, and `restore` help text.
    - [ ] Add docs snippet with safe-eject checklist and expected fsync/write-completion behavior.
 
 3. **PR-D3: Vault structure adversarial harness**
@@ -417,6 +417,11 @@ This slice starts the desktop productization track without blocking on extension
    - [ ] Create `wallet/desktop` scaffold with Tauri runtime and workspace-level build wiring.
    - [ ] Expose minimal command bridge for `backup init`, `backup add-slot`, `backup export-credentials`, `backup verify`, `backup restore` using typed request/response DTOs.
    - [ ] Enforce “no secret in UI logs” guardrails in bridge layer with redaction helpers and deny-list tests.
+
+### Delta Update (2026-05-01, priority continuation)
+
+- PR-D2 implementation is now in progress in wallet CLI: `backup init`, `backup export-credentials`, and `backup restore` emit removable-media unplug/flush warnings by default, and non-interactive pipelines can explicitly acknowledge risk with `--assume-removable-media-risk`.
+- Remaining PR-D2 closure is documentation: add safe-eject and write-completion snippet in wallet operator docs/runbook and cross-link from this checklist.
 
 2. **PR-E2: Removable media discovery + safe-write pipeline**
    - [ ] Implement cross-platform removable-drive discovery abstraction with deterministic adapter error mapping.

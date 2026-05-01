@@ -409,6 +409,8 @@ struct BackupInitArgs {
     decoy_password: Option<String>,
     #[arg(long)]
     critical_password: Option<String>,
+    #[arg(long, default_value_t = false)]
+    assume_removable_media_risk: bool,
 }
 
 #[derive(Debug, Args)]
@@ -433,6 +435,8 @@ struct BackupExportArgs {
     password: Option<String>,
     #[arg(long, value_delimiter = ',', default_value = "keys")]
     scopes: Vec<BackupExportScope>,
+    #[arg(long, default_value_t = false)]
+    assume_removable_media_risk: bool,
 }
 
 #[derive(Debug, Args)]
@@ -459,6 +463,8 @@ struct BackupRestoreArgs {
     password: Option<String>,
     #[arg(long)]
     json: bool,
+    #[arg(long, default_value_t = false)]
+    assume_removable_media_risk: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, ValueEnum, PartialEq, Eq)]
@@ -1944,6 +1950,7 @@ fn hash_hex(payload: &[u8]) -> String {
 }
 
 fn backup_init(args: BackupInitArgs) -> anyhow::Result<()> {
+    emit_removable_media_warning("init", args.assume_removable_media_risk);
     let decoy_password =
         load_backup_password(args.decoy_password, "CITIZEN_BACKUP_DECOY_PASSWORD")?;
     let critical_password =
@@ -1974,6 +1981,7 @@ fn backup_add_slot(args: BackupAddSlotArgs) -> anyhow::Result<()> {
 }
 
 fn backup_export_credentials(args: BackupExportArgs) -> anyhow::Result<()> {
+    emit_removable_media_warning("export-credentials", args.assume_removable_media_risk);
     let mut vault = load_backup_vault(&args.vault_path)?;
     let password = load_backup_password(args.password, "CITIZEN_BACKUP_SLOT_PASSWORD")?;
     let keystore = Keystore::load_or_create(&args.path)?;
@@ -2064,6 +2072,7 @@ fn backup_verify(args: BackupVerifyArgs) -> anyhow::Result<()> {
 }
 
 fn backup_restore(args: BackupRestoreArgs) -> anyhow::Result<()> {
+    emit_removable_media_warning("restore", args.assume_removable_media_risk);
     let vault = load_backup_vault(&args.vault_path).map_err(|_| {
         backup_error_anyhow(BackupErrorCode::UnsupportedSchema, "unsupported backup vault schema")
     })?;
@@ -2100,6 +2109,18 @@ fn backup_restore(args: BackupRestoreArgs) -> anyhow::Result<()> {
         println!("Restored wallet to {}", args.output_path.display());
     }
     Ok(())
+}
+
+fn emit_removable_media_warning(command: &str, acknowledged: bool) {
+    if acknowledged {
+        return;
+    }
+    eprintln!(
+        "WARNING: wallet backup {command} may target removable media. Do not unplug the device during writes; wait for write completion and perform a safe eject."
+    );
+    eprintln!(
+        "If your automation flow already handles removable-media risks, pass --assume-removable-media-risk."
+    );
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -2455,6 +2476,7 @@ mod tests {
             portable_label: Some("usb-a".to_string()),
             decoy_password: Some("decoy-pass".to_string()),
             critical_password: Some("critical-pass".to_string()),
+            assume_removable_media_risk: true,
         })
         .expect("init vault");
         backup_export_credentials(BackupExportArgs {
@@ -2463,6 +2485,7 @@ mod tests {
             role: BackupSlotRole::Critical,
             password: Some("critical-pass".to_string()),
             scopes: vec![BackupExportScope::Keys, BackupExportScope::RecoveryMetadata],
+            assume_removable_media_risk: true,
         })
         .expect("export credentials");
         backup_verify(BackupVerifyArgs {
@@ -2478,6 +2501,7 @@ mod tests {
             role: BackupSlotRole::Critical,
             password: Some("critical-pass".to_string()),
             json: true,
+            assume_removable_media_risk: true,
         })
         .expect("restore");
 
@@ -2511,6 +2535,7 @@ mod tests {
             portable_label: None,
             decoy_password: Some("decoy-pass".to_string()),
             critical_password: Some("critical-pass".to_string()),
+            assume_removable_media_risk: true,
         })
         .expect("init vault");
         backup_export_credentials(BackupExportArgs {
@@ -2519,6 +2544,7 @@ mod tests {
             role: BackupSlotRole::Critical,
             password: Some("critical-pass".to_string()),
             scopes: vec![BackupExportScope::Keys],
+            assume_removable_media_risk: true,
         })
         .expect("export credentials");
 
@@ -2553,6 +2579,7 @@ mod tests {
             portable_label: None,
             decoy_password: Some("decoy-pass".to_string()),
             critical_password: Some("critical-pass".to_string()),
+            assume_removable_media_risk: true,
         })
         .expect("init vault");
         let mut vault = load_backup_vault(&vault_path).expect("load vault");
@@ -2565,6 +2592,7 @@ mod tests {
             role: BackupSlotRole::Decoy,
             password: Some("decoy-pass".to_string()),
             json: true,
+            assume_removable_media_risk: true,
         })
         .expect_err("missing slot should fail");
 
