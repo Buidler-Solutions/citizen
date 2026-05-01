@@ -249,7 +249,7 @@ To translate the CLI-first vault implementation into a polished portable app exp
 - [ ] Choose runtime shell (Tauri preferred for Rust-native crypto reuse; Electron only if extension parity requires it).
 - [ ] Package signed builds for macOS/Windows/Linux with reproducible build metadata.
 - [~] Implement removable-drive discovery abstraction with platform-specific adapters and deterministic error mapping (Vaultier now routes discovery through explicit per-platform adapter boundaries, deterministic media disconnect detection (`media_unavailable`), and a Tauri runtime bridge contract that validates compatibility/free-space/writability constraints before surfacing candidate drives; real OS-native adapters still pending).
-- [~] Add crash-safe write strategy (temp file + fsync + atomic rename) for vault container updates (Vaultier now exposes explicit flush workflow in UX, validates required crash-safe steps before allowing safe-eject completion, and includes a Tauri bridge contract for strategy reporting; true runtime-backed write-path enforcement remains pending).
+- [~] Add crash-safe write strategy (temp file + fsync + atomic rename) for vault container updates (Vaultier now exposes explicit flush workflow in UX, validates required crash-safe steps before allowing safe-eject completion, includes a Tauri bridge contract for strategy reporting, and now hard-blocks safe-eject in Tauri mode when runtime-backed flush strategy evidence is missing; full OS-native adapter enforcement remains pending).
 - [ ] Add secure memory handling audit for desktop bridge boundaries (Rust core <-> UI layer).
 
 ### Security & Integrity UX

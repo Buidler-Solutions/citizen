@@ -173,18 +173,32 @@ export async function flushPendingWritesWithStrategy(targetPath: string): Promis
     const tauri = await flushViaTauri(targetPath);
     if (tauri.bridgeIssue) {
       logs.unshift({ at: now(), action: 'vault.flush.bridge', status: 'warn', details: tauri.bridgeIssue.detail });
+      logs.unshift({
+        at: now(),
+        action: 'vault.flush.runtime_required',
+        status: 'warn',
+        details: 'Safe-eject is blocked until the Tauri flush bridge is available with runtime-backed crash-safe writes.',
+      });
+      return { logs, strategy: [] };
     }
-    if (tauri.strategy.length > 0) {
-      if (!isCrashSafeStrategyComplete(tauri.strategy)) {
-        logs.unshift({
-          at: now(),
-          action: 'vault.flush.strategy.incomplete',
-          status: 'warn',
-          details: 'Runtime bridge strategy omitted one or more crash-safe write steps; do not eject until complete.',
-        });
-      }
-      return { logs, strategy: tauri.strategy };
+    if (tauri.strategy.length === 0) {
+      logs.unshift({
+        at: now(),
+        action: 'vault.flush.strategy.missing',
+        status: 'warn',
+        details: 'Safe-eject is blocked until runtime reports all crash-safe write steps.',
+      });
+      return { logs, strategy: [] };
     }
+    if (!isCrashSafeStrategyComplete(tauri.strategy)) {
+      logs.unshift({
+        at: now(),
+        action: 'vault.flush.strategy.incomplete',
+        status: 'warn',
+        details: 'Runtime bridge strategy omitted one or more crash-safe write steps; do not eject until complete.',
+      });
+    }
+    return { logs, strategy: tauri.strategy };
   }
   const fallbackStrategy: CrashSafeWriteStep[] = [
     { step: 'temp_write', status: 'ok', detail: 'Write encrypted payload to .tmp container file.' },
