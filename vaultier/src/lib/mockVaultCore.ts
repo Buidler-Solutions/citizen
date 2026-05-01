@@ -184,7 +184,7 @@ export async function createBackup(request: BackupRequest): Promise<BackupResult
     },
     kdfProfile: {
       algorithm: 'argon2id',
-      profile: request.roles.includes('critical') ? 'hardened' : 'balanced',
+      profile: request.roles.includes('critical') ? 'critical-hardened' : 'balanced',
       memoryKiB: request.roles.includes('critical') ? 262_144 : 131_072,
       iterations: request.roles.includes('critical') ? 4 : 3,
       parallelism: 1,
