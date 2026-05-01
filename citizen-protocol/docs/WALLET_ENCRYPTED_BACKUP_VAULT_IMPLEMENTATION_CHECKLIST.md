@@ -400,9 +400,9 @@ Use this queue to keep momentum without reopening resolved design choices. Each 
    - [x] Ensure tests assert deterministic error identifiers from PR-D1.
 
 4. **PR-D4: Format stability + migration note**
-   - [ ] Add dedicated `WALLET_BACKUP_VAULT_FORMAT.md` with v1 field contract and migration policy.
-   - [ ] Cross-link checklist, threat model, and CLI docs to the format note.
-   - [ ] Document v1 compatibility guarantees (forward-reject behavior + explicit migration command requirement for future versions).
+   - [x] Add dedicated `WALLET_BACKUP_VAULT_FORMAT.md` with v1 field contract and migration policy.
+   - [x] Cross-link checklist, threat model, and CLI docs to the format note.
+   - [x] Document v1 compatibility guarantees (forward-reject behavior + explicit migration command requirement for future versions).
 
 **Exit criteria**
 - [ ] PR-D1 through PR-D4 merged with passing wallet crate tests.
@@ -464,7 +464,7 @@ This slice starts the desktop productization track without blocking on extension
 | Deterministic machine error IDs | Implemented | Wallet backup error enum now emits stable identifiers (`unsupported_schema`, `slot_not_found`, `decrypt_failed`, `checksum_mismatch`, `invalid_payload`) and tests assert identifier-bearing failures. |
 | USB operational safety guidance | Implemented | CLI warning copy and `--assume-removable-media-risk` are active; threat model now includes safe-eject/write-completion checklist and duplicate-media cadence guidance (PR-D2 complete). |
 | Fuzz/property vault corruption harness | In progress | Tamper checks exist; dedicated malformed-vault/property suite pending (PR-D3). |
-| Versioned format spec | In progress | Schema name is stable in code; standalone spec/migration doc pending (PR-D4). |
+| Versioned format spec | Implemented | `WALLET_BACKUP_VAULT_FORMAT.md` now defines v1 field contract, forward-reject behavior, and explicit migration requirements for future schema versions (PR-D4 complete). |
 
 ### Next Slice F — Portable app implementation backlog (execution-ready)
 

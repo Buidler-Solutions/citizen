@@ -6,6 +6,8 @@ This runbook defines the operator flow for recovering wallet credentials from th
 `wallet backup` vault lifecycle (`init`, `add-slot`, `export-credentials`, `verify`, `restore`) with
 special handling for removable media and corrupted/partial backups.
 
+Format + compatibility reference: `WALLET_BACKUP_VAULT_FORMAT.md` (v1 schema contract, forward-reject behavior, migration requirements).
+
 ## 1) Scope and assumptions
 
 - Uses the current wallet CLI implementation in `citizen-protocol/crates/wallet`.
