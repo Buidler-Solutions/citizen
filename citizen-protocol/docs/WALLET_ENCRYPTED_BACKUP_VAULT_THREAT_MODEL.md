@@ -12,6 +12,8 @@ This document covers the currently implemented wallet backup vault flow in `crat
 
 Status: implementation-aware baseline for maintainer review; not a final production-security sign-off.
 
+Format contract reference: `WALLET_BACKUP_VAULT_FORMAT.md` for stable `citizen.wallet.backup.v1` field and migration semantics.
+
 ## Protected artifacts
 
 - Wallet keystore credentials serialized from local wallet files.
