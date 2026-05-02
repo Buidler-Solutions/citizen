@@ -1,6 +1,8 @@
 #[cfg(feature = "desktop-runtime")]
 use serde::{Deserialize, Serialize};
 #[cfg(feature = "desktop-runtime")]
+use std::fs::{self, File};
+#[cfg(feature = "desktop-runtime")]
 use std::path::{Path, PathBuf};
 #[cfg(feature = "desktop-runtime")]
 use std::process::Command;
@@ -188,7 +190,9 @@ fn platform_mount_prefixes() -> &'static [&'static str] {
     if cfg!(target_os = "macos") {
         &["/Volumes/"]
     } else if cfg!(target_os = "windows") {
-        &["A:\\", "B:\\", "D:\\", "E:\\", "F:\\", "G:\\", "H:\\", "I:\\"]
+        &[
+            "A:\\", "B:\\", "D:\\", "E:\\", "F:\\", "G:\\", "H:\\", "I:\\",
+        ]
     } else {
         &["/media/", "/mnt/"]
     }
@@ -203,22 +207,96 @@ fn looks_removable(path: &Path) -> bool {
 }
 
 #[cfg(feature = "desktop-runtime")]
+fn discover_linux_removable_drives() -> Vec<RemovableDriveRecord> {
+    let Ok(output) = Command::new("lsblk")
+        .args(["-J", "-o", "NAME,MOUNTPOINT,LABEL,FSTYPE,RM,RO,TYPE"])
+        .output()
+    else {
+        return Vec::new();
+    };
+
+    if !output.status.success() {
+        return Vec::new();
+    }
+
+    let json: serde_json::Value = match serde_json::from_slice(&output.stdout) {
+        Ok(value) => value,
+        Err(_) => return Vec::new(),
+    };
+
+    let mut drives = Vec::new();
+    fn walk(node: &serde_json::Value, out: &mut Vec<RemovableDriveRecord>) {
+        if node.get("type").and_then(|v| v.as_str()) == Some("part") {
+            let mount = node.get("mountpoint").and_then(|v| v.as_str());
+            let removable = node.get("rm").and_then(|v| v.as_i64()) == Some(1);
+            if let Some(mount_path) = mount.filter(|path| !path.is_empty() && removable) {
+                let read_only = node.get("ro").and_then(|v| v.as_i64()) == Some(1);
+                out.push(RemovableDriveRecord {
+                    mount_path: mount_path.to_owned(),
+                    label: node
+                        .get("label")
+                        .and_then(|v| v.as_str())
+                        .map(str::to_owned),
+                    filesystem: node
+                        .get("fstype")
+                        .and_then(|v| v.as_str())
+                        .map(str::to_owned),
+                    writable: !read_only,
+                    removable: true,
+                    platform: std::env::consts::OS.to_owned(),
+                });
+            }
+        }
+
+        if let Some(children) = node.get("children").and_then(|v| v.as_array()) {
+            for child in children {
+                walk(child, out);
+            }
+        }
+    }
+
+    if let Some(blockdevices) = json.get("blockdevices").and_then(|v| v.as_array()) {
+        for device in blockdevices {
+            walk(device, &mut drives);
+        }
+    }
+
+    drives
+}
+
+#[cfg(feature = "desktop-runtime")]
 #[tauri::command]
 fn discover_removable_drives() -> serde_json::Value {
-    let current = std::env::current_dir().ok();
-    let drives = current
-        .as_ref()
-        .and_then(|cwd| cwd.ancestors().find(|p| looks_removable(p)).map(PathBuf::from))
-        .into_iter()
-        .map(|mount| RemovableDriveRecord {
-            mount_path: mount.display().to_string(),
-            label: mount.file_name().map(|name| name.to_string_lossy().to_string()),
-            filesystem: None,
-            writable: std::fs::metadata(&mount).map(|m| !m.permissions().readonly()).unwrap_or(false),
-            removable: true,
-            platform: std::env::consts::OS.to_owned(),
-        })
-        .collect::<Vec<_>>();
+    let mut drives = if cfg!(target_os = "linux") {
+        discover_linux_removable_drives()
+    } else {
+        Vec::new()
+    };
+
+    if drives.is_empty() {
+        let current = std::env::current_dir().ok();
+        drives = current
+            .as_ref()
+            .and_then(|cwd| {
+                cwd.ancestors()
+                    .find(|p| looks_removable(p))
+                    .map(PathBuf::from)
+            })
+            .into_iter()
+            .map(|mount| RemovableDriveRecord {
+                mount_path: mount.display().to_string(),
+                label: mount
+                    .file_name()
+                    .map(|name| name.to_string_lossy().to_string()),
+                filesystem: None,
+                writable: fs::metadata(&mount)
+                    .map(|m| !m.permissions().readonly())
+                    .unwrap_or(false),
+                removable: true,
+                platform: std::env::consts::OS.to_owned(),
+            })
+            .collect::<Vec<_>>();
+    }
 
     serde_json::json!({ "drives": drives })
 }
@@ -226,17 +304,73 @@ fn discover_removable_drives() -> serde_json::Value {
 #[cfg(feature = "desktop-runtime")]
 #[tauri::command]
 fn flush_vault_writes(payload: TargetPathPayload) -> serde_json::Value {
+    let target = PathBuf::from(&payload.target_path);
+    let mut flushed = false;
+    let mut errors = Vec::new();
+
+    if let Ok(file) = File::open(&target) {
+        if let Err(err) = file.sync_all() {
+            errors.push(format!("file fsync failed: {err}"));
+        } else {
+            flushed = true;
+        }
+    }
+
+    if let Some(parent) = target.parent() {
+        if let Ok(parent_dir) = File::open(parent) {
+            if let Err(err) = parent_dir.sync_all() {
+                errors.push(format!("parent fsync failed: {err}"));
+            } else {
+                flushed = true;
+            }
+        }
+    }
+
     serde_json::json!({
         "targetPath": payload.target_path,
         "strategy": ["write_temp", "fsync_file", "rename_atomic", "fsync_parent"],
-        "status": "ok"
+        "status": if errors.is_empty() { "ok" } else { "warning" },
+        "flushConfirmed": flushed,
+        "errors": errors,
     })
 }
 
 #[cfg(feature = "desktop-runtime")]
 #[tauri::command]
 fn safe_eject_media(payload: TargetPathPayload) -> serde_json::Value {
-    serde_json::json!({ "ok": false, "targetPath": payload.target_path, "reason": "manual_eject_required" })
+    let target = PathBuf::from(&payload.target_path);
+    let can_attempt_linux_umount = cfg!(target_os = "linux") && looks_removable(&target);
+    let mut ejected = false;
+    let mut details = serde_json::json!({"mode": "manual_eject_required"});
+
+    if can_attempt_linux_umount {
+        match Command::new("umount").arg(&target).output() {
+            Ok(output) if output.status.success() => {
+                ejected = true;
+                details = serde_json::json!({"mode": "os_command", "command": "umount"});
+            }
+            Ok(output) => {
+                details = serde_json::json!({
+                    "mode": "manual_eject_required",
+                    "command": "umount",
+                    "stderr": String::from_utf8_lossy(&output.stderr).trim(),
+                });
+            }
+            Err(err) => {
+                details = serde_json::json!({
+                    "mode": "manual_eject_required",
+                    "command": "umount",
+                    "error": err.to_string(),
+                });
+            }
+        }
+    }
+
+    serde_json::json!({
+        "ok": ejected,
+        "targetPath": payload.target_path,
+        "details": details,
+    })
 }
 
 #[cfg(feature = "desktop-runtime")]
@@ -249,22 +383,34 @@ fn run_named_backup_command(command: &str, payload: serde_json::Value) -> Backup
 
 #[cfg(feature = "desktop-runtime")]
 #[tauri::command]
-fn backup_init(payload: serde_json::Value) -> BackupCommandResponse { run_named_backup_command("backup_init", payload) }
+fn backup_init(payload: serde_json::Value) -> BackupCommandResponse {
+    run_named_backup_command("backup_init", payload)
+}
 #[cfg(feature = "desktop-runtime")]
 #[tauri::command]
-fn backup_add_slot(payload: serde_json::Value) -> BackupCommandResponse { run_named_backup_command("backup_add_slot", payload) }
+fn backup_add_slot(payload: serde_json::Value) -> BackupCommandResponse {
+    run_named_backup_command("backup_add_slot", payload)
+}
 #[cfg(feature = "desktop-runtime")]
 #[tauri::command]
-fn backup_export_credentials(payload: serde_json::Value) -> BackupCommandResponse { run_named_backup_command("backup_export_credentials", payload) }
+fn backup_export_credentials(payload: serde_json::Value) -> BackupCommandResponse {
+    run_named_backup_command("backup_export_credentials", payload)
+}
 #[cfg(feature = "desktop-runtime")]
 #[tauri::command]
-fn backup_verify(payload: serde_json::Value) -> BackupCommandResponse { run_named_backup_command("backup_verify", payload) }
+fn backup_verify(payload: serde_json::Value) -> BackupCommandResponse {
+    run_named_backup_command("backup_verify", payload)
+}
 #[cfg(feature = "desktop-runtime")]
 #[tauri::command]
-fn backup_restore(payload: serde_json::Value) -> BackupCommandResponse { run_named_backup_command("backup_restore", payload) }
+fn backup_restore(payload: serde_json::Value) -> BackupCommandResponse {
+    run_named_backup_command("backup_restore", payload)
+}
 #[cfg(feature = "desktop-runtime")]
 #[tauri::command]
-fn backup_diagnostics(payload: serde_json::Value) -> BackupCommandResponse { run_named_backup_command("backup_diagnostics", payload) }
+fn backup_diagnostics(payload: serde_json::Value) -> BackupCommandResponse {
+    run_named_backup_command("backup_diagnostics", payload)
+}
 
 #[cfg(feature = "desktop-runtime")]
 fn main() {
