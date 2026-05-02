@@ -87,7 +87,7 @@ async function main() {
       assert((args as { targetPath: string }).targetPath === '/media/usb/vault.cvb', 'safe-eject should forward targetPath payload');
       return { ok: true };
     }
-    if (['backup_init', 'backup_add_slot', 'backup_export_credentials', 'backup_verify', 'backup_restore'].includes(name)) {
+    if (['backup_init', 'backup_add_slot', 'backup_export_credentials', 'backup_verify', 'backup_restore', 'backup_diagnostics'].includes(name)) {
       const response: HeadlessResponse = { schemaVersion: 'v1alpha1', contractVersion: '2026-05-01', ok: true, command: name as HeadlessResponse['command'], result: {} };
       return response;
     }
@@ -108,6 +108,7 @@ async function main() {
     { command: 'backup_export_credentials', payload: { command: 'backup_export_credentials', targetPath: '/media/usb/vault.cvb', role: 'critical', password: 'critical-pass' } },
     { command: 'backup_verify', payload: { command: 'backup_verify', targetPath: '/media/usb/vault.cvb', expectedVaultVersion: '1', requireSignedManifest: true } },
     { command: 'backup_restore', payload: { command: 'backup_restore', targetPath: '/media/usb/vault.cvb', role: 'critical', password: 'critical-pass' } },
+    { command: 'backup_diagnostics', payload: { command: 'backup_diagnostics', targetPath: '/media/usb/vault.cvb', profile: { portableLabel: 'Citizen Vault', schemaVersion: 'citizen.wallet.backup.v1', createdAt: '2026-05-02T00:00:00.000Z' }, recentLogs: [], recentErrors: [], performanceMeasurements: [] } },
   ] as const;
 
   withTauriInvoke(async (name) => {

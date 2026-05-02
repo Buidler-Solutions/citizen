@@ -36,6 +36,13 @@
       "ok",
       "result",
       "schemaVersion"
+    ],
+    "backup_diagnostics": [
+      "command",
+      "contractVersion",
+      "ok",
+      "result",
+      "schemaVersion"
     ]
   },
   "expectedTopLevelValues": {
@@ -75,6 +82,13 @@
       "restoredAt",
       "role",
       "targetPath"
+    ],
+    "backup_diagnostics": [
+      "generatedAt",
+      "issues",
+      "platform",
+      "recentOperations",
+      "schemaVersion"
     ]
   },
   "expectedResultValues": {
@@ -109,6 +123,13 @@
       "role": "fixture-backup_restore-role",
       "restoredAt": "fixture-backup_restore-restoredAt",
       "performance": "fixture-backup_restore-performance"
+    },
+    "backup_diagnostics": {
+      "generatedAt": "fixture-backup_diagnostics-generatedAt",
+      "issues": "fixture-backup_diagnostics-issues",
+      "platform": "fixture-backup_diagnostics-platform",
+      "recentOperations": "fixture-backup_diagnostics-recentOperations",
+      "schemaVersion": "fixture-backup_diagnostics-schemaVersion"
     }
   }
 }
