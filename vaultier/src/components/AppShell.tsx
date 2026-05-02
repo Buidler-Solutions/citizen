@@ -3,7 +3,7 @@ import { createBackup, discoverRemovableDrives, exportDiagnosticBundle, flushPen
 import { getRuntimeProfile, setRuntimeProfile } from '../lib/runtimeBridge';
 import type { BackupRequest, CrashSafeWriteStep, DiagnosticBundle, DriveDiscoveryResult, OperationLog, PerformanceMeasurement, PortableProfile, RestoreResult, RuntimeProfile, RuntimeShell, VerifyResult, VaultRole } from '../lib/types';
 import { ERROR_COPY, OPERATION_STATE_COPY, type ErrorIdentifier, type OperationState } from '../lib/operationState';
-import { defaultReminderPolicy, getNextReminderAt, isReminderDue, loadPortableProfile, loadReminderSettings, savePortableProfile, saveReminderSettings, type ReminderPolicy } from '../lib/reminders';
+import { appendReminderAudit, defaultReminderPolicy, getNextReminderAt, isReminderDue, loadPortableProfile, loadReminderAudit, loadReminderSettings, savePortableProfile, saveReminderSettings, type ReminderPolicy } from '../lib/reminders';
 
 type Stage = 'create' | 'verify' | 'restore' | 'eject';
 const STAGES: Stage[] = ['create', 'verify', 'restore', 'eject'];
@@ -82,6 +82,7 @@ export function AppShell() {
   const [operationState, setOperationState] = useState<OperationState>('idle');
   const [ejectChecks, setEjectChecks] = useState({ verified: false, restoreTest: false, flushComplete: false, duplicateMedia: false });
   const [reminderPolicy, setReminderPolicy] = useState<ReminderPolicy>(defaultReminderPolicy());
+  const [reminderAudit, setReminderAudit] = useState(loadReminderAudit());
   const [runtimeShell, setRuntimeShell] = useState<RuntimeShell>('web-mock');
   const [runtimeProfile, setRuntimeProfileState] = useState<RuntimeProfile>('wb-simulation');
   const [flushStrategy, setFlushStrategy] = useState<CrashSafeWriteStep[]>([]);
@@ -95,7 +96,7 @@ export function AppShell() {
     });
   }, []);
   useEffect(() => { setRuntimeProfileState(getRuntimeProfile()); setRuntimeShell(getRuntimeShell()); }, []);
-  useEffect(() => { setReminderPolicy(loadReminderSettings()); setProfile(loadPortableProfile()); }, []);
+  useEffect(() => { setReminderPolicy(loadReminderSettings()); setProfile(loadPortableProfile()); setReminderAudit(loadReminderAudit()); }, []);
   useEffect(() => { saveReminderSettings(reminderPolicy); }, [reminderPolicy]);
   useEffect(() => { if (profile) savePortableProfile(profile); }, [profile]);
   useEffect(() => { if (unlockDelayMs <= 0) return; const timer = setInterval(() => setUnlockDelayMs((v) => Math.max(0, v - 500)), 500); return () => clearInterval(timer); }, [unlockDelayMs]);
@@ -237,7 +238,7 @@ export function AppShell() {
     }
     setOperationState('completed');
   };
-  const runExportDiagnostics = async () => { if (profile) setDiagnosticBundle(await exportDiagnosticBundle(profile, logs.slice(0, 12), errorHistory, performanceMeasurements)); };
+  const runExportDiagnostics = async () => { if (profile) setDiagnosticBundle(await exportDiagnosticBundle(profile, logs.slice(0, 12), errorHistory, performanceMeasurements, reminderAudit)); };
   const runSafeEject = async () => {
     const result = await safeEjectMedia(targetPath);
     appendLogs(result.logs);
@@ -305,8 +306,28 @@ export function AppShell() {
     </section>
     <section className="card"><h2>Portable profile</h2>{profile ? <ul><li>Portable label: {profile.portableLabel}</li><li>Schema version: {profile.schemaVersion}</li><li>Created: {profile.createdAt}</li><li>Last Verification: {profile.lastVerifiedAt}</li><li>Next verification reminder: {nextReminderAt ?? 'Pending first verify'}</li></ul> : <p className="hint">Create a backup to generate a profile.</p>}
       <h3>Reminder policy</h3>
-      <label className="inline-control"><input type="checkbox" checked={reminderPolicy.enabled} onChange={() => setReminderPolicy((p) => ({ ...p, enabled: !p.enabled }))} />Enable verification reminders</label>
-      <label>Reminder cadence (days)<input type="number" min={7} max={365} value={reminderPolicy.cadenceDays} onChange={(e) => setReminderPolicy((p) => ({ ...p, cadenceDays: Number(e.target.value) || p.cadenceDays }))} /></label>
+      <label className="inline-control"><input type="checkbox" checked={reminderPolicy.enabled} onChange={() => {
+        const nextEnabled = !reminderPolicy.enabled;
+        setReminderPolicy((p) => ({ ...p, enabled: nextEnabled }));
+        const entry = {
+          at: new Date().toISOString(),
+          action: nextEnabled ? 'reminder_enabled' as const : 'reminder_disabled' as const,
+          detail: nextEnabled ? 'Operator enabled verification reminders.' : 'Operator disabled verification reminders (opt-out).',
+        };
+        appendReminderAudit(entry);
+        setReminderAudit((current) => [entry, ...current].slice(0, 50));
+      }} />Enable verification reminders</label>
+      <label>Reminder cadence (days)<input type="number" min={7} max={365} value={reminderPolicy.cadenceDays} onChange={(e) => {
+        const nextCadence = Number(e.target.value) || reminderPolicy.cadenceDays;
+        setReminderPolicy((p) => ({ ...p, cadenceDays: nextCadence }));
+        const entry = {
+          at: new Date().toISOString(),
+          action: 'cadence_updated' as const,
+          detail: `Operator set reminder cadence to ${nextCadence} days.`,
+        };
+        appendReminderAudit(entry);
+        setReminderAudit((current) => [entry, ...current].slice(0, 50));
+      }} /></label>
       <h3>Performance envelope</h3><p className="hint">Targets: create ≤ {PERFORMANCE_TARGETS.create}ms, verify ≤ {PERFORMANCE_TARGETS.verify}ms, restore ≤ {PERFORMANCE_TARGETS.restore}ms.</p>{performanceMeasurements.length > 0 ? <ul className="log-list">{performanceMeasurements.map((m) => <li key={`${m.operation}-${m.measuredAt}`}>{m.measuredAt} · {m.operation} · {m.elapsedMs}ms / {m.thresholdMs}ms · {m.status.toUpperCase()}</li>)}</ul> : <p className="hint">Run create/verify/restore to collect deterministic timing evidence logs.</p>}
       <h3>Operation log</h3><ul className="log-list">{logs.map((entry) => <li key={`${entry.at}-${entry.action}`}>{entry.at} · {entry.action} · {entry.status} · {entry.details}</li>)}</ul><div className="row"><button disabled={!profile} onClick={runExportDiagnostics}>Export diagnostics</button><button disabled={!diagnosticBundle} onClick={downloadDiagnosticBundle}>Download JSON</button></div>{diagnosticBundle && <details><summary>Latest diagnostic bundle</summary><pre>{JSON.stringify(diagnosticBundle, null, 2)}</pre></details>}</section>
     <section className="card">

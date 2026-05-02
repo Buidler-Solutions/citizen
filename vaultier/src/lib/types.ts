@@ -84,6 +84,12 @@ export type PerformanceMeasurement = {
   measuredAt: string;
 };
 
+export type ReminderAuditEntry = {
+  at: string;
+  action: 'reminder_enabled' | 'reminder_disabled' | 'cadence_updated';
+  detail: string;
+};
+
 export type DiagnosticBundle = {
   generatedAt: string;
   platform: string;
@@ -92,6 +98,7 @@ export type DiagnosticBundle = {
   recentLogs: OperationLog[];
   recentErrors: string[];
   performanceMeasurements: PerformanceMeasurement[];
+  reminderAudit: ReminderAuditEntry[];
 };
 
 export type HeadlessCommand =
@@ -128,6 +135,7 @@ export type HeadlessCommand =
       recentLogs: OperationLog[];
       recentErrors: string[];
       performanceMeasurements: PerformanceMeasurement[];
+      reminderAudit?: ReminderAuditEntry[];
     };
 
 export type HeadlessResponse = {

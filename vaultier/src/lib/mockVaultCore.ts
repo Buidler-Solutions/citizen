@@ -18,6 +18,7 @@ import type {
   DriveProbeIssue,
   DriveRecord,
   PerformanceMeasurement,
+  ReminderAuditEntry,
   CrashSafeWriteStep,
   BackupCandidate,
   SafeEjectResult,
@@ -407,7 +408,7 @@ function selectDeterministicRestoreCandidate(candidates?: BackupCandidate[]): Ba
   })[0];
 }
 
-export async function exportDiagnosticBundle(profile: PortableProfile, recentLogs: OperationLog[], recentErrors: string[], performanceMeasurements: PerformanceMeasurement[]): Promise<DiagnosticBundle> {
+export async function exportDiagnosticBundle(profile: PortableProfile, recentLogs: OperationLog[], recentErrors: string[], performanceMeasurements: PerformanceMeasurement[], reminderAudit: ReminderAuditEntry[] = []): Promise<DiagnosticBundle> {
   await wait(250);
   return {
     generatedAt: now(),
@@ -417,6 +418,7 @@ export async function exportDiagnosticBundle(profile: PortableProfile, recentLog
     recentLogs,
     recentErrors,
     performanceMeasurements,
+    reminderAudit,
   };
 }
 
@@ -575,6 +577,7 @@ export async function runHeadlessCommand(command: HeadlessCommand): Promise<Head
       command.recentLogs,
       command.recentErrors,
       command.performanceMeasurements,
+      command.reminderAudit ?? [],
     );
     const response: HeadlessResponse = {
       schemaVersion: 'v1alpha1',
@@ -589,6 +592,7 @@ export async function runHeadlessCommand(command: HeadlessCommand): Promise<Head
         recent_logs: diagnostics.recentLogs,
         recent_errors: diagnostics.recentErrors,
         performance_measurements: diagnostics.performanceMeasurements,
+        reminder_audit: diagnostics.reminderAudit,
       },
     };
     const redaction = scanForSecretFields(response.result);
