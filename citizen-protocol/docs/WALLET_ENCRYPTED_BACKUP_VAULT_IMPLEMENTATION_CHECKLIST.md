@@ -490,7 +490,7 @@ This slice starts the desktop productization track without blocking on extension
 3. **PR-E3: Sleek guided flows (MVP UX)**
    - [ ] Ship single-screen “Create Backup” flow with decoy + critical setup, passphrase strength guidance, and progress timeline.
    - [ ] Ship “Verify Backup” quick action and “Test Restore” wizard with expandable technical details panel.
-   - [ ] Add portable profile card (label, schema version, created-at, last verified-at) and safe-removal checklist drawer.
+   - [x] Add portable profile card (label, schema version, created-at, last verified-at) and safe-removal checklist drawer. (Vaultier `AppShell` now renders a portable profile card with `portableLabel`/`schemaVersion`/`createdAt`/`lastVerifiedAt` fields, and ships a safe-removal checklist section that tracks verification, restore rehearsal, flush completion, and duplicate-media confirmation before safe-eject.)
 
 4. **PR-E4: Headless parity + diagnostics**
    - [~] Add desktop headless mode that mirrors `wallet backup ... --json` contract for CI/recovery labs. (Vaultier headless command surface now includes `backup_diagnostics` and contract tests for diagnostics payload shape; remaining work is wiring real desktop runtime adapters.)
@@ -512,6 +512,16 @@ This slice starts the desktop productization track without blocking on extension
 | M3 — Restore confidence UX | Planned | Verify + test-restore flows with deterministic technical detail panel. |
 | M4 — Operator/CI parity | Planned | Headless mode and diagnostics aligned with CLI JSON contract. |
 | M5 — Release hardening | Planned | Signed builds, compatibility matrix, cross-platform smoke + security sign-off. |
+
+### Delta Update (2026-05-02, checklist gap audit continuation)
+
+- Re-audited checklist-to-implementation parity for the Tauri/Vaultier desktop path and updated checkbox state where functionality is now implemented but previously left unchecked.
+- Confirmed that portable profile persistence + UI rendering and safe-removal checklist UX are present in Vaultier and should be tracked as complete in the PR-E3 checklist line item.
+- Remaining desktop gaps still requiring implementation evidence before production-readiness claims:
+  - cross-platform signed packaging + reproducible artifact metadata,
+  - full in-process wallet-core bridge replacement for CLI shell fallback,
+  - OS-native removable media adapter completion + parity tests across Linux/macOS/Windows,
+  - final memory/logging security audit closure with attached sign-off evidence.
 
 ### Execution Tracker (updated 2026-05-01)
 
