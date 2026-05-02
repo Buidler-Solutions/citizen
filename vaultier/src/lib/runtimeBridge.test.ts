@@ -193,26 +193,49 @@ async function main() {
     assert(!message.includes('super-secret'), 'bridge failure details must redact secrets when present');
   }
 
-  withTauriInvoke(async (name) => {
-    if (name === 'backup_verify') {
-      return {
-        schemaVersion: 'v1alpha1',
-        contractVersion: '2026-05-01',
-        ok: true,
-        command: 'backup_verify',
-        result: { backupPassword: 'should-never-leak' },
-      } satisfies HeadlessResponse;
-    }
-    throw new Error(`unexpected_command:${name}`);
-  });
 
-  try {
-    await invokeBackupCommandViaTauri({ command: 'backup_verify', targetPath: '/media/usb/vault.cvb', expectedVaultVersion: '1', requireSignedManifest: true });
-    throw new Error('expected redaction failure');
-  } catch (error) {
-    const message = String((error as Error).message);
-    assert(message.includes('tauri_backup_verify_failed'), 'redaction failures should still use deterministic command prefix');
-    assert(!message.includes('should-never-leak'), 'redaction failures must not expose raw secret values');
+
+  const commandsForRedaction = [
+    { command: 'backup_init', payload: { command: 'backup_init', targetPath: '/media/usb/vault.cvb', decoyPassword: 'decoy-pass', criticalPassword: 'critical-pass' } },
+    { command: 'backup_add_slot', payload: { command: 'backup_add_slot', targetPath: '/media/usb/vault.cvb', role: 'critical', password: 'critical-pass' } },
+    { command: 'backup_export_credentials', payload: { command: 'backup_export_credentials', targetPath: '/media/usb/vault.cvb', role: 'critical', password: 'critical-pass' } },
+    { command: 'backup_verify', payload: { command: 'backup_verify', targetPath: '/media/usb/vault.cvb', expectedVaultVersion: '1', requireSignedManifest: true } },
+    { command: 'backup_restore', payload: { command: 'backup_restore', targetPath: '/media/usb/vault.cvb', role: 'critical', password: 'critical-pass' } },
+    {
+      command: 'backup_diagnostics',
+      payload: {
+        command: 'backup_diagnostics',
+        targetPath: '/media/usb/vault.cvb',
+        profile: { portableLabel: 'Citizen Vault', schemaVersion: 'citizen.wallet.backup.v1', createdAt: '2026-05-02T00:00:00.000Z' },
+        recentLogs: [],
+        recentErrors: [],
+        performanceMeasurements: [],
+      },
+    },
+  ] as const;
+
+  for (const entry of commandsForRedaction) {
+    withTauriInvoke(async (name) => {
+      if (name === entry.command) {
+        return {
+          schemaVersion: 'v1alpha1',
+          contractVersion: '2026-05-01',
+          ok: true,
+          command: entry.command,
+          result: { backupPassword: 'should-never-leak' },
+        } satisfies HeadlessResponse;
+      }
+      throw new Error(`unexpected_command:${name}`);
+    });
+
+    try {
+      await invokeBackupCommandViaTauri(entry.payload as Parameters<typeof invokeBackupCommandViaTauri>[0]);
+      throw new Error('expected redaction failure');
+    } catch (error) {
+      const message = String((error as Error).message);
+      assert(message.includes(`tauri_${entry.command}_failed`), `redaction failures should use deterministic command prefix for ${entry.command}`);
+      assert(!message.includes('should-never-leak'), `redaction failures must not expose raw secret values for ${entry.command}`);
+    }
   }
 }
 
