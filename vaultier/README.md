@@ -27,6 +27,7 @@ This implementation advances the checklist in `citizen-protocol/docs/WALLET_ENCR
 - deterministic performance envelope targets + evidence log capture for create/verify/restore, included in diagnostic bundle export.
 - deterministic machine-readable performance evidence objects in headless `backup_export_credentials`, `backup_verify`, and `backup_restore` responses (elapsed/threshold/status) for operator automation gates.
 - deterministic Argon2id KDF profile metadata emitted in headless `backup_init` responses (balanced vs critical-hardened params) for operator automation evidence.
+- tauri-first runtime enforcement: web-mock no longer performs create/verify/restore/eject operations and no longer simulates safe-eject success.
 
 ## Package manager
 
@@ -68,6 +69,9 @@ The near-term direction is to keep Vaultier implementation-first and portable-op
 3. Add crash-safe write strategy (temp file + fsync + atomic rename) in the desktop bridge.
 4. Add safe-eject adapters for macOS, Windows, and Linux.
 5. Package signed portable desktop builds (Tauri target).
+
+Current checkpoint emphasis: treat `web-mock` as UI rehearsal only and require Tauri runtime bridge evidence before any production workflow claims.
+The Tauri bridge path is expected to follow the same normalized drive-discovery contract as the simulation adapter (deterministic ordering, schema parity, and identical policy validation semantics).
 
 
 ## Maintainer evidence packet
