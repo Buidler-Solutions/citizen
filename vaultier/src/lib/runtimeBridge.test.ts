@@ -10,6 +10,16 @@ function assert(condition: unknown, message: string): void {
 
 type InvokeFn = (name: string, args?: unknown) => Promise<unknown>;
 
+
+function assertKeys(response: Record<string, unknown>, expected: string[], label: string): void {
+  const responseKeys = Object.keys(response).sort();
+  const expectedKeys = [...expected].sort();
+  assert(
+    JSON.stringify(responseKeys) === JSON.stringify(expectedKeys),
+    `${label}: expected keys [${expectedKeys.join(',')}] but got [${responseKeys.join(',')}]`,
+  );
+}
+
 const resultShapeFixturePath = decodeURIComponent(new URL('../../fixtures/command-result-shape.v1.json', import.meta.url).pathname);
 const resultShapeFixture = JSON.parse(readFileSync(resultShapeFixturePath, 'utf8')) as {
   commands: Record<string, string[]>;
@@ -146,6 +156,29 @@ async function main() {
     const expectedResultValues = resultShapeFixture.expectedResultValues[parity.command] ?? {};
     assertResultFixtureValues(resultRecord, expectedResultValues, parity.command);
   }
+
+  withTauriInvoke(async (name, args) => {
+    if (name === 'flush_vault_writes') {
+      assert((args as { targetPath: string }).targetPath === '/media/usb/vault.cvb', 'flush parity should forward targetPath payload');
+      return { strategy: [{ step: 'temp_write', status: 'ok', detail: 'fixture-step' }] };
+    }
+    if (name === 'safe_eject_media') {
+      assert((args as { targetPath: string }).targetPath === '/media/usb/vault.cvb', 'safe-eject parity should forward targetPath payload');
+      return { ok: true };
+    }
+    throw new Error(`unexpected_command:${name}`);
+  });
+
+  const flushParity = await flushViaTauri('/media/usb/vault.cvb');
+  assert(flushParity.bridgeIssue === undefined, 'flush parity should not return bridgeIssue when tauri bridge responds');
+  assert(flushParity.strategy.length === 1, 'flush parity should preserve runtime strategy shape');
+  const flushStep = flushParity.strategy[0] as Record<string, unknown>;
+  assertKeys(flushStep, ['detail', 'status', 'step'], 'flush_vault_writes parity');
+
+  const ejectParity = await safeEjectViaTauri('/media/usb/vault.cvb');
+  assert(ejectParity.bridgeIssue === undefined, 'safe-eject parity should not return bridgeIssue when tauri bridge responds');
+  assert(ejectParity.ok === true, 'safe-eject parity should preserve runtime ok status');
+
 
   withTauriInvoke(async () => {
     throw new Error('bridge_failure');
