@@ -13,7 +13,8 @@
     "check:priority-gap": "node checklist-gap-check.mjs",
     "check:priority-gap:json": "node checklist-gap-check.mjs --json",
     "check:priority-gap:strict": "pnpm check:priority-gap",
-    "check:evidence-packet": "node maintainer-evidence-packet.mjs"
+    "check:evidence-packet": "node maintainer-evidence-packet.mjs",
+    "test": "pnpm test:headless-contract"
   },
   "dependencies": {
     "react": "^18.3.1",
