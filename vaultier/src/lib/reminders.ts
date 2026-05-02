@@ -5,7 +5,14 @@ export type ReminderPolicy = {
   cadenceDays: number;
 };
 
+export type ReminderAuditEntry = {
+  at: string;
+  action: 'reminder_enabled' | 'reminder_disabled' | 'cadence_updated';
+  detail: string;
+};
+
 const REMINDER_STORAGE_KEY = 'vaultier.reminder_policy.v1';
+const REMINDER_AUDIT_STORAGE_KEY = 'vaultier.reminder_policy_audit.v1';
 const PROFILE_STORAGE_KEY = 'vaultier.portable_profile.v1';
 const DEFAULT_POLICY: ReminderPolicy = { enabled: true, cadenceDays: 30 };
 
@@ -42,6 +49,31 @@ export function saveReminderSettings(policy: ReminderPolicy): void {
   };
 
   window.localStorage.setItem(REMINDER_STORAGE_KEY, JSON.stringify(normalized));
+}
+
+export function loadReminderAudit(): ReminderAuditEntry[] {
+  if (typeof window === 'undefined' || !window.localStorage) return [];
+
+  try {
+    const raw = window.localStorage.getItem(REMINDER_AUDIT_STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((entry): entry is ReminderAuditEntry => {
+      if (!entry || typeof entry !== 'object') return false;
+      const candidate = entry as Partial<ReminderAuditEntry>;
+      return typeof candidate.at === 'string' && typeof candidate.action === 'string' && typeof candidate.detail === 'string';
+    }).slice(0, 50);
+  } catch {
+    return [];
+  }
+}
+
+export function appendReminderAudit(entry: ReminderAuditEntry): void {
+  if (typeof window === 'undefined' || !window.localStorage) return;
+  const current = loadReminderAudit();
+  const next = [entry, ...current].slice(0, 50);
+  window.localStorage.setItem(REMINDER_AUDIT_STORAGE_KEY, JSON.stringify(next));
 }
 
 export function savePortableProfile(profile: PortableProfile): void {
