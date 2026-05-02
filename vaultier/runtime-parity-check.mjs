@@ -23,6 +23,11 @@ for (const command of Object.keys(resultShapeFixture.commands)) {
   assert.match(headlessContract, new RegExp(`command: '${command}'`), `WB-mode fixture missing command ${command}`);
 }
 
+assert.equal(Object.keys(resultShapeFixture.expectedResultKeys).length, commands.length, 'result-shape fixture expectedResultKeys coverage drifted');
+for (const command of commands) {
+  assert.ok(Array.isArray(resultShapeFixture.expectedResultKeys[command]), `result-shape fixture missing expectedResultKeys for ${command}`);
+}
+
 for (const command of commands) {
   assert.match(runtimeBridge, new RegExp(`${command}: \\(`), `runtimeBridge tauri API missing ${command}`);
   assert.match(headlessContract, new RegExp(`command: '${command}'`), `WB-mode contract fixture missing ${command}`);
