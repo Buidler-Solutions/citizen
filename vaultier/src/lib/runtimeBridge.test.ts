@@ -14,9 +14,10 @@ function withTauriInvoke(invoke?: InvokeFn): void {
 }
 
 async function main() {
-  const sanitized = sanitizeTauriPayloadForLogs({ passphrase: 'x', nested: { backupPassword: 'y', notes: 'safe' } }) as Record<string, unknown>;
+  const sanitized = sanitizeTauriPayloadForLogs({ passphrase: 'x', nested: { backupPassword: 'y', notes: 'safe' }, args: ['--slot-password=abc123'] }) as Record<string, unknown>;
   assert(sanitized.passphrase === '[REDACTED]', 'top-level secret field should be redacted');
   assert((sanitized.nested as Record<string, unknown>).backupPassword === '[REDACTED]', 'nested password field should be redacted');
+  assert(((sanitized.args as unknown[])[0] as string) === '[REDACTED]', 'secret-like CLI arg strings should be redacted');
 
   withTauriInvoke(undefined);
   assert(detectRuntimeShell() === 'web-mock', 'runtime detection should default to web-mock without tauri bridge');
@@ -67,11 +68,11 @@ async function main() {
   });
 
   try {
-    await invokeBackupCommandViaTauri({ command: 'backup_restore', targetPath: '/media/usb/vault.cvb', role: 'critical', restoreIdentityKeys: true, restoreAccountKeys: true, restoreConsentReceipts: true });
+    await invokeBackupCommandViaTauri({ command: 'backup_verify', targetPath: '/media/usb/vault.cvb', expectedVaultVersion: '1', requireSignedManifest: true, manifestSignatureKeyId: 'password=super-secret' });
     throw new Error('expected failure');
   } catch (error) {
     const message = String((error as Error).message);
-    assert(message.includes('tauri_backup_restore_failed'), 'bridge failures should include deterministic command prefix');
+    assert(message.includes('tauri_backup_verify_failed'), 'bridge failures should include deterministic command prefix');
     assert(!message.includes('super-secret'), 'bridge failure details must redact secrets when present');
   }
 }
