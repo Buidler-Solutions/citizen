@@ -6,7 +6,7 @@ This package bootstraps the Tauri-first desktop runtime for Vaultier so portable
 
 - Tauri shell scaffold with deterministic command IDs.
 - Typed request/response DTOs for backup operations.
-- Bridge handlers now invoke `citizen-wallet` CLI backup commands (`init`, `add-slot`, `export-credentials`, `verify`, `restore`) and return deterministic desktop contract envelopes while preserving implementation gaps for argument/secret plumbing.
+- Bridge handlers invoke `citizen-wallet` CLI backup commands (`init`, `add-slot`, `export-credentials`, `verify`, `restore`), accept typed `payload.args` to forward command arguments, and return deterministic desktop contract envelopes while preserving implementation gaps for in-process wallet-core bindings.
 
 ## Commands
 
