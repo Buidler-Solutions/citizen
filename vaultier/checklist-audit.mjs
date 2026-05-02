@@ -26,6 +26,7 @@ for (const rawLine of doc.split('\n')) {
 const counts = { pending: 0, partial: 0, complete: 0 };
 const staleUnchecked = [];
 const completionHints = /(implemented|now includes|now enforces|validated|captured|exists in-repo|documented|recorded|added|wired|published|confirmed|accept(ed|ance))/i;
+const remainingWorkHints = /(pending|remains pending|still pending|remaining|follow-up|follow up|open|yet|not\s+yet|still requires|still open|before marking complete|until .* complete)/i;
 
 for (const section of sections) {
   for (const item of section.items) {
@@ -33,8 +34,12 @@ for (const section of sections) {
     if (item.status === '~') counts.partial += 1;
     if (item.status === 'x') counts.complete += 1;
 
-    if ((item.status === ' ' || item.status === '~') && completionHints.test(item.text)) {
-      staleUnchecked.push({ section: section.title, status: item.status === '~' ? 'partial' : 'pending', text: item.text });
+    if (item.status !== 'x' && completionHints.test(item.text) && !remainingWorkHints.test(item.text)) {
+      staleUnchecked.push({
+        section: section.title,
+        status: item.status === '~' ? 'partial' : 'pending',
+        text: item.text,
+      });
     }
   }
 }
