@@ -21,8 +21,9 @@ import type {
   CrashSafeWriteStep,
   RedactionScanResult,
   BackupCandidate,
+  SafeEjectResult,
 } from './types';
-import { detectRuntimeShell, discoverDrivesViaTauri, flushViaTauri, invokeBackupCommandViaTauri } from './runtimeBridge';
+import { detectRuntimeShell, discoverDrivesViaTauri, flushViaTauri, invokeBackupCommandViaTauri, safeEjectViaTauri } from './runtimeBridge';
 
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 const now = () => new Date().toISOString();
@@ -210,6 +211,37 @@ export async function flushPendingWritesWithStrategy(targetPath: string): Promis
   return {
     logs,
     strategy: fallbackStrategy,
+  };
+}
+
+export async function safeEjectMedia(targetPath: string): Promise<SafeEjectResult> {
+  await wait(150);
+  const at = now();
+  if (getRuntimeShell() === 'tauri') {
+    const response = await safeEjectViaTauri(targetPath);
+    if (response.bridgeIssue || !response.ok) {
+      return {
+        ok: false,
+        logs: [
+          { at, action: 'vault.eject.runtime_required', status: 'warn', details: response.bridgeIssue?.detail ?? 'Runtime reported eject failure.' },
+        ],
+      };
+    }
+    return {
+      ok: true,
+      logs: [{ at, action: 'vault.eject.complete', status: 'ok', details: `Runtime bridge confirmed safe eject for ${targetPath}.` }],
+    };
+  }
+  return {
+    ok: true,
+    logs: [
+      {
+        at,
+        action: 'vault.eject.manual',
+        status: 'warn',
+        details: `Mock runtime cannot issue OS eject calls. Use system eject controls for ${targetPath}.`,
+      },
+    ],
   };
 }
 

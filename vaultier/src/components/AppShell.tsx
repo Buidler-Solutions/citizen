@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { createBackup, discoverRemovableDrives, exportDiagnosticBundle, flushPendingWritesWithStrategy, getRuntimeShell, testRestore, verifyBackup } from '../lib/mockVaultCore';
+import { createBackup, discoverRemovableDrives, exportDiagnosticBundle, flushPendingWritesWithStrategy, getRuntimeShell, safeEjectMedia, testRestore, verifyBackup } from '../lib/mockVaultCore';
 import type { BackupRequest, CrashSafeWriteStep, DiagnosticBundle, DriveDiscoveryResult, OperationLog, PerformanceMeasurement, PortableProfile, RestoreResult, RuntimeShell, VerifyResult, VaultRole } from '../lib/types';
 import { ERROR_COPY, OPERATION_STATE_COPY, type ErrorIdentifier, type OperationState } from '../lib/operationState';
 import { defaultReminderPolicy, getNextReminderAt, isReminderDue, loadReminderSettings, saveReminderSettings, type ReminderPolicy } from '../lib/reminders';
@@ -84,6 +84,7 @@ export function AppShell() {
   const [runtimeShell, setRuntimeShell] = useState<RuntimeShell>('web-mock');
   const [allowMockRuntimeOps, setAllowMockRuntimeOps] = useState(false);
   const [flushStrategy, setFlushStrategy] = useState<CrashSafeWriteStep[]>([]);
+  const [ejectCompleted, setEjectCompleted] = useState(false);
   const [performanceMeasurements, setPerformanceMeasurements] = useState<PerformanceMeasurement[]>([]);
 
   useEffect(() => {
@@ -234,6 +235,11 @@ export function AppShell() {
     setOperationState('completed');
   };
   const runExportDiagnostics = async () => { if (profile) setDiagnosticBundle(await exportDiagnosticBundle(profile, logs.slice(0, 12), errorHistory, performanceMeasurements)); };
+  const runSafeEject = async () => {
+    const result = await safeEjectMedia(targetPath);
+    appendLogs(result.logs);
+    setEjectCompleted(result.ok);
+  };
   const runRefreshDrives = async () => {
     const result = await discoverRemovableDrives();
     setDiscovery(result);
@@ -274,7 +280,8 @@ export function AppShell() {
       <button disabled={running || selectedRoles.length === 0 || mockRuntimeBlocked} onClick={runCreateBackup}>Create Backup</button></>}
       {stage === 'verify' && <><button disabled={running || !profile || mockRuntimeBlocked} onClick={runVerify}>Verify Backup</button>{verifyResult && <><p className={verifyResult.checks.some((check) => check.status === 'warn') ? 'summary warn' : 'summary ok'}>{verifyResult.checks.length} deterministic checks completed at {verifyResult.verifiedAt}.</p><ul className="log-list">{verifyResult.checks.map((check) => <li key={check.label}>{check.label}: {check.status.toUpperCase()} · {check.detail}</li>)}</ul><p className={verifyResult.manifest.verified ? 'summary ok' : 'summary warn'}>Signed manifest: {verifyResult.manifest.verified ? `verified (${verifyResult.manifest.signatureKeyId})` : 'verification failed'}.</p></>}</>}
       {stage === 'restore' && <><label>Restore passphrase<input type="password" value={restorePassphrase} onChange={(e) => setRestorePassphrase(e.target.value)} /></label><label className="inline-control"><input type="checkbox" checked={restoreBackoffEnabled} onChange={() => setRestoreBackoffEnabled((value) => !value)} />Enable unlock retry backoff (CLI-aligned default)</label><div className="row"><button onClick={simulateFailedUnlock}>Simulate wrong passphrase</button><button disabled={running || unlockDelayMs > 0 || mockRuntimeBlocked} onClick={runRestore}>Test Restore</button></div>{unlockDelayMs > 0 && <p className="summary warn">Backoff active: {unlockDelayMs}ms. Repeated failures intentionally slow unlock retries.</p>}<p className="hint">Backoff schedule: {BACKOFF_STEPS_MS.join('ms -> ')}ms.</p>{restoreResult && <p className="summary ok">Recovered: {restoreResult.restoredArtifacts.join(', ')}</p>}</>}
-      {stage === 'eject' && <><button onClick={runFlushWrites}>Flush pending writes</button><label className="inline-control"><input type="checkbox" checked={ejectChecks.duplicateMedia} onChange={() => setEjectChecks((p) => ({ ...p, duplicateMedia: !p.duplicateMedia }))} />Duplicate backup stored separately</label><p className={safeToEject ? 'summary ok' : 'summary warn'}>{safeToEject ? 'Checklist complete. Safe to eject.' : 'Complete all checklist steps before ejection.'}</p>
+      {stage === 'eject' && <><button onClick={runFlushWrites}>Flush pending writes</button><button onClick={runSafeEject} disabled={!safeToEject}>Run safe eject</button><label className="inline-control"><input type="checkbox" checked={ejectChecks.duplicateMedia} onChange={() => setEjectChecks((p) => ({ ...p, duplicateMedia: !p.duplicateMedia }))} />Duplicate backup stored separately</label><p className={safeToEject ? 'summary ok' : 'summary warn'}>{safeToEject ? 'Checklist complete. Safe to eject.' : 'Complete all checklist steps before ejection.'}</p>
+      {ejectCompleted && <p className="summary ok">Safe eject completed. You can now remove the media.</p>}
       <p className="summary warn">Do not unplug during write/flush operations. Unexpected removal can corrupt vault headers and slot metadata.</p>
       {selectedDrive && <p className="hint">Safe eject guidance: {platformEjectGuidance[selectedDrive.platform]}</p>}
       {selectedDrive && <p className="hint">Filesystem compatibility note: preferred formats are exFAT, NTFS, APFS, or ext4 for cross-machine restore reliability.</p>}
