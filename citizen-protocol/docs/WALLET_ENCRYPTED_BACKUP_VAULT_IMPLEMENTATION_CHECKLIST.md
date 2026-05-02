@@ -290,7 +290,7 @@ To translate the CLI-first vault implementation into a polished portable app exp
 ### Continue Tauri Vaultier Desktop Version (Execution Queue)
 
 1. **TV-1: WB-mode first hardening**
-   - [~] Make WB-mode simulation adapter the default profile in desktop rehearsal builds. (Vaultier now defaults runtime profile selection to `wb-simulation`, with explicit opt-in to `tauri-runtime` via runtime profile selector or query/localStorage override for parity drills.)
+   - [x] Make WB-mode simulation adapter the default profile in desktop rehearsal builds. (Vaultier now defaults runtime profile selection to `wb-simulation`, requires explicit opt-in to `tauri-runtime` via runtime profile selector or query/localStorage override for parity drills, and contract checks now enforce wb-simulation fallback + opt-in tauri shell gating.)
    - [x] Add deterministic fixtures for decoy/critical create->verify->restore journeys under WB-mode (added `vaultier/fixtures/wb-mode-journeys.json` with pinned schema/contract fixtures and `vaultier/wb-mode-fixture-check.mjs` validation wired into `pnpm test:headless-contract`).
    - [x] Gate merges on WB-mode contract checks for `init`, `add-slot`, `export-credentials`, `verify`, and `restore` (added `vaultier-desktop-contract-gate.yml` GitHub Actions workflow scoped to `vaultier/**` + `wallet/desktop/**`, running `pnpm test:headless-contract`; headless contract check now asserts all five command branches and deterministic performance/log markers).
 

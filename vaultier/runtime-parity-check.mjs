@@ -34,6 +34,24 @@ assert.match(runtimeBridge, /sanitizePayload\(payload\)/, 'runtime bridge must s
 
 assert.match(
   runtimeBridge,
+  /if \(typeof window === 'undefined'\) return 'wb-simulation';/,
+  'runtime profile must default to wb-simulation in non-browser contexts',
+);
+
+assert.match(
+  runtimeBridge,
+  /return 'wb-simulation';/,
+  'runtime profile fallback must stay pinned to wb-simulation',
+);
+
+assert.match(
+  runtimeBridge,
+  /if \(profile === 'tauri-runtime' && hasTauriRuntime\(\)\) return 'tauri';/,
+  'tauri shell must require explicit tauri-runtime profile opt-in',
+);
+
+assert.match(
+  runtimeBridge,
   /tauri_response_redaction_blocked/,
   'runtime bridge must reject secret-like response payload fields deterministically',
 );
