@@ -13,6 +13,8 @@ This package bootstraps the Tauri-first desktop runtime for Vaultier so portable
 ```bash
 cd wallet/desktop
 pnpm install
+pnpm doctor:linux # Linux only: verifies javascriptcoregtk/webkit2gtk pkg-config deps
+pnpm doctor:linux:fix # Linux only: attempts distro-aware package installation
 pnpm tauri:dev
 # or build runtime explicitly
 cargo check --manifest-path src-tauri/Cargo.toml --features desktop-runtime
@@ -26,6 +28,41 @@ cargo check --manifest-path src-tauri/Cargo.toml --features desktop-runtime
 - Current bridge execution shells out to `cargo run -p citizen-wallet -- wallet backup ... --json` from `citizen-protocol/` and is intended as a cautious implementation step until native in-process wallet-core bindings land.
 
 - Linux note: `desktop-runtime` intentionally gates Tauri/WebKitGTK dependencies so plain `cargo check --manifest-path src-tauri/Cargo.toml` can run without `javascriptcoregtk` system packages; runtime builds still require system WebKitGTK/JavascriptCore packages.
+
+### Linux dependency fix for `javascriptcore-rs-sys` build errors
+
+If `pnpm tauri:dev` fails with:
+
+- `Package javascriptcoregtk-4.1 was not found in the pkg-config search path`
+- `The system library javascriptcoregtk-4.1 required by crate javascriptcore-rs-sys was not found`
+
+install native development packages and rerun the doctor script:
+
+```bash
+# Ubuntu/Debian
+sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev
+
+# Fedora
+sudo dnf install webkit2gtk4.1-devel javascriptcoregtk4.1-devel
+
+# Arch
+sudo pacman -S webkit2gtk-4.1
+
+cd wallet/desktop
+pnpm doctor:linux
+# optional automated install path (requires sudo)
+pnpm doctor:linux:fix
+pnpm tauri:dev
+```
+
+If packages are installed but detection still fails, check whether `pkg-config` can see `.pc` files:
+
+```bash
+pkg-config --modversion javascriptcoregtk-4.1
+pkg-config --modversion webkit2gtk-4.1
+```
+
+If those commands fail, export `PKG_CONFIG_PATH` to the directory that contains the `.pc` files (the `pnpm doctor:linux` script now prints candidate paths when it detects this situation).
 
 ## Implementation Status
 

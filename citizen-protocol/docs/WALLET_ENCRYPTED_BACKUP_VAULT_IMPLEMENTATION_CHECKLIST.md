@@ -257,6 +257,16 @@ To keep implementation sequencing unambiguous, treat **Checkpoint 8.5 — Priori
 
 > Implementation caution: treat the desktop app as implemented and runnable for operator rehearsal, but not yet production-ready until the remaining checklist gates above are complete and evidenced.
 
+### Desktop Delta Update (2026-05-02)
+
+- Desktop implementation is now explicitly confirmed as **implemented and runnable** for Vaultier rehearsals via `wallet/desktop` + `vaultier` guided flows, aligned with the current checklist directive to stay cautious on unresolved hardening gaps.
+- CLI-contract parity remains the source-of-truth for desktop runtime behavior; new desktop work should preserve deterministic `wallet backup ... --json` compatibility before adding UI-only behavior.
+- Remaining gaps should be treated as blocker-class for production claims:
+  - cross-platform signed packaging + reproducible metadata,
+  - OS-native removable media adapters (beyond current cautious bridge boundaries),
+  - in-process wallet-core bridge replacement for CLI shell fallback,
+  - final memory/logging security audit sign-off.
+
 To translate the CLI-first vault implementation into a polished portable app experience, execute this cross-platform track in parallel with Checkpoints 5–9.
 
 ### UX/Product Requirements
@@ -471,7 +481,7 @@ This slice starts the desktop productization track without blocking on extension
 
 | Milestone | Status | Target outcome |
 | --- | --- | --- |
-| M0 — Runtime decision + shell bootstrap | In Progress | Tauri scaffold plus a working bridge command now lives in `wallet/desktop` and executes wallet backup CLI JSON paths; next step is replacing shell-based execution with wallet-core API bindings and hardened secret transport. |
+| M0 — Runtime decision + shell bootstrap | Implemented (hardening pending) | Tauri scaffold plus a working bridge command now lives in `wallet/desktop` and executes wallet backup CLI JSON paths; next step is replacing shell-based execution with wallet-core API bindings and hardened secret transport before production sign-off. |
 | M1 — Reliable removable-media writes | Planned | Deterministic mount detection, flush/fsync behavior, atomic update semantics. |
 | M2 — Guided backup UX | Planned | One-screen decoy/critical creation flow with visible progress and safety cues. |
 | M3 — Restore confidence UX | Planned | Verify + test-restore flows with deterministic technical detail panel. |

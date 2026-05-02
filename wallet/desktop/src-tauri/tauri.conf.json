@@ -18,5 +18,10 @@
         "resizable": true
       }
     ]
+  },
+  "bundle": {
+    "icon": [
+      "../../browser/public/icons/icon128.png"
+    ]
   }
 }
