@@ -11,6 +11,7 @@
     "start": "vite",
     "test:headless-contract": "pnpm check:priority-gap && node headless-contract-check.mjs && node operation-copy-check.mjs",
     "check:priority-gap": "node checklist-gap-check.mjs",
+    "check:priority-gap:json": "node checklist-gap-check.mjs --json",
     "check:priority-gap:strict": "pnpm check:priority-gap",
     "check:evidence-packet": "node maintainer-evidence-packet.mjs"
   },

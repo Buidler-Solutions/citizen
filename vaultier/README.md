@@ -51,6 +51,14 @@ pnpm check:priority-gap
 
 The headless contract regression script now enforces this gate first so priority blockers fail fast during local/CI runs.
 
+For automation/evidence tooling, emit machine-readable priority-gap status:
+
+```bash
+cd vaultier
+pnpm check:priority-gap:json
+```
+
+
 ## Direction update
 
 The near-term direction is to keep Vaultier implementation-first and portable-ops focused:

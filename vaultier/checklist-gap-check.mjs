@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
+const emitJson = process.argv.includes('--json');
 const checklistPath = resolve('../citizen-protocol/docs/WALLET_ENCRYPTED_BACKUP_VAULT_IMPLEMENTATION_CHECKLIST.md');
 const doc = readFileSync(checklistPath, 'utf8');
 
@@ -31,18 +32,42 @@ for (const rawLine of lines) {
   }
 }
 
-const pendingCount = openItems.filter((item) => item.status === ' ').length;
-const partialCount = openItems.filter((item) => item.status === '~').length;
+const pendingItems = openItems.filter((item) => item.status === ' ');
+const partialItems = openItems.filter((item) => item.status === '~');
 
-console.log(`checklist-gap-check: checkpoint-8.5 pending=${pendingCount} partial=${partialCount} complete=${doneItems.length}`);
+const summary = {
+  checkpoint: '8.5',
+  status: openItems.length === 0 ? 'complete' : 'blocked',
+  counts: {
+    pending: pendingItems.length,
+    partial: partialItems.length,
+    complete: doneItems.length,
+  },
+  openItems: openItems.map((item, index) => ({
+    index: index + 1,
+    status: item.status === '~' ? 'partial' : 'pending',
+    checklistBadge: item.status === '~' ? '[~]' : '[ ]',
+    text: item.text,
+  })),
+};
+
+if (emitJson) {
+  console.log(JSON.stringify(summary, null, 2));
+} else {
+  console.log(
+    `checklist-gap-check: checkpoint-8.5 pending=${summary.counts.pending} partial=${summary.counts.partial} complete=${summary.counts.complete}`,
+  );
+
+  if (openItems.length > 0) {
+    console.log('checklist-gap-check: open priority-gate items:');
+    for (const item of summary.openItems) {
+      console.log(`  ${item.index}. ${item.checklistBadge} ${item.text}`);
+    }
+  } else {
+    console.log('checklist-gap-check: priority gate complete; non-blocking tracks may proceed.');
+  }
+}
 
 if (openItems.length > 0) {
-  console.log('checklist-gap-check: open priority-gate items:');
-  for (const [index, item] of openItems.entries()) {
-    const badge = item.status === '~' ? '[~]' : '[ ]';
-    console.log(`  ${index + 1}. ${badge} ${item.text}`);
-  }
   process.exitCode = 2;
-} else {
-  console.log('checklist-gap-check: priority gate complete; non-blocking tracks may proceed.');
 }
