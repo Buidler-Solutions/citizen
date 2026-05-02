@@ -96,10 +96,13 @@ function normalizeBackupResponse(commandName: HeadlessCommand['command'], respon
 
   return {
     schemaVersion: 'v1alpha1',
-    contractVersion: wrapped.contract_version ?? 'citizen.wallet.backup.desktop.v1alpha1',
+    contractVersion: '2026-05-01',
     ok: false,
     command: commandName,
-    errorId: wrapped.error_id ?? 'wallet_cli_error',
+    error: {
+      code: 'invalid_payload',
+      message: wrapped.error_id ?? 'wallet_cli_error',
+    },
     result: {
       error_id: wrapped.error_id ?? 'wallet_cli_error',
       message: 'Tauri runtime command failed before CLI contract payload could be returned.',
