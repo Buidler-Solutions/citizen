@@ -518,6 +518,7 @@ This slice starts the desktop productization track without blocking on extension
 ### Delta Update (2026-05-02, Tauri continuation gap reconciliation)
 
 - Re-audited this checklist against the current `wallet/desktop` + `vaultier/` implementation and prior 8.5 evidence artifacts to catch items that were implemented but left unchecked.
+- Tauri desktop bridge now forwards CLI top-level parity markers (`contract_version`, `status`) in deterministic response details (`wallet_cli_contract_version`, `wallet_cli_status`) so WB-mode/runtime contract-drift checks can assert field compatibility without parsing nested payload internals.
 - Marked **Next Slice C / CI wiring** as complete because the dedicated wallet backup CI workflow is in-repo and already referenced in sign-off evidence.
 - Remaining unchecked Tauri items continue to represent real implementation gaps (in-process wallet-core bridge, signed packaging, full OS-native removable-media adapter parity, and final bridge memory/logging audit), so they stay open intentionally until code + evidence land.
 

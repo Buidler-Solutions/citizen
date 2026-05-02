@@ -237,12 +237,23 @@ fn execute_backup_command(request: BackupCommandRequest) -> BackupCommandRespons
             };
         }
 
+        let cli_contract_version = parsed
+            .get("contract_version")
+            .and_then(|v| v.as_str())
+            .map(str::to_owned);
+        let cli_status = parsed
+            .get("status")
+            .and_then(|v| v.as_str())
+            .map(str::to_owned);
+
         BackupCommandResponse {
             contract_version: CONTRACT_VERSION,
             status: "ok",
             error_id: None,
             details: serde_json::json!({
                 "command": request.command,
+                "wallet_cli_contract_version": cli_contract_version,
+                "wallet_cli_status": cli_status,
                 "wallet_cli": parsed,
                 "wallet_cli_stderr": stderr,
             }),
@@ -319,6 +330,7 @@ mod tests {
         let value = serde_json::to_value(response).expect("response serializes");
         assert_eq!(value["contract_version"], CONTRACT_VERSION);
         assert_eq!(value["status"], "ok");
+        assert_eq!(value["details"]["wallet_cli"]["status"], "ok");
         assert!(!contains_sensitive_keys(&value));
     }
 
