@@ -291,7 +291,7 @@ To translate the CLI-first vault implementation into a polished portable app exp
 
 1. **TV-1: WB-mode first hardening**
    - [~] Make WB-mode simulation adapter the default profile in desktop rehearsal builds. (Vaultier now defaults runtime profile selection to `wb-simulation`, with explicit opt-in to `tauri-runtime` via runtime profile selector or query/localStorage override for parity drills.)
-   - [ ] Add deterministic fixtures for decoy/critical create->verify->restore journeys under WB-mode.
+   - [x] Add deterministic fixtures for decoy/critical create->verify->restore journeys under WB-mode (added `vaultier/fixtures/wb-mode-journeys.json` with pinned schema/contract fixtures and `vaultier/wb-mode-fixture-check.mjs` validation wired into `pnpm test:headless-contract`).
    - [ ] Gate merges on WB-mode contract checks for `init`, `add-slot`, `export-credentials`, `verify`, and `restore`.
 
 2. **TV-2: Tauri bridge parity path**
