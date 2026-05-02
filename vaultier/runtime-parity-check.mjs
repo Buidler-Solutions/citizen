@@ -13,6 +13,11 @@ const commands = ['backup_init', 'backup_add_slot', 'backup_export_credentials',
 
 assert.equal(resultShapeFixture.schemaVersion, 'v1alpha1', 'result-shape fixture schema version drifted');
 assert.equal(resultShapeFixture.contractVersion, '2026-05-01', 'result-shape fixture contract version drifted');
+assert.deepEqual(
+  resultShapeFixture.expectedTopLevelValues,
+  { schemaVersion: 'v1alpha1', contractVersion: '2026-05-01', ok: true },
+  'result-shape fixture top-level expected values drifted',
+);
 
 for (const command of Object.keys(resultShapeFixture.commands)) {
   assert.match(headlessContract, new RegExp(`command: '${command}'`), `WB-mode fixture missing command ${command}`);
@@ -63,3 +68,9 @@ assert.match(
 );
 
 console.log('runtime-parity-check: wb-mode snapshots, tauri bridge coverage, and redaction parity validated');
+
+assert.match(
+  runtimeBridge,
+  /const response = await invokeTauri<HeadlessResponse>\(commandName, payload\)/,
+  'runtime bridge command invocation path must remain deterministic for parity snapshots',
+);

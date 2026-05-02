@@ -76,3 +76,4 @@ vaultier/dist/
 wallet/desktop/dist/
 wallet/desktop/node_modules/
 wallet/desktop/src-tauri/target/
+wallet/desktop/src-tauri/gen/
