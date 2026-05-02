@@ -5,6 +5,7 @@ type BridgeDrive = DriveRecord & { platform: RuntimePlatform };
 type TauriBridgeApi = {
   discover_removable_drives: () => Promise<{ drives: BridgeDrive[] }>;
   flush_vault_writes: (payload: { targetPath: string }) => Promise<{ strategy: CrashSafeWriteStep[] }>;
+  safe_eject_media: (payload: { targetPath: string }) => Promise<{ ok: boolean }>;
   backup_init: (payload: Omit<Extract<HeadlessCommand, { command: 'backup_init' }>, 'command'>) => Promise<HeadlessResponse>;
   backup_add_slot: (payload: Omit<Extract<HeadlessCommand, { command: 'backup_add_slot' }>, 'command'>) => Promise<HeadlessResponse>;
   backup_export_credentials: (payload: Omit<Extract<HeadlessCommand, { command: 'backup_export_credentials' }>, 'command'>) => Promise<HeadlessResponse>;
@@ -96,5 +97,21 @@ export async function invokeBackupCommandViaTauri(command: HeadlessCommand): Pro
     const wrapped = new Error(`tauri_${commandName}_failed:${details}`);
     (wrapped as Error & { cause?: unknown }).cause = error;
     throw wrapped;
+  }
+}
+
+export async function safeEjectViaTauri(targetPath: string): Promise<{ ok: boolean; bridgeIssue?: DriveProbeIssue }> {
+  try {
+    const response = await invokeTauri<{ ok: boolean }>('safe_eject_media', { targetPath });
+    return { ok: response.ok };
+  } catch {
+    return {
+      ok: false,
+      bridgeIssue: {
+        mountPath: targetPath,
+        code: 'media_unavailable',
+        detail: 'Tauri safe-eject bridge unavailable; manual OS eject is still required.',
+      },
+    };
   }
 }

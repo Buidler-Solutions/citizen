@@ -204,3 +204,8 @@ export type FlushResult = {
   logs: OperationLog[];
   strategy: CrashSafeWriteStep[];
 };
+
+export type SafeEjectResult = {
+  ok: boolean;
+  logs: OperationLog[];
+};
