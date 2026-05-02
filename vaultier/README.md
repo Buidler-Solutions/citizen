@@ -40,6 +40,17 @@ pnpm install
 pnpm start  # alias for dev
 ```
 
+## Priority-first checklist gate
+
+Before continuing Vaultier implementation, run the checkpoint 8.5 gap check and treat any open items as blockers:
+
+```bash
+cd vaultier
+pnpm check:priority-gap
+```
+
+The headless contract regression script now enforces this gate first so priority blockers fail fast during local/CI runs.
+
 ## Direction update
 
 The near-term direction is to keep Vaultier implementation-first and portable-ops focused:

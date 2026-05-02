@@ -21,6 +21,9 @@ for (const rawLine of lines) {
 
   const status = line.slice(3, 4);
   const text = line.replace(/^- \[[ x~]\]\s*/, '');
+  if (text.endsWith(':')) {
+    continue;
+  }
   if (status === ' ' || status === '~') {
     openItems.push({ status, text });
   } else if (status === 'x') {
