@@ -15,6 +15,7 @@ const resultShapeFixture = JSON.parse(readFileSync(resultShapeFixturePath, 'utf8
   commands: Record<string, string[]>;
   expectedTopLevelValues: Record<string, unknown>;
   expectedResultKeys: Record<string, string[]>;
+  expectedResultValues: Record<string, Record<string, unknown>>;
 };
 
 
@@ -35,6 +36,16 @@ function buildFixtureResult(command: string): Record<string, unknown> {
     response[key] = `fixture-${command}-${key}`;
   }
   return response;
+}
+
+
+function assertResultFixtureValues(response: Record<string, unknown>, expected: Record<string, unknown>, command: string): void {
+  for (const [key, value] of Object.entries(expected)) {
+    assert(
+      JSON.stringify(response[key]) === JSON.stringify(value),
+      `runtime parity result-value drift for ${command}:${key}`,
+    );
+  }
 }
 
 function withTauriInvoke(invoke?: InvokeFn): void {
@@ -127,9 +138,12 @@ async function main() {
     const responseKeys = Object.keys(responseRecord).sort();
     const expectedKeys = [...resultShapeFixture.commands[parity.command]].sort();
     assert(JSON.stringify(responseKeys) === JSON.stringify(expectedKeys), `runtime parity snapshot key drift for ${parity.command}`);
-    const resultKeys = Object.keys((responseRecord.result ?? {}) as Record<string, unknown>).sort();
+    const resultRecord = (responseRecord.result ?? {}) as Record<string, unknown>;
+    const resultKeys = Object.keys(resultRecord).sort();
     const expectedResultKeys = [...(resultShapeFixture.expectedResultKeys[parity.command] ?? [])].sort();
     assert(JSON.stringify(resultKeys) === JSON.stringify(expectedResultKeys), `runtime parity result-key drift for ${parity.command}`);
+    const expectedResultValues = resultShapeFixture.expectedResultValues[parity.command] ?? {};
+    assertResultFixtureValues(resultRecord, expectedResultValues, parity.command);
   }
 
   withTauriInvoke(async () => {

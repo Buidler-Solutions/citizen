@@ -24,8 +24,10 @@ for (const command of Object.keys(resultShapeFixture.commands)) {
 }
 
 assert.equal(Object.keys(resultShapeFixture.expectedResultKeys).length, commands.length, 'result-shape fixture expectedResultKeys coverage drifted');
+assert.equal(Object.keys(resultShapeFixture.expectedResultValues).length, commands.length, 'result-shape fixture expectedResultValues coverage drifted');
 for (const command of commands) {
   assert.ok(Array.isArray(resultShapeFixture.expectedResultKeys[command]), `result-shape fixture missing expectedResultKeys for ${command}`);
+  assert.ok(resultShapeFixture.expectedResultValues[command], `result-shape fixture missing expectedResultValues for ${command}`);
 }
 
 for (const command of commands) {
