@@ -239,7 +239,75 @@ fn execute_backup_command(request: BackupCommandRequest) -> BackupCommandRespons
 
 #[cfg(all(test, feature = "desktop-runtime"))]
 mod tests {
-    use super::{contains_sensitive_keys, parse_cli_json};
+
+    use super::{
+        command_to_cli_args, contains_sensitive_keys, parse_cli_json, BackupCommandResponse,
+        CONTRACT_VERSION,
+    };
+
+    #[test]
+    fn cli_command_mapping_covers_required_backup_commands() {
+        assert_eq!(command_to_cli_args("backup_init"), Some(vec!["backup", "init"]));
+        assert_eq!(
+            command_to_cli_args("backup_add_slot"),
+            Some(vec!["backup", "add-slot"])
+        );
+        assert_eq!(
+            command_to_cli_args("backup_export_credentials"),
+            Some(vec!["backup", "export-credentials"])
+        );
+        assert_eq!(
+            command_to_cli_args("backup_verify"),
+            Some(vec!["backup", "verify"])
+        );
+        assert_eq!(
+            command_to_cli_args("backup_restore"),
+            Some(vec!["backup", "restore"])
+        );
+        assert_eq!(
+            command_to_cli_args("backup_diagnostics"),
+            Some(vec!["backup", "diagnostics"])
+        );
+    }
+
+    #[test]
+    fn backup_response_serialization_keeps_contract_fields_and_avoids_secret_keys() {
+        let response = BackupCommandResponse {
+            contract_version: CONTRACT_VERSION,
+            status: "ok",
+            error_id: None,
+            details: serde_json::json!({
+                "command": "backup_verify",
+                "wallet_cli": {
+                    "status": "ok",
+                    "schema_version": "v1",
+                    "verified_at": "2026-05-02T00:00:00Z"
+                }
+            }),
+        };
+
+        let value = serde_json::to_value(response).expect("response serializes");
+        assert_eq!(value["contract_version"], CONTRACT_VERSION);
+        assert_eq!(value["status"], "ok");
+        assert!(!contains_sensitive_keys(&value));
+    }
+
+    #[test]
+    fn backup_response_sensitive_key_scan_rejects_secret_like_fields() {
+        let response = BackupCommandResponse {
+            contract_version: CONTRACT_VERSION,
+            status: "ok",
+            error_id: None,
+            details: serde_json::json!({
+                "wallet_cli": {
+                    "mnemonic": "should-not-appear"
+                }
+            }),
+        };
+
+        let value = serde_json::to_value(response).expect("response serializes");
+        assert!(contains_sensitive_keys(&value));
+    }
 
     #[test]
     fn parse_cli_json_accepts_valid_payload() {
