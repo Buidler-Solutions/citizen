@@ -164,7 +164,7 @@ To keep implementation sequencing unambiguous, treat **Checkpoint 8.5 — Priori
 
 **Exit criteria**
 - [ ] Extension integration tests pass for create/export/restore/verify.
-- [ ] Security boundaries documented for extension runtime and browser storage constraints.
+- [x] Security boundaries documented for extension runtime and browser storage constraints. (Documented in `wallet/browser/docs/WALLET_EXTENSION_BACKUP_SECURITY_BOUNDARIES.md`, including service-worker/page-context isolation rules, encrypted payload handling boundaries, browser storage constraints, and deterministic error-handling expectations for backup flows.)
 
 ---
 
@@ -410,7 +410,7 @@ This section extends the checklist with concrete near-term implementation work i
 ### Next Slice B — USB/operator reliability and runbook closure
 
 - [ ] Add CLI warnings and guidance for removable-media risks (partial write, unplug during flush, filesystem limits) in `init`, `export-credentials`, and `restore` command output/help text.
-- [ ] Add operator drill: “create on USB A, verify on machine 1, restore on machine 2”.
+- [x] Add operator drill: “create on USB A, verify on machine 1, restore on machine 2”. (Drill procedure + captured evidence now documented in `citizen-protocol/docs/evidence/wallet-backup-vault/WALLET_BACKUP_USB_CROSS_MACHINE_DRILL_2026-05-02.md`.)
 - [ ] Add explicit duplicate-media procedure (primary + sealed backup + verification cadence).
 - [ ] Document minimum operator profile recommendations:
   - [ ] removable media class/durability expectations
@@ -419,7 +419,7 @@ This section extends the checklist with concrete near-term implementation work i
 
 **Exit criteria**
 - [ ] USB hygiene section is present in wallet runbook docs and cross-linked from this checklist.
-- [ ] At least one end-to-end drill record is captured in docs with observed caveats.
+- [x] At least one end-to-end drill record is captured in docs with observed caveats. (Recorded in `citizen-protocol/docs/evidence/wallet-backup-vault/WALLET_BACKUP_USB_CROSS_MACHINE_DRILL_2026-05-02.md`, including caveats for unsigned desktop rehearsal builds and manual safe-eject fallback handling on adapter mismatch.)
 
 ### Next Slice C — Test matrix closure for GA-v1 candidate
 
