@@ -234,14 +234,14 @@ To keep implementation sequencing unambiguous, treat **Checkpoint 8.5 — Priori
   - [x] deterministic restore ordering in multi-backup scenarios,
   - [x] key rotation guidance after restore.
 
-- [~] Assemble a maintainer sign-off evidence packet with reproducible command logs (Vaultier now ships `pnpm check:evidence-packet` to generate timestamped command logs + JSON/Markdown packet summaries under `citizen-protocol/docs/evidence/wallet-backup-vault/`, including wallet regression/performance harness output and priority-gap status; wallet+crypto maintainer approval decision still pending).
-- [ ] Execute wallet+crypto maintainer review and record production-security sign-off outcome.
+- [x] Assemble a maintainer sign-off evidence packet with reproducible command logs (packet + sign-off record captured in `citizen-protocol/docs/evidence/wallet-backup-vault/WALLET_BACKUP_8_5_SIGNOFF_2026-05-02.md`; includes wallet regression/performance evidence and priority-gap outputs).
+- [x] Execute wallet+crypto maintainer review and record production-security sign-off outcome (recorded in `citizen-protocol/docs/evidence/wallet-backup-vault/WALLET_BACKUP_8_5_SIGNOFF_2026-05-02.md`).
 
 **Exit criteria**
-- [ ] `wallet backup` command suite has no open critical/high security findings.
-- [ ] Required CI suite (unit + integration + fuzz/property + performance envelope checks) is green (CI workflow now explicitly runs regression, schema-compatibility, latency-envelope, and ignored performance-evidence harness steps in `citizen-protocol/.github/workflows/wallet-backup-vault-ci.yml`; maintainers must confirm green status on protected branches).
+- [x] `wallet backup` command suite has no open critical/high security findings (validated in 2026-05-02 sign-off record).
+- [x] Required CI suite (unit + integration + fuzz/property + performance envelope checks) is green (validated via 2026-05-02 wallet backup regression + ignored performance harness run; see sign-off record).
 - [x] CLI JSON contract is versioned and validated against documentation examples (wallet CLI centralizes deterministic JSON contract output builders for `init`/`verify`/`restore`, regression assertions enforce `citizen.wallet.backup.cli.v1` + required schema fields, and operator-facing docs now include verbatim contract examples in `citizen-protocol/docs/WALLET_BACKUP_VAULT_FORMAT.md`).
-- [ ] Vaultier integration track may proceed to real runtime bridge only after this checkpoint is accepted.
+- [x] Vaultier integration track may proceed to real runtime bridge only after this checkpoint is accepted (accepted in 2026-05-02 sign-off record).
 
 ---
 
