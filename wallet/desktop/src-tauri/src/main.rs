@@ -43,6 +43,26 @@ fn command_to_cli_args(command: &str) -> Option<Vec<&'static str>> {
 }
 
 #[cfg(feature = "desktop-runtime")]
+fn payload_args(payload: &serde_json::Value) -> Result<Vec<String>, String> {
+    let Some(args_value) = payload.get("args") else {
+        return Ok(Vec::new());
+    };
+
+    let args = args_value
+        .as_array()
+        .ok_or_else(|| "payload.args must be an array of strings".to_owned())?;
+
+    args.iter()
+        .map(|value| {
+            value
+                .as_str()
+                .map(ToOwned::to_owned)
+                .ok_or_else(|| "payload.args entries must be strings".to_owned())
+        })
+        .collect()
+}
+
+#[cfg(feature = "desktop-runtime")]
 fn execute_backup_command(request: BackupCommandRequest) -> BackupCommandResponse {
     let cli_args = match command_to_cli_args(&request.command) {
         Some(args) => args,
@@ -71,17 +91,34 @@ fn execute_backup_command(request: BackupCommandRequest) -> BackupCommandRespons
         }
     };
 
-    let output = match Command::new("cargo")
+    let dynamic_args = match payload_args(&request.payload) {
+        Ok(args) => args,
+        Err(err) => {
+            return BackupCommandResponse {
+                contract_version: "citizen.wallet.backup.desktop.v1alpha1",
+                status: "error",
+                error_id: Some("invalid_payload"),
+                details: serde_json::json!({
+                    "message": err,
+                    "command": request.command,
+                }),
+            }
+        }
+    };
+
+    let mut command = Command::new("cargo");
+    command
         .arg("run")
         .arg("-p")
         .arg("citizen-wallet")
         .arg("--")
         .arg("wallet")
         .args(cli_args)
+        .args(dynamic_args)
         .arg("--json")
-        .current_dir(root.join("citizen-protocol"))
-        .output()
-    {
+        .current_dir(root.join("citizen-protocol"));
+
+    let output = match command.output() {
         Ok(output) => output,
         Err(err) => {
             return BackupCommandResponse {
@@ -105,7 +142,6 @@ fn execute_backup_command(request: BackupCommandRequest) -> BackupCommandRespons
             error_id: None,
             details: serde_json::json!({
                 "command": request.command,
-                "payload_received": request.payload,
                 "wallet_cli_stdout": stdout,
                 "wallet_cli_stderr": stderr,
             }),
@@ -117,7 +153,6 @@ fn execute_backup_command(request: BackupCommandRequest) -> BackupCommandRespons
             error_id: Some("wallet_cli_error"),
             details: serde_json::json!({
                 "command": request.command,
-                "payload_received": request.payload,
                 "wallet_cli_stdout": stdout,
                 "wallet_cli_stderr": stderr,
             }),
