@@ -517,3 +517,12 @@ Use this rubric during UX and maintainer review so “sleek” is measurable, no
 - PR-F1 should land before PR-F3 to prevent UI contract churn.
 - PR-F2 should land before PR-F5 so smoke runners validate real preflight behavior.
 - PR-D2 and PR-D3 remain blockers for final portable-app hardening because UX copy and corruption handling must align to deterministic wallet-core semantics.
+
+### Delta Update (2026-05-02, priority gap automation)
+
+- Added a Vaultier-maintained checklist gap checker (`vaultier/checklist-gap-check.mjs`) that parses this file and emits machine-readable open-gap summaries for:
+  - Priority Gate (Checkpoint 8.5) open tasks,
+  - Priority Gate open exit criteria,
+  - unresolved Portable Application Track `[ ]` and `[~]` items.
+- Added `pnpm check:priority-gap` in `vaultier/package.json` so Vaultier continuation can deterministically fail fast when priority items remain open.
+- This supports the “always check the gap before continuing Vaultier coding” operator workflow without changing security sign-off semantics.
