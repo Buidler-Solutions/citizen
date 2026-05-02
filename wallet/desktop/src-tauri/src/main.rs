@@ -88,6 +88,29 @@ fn payload_args(payload: &serde_json::Value) -> Result<Vec<String>, String> {
 }
 
 #[cfg(feature = "desktop-runtime")]
+fn parse_cli_json(stdout: &str) -> Result<serde_json::Value, String> {
+    serde_json::from_str(stdout)
+        .map_err(|err| format!("wallet CLI did not emit valid JSON output: {err}"))
+}
+
+#[cfg(feature = "desktop-runtime")]
+fn contains_sensitive_keys(value: &serde_json::Value) -> bool {
+    match value {
+        serde_json::Value::Object(map) => map.iter().any(|(key, nested)| {
+            let lower = key.to_ascii_lowercase();
+            let sensitive = lower.contains("passphrase")
+                || lower.contains("secret")
+                || lower.contains("mnemonic")
+                || lower.contains("private_key")
+                || lower.contains("seed");
+            sensitive || contains_sensitive_keys(nested)
+        }),
+        serde_json::Value::Array(items) => items.iter().any(contains_sensitive_keys),
+        _ => false,
+    }
+}
+
+#[cfg(feature = "desktop-runtime")]
 fn execute_backup_command(request: BackupCommandRequest) -> BackupCommandResponse {
     let cli_args = match command_to_cli_args(&request.command) {
         Some(args) => args,
@@ -161,13 +184,42 @@ fn execute_backup_command(request: BackupCommandRequest) -> BackupCommandRespons
     let stderr = String::from_utf8_lossy(&output.stderr).trim().to_owned();
 
     if output.status.success() {
+        let parsed = match parse_cli_json(&stdout) {
+            Ok(json) => json,
+            Err(err) => {
+                return BackupCommandResponse {
+                    contract_version: CONTRACT_VERSION,
+                    status: "error",
+                    error_id: Some("invalid_payload"),
+                    details: serde_json::json!({
+                        "command": request.command,
+                        "message": err,
+                        "wallet_cli_stderr": stderr,
+                    }),
+                }
+            }
+        };
+
+        if contains_sensitive_keys(&parsed) {
+            return BackupCommandResponse {
+                contract_version: CONTRACT_VERSION,
+                status: "error",
+                error_id: Some("invalid_payload"),
+                details: serde_json::json!({
+                    "command": request.command,
+                    "message": "wallet CLI payload contained non-redacted sensitive fields",
+                    "wallet_cli_stderr": stderr,
+                }),
+            };
+        }
+
         BackupCommandResponse {
             contract_version: CONTRACT_VERSION,
             status: "ok",
             error_id: None,
             details: serde_json::json!({
                 "command": request.command,
-                "wallet_cli_stdout": stdout,
+                "wallet_cli": parsed,
                 "wallet_cli_stderr": stderr,
             }),
         }
@@ -182,6 +234,46 @@ fn execute_backup_command(request: BackupCommandRequest) -> BackupCommandRespons
                 "wallet_cli_stderr": stderr,
             }),
         }
+    }
+}
+
+#[cfg(all(test, feature = "desktop-runtime"))]
+mod tests {
+    use super::{contains_sensitive_keys, parse_cli_json};
+
+    #[test]
+    fn parse_cli_json_accepts_valid_payload() {
+        let parsed =
+            parse_cli_json(r#"{"contract_version":"citizen.wallet.backup.cli.v1","status":"ok"}"#)
+                .expect("valid JSON should parse");
+        assert_eq!(parsed["status"], "ok");
+    }
+
+    #[test]
+    fn parse_cli_json_rejects_non_json_payload() {
+        let err = parse_cli_json("backup init completed").expect_err("non-JSON must fail");
+        assert!(err.contains("valid JSON"));
+    }
+
+    #[test]
+    fn sensitive_key_scan_detects_nested_secret_fields() {
+        let payload = serde_json::json!({
+            "details": {
+                "role": "critical",
+                "seed_phrase": "secret",
+            }
+        });
+        assert!(contains_sensitive_keys(&payload));
+    }
+
+    #[test]
+    fn sensitive_key_scan_allows_non_secret_contract_fields() {
+        let payload = serde_json::json!({
+            "contract_version": "citizen.wallet.backup.cli.v1",
+            "status": "ok",
+            "vault_path": "/media/usb/vault.json"
+        });
+        assert!(!contains_sensitive_keys(&payload));
     }
 }
 
