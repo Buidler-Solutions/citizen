@@ -3,6 +3,8 @@ import { readFileSync } from 'node:fs';
 
 const runtimeBridge = readFileSync(new URL('./src/lib/runtimeBridge.ts', import.meta.url), 'utf8');
 const headlessContract = readFileSync(new URL('./src/lib/headlessContract.test.ts', import.meta.url), 'utf8');
+
+const mockVaultCore = readFileSync(new URL('./src/lib/mockVaultCore.ts', import.meta.url), 'utf8');
 const resultShapeFixture = JSON.parse(
   readFileSync(new URL('./fixtures/command-result-shape.v1.json', import.meta.url), 'utf8'),
 );
@@ -34,4 +36,17 @@ assert.match(
 
 assert.match(runtimeBridge, /sanitizePayload\(payload\)/, 'runtime bridge must sanitize payload before logging failures');
 
-console.log('runtime-parity-check: wb-mode snapshots and tauri bridge command coverage validated');
+
+assert.match(
+  runtimeBridge,
+  /tauri_response_redaction_blocked/,
+  'runtime bridge must reject secret-like response payload fields deterministically',
+);
+
+assert.match(
+  mockVaultCore,
+  /Response contained redaction-blocked fields:/,
+  'WB-mode simulator must reject secret-like response payload fields deterministically',
+);
+
+console.log('runtime-parity-check: wb-mode snapshots, tauri bridge coverage, and redaction parity validated');
