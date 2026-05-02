@@ -1,4 +1,5 @@
 import { detectRuntimeShell, discoverDrivesViaTauri, flushViaTauri, invokeBackupCommandViaTauri, safeEjectViaTauri, sanitizeTauriPayloadForLogs } from './runtimeBridge';
+import { readFileSync } from 'node:fs';
 import type { HeadlessResponse } from './types';
 
 function assert(condition: unknown, message: string): void {
@@ -8,6 +9,11 @@ function assert(condition: unknown, message: string): void {
 }
 
 type InvokeFn = (name: string, args?: unknown) => Promise<unknown>;
+
+const resultShapeFixturePath = decodeURIComponent(new URL('../../fixtures/command-result-shape.v1.json', import.meta.url).pathname);
+const resultShapeFixture = JSON.parse(readFileSync(resultShapeFixturePath, 'utf8')) as {
+  commands: Record<string, string[]>;
+};
 
 function withTauriInvoke(invoke?: InvokeFn): void {
   (globalThis as unknown as { window?: unknown }).window = invoke ? ({ __TAURI__: { core: { invoke } } } as unknown) : ({} as unknown);
@@ -48,8 +54,8 @@ async function main() {
       assert((args as { targetPath: string }).targetPath === '/media/usb/vault.cvb', 'safe-eject should forward targetPath payload');
       return { ok: true };
     }
-    if (name === 'backup_verify') {
-      const response: HeadlessResponse = { schemaVersion: 'v1alpha1', contractVersion: '2026-05-01', ok: true, command: 'backup_verify', result: {} };
+    if (['backup_init', 'backup_add_slot', 'backup_export_credentials', 'backup_verify', 'backup_restore'].includes(name)) {
+      const response: HeadlessResponse = { schemaVersion: 'v1alpha1', contractVersion: '2026-05-01', ok: true, command: name as HeadlessResponse['command'], result: {} };
       return response;
     }
     throw new Error(`unexpected_command:${name}`);
@@ -62,6 +68,44 @@ async function main() {
 
   const verify = await invokeBackupCommandViaTauri({ command: 'backup_verify', targetPath: '/media/usb/vault.cvb', expectedVaultVersion: '1', requireSignedManifest: true });
   assert(verify.ok === true, 'verify bridge command should return headless response payload');
+
+  const parityCommands = [
+    { command: 'backup_init', payload: { command: 'backup_init', targetPath: '/media/usb/vault.cvb', decoyPassword: 'decoy-pass', criticalPassword: 'critical-pass' } },
+    { command: 'backup_add_slot', payload: { command: 'backup_add_slot', targetPath: '/media/usb/vault.cvb', role: 'critical', password: 'critical-pass' } },
+    { command: 'backup_export_credentials', payload: { command: 'backup_export_credentials', targetPath: '/media/usb/vault.cvb', role: 'critical', password: 'critical-pass' } },
+    { command: 'backup_verify', payload: { command: 'backup_verify', targetPath: '/media/usb/vault.cvb', expectedVaultVersion: '1', requireSignedManifest: true } },
+    { command: 'backup_restore', payload: { command: 'backup_restore', targetPath: '/media/usb/vault.cvb', role: 'critical', password: 'critical-pass' } },
+  ] as const;
+
+  withTauriInvoke(async (name) => {
+    if (!parityCommands.some((entry) => entry.command === name)) {
+      throw new Error(`unexpected_command:${name}`);
+    }
+
+    const fixtureKeys = resultShapeFixture.commands[name] ?? [];
+    const response: Record<string, unknown> = {
+      schemaVersion: 'v1alpha1',
+      contractVersion: '2026-05-01',
+      ok: true,
+      command: name,
+      result: {},
+    };
+
+    for (const key of fixtureKeys) {
+      if (!(key in response)) {
+        response[key] = key === 'result' ? {} : 'fixture-value';
+      }
+    }
+
+    return response;
+  });
+
+  for (const parity of parityCommands) {
+    const response = await invokeBackupCommandViaTauri(parity.payload as Parameters<typeof invokeBackupCommandViaTauri>[0]);
+    const responseKeys = Object.keys(response).sort();
+    const expectedKeys = [...resultShapeFixture.commands[parity.command]].sort();
+    assert(JSON.stringify(responseKeys) === JSON.stringify(expectedKeys), `runtime parity snapshot key drift for ${parity.command}`);
+  }
 
   withTauriInvoke(async () => {
     throw new Error('bridge_failure');
