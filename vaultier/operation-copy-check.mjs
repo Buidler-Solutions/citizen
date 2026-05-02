@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 
 const source = readFileSync(new URL('./src/lib/operationState.ts', import.meta.url), 'utf8');
 
-for (const state of ['idle', 'preflight', 'writing', 'flushing', 'verify_required', 'completed', 'action_required']) {
+for (const state of ['idle', 'preflight', 'writing', 'flushing', 'verified', 'verify_required', 'completed', 'action_required']) {
   assert.match(source, new RegExp(`${state}:\\s*\\{`), `operation state "${state}" copy missing`);
 }
 
