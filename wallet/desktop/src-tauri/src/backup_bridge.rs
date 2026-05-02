@@ -387,6 +387,25 @@ mod tests {
         });
         assert!(!contains_sensitive_keys(&payload));
     }
+
+    #[test]
+    fn utility_flush_reports_path_invalid_for_missing_target() {
+        let output = super::flush_vault_writes(super::TargetPathPayload {
+            target_path: "/tmp/definitely-missing-vaultier-file".to_owned(),
+        });
+        assert_eq!(output["status"], "error");
+        assert_eq!(output["error_id"], "path_invalid");
+    }
+
+    #[test]
+    fn utility_safe_eject_returns_deterministic_status_fields() {
+        let output = super::safe_eject_media(super::TargetPathPayload {
+            target_path: "/tmp".to_owned(),
+        });
+        assert!(output.get("status").is_some());
+        assert!(output.get("error_id").is_some());
+    }
+
 }
 
 #[cfg(feature = "desktop-runtime")]
@@ -509,6 +528,15 @@ pub fn discover_removable_drives() -> serde_json::Value {
 #[tauri::command]
 pub fn flush_vault_writes(payload: TargetPathPayload) -> serde_json::Value {
     let target = PathBuf::from(&payload.target_path);
+    if !target.exists() {
+        return serde_json::json!({
+            "status": "error",
+            "error_id": "path_invalid",
+            "targetPath": payload.target_path,
+            "flushConfirmed": false,
+            "errors": ["target path does not exist"],
+        });
+    }
     let mut flushed = false;
     let mut errors = Vec::new();
 
@@ -534,6 +562,7 @@ pub fn flush_vault_writes(payload: TargetPathPayload) -> serde_json::Value {
         "targetPath": payload.target_path,
         "strategy": ["write_temp", "fsync_file", "rename_atomic", "fsync_parent"],
         "status": if errors.is_empty() { "ok" } else { "warning" },
+        "error_id": if errors.is_empty() { serde_json::Value::Null } else { serde_json::json!("flush_incomplete") },
         "flushConfirmed": flushed,
         "errors": errors,
     })
@@ -647,6 +676,8 @@ pub fn safe_eject_media(payload: TargetPathPayload) -> serde_json::Value {
 
     serde_json::json!({
         "ok": ejected,
+        "status": if ejected { "ok" } else { "warning" },
+        "error_id": if ejected { serde_json::Value::Null } else { serde_json::json!("media_unavailable") },
         "targetPath": payload.target_path,
         "details": details,
     })
