@@ -9,8 +9,8 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-tauri = { version = "2", features = [] }
+tauri = { version = "2", features = [], optional = true }
 
 [features]
-default = ["custom-protocol"]
-custom-protocol = ["tauri/custom-protocol"]
+default = []
+desktop-runtime = ["dep:tauri", "tauri/custom-protocol"]
