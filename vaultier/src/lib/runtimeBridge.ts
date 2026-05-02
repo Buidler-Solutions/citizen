@@ -1,4 +1,5 @@
 import type { CrashSafeWriteStep, DriveProbeIssue, DriveRecord, HeadlessCommand, HeadlessResponse, RuntimePlatform, RuntimeProfile, RuntimeShell } from './types';
+import { scanForSecretFields } from './redaction';
 
 type BridgeDrive = DriveRecord & { platform: RuntimePlatform };
 
@@ -119,7 +120,12 @@ export async function invokeBackupCommandViaTauri(command: HeadlessCommand): Pro
   const sanitizedPayload = sanitizePayload(payload);
 
   try {
-    return await invokeTauri<HeadlessResponse>(commandName, payload);
+    const response = await invokeTauri<HeadlessResponse>(commandName, payload);
+    const redaction = scanForSecretFields(response.result);
+    if (!redaction.ok) {
+      throw new Error(`tauri_response_redaction_blocked:${redaction.redactedFields.join(',')}`);
+    }
+    return response;
   } catch (error) {
     const details = JSON.stringify(sanitizedPayload);
     const wrapped = new Error(`tauri_${commandName}_failed:${details}`);
