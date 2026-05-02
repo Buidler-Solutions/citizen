@@ -9,14 +9,15 @@
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "start": "vite",
-    "test:headless-contract": "pnpm check:priority-gap && node headless-contract-check.mjs && node runtime-parity-check.mjs && node wb-mode-fixture-check.mjs && node operation-copy-check.mjs",
+    "test:headless-contract": "pnpm check:priority-gap && node headless-contract-check.mjs && node runtime-parity-check.mjs && node wb-mode-fixture-check.mjs && node operation-copy-check.mjs && pnpm check:reminders",
     "check:priority-gap": "node checklist-gap-check.mjs",
     "check:priority-gap:json": "node checklist-gap-check.mjs --json",
     "check:priority-gap:strict": "pnpm check:priority-gap",
     "check:evidence-packet": "node maintainer-evidence-packet.mjs",
     "test": "pnpm test:headless-contract",
     "check:checklist-audit": "node checklist-audit.mjs",
-    "check:checklist-audit:json": "node checklist-audit.mjs --json"
+    "check:checklist-audit:json": "node checklist-audit.mjs --json",
+    "check:reminders": "node reminder-policy-check.mjs"
   },
   "dependencies": {
     "react": "^18.3.1",

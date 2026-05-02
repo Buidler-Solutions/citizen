@@ -159,7 +159,7 @@ To keep implementation sequencing unambiguous, treat **Checkpoint 8.5 — Priori
 - [ ] Add extension UI flow for creating decoy + critical backup vaults.
 - [ ] Add secure export bridge for encrypted payload creation (never raw secret exfiltration to page context).
 - [ ] Add restore flow with integrity checks and clear conflict resolution strategy.
-- [ ] Add UX affordances for backup freshness indicator and verification reminders.
+- [x] Add UX affordances for backup freshness indicator and verification reminders.
 - [ ] Add passphrase-strength guidance and recovery warnings.
 
 **Exit criteria**
@@ -563,7 +563,7 @@ Use this backlog to convert the portable app milestone tracker into small implem
 4. **PR-F4: Portable profile + verification cadence reminders**
    - [~] Persist non-secret profile metadata (`portable_label`, `created_at`, `last_verified_at`, `schema_version`) in app-local settings. (Vaultier now persists portable profile metadata in local settings via `savePortableProfile`/`loadPortableProfile`; remaining work is desktop runtime parity coverage.)
    - [~] Add reminder policy defaults (for example: 30-day verify prompt) with user-configurable cadence and explicit opt-out logging. (Vaultier now defaults to enabled 30-day reminders with persisted user cadence/opt-out toggles in local settings; explicit operator-audit log export for reminder opt-outs remains pending.)
-   - [~] Add reminder tests covering timezone-safe date arithmetic and deterministic next-reminder calculation. (`getNextReminderAt` now uses UTC date arithmetic for deterministic cadence handling; dedicated automated reminder test harness is still pending.)
+   - [x] Add reminder tests covering timezone-safe date arithmetic and deterministic next-reminder calculation. (`vaultier/reminder-policy-check.mjs` now validates UTC cadence math, leap-year rollover behavior, timezone-offset input normalization, and deterministic due-state evaluation; wired into `pnpm test:headless-contract` via `pnpm check:reminders`.)
 
 5. **PR-F5: Desktop smoke and packaging gate**
    - [ ] Add CI smoke workflow that runs create/add-slot/export/verify/restore against ephemeral temp volumes per OS runner.
