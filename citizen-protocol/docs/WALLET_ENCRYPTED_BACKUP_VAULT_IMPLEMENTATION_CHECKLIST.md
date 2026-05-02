@@ -233,6 +233,8 @@ To keep implementation sequencing unambiguous, treat **Checkpoint 8.5 — Priori
   - [x] corrupted/partial backup recovery,
   - [x] deterministic restore ordering in multi-backup scenarios,
   - [x] key rotation guidance after restore.
+
+- [~] Assemble a maintainer sign-off evidence packet with reproducible command logs (current packet now records local regression evidence for `cargo test -p citizen-wallet backup -- --nocapture` executed on 2026-05-02; wallet+crypto maintainer approval decision still pending).
 - [ ] Execute wallet+crypto maintainer review and record production-security sign-off outcome.
 
 **Exit criteria**
