@@ -2239,6 +2239,12 @@ fn emit_removable_media_warning(command: &str, acknowledged: bool) {
     eprintln!(
         "If your automation flow already handles removable-media risks, pass --assume-removable-media-risk."
     );
+    eprintln!(
+        "Recommended USB profile: keep 20%+ free capacity, use media with wear-leveling/endurance telemetry, and maintain at least two independently stored vault copies."
+    );
+    eprintln!(
+        "Recommended throughput floor: sustained >=30 MB/s write and >=80 MB/s read to reduce long write windows and verification timeouts."
+    );
 }
 
 #[derive(Clone, Copy, Debug)]
