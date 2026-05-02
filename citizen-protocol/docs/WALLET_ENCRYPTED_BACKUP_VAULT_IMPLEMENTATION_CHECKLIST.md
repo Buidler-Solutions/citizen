@@ -405,7 +405,7 @@ This section extends the checklist with concrete near-term implementation work i
 
 **Exit criteria**
 - [ ] CLI round-trip fixtures pass across two independently generated vaults using the finalized format contract.
-- [ ] A short “format stability” note is added to this document and linked from wallet CLI docs.
+- [x] A short “format stability” note is added to this document and linked from wallet CLI docs (see **Format Stability Note (v1)** below; wallet-facing references are present in `WALLET_BACKUP_DISASTER_RECOVERY_RUNBOOK.md` and `WALLET_ENCRYPTED_BACKUP_VAULT_THREAT_MODEL.md`).
 
 ### Next Slice B — USB/operator reliability and runbook closure
 
@@ -601,3 +601,19 @@ Use this rubric during UX and maintainer review so “sleek” is measurable, no
   - unresolved Portable Application Track `[ ]` and `[~]` items.
 - Added `pnpm check:priority-gap` in `vaultier/package.json` so Vaultier continuation can deterministically fail fast when priority items remain open.
 - This supports the “always check the gap before continuing Vaultier coding” operator workflow without changing security sign-off semantics.
+
+### Format Stability Note (v1)
+
+- Active vault format contract is `citizen.wallet.backup.v1`, with deterministic forward-reject behavior for unknown schema versions.
+- CLI and desktop/headless compatibility validation must preserve the documented `citizen.wallet.backup.cli.v1` JSON envelope fields for automation safety.
+- Any future format change must ship with:
+  - explicit migration command/workflow,
+  - compatibility-matrix update in `WALLET_DESKTOP_CLI_COMPATIBILITY_MATRIX.md`,
+  - checklist status updates in this file in the same change set.
+
+### Delta Update (2026-05-02, full checklist gap pass for Tauri continuation)
+
+- Re-ran `vaultier/checklist-gap-check.mjs` and `vaultier/checklist-audit.mjs` to reconcile checklist state before continuing Tauri/Vaultier implementation slices.
+- Confirmed Checkpoint 8.5 priority gate remains complete (`pending=0`, `partial=0`), so continuation work can focus on portable-app gap closure.
+- Closed the stale unchecked “format stability note” item by adding the explicit v1 format-stability note above and cross-linking the existing wallet docs that already reference the format contract.
+- Remaining unchecked items are intentionally open and still require implementation evidence (cross-platform smoke/package signing, in-process bridge hardening, extension-side completion, and formal UX/security sign-off).
