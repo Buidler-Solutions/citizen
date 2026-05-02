@@ -3,8 +3,23 @@ import { readFileSync } from 'node:fs';
 
 const runtimeBridge = readFileSync(new URL('./src/lib/runtimeBridge.ts', import.meta.url), 'utf8');
 const headlessContract = readFileSync(new URL('./src/lib/headlessContract.test.ts', import.meta.url), 'utf8');
+const resultShapeFixture = JSON.parse(
+  readFileSync(new URL('./fixtures/command-result-shape.v1.json', import.meta.url), 'utf8'),
+);
 
 const commands = ['backup_init', 'backup_add_slot', 'backup_export_credentials', 'backup_verify', 'backup_restore'];
+
+assert.equal(resultShapeFixture.schemaVersion, 'v1alpha1', 'result-shape fixture schema version drifted');
+assert.equal(resultShapeFixture.contractVersion, '2026-05-01', 'result-shape fixture contract version drifted');
+
+for (const [command, expectedKeys] of Object.entries(resultShapeFixture.commands)) {
+  const snapshotLiteral = `['${expectedKeys.join("', '")}']`;
+  assert.match(headlessContract, new RegExp(`command: '${command}'`), `WB-mode fixture missing command ${command}`);
+  assert.ok(
+    headlessContract.includes(snapshotLiteral),
+    `WB-mode result shape snapshot missing expected keys for ${command}`,
+  );
+}
 
 for (const command of commands) {
   assert.match(runtimeBridge, new RegExp(`${command}: \\(`), `runtimeBridge tauri API missing ${command}`);
@@ -19,4 +34,4 @@ assert.match(
 
 assert.match(runtimeBridge, /sanitizePayload\(payload\)/, 'runtime bridge must sanitize payload before logging failures');
 
-console.log('runtime-parity-check: wb-mode and tauri bridge command coverage validated');
+console.log('runtime-parity-check: wb-mode snapshots and tauri bridge command coverage validated');
