@@ -39,7 +39,7 @@ This initiative should replicate key VeraCrypt-style operating properties while 
 - [ ] Support vault creation directly on mounted removable drives (Linux/macOS/Windows path semantics in scope).
 - [x] Add optional “portable mode” metadata for cross-machine restore checks.
 - [ ] Provide safe eject + write flush guidance in CLI and extension flows.
-- [~] Detect common removable-media failure modes (Vaultier now surfaces deterministic `media_unavailable` disconnect detection + refresh checks, existing filesystem compatibility warnings, and flush-strategy completeness enforcement before marking safe-eject complete; true runtime-backed partial-write prevention in desktop adapters remains pending).
+- [~] Detect common removable-media failure modes (Vaultier now surfaces deterministic `media_unavailable` disconnect detection + refresh checks, existing filesystem compatibility warnings, and flush-strategy completeness enforcement before marking safe-eject complete; wallet CLI now persists vault files through atomic temp-write + `sync_all` + rename durability steps, while true runtime-backed partial-write prevention in desktop adapters remains pending).
 - [~] Define minimum recommended USB durability/performance profile for operators (Vaultier now surfaces an explicit operator-facing USB durability profile panel with capacity headroom, endurance, filesystem, throughput, and duplicate-media guidance; wallet CLI/help parity still pending).
 
 **Exit criteria**
@@ -78,7 +78,7 @@ This initiative should replicate key VeraCrypt-style operating properties while 
   - [x] wallet crate integration under `citizen-protocol/crates/wallet` + CLI adapters is now the active implementation path.
   - [ ] `wallet/backup-vault` remains a future extraction option if extension/runtime sharing pressure grows.
 - [x] Define stable data model crates/modules for vault headers, key-derivation config, slot metadata, and backup manifests.
-- [ ] Define trait boundaries for storage backend adapters (filesystem first).
+- [x] Define trait boundaries for storage backend adapters (filesystem first, with `BackupVaultStorage` and `FilesystemBackupVaultStorage` backing the current CLI path).
 - [ ] Define interop contract for CLI and extension clients (common schema + versioning).
 
 **Exit criteria**
