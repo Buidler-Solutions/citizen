@@ -500,9 +500,9 @@ Use this backlog to convert the portable app milestone tracker into small implem
    - [x] Add snapshot tests to prevent accidental drift in warning copy, especially safe-removal and corruption warnings (`vaultier/operation-copy-check.mjs` now gates required operation/error copy markers and critical warning strings via deterministic source assertions in CI/local checks).
 
 4. **PR-F4: Portable profile + verification cadence reminders**
-   - [ ] Persist non-secret profile metadata (`portable_label`, `created_at`, `last_verified_at`, `schema_version`) in app-local settings.
-   - [ ] Add reminder policy defaults (for example: 30-day verify prompt) with user-configurable cadence and explicit opt-out logging.
-   - [ ] Add reminder tests covering timezone-safe date arithmetic and deterministic next-reminder calculation.
+   - [~] Persist non-secret profile metadata (`portable_label`, `created_at`, `last_verified_at`, `schema_version`) in app-local settings. (Vaultier now persists portable profile metadata in local settings via `savePortableProfile`/`loadPortableProfile`; remaining work is desktop runtime parity coverage.)
+   - [~] Add reminder policy defaults (for example: 30-day verify prompt) with user-configurable cadence and explicit opt-out logging. (Vaultier now defaults to enabled 30-day reminders with persisted user cadence/opt-out toggles in local settings; explicit operator-audit log export for reminder opt-outs remains pending.)
+   - [~] Add reminder tests covering timezone-safe date arithmetic and deterministic next-reminder calculation. (`getNextReminderAt` now uses UTC date arithmetic for deterministic cadence handling; dedicated automated reminder test harness is still pending.)
 
 5. **PR-F5: Desktop smoke and packaging gate**
    - [ ] Add CI smoke workflow that runs create/add-slot/export/verify/restore against ephemeral temp volumes per OS runner.

@@ -117,8 +117,8 @@ async function main() {
     command: 'backup_diagnostics',
     targetPath: '/Volumes/CITIZEN_USB',
     profile: {
-      usbLabel: 'CITIZEN_USB',
-      vaultVersion: 'v1alpha1',
+      portableLabel: 'CITIZEN_USB',
+      schemaVersion: 'v1alpha1',
       createdAt: '2026-05-01T00:00:00.000Z',
       lastVerifiedAt: '2026-05-01T00:30:00.000Z',
     },

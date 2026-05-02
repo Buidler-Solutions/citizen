@@ -1,8 +1,8 @@
 export type VaultRole = 'decoy' | 'critical';
 
 export type PortableProfile = {
-  usbLabel: string;
-  vaultVersion: string;
+  portableLabel: string;
+  schemaVersion: string;
   createdAt: string;
   lastVerifiedAt?: string;
 };

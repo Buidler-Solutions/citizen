@@ -288,8 +288,8 @@ export async function createBackup(request: BackupRequest): Promise<BackupResult
 
   return {
     profile: {
-      usbLabel: request.targetPath.split('/').pop() || 'USB_DRIVE',
-      vaultVersion: 'v1alpha1',
+      portableLabel: request.targetPath.split('/').pop() || 'USB_DRIVE',
+      schemaVersion: 'v1alpha1',
       createdAt: timestamp,
       lastVerifiedAt: timestamp,
     },

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { createBackup, discoverRemovableDrives, exportDiagnosticBundle, flushPendingWritesWithStrategy, getRuntimeShell, safeEjectMedia, testRestore, verifyBackup } from '../lib/mockVaultCore';
 import type { BackupRequest, CrashSafeWriteStep, DiagnosticBundle, DriveDiscoveryResult, OperationLog, PerformanceMeasurement, PortableProfile, RestoreResult, RuntimeShell, VerifyResult, VaultRole } from '../lib/types';
 import { ERROR_COPY, OPERATION_STATE_COPY, type ErrorIdentifier, type OperationState } from '../lib/operationState';
-import { defaultReminderPolicy, getNextReminderAt, isReminderDue, loadReminderSettings, saveReminderSettings, type ReminderPolicy } from '../lib/reminders';
+import { defaultReminderPolicy, getNextReminderAt, isReminderDue, loadPortableProfile, loadReminderSettings, savePortableProfile, saveReminderSettings, type ReminderPolicy } from '../lib/reminders';
 
 type Stage = 'create' | 'verify' | 'restore' | 'eject';
 const STAGES: Stage[] = ['create', 'verify', 'restore', 'eject'];
@@ -94,8 +94,9 @@ export function AppShell() {
     });
   }, []);
   useEffect(() => { setRuntimeShell(getRuntimeShell()); }, []);
-  useEffect(() => { setReminderPolicy(loadReminderSettings()); }, []);
+  useEffect(() => { setReminderPolicy(loadReminderSettings()); setProfile(loadPortableProfile()); }, []);
   useEffect(() => { saveReminderSettings(reminderPolicy); }, [reminderPolicy]);
+  useEffect(() => { if (profile) savePortableProfile(profile); }, [profile]);
   useEffect(() => { if (unlockDelayMs <= 0) return; const timer = setInterval(() => setUnlockDelayMs((v) => Math.max(0, v - 500)), 500); return () => clearInterval(timer); }, [unlockDelayMs]);
   useEffect(() => {
     if (!targetPath || discovery.drives.length === 0) return;
@@ -175,7 +176,7 @@ export function AppShell() {
     try {
       const result = await verifyBackup({
         targetPath,
-        expectedVaultVersion: profile.vaultVersion,
+        expectedVaultVersion: profile.schemaVersion,
         requireSignedManifest: true,
         manifestSignatureKeyId: 'citizen-wallet-maintainers:v1',
       });
@@ -287,7 +288,7 @@ export function AppShell() {
       {selectedDrive && <p className="hint">Filesystem compatibility note: preferred formats are exFAT, NTFS, APFS, or ext4 for cross-machine restore reliability.</p>}
       {flushStrategy.length > 0 && <details><summary>Crash-safe write strategy</summary><ul>{flushStrategy.map((step) => <li key={step.step}>{step.step} · {step.status} · {step.detail}</li>)}</ul></details>}</>}
     </section>
-    <section className="card"><h2>Portable profile</h2>{profile ? <ul><li>USB Label: {profile.usbLabel}</li><li>Vault Format: {profile.vaultVersion}</li><li>Created: {profile.createdAt}</li><li>Last Verification: {profile.lastVerifiedAt}</li><li>Next verification reminder: {nextReminderAt ?? 'Pending first verify'}</li></ul> : <p className="hint">Create a backup to generate a profile.</p>}
+    <section className="card"><h2>Portable profile</h2>{profile ? <ul><li>Portable label: {profile.portableLabel}</li><li>Schema version: {profile.schemaVersion}</li><li>Created: {profile.createdAt}</li><li>Last Verification: {profile.lastVerifiedAt}</li><li>Next verification reminder: {nextReminderAt ?? 'Pending first verify'}</li></ul> : <p className="hint">Create a backup to generate a profile.</p>}
       <h3>Reminder policy</h3>
       <label className="inline-control"><input type="checkbox" checked={reminderPolicy.enabled} onChange={() => setReminderPolicy((p) => ({ ...p, enabled: !p.enabled }))} />Enable verification reminders</label>
       <label>Reminder cadence (days)<input type="number" min={7} max={365} value={reminderPolicy.cadenceDays} onChange={(e) => setReminderPolicy((p) => ({ ...p, cadenceDays: Number(e.target.value) || p.cadenceDays }))} /></label>
