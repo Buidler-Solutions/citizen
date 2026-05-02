@@ -6,7 +6,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
-use std::fs;
+use std::fs::{self, File};
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use uuid::Uuid;
 use x25519_dalek::{PublicKey as X25519PublicKey, StaticSecret};
@@ -2269,23 +2270,52 @@ fn backup_error_anyhow(code: BackupErrorCode, message: &str) -> anyhow::Error {
     anyhow::anyhow!("{}: {}", code.as_str(), message)
 }
 
-fn load_backup_vault(path: &Path) -> anyhow::Result<BackupVaultFile> {
-    let contents = fs::read_to_string(path)?;
-    let vault: BackupVaultFile = serde_json::from_str(&contents)?;
-    if vault.schema != "citizen.wallet.backup.v1" {
-        return Err(anyhow::anyhow!("unsupported backup vault schema"));
+trait BackupVaultStorage {
+    fn load(&self, path: &Path) -> anyhow::Result<BackupVaultFile>;
+    fn save(&self, path: &Path, vault: &BackupVaultFile) -> anyhow::Result<()>;
+}
+
+#[derive(Default)]
+struct FilesystemBackupVaultStorage;
+
+impl BackupVaultStorage for FilesystemBackupVaultStorage {
+    fn load(&self, path: &Path) -> anyhow::Result<BackupVaultFile> {
+        let contents = fs::read_to_string(path)?;
+        let vault: BackupVaultFile = serde_json::from_str(&contents)?;
+        if vault.schema != "citizen.wallet.backup.v1" {
+            return Err(anyhow::anyhow!("unsupported backup vault schema"));
+        }
+        Ok(vault)
     }
-    Ok(vault)
+
+    fn save(&self, path: &Path, vault: &BackupVaultFile) -> anyhow::Result<()> {
+        if let Some(parent) = path.parent() {
+            if !parent.as_os_str().is_empty() {
+                fs::create_dir_all(parent)?;
+            }
+        }
+
+        let serialized = serde_json::to_vec_pretty(vault)?;
+        let tmp_path = path.with_extension("tmp");
+        let mut tmp_file = File::create(&tmp_path)?;
+        tmp_file.write_all(&serialized)?;
+        tmp_file.sync_all()?;
+        fs::rename(&tmp_path, path)?;
+        if let Some(parent) = path.parent() {
+            if !parent.as_os_str().is_empty() {
+                File::open(parent)?.sync_all()?;
+            }
+        }
+        Ok(())
+    }
+}
+
+fn load_backup_vault(path: &Path) -> anyhow::Result<BackupVaultFile> {
+    FilesystemBackupVaultStorage.load(path)
 }
 
 fn save_backup_vault(path: &Path, vault: &BackupVaultFile) -> anyhow::Result<()> {
-    if let Some(parent) = path.parent() {
-        if !parent.as_os_str().is_empty() {
-            fs::create_dir_all(parent)?;
-        }
-    }
-    fs::write(path, serde_json::to_string_pretty(vault)?)?;
-    Ok(())
+    FilesystemBackupVaultStorage.save(path, vault)
 }
 
 fn empty_slot(role: BackupSlotRole, password: &str) -> anyhow::Result<BackupVaultSlot> {
