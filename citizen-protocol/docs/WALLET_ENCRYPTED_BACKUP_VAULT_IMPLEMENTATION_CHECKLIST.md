@@ -632,3 +632,11 @@ Use this rubric during UX and maintainer review so “sleek” is measurable, no
 - Closed PR-F5 documentation subtask by adding desktop “Known limitations” coverage in `wallet/desktop/README.md`; remaining PR-F5 items (cross-platform smoke CI + signed reproducible artifacts) remain open by design.
 
 - Extended `vaultier/checklist-gap-check.mjs` to also emit candidate stale unchecked checklist items (implemented-but-unchecked heuristics) so each Tauri continuation pass can reconcile gaps before coding; optional `--strict-stale-unchecked` now fails the check when stale candidates are still present.
+
+### Delta Update (2026-05-02, stale-gap signal hardening)
+
+- Tightened `vaultier/checklist-gap-check.mjs` stale-unchecked heuristics to ignore sign-off-gated acceptance criteria that should remain unchecked until explicit UX/security review evidence is attached.
+- Re-ran `pnpm check:priority-gap` after the heuristic adjustment; stale-unchecked candidates dropped from four to two and now point to genuinely unresolved cross-surface gaps:
+  - extension runtime/browser storage security-boundary documentation,
+  - at least one recorded end-to-end USB drill artifact in docs.
+- This keeps Tauri continuation checks focused on actionable checklist drift without auto-flagging items that are intentionally pending formal sign-off.

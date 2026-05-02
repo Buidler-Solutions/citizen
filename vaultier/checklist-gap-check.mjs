@@ -38,6 +38,7 @@ const partialItems = openItems.filter((item) => item.status === '~');
 
 const completionHints = /(implemented|now includes|now enforces|validated|captured|exists in-repo|documented|recorded|added|wired|published|confirmed|accept(ed|ance))/i;
 const remainingWorkHints = /(pending|remains pending|still pending|remaining|follow-up|follow up|open|yet|not\s+yet|still requires|still open|before marking complete|until .* complete)/i;
+const signoffGatedHints = /(for both CLI and extension|working and sleek|<3 minute|first-time backup flow under 3 minutes|all user-facing commands and JSON schema examples validated)/i;
 const staleUnchecked = [];
 let sectionTitle = 'ROOT';
 
@@ -54,6 +55,7 @@ for (const rawLine of doc.split('\n')) {
   const status = match[1];
   const text = match[2];
   if (status === 'x') continue;
+  if (signoffGatedHints.test(text)) continue;
   if (completionHints.test(text) && !remainingWorkHints.test(text)) {
     staleUnchecked.push({
       section: sectionTitle,
