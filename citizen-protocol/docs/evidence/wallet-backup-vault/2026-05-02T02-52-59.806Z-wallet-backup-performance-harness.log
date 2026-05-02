@@ -1,0 +1,289 @@
+$ cargo test -p citizen-wallet backup_command_path_performance_evidence_harness -- --ignored --nocapture
+
+
+running 1 test
+{
+  "contract_version": "citizen.wallet.backup.cli.v1",
+  "kdf_params": {
+    "iterations": 2,
+    "kdf": "argon2id",
+    "memory_kib": 19456,
+    "output_length": 32,
+    "parallelism": 1
+  },
+  "kdf_profile": "balanced",
+  "portable_label": "perf-usb",
+  "schema": "citizen.wallet.backup.v1",
+  "vault_path": "/tmp/citizen-wallet-backup-command-perf-evidence-0-1777690507993915442/vault.json",
+  "version": 1
+}
+Exported wallet credentials into vault /tmp/citizen-wallet-backup-command-perf-evidence-0-1777690507993915442/vault.json
+{
+  "contract_version": "citizen.wallet.backup.cli.v1",
+  "created_at": 1777690507,
+  "portable_label": "perf-usb",
+  "schema": "citizen.wallet.backup.v1",
+  "slots": [
+    {
+      "exported_at": 1777690508,
+      "role": "decoy",
+      "scopes": [
+        "keys"
+      ]
+    },
+    {
+      "exported_at": 1777690509,
+      "role": "critical",
+      "scopes": [
+        "keys",
+        "recovery-metadata"
+      ]
+    }
+  ],
+  "version": 1
+}
+{
+  "contract_version": "citizen.wallet.backup.cli.v1",
+  "exported_at": 1777690509,
+  "output_path": "/tmp/citizen-wallet-backup-command-perf-evidence-0-1777690507993915442/wallet-restored.json",
+  "role": "critical",
+  "status": "restored"
+}
+{
+  "contract_version": "citizen.wallet.backup.cli.v1",
+  "kdf_params": {
+    "iterations": 2,
+    "kdf": "argon2id",
+    "memory_kib": 19456,
+    "output_length": 32,
+    "parallelism": 1
+  },
+  "kdf_profile": "balanced",
+  "portable_label": "perf-usb",
+  "schema": "citizen.wallet.backup.v1",
+  "vault_path": "/tmp/citizen-wallet-backup-command-perf-evidence-1-1777690510965534846/vault.json",
+  "version": 1
+}
+Exported wallet credentials into vault /tmp/citizen-wallet-backup-command-perf-evidence-1-1777690510965534846/vault.json
+{
+  "contract_version": "citizen.wallet.backup.cli.v1",
+  "created_at": 1777690510,
+  "portable_label": "perf-usb",
+  "schema": "citizen.wallet.backup.v1",
+  "slots": [
+    {
+      "exported_at": 1777690511,
+      "role": "decoy",
+      "scopes": [
+        "keys"
+      ]
+    },
+    {
+      "exported_at": 1777690512,
+      "role": "critical",
+      "scopes": [
+        "keys",
+        "recovery-metadata"
+      ]
+    }
+  ],
+  "version": 1
+}
+{
+  "contract_version": "citizen.wallet.backup.cli.v1",
+  "exported_at": 1777690512,
+  "output_path": "/tmp/citizen-wallet-backup-command-perf-evidence-1-1777690510965534846/wallet-restored.json",
+  "role": "critical",
+  "status": "restored"
+}
+{
+  "contract_version": "citizen.wallet.backup.cli.v1",
+  "kdf_params": {
+    "iterations": 2,
+    "kdf": "argon2id",
+    "memory_kib": 19456,
+    "output_length": 32,
+    "parallelism": 1
+  },
+  "kdf_profile": "balanced",
+  "portable_label": "perf-usb",
+  "schema": "citizen.wallet.backup.v1",
+  "vault_path": "/tmp/citizen-wallet-backup-command-perf-evidence-2-1777690514064393690/vault.json",
+  "version": 1
+}
+Exported wallet credentials into vault /tmp/citizen-wallet-backup-command-perf-evidence-2-1777690514064393690/vault.json
+{
+  "contract_version": "citizen.wallet.backup.cli.v1",
+  "created_at": 1777690514,
+  "portable_label": "perf-usb",
+  "schema": "citizen.wallet.backup.v1",
+  "slots": [
+    {
+      "exported_at": 1777690514,
+      "role": "decoy",
+      "scopes": [
+        "keys"
+      ]
+    },
+    {
+      "exported_at": 1777690516,
+      "role": "critical",
+      "scopes": [
+        "keys",
+        "recovery-metadata"
+      ]
+    }
+  ],
+  "version": 1
+}
+{
+  "contract_version": "citizen.wallet.backup.cli.v1",
+  "exported_at": 1777690516,
+  "output_path": "/tmp/citizen-wallet-backup-command-perf-evidence-2-1777690514064393690/wallet-restored.json",
+  "role": "critical",
+  "status": "restored"
+}
+{
+  "contract_version": "citizen.wallet.backup.cli.v1",
+  "kdf_params": {
+    "iterations": 2,
+    "kdf": "argon2id",
+    "memory_kib": 19456,
+    "output_length": 32,
+    "parallelism": 1
+  },
+  "kdf_profile": "balanced",
+  "portable_label": "perf-usb",
+  "schema": "citizen.wallet.backup.v1",
+  "vault_path": "/tmp/citizen-wallet-backup-command-perf-evidence-3-1777690517485716486/vault.json",
+  "version": 1
+}
+Exported wallet credentials into vault /tmp/citizen-wallet-backup-command-perf-evidence-3-1777690517485716486/vault.json
+{
+  "contract_version": "citizen.wallet.backup.cli.v1",
+  "created_at": 1777690517,
+  "portable_label": "perf-usb",
+  "schema": "citizen.wallet.backup.v1",
+  "slots": [
+    {
+      "exported_at": 1777690518,
+      "role": "decoy",
+      "scopes": [
+        "keys"
+      ]
+    },
+    {
+      "exported_at": 1777690519,
+      "role": "critical",
+      "scopes": [
+        "keys",
+        "recovery-metadata"
+      ]
+    }
+  ],
+  "version": 1
+}
+{
+  "contract_version": "citizen.wallet.backup.cli.v1",
+  "exported_at": 1777690519,
+  "output_path": "/tmp/citizen-wallet-backup-command-perf-evidence-3-1777690517485716486/wallet-restored.json",
+  "role": "critical",
+  "status": "restored"
+}
+{
+  "contract_version": "citizen.wallet.backup.cli.v1",
+  "kdf_params": {
+    "iterations": 2,
+    "kdf": "argon2id",
+    "memory_kib": 19456,
+    "output_length": 32,
+    "parallelism": 1
+  },
+  "kdf_profile": "balanced",
+  "portable_label": "perf-usb",
+  "schema": "citizen.wallet.backup.v1",
+  "vault_path": "/tmp/citizen-wallet-backup-command-perf-evidence-4-1777690522053595519/vault.json",
+  "version": 1
+}
+Exported wallet credentials into vault /tmp/citizen-wallet-backup-command-perf-evidence-4-1777690522053595519/vault.json
+{
+  "contract_version": "citizen.wallet.backup.cli.v1",
+  "created_at": 1777690522,
+  "portable_label": "perf-usb",
+  "schema": "citizen.wallet.backup.v1",
+  "slots": [
+    {
+      "exported_at": 1777690523,
+      "role": "decoy",
+      "scopes": [
+        "keys"
+      ]
+    },
+    {
+      "exported_at": 1777690525,
+      "role": "critical",
+      "scopes": [
+        "keys",
+        "recovery-metadata"
+      ]
+    }
+  ],
+  "version": 1
+}
+{
+  "contract_version": "citizen.wallet.backup.cli.v1",
+  "exported_at": 1777690525,
+  "output_path": "/tmp/citizen-wallet-backup-command-perf-evidence-4-1777690522053595519/wallet-restored.json",
+  "role": "critical",
+  "status": "restored"
+}
+test cli::tests::backup_command_path_performance_evidence_harness ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 69 filtered out; finished in 19.37s
+
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.29s
+     Running unittests src/lib.rs (target/debug/deps/citizen_wallet-9ba0451f303a74a3)
+wallet backup performance evidence: [
+  {
+    "export_ms": 572,
+    "init_ms": 1135,
+    "iteration": 0,
+    "restore_ms": 608,
+    "verify_ms": 654
+  },
+  {
+    "export_ms": 605,
+    "init_ms": 1218,
+    "iteration": 1,
+    "restore_ms": 684,
+    "verify_ms": 588
+  },
+  {
+    "export_ms": 720,
+    "init_ms": 1336,
+    "iteration": 2,
+    "restore_ms": 723,
+    "verify_ms": 639
+  },
+  {
+    "export_ms": 758,
+    "init_ms": 1612,
+    "iteration": 3,
+    "restore_ms": 1278,
+    "verify_ms": 917
+  },
+  {
+    "export_ms": 1073,
+    "init_ms": 2376,
+    "iteration": 4,
+    "restore_ms": 824,
+    "verify_ms": 1014
+  }
+]
+     Running unittests src/bin/wallet.rs (target/debug/deps/wallet-5e51d6a179460922)

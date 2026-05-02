@@ -1,0 +1,182 @@
+$ cargo test -p citizen-wallet backup -- --nocapture
+
+
+running 19 tests
+test cli::tests::backup_command_path_performance_evidence_harness ... ignored, manual performance evidence harness for wallet backup command path
+test cli::tests::backup_json_contract_examples_match_v1_schema ... ok
+test cli::tests::backup_vault_schema_fixture_remains_compatible ... ok
+test cli::tests::backup_verify_rejects_missing_schema_with_deterministic_error ... ok
+Initialized backup vault at /tmp/citizen-wallet-backup-slot-not-found-1777690380772054818/vault.json
+test cli::tests::backup_restore_returns_slot_not_found_error_identifier ... ok
+Initialized backup vault at /tmp/citizen-wallet-backup-tamper-1777690380772184220/vault.json
+{
+  "contract_version": "citizen.wallet.backup.cli.v1",
+  "kdf_params": {
+    "iterations": 2,
+    "kdf": "argon2id",
+    "memory_kib": 19456,
+    "output_length": 32,
+    "parallelism": 1
+  },
+  "kdf_profile": "balanced",
+  "portable_label": "usb-cross-slot",
+  "schema": "citizen.wallet.backup.v1",
+  "vault_path": "/tmp/citizen-wallet-backup-cross-slot-password-confusion-1777690380774371352/vault.json",
+  "version": 1
+}
+Initialized backup vault at /tmp/citizen-wallet-backup-multi-bitflip-tamper-1777690380794334139/vault.json
+{
+  "contract_version": "citizen.wallet.backup.cli.v1",
+  "kdf_params": {
+    "iterations": 2,
+    "kdf": "argon2id",
+    "memory_kib": 19456,
+    "output_length": 32,
+    "parallelism": 1
+  },
+  "kdf_profile": "balanced",
+  "portable_label": "usb-latency",
+  "schema": "citizen.wallet.backup.v1",
+  "vault_path": "/tmp/citizen-wallet-backup-command-latency-envelope-1777690380771817215/vault.json",
+  "version": 1
+}
+Initialized backup vault at /tmp/citizen-wallet-backup-roundtrip-1777690380773900645/vault.json
+{
+  "contract_version": "citizen.wallet.backup.cli.v1",
+  "kdf_params": {
+    "iterations": 2,
+    "kdf": "argon2id",
+    "memory_kib": 19456,
+    "output_length": 32,
+    "parallelism": 1
+  },
+  "kdf_profile": "balanced",
+  "portable_label": "usb-byte-fuzz",
+  "schema": "citizen.wallet.backup.v1",
+  "vault_path": "/tmp/citizen-wallet-backup-byte-level-mutation-corpus-1777690380772428324/vault.json",
+  "version": 1
+}
+Exported wallet credentials into vault /tmp/citizen-wallet-backup-roundtrip-1777690380773900645/vault.json
+Exported wallet credentials into vault /tmp/citizen-wallet-backup-command-latency-envelope-1777690380771817215/vault.json
+Exported wallet credentials into vault /tmp/citizen-wallet-backup-tamper-1777690380772184220/vault.json
+Exported wallet credentials into vault /tmp/citizen-wallet-backup-cross-slot-password-confusion-1777690380774371352/vault.json
+Exported wallet credentials into vault /tmp/citizen-wallet-backup-byte-level-mutation-corpus-1777690380772428324/vault.json
+Exported wallet credentials into vault /tmp/citizen-wallet-backup-multi-bitflip-tamper-1777690380794334139/vault.json
+Initialized backup vault at /tmp/citizen-wallet-backup-bitflip-tamper-1777690383856926820/vault.json
+{
+  "contract_version": "citizen.wallet.backup.cli.v1",
+  "created_at": 1777690380,
+  "portable_label": "usb-a",
+  "schema": "citizen.wallet.backup.v1",
+  "slots": [
+    {
+      "exported_at": 1777690382,
+      "role": "decoy",
+      "scopes": [
+        "keys"
+      ]
+    },
+    {
+      "exported_at": 1777690385,
+      "role": "critical",
+      "scopes": [
+        "keys",
+        "recovery-metadata"
+      ]
+    }
+  ],
+  "version": 1
+}
+test cli::tests::backup_verify_detects_payload_checksum_tamper ... ok
+{
+  "contract_version": "citizen.wallet.backup.cli.v1",
+  "created_at": 1777690380,
+  "portable_label": "usb-latency",
+  "schema": "citizen.wallet.backup.v1",
+  "slots": [
+    {
+      "exported_at": 1777690382,
+      "role": "decoy",
+      "scopes": [
+        "keys"
+      ]
+    },
+    {
+      "exported_at": 1777690385,
+      "role": "critical",
+      "scopes": [
+        "keys",
+        "recovery-metadata"
+      ]
+    }
+  ],
+  "version": 1
+}
+{
+  "contract_version": "citizen.wallet.backup.cli.v1",
+  "created_at": 1777690380,
+  "portable_label": null,
+  "schema": "citizen.wallet.backup.v1",
+  "slots": [
+    {
+      "exported_at": 1777690382,
+      "role": "decoy",
+      "scopes": [
+        "keys"
+      ]
+    },
+    {
+      "exported_at": 1777690385,
+      "role": "critical",
+      "scopes": [
+        "keys"
+      ]
+    }
+  ],
+  "version": 1
+}
+test cli::tests::backup_verify_rejects_byte_level_mutation_corpus_without_panics ... ok
+test cli::tests::backup_verify_rejects_cross_slot_password_confusion_with_decrypt_failed ... ok
+Exported wallet credentials into vault /tmp/citizen-wallet-backup-bitflip-tamper-1777690383856926820/vault.json
+{
+  "contract_version": "citizen.wallet.backup.cli.v1",
+  "exported_at": 1777690385,
+  "output_path": "/tmp/citizen-wallet-backup-roundtrip-1777690380773900645/wallet-restored.json",
+  "role": "critical",
+  "status": "restored"
+}
+test cli::tests::backup_vault_roundtrip_restore_recovers_keystore ... ok
+{
+  "contract_version": "citizen.wallet.backup.cli.v1",
+  "exported_at": 1777690385,
+  "output_path": "/tmp/citizen-wallet-backup-command-latency-envelope-1777690380771817215/wallet-restored.json",
+  "role": "critical",
+  "status": "restored"
+}
+test cli::tests::backup_command_path_latency_envelope_stays_within_thresholds ... ok
+test cli::tests::backup_verify_rejects_malformed_vault_structure_matrix ... ok
+test cli::tests::backup_verify_rejects_random_bit_flip_tamper_with_deterministic_error ... ok
+test tests::encrypted_payload_uses_backup_argon2id_defaults ... ok
+Initialized backup vault at /tmp/citizen-wallet-backup-truncated-ciphertext-1777690387121308406/vault.json
+Initialized backup vault at /tmp/citizen-wallet-backup-manifest-required-1777690387282351324/vault.json
+Exported wallet credentials into vault /tmp/citizen-wallet-backup-truncated-ciphertext-1777690387121308406/vault.json
+Exported wallet credentials into vault /tmp/citizen-wallet-backup-manifest-required-1777690387282351324/vault.json
+test cli::tests::backup_verify_rejects_multiple_bit_flip_positions_with_deterministic_errors ... ok
+test cli::tests::backup_verify_rejects_truncated_ciphertext_with_decrypt_failed ... ok
+test cli::tests::backup_verify_requires_signed_manifest ... ok
+test tests::backup_encrypt_decrypt_meets_latency_envelope ... ok
+test tests::backup_payload_test_vector_decrypt_and_tamper_failure ... ok
+test cli::tests::backup_verify_rejects_randomized_metadata_mutations has been running for over 60 seconds
+test cli::tests::backup_verify_rejects_randomized_metadata_mutations ... ok
+
+test result: ok. 18 passed; 0 failed; 1 ignored; 0 measured; 51 filtered out; finished in 126.77s
+
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.75s
+     Running unittests src/lib.rs (target/debug/deps/citizen_wallet-9ba0451f303a74a3)
+     Running unittests src/bin/wallet.rs (target/debug/deps/wallet-5e51d6a179460922)

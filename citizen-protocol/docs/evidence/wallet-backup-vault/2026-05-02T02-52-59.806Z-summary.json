@@ -1,0 +1,33 @@
+{
+  "generated_at": "2026-05-02T02:52:59.807Z",
+  "generated_by": "vaultier/maintainer-evidence-packet.mjs",
+  "commands": [
+    {
+      "name": "wallet-backup-regression",
+      "command": "cargo test -p citizen-wallet backup -- --nocapture",
+      "cwd": "/home/green/citizen/citizen-protocol",
+      "exit_code": 0,
+      "signal": null,
+      "log_file": "/home/green/citizen/citizen-protocol/docs/evidence/wallet-backup-vault/2026-05-02T02-52-59.806Z-wallet-backup-regression.log",
+      "passed": true
+    },
+    {
+      "name": "wallet-backup-performance-harness",
+      "command": "cargo test -p citizen-wallet backup_command_path_performance_evidence_harness -- --ignored --nocapture",
+      "cwd": "/home/green/citizen/citizen-protocol",
+      "exit_code": 0,
+      "signal": null,
+      "log_file": "/home/green/citizen/citizen-protocol/docs/evidence/wallet-backup-vault/2026-05-02T02-52-59.806Z-wallet-backup-performance-harness.log",
+      "passed": true
+    },
+    {
+      "name": "vaultier-priority-gap",
+      "command": "pnpm check:priority-gap",
+      "cwd": "/home/green/citizen/vaultier",
+      "exit_code": 2,
+      "signal": null,
+      "log_file": "/home/green/citizen/citizen-protocol/docs/evidence/wallet-backup-vault/2026-05-02T02-52-59.806Z-vaultier-priority-gap.log",
+      "passed": false
+    }
+  ]
+}

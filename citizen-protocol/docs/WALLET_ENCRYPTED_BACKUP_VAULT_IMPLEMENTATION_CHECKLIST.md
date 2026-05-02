@@ -428,7 +428,7 @@ Use this queue to keep momentum without reopening resolved design choices. Each 
 This slice starts the desktop productization track without blocking on extension parity. It reuses the existing wallet crate crypto/format logic and treats the desktop shell as an orchestration + UX layer.
 
 1. **PR-E1: Desktop shell bootstrap (Tauri-first)**
-   - [ ] Create `wallet/desktop` scaffold with Tauri runtime and workspace-level build wiring.
+   - [x] Create `wallet/desktop` scaffold with Tauri runtime and workspace-level build wiring (new `wallet/desktop` package now includes a Tauri shell, config, and deterministic command bridge placeholder for Vaultier runtime handoff).
    - [~] Expose minimal command bridge for `backup init`, `backup add-slot`, `backup export-credentials`, `backup verify`, `backup restore` using typed request/response DTOs. (`vaultier/src/lib/runtimeBridge.ts` now defines typed Tauri bridge contracts for all five commands and `runHeadlessCommand` routes through that bridge when available; remaining work is wiring these bridge endpoints in the real Tauri shell.)
    - [~] Enforce “no secret in UI logs” guardrails in bridge layer with redaction helpers and deny-list tests. (Vaultier Tauri bridge now sanitizes command payloads before surfaced error details and ships deterministic deny-list coverage in `vaultier/src/lib/runtimeBridge.test.ts`; full bridge-wide log sink audit remains pending.)
 
@@ -461,7 +461,7 @@ This slice starts the desktop productization track without blocking on extension
 
 | Milestone | Status | Target outcome |
 | --- | --- | --- |
-| M0 — Runtime decision + shell bootstrap | Planned | Tauri scaffold + typed command bridge to wallet crate backup APIs. |
+| M0 — Runtime decision + shell bootstrap | In Progress | Tauri scaffold + typed command bridge placeholder now lives in `wallet/desktop`; next step is wiring wallet crate backup APIs. |
 | M1 — Reliable removable-media writes | Planned | Deterministic mount detection, flush/fsync behavior, atomic update semantics. |
 | M2 — Guided backup UX | Planned | One-screen decoy/critical creation flow with visible progress and safety cues. |
 | M3 — Restore confidence UX | Planned | Verify + test-restore flows with deterministic technical detail panel. |
