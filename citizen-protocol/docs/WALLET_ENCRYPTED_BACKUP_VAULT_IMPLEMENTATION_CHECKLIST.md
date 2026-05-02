@@ -507,8 +507,8 @@ This slice starts the desktop productization track without blocking on extension
 | Milestone | Status | Target outcome |
 | --- | --- | --- |
 | M0 — Runtime decision + shell bootstrap | Implemented (hardening pending) | Tauri scaffold plus a working bridge command now lives in `wallet/desktop` and executes wallet backup CLI JSON paths; next step is replacing shell-based execution with wallet-core API bindings and hardened secret transport before production sign-off. |
-| M1 — Reliable removable-media writes | Planned | Deterministic mount detection, flush/fsync behavior, atomic update semantics. |
-| M2 — Guided backup UX | Planned | One-screen decoy/critical creation flow with visible progress and safety cues. |
+| M1 — Reliable removable-media writes | In Progress | Deterministic mount/path preflight, flush/fsync reporting, and safe-eject command adapters are implemented with remaining work on full OS-native parity evidence + signed-release hardening. |
+| M2 — Guided backup UX | In Progress | Guided create/verify/restore flows, operation-state copy pack, portable profile card, and reminder cadence are implemented; remaining work is formal <3 minute UX sign-off evidence and final copy/security review. |
 | M3 — Restore confidence UX | Planned | Verify + test-restore flows with deterministic technical detail panel. |
 | M4 — Operator/CI parity | Planned | Headless mode and diagnostics aligned with CLI JSON contract. |
 | M5 — Release hardening | Planned | Signed builds, compatibility matrix, cross-platform smoke + security sign-off. |
@@ -572,7 +572,7 @@ Use this backlog to convert the portable app milestone tracker into small implem
 
 **Exit criteria**
 - [ ] PR-F1 through PR-F5 merged with green cross-platform smoke checks.
-- [ ] Portable app roadmap status can advance M0→M2 from Planned to In Progress/Implemented with linked evidence PRs.
+- [x] Portable app roadmap status can advance M0→M2 from Planned to In Progress/Implemented with linked evidence PRs. (Updated milestone tracker now reflects M1/M2 as In Progress, aligned to implemented Vaultier/Tauri evidence already tracked in this checklist.)
 - [ ] Desktop docs explicitly reference deterministic error contract and recovery runbook procedures.
 
 
