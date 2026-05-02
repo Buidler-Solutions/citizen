@@ -82,6 +82,7 @@ export function AppShell() {
   const [ejectChecks, setEjectChecks] = useState({ verified: false, restoreTest: false, flushComplete: false, duplicateMedia: false });
   const [reminderPolicy, setReminderPolicy] = useState<ReminderPolicy>(defaultReminderPolicy());
   const [runtimeShell, setRuntimeShell] = useState<RuntimeShell>('web-mock');
+  const [allowMockRuntimeOps, setAllowMockRuntimeOps] = useState(false);
   const [flushStrategy, setFlushStrategy] = useState<CrashSafeWriteStep[]>([]);
   const [performanceMeasurements, setPerformanceMeasurements] = useState<PerformanceMeasurement[]>([]);
 
@@ -114,6 +115,7 @@ export function AppShell() {
   }, [discovery, targetPath]);
 
   const selectedDrive = useMemo(() => discovery.drives.find((d) => d.mountPath === targetPath), [discovery, targetPath]);
+  const mockRuntimeBlocked = runtimeShell !== 'tauri' && !allowMockRuntimeOps;
   const safeToEject = useMemo(() => Object.values(ejectChecks).every(Boolean), [ejectChecks]);
   const decoyEntropy = estimateEntropyBits(decoyPassphrase);
   const criticalEntropy = estimateEntropyBits(criticalPassphrase);
@@ -148,6 +150,7 @@ export function AppShell() {
   };
 
   const runCreateBackup = async () => {
+    if (mockRuntimeBlocked) return setActiveError('media_unavailable');
     if (!selectedDrive) return setActiveError('path_invalid');
     if (!selectedDrive.writable) return setActiveError('mount_unwritable');
     if (selectedDrive.estimatedFreeGb < 4) return setActiveError('insufficient_space');
@@ -164,6 +167,7 @@ export function AppShell() {
   };
 
   const runVerify = async () => {
+    if (mockRuntimeBlocked) return setActiveError('media_unavailable');
     if (!profile) return;
     setRunning(true); setActiveError(null); setOperationState('preflight');
     const startedAt = performance.now();
@@ -187,6 +191,7 @@ export function AppShell() {
   };
 
   const runRestore = async () => {
+    if (mockRuntimeBlocked) return setActiveError('media_unavailable');
     if (unlockDelayMs > 0) return;
     const expectedPassphrase = selectedRoles.includes('critical') ? criticalPassphrase : decoyPassphrase;
     if (!restorePassphrase || restorePassphrase !== expectedPassphrase) {
@@ -249,7 +254,8 @@ export function AppShell() {
 
   return <main className={highContrast ? 'shell high-contrast' : 'shell'}>
     <section className="card" aria-live="polite"><h1>Vaultier</h1><p className="subtitle">Portable encrypted backup vault for Citizen wallet recovery.</p>
-      <article className="state-panel"><strong>{OPERATION_STATE_COPY[operationState].title}</strong><p className="hint">{OPERATION_STATE_COPY[operationState].detail}</p><p className="hint">Runtime shell: {runtimeShell === 'tauri' ? 'Tauri bridge' : 'Web mock adapter'}.</p>{activeError && <div className="error-panel"><strong>Error code: {activeError}</strong><p>{ERROR_COPY[activeError].headline}</p><p className="hint">Next action: {ERROR_COPY[activeError].nextAction}</p></div>}</article>
+      <article className="state-panel"><strong>{OPERATION_STATE_COPY[operationState].title}</strong><p className="hint">{OPERATION_STATE_COPY[operationState].detail}</p><p className="hint">Runtime shell: {runtimeShell === 'tauri' ? 'Tauri bridge' : 'Web mock adapter'}.</p>{runtimeShell !== 'tauri' && <p className="summary warn">Production-grade USB write/flush protections require Tauri runtime bridge evidence. Mock runtime is for UX rehearsal only.</p>}{activeError && <div className="error-panel"><strong>Error code: {activeError}</strong><p>{ERROR_COPY[activeError].headline}</p><p className="hint">Next action: {ERROR_COPY[activeError].nextAction}</p></div>}</article>
+      {runtimeShell !== 'tauri' && <label className="inline-control"><input type="checkbox" checked={allowMockRuntimeOps} onChange={() => setAllowMockRuntimeOps((value) => !value)} />Allow mock runtime operations for local rehearsal</label>}
       {reminderDue && <p className="summary warn">Verification reminder is due. Run verify before relying on this media.</p>}
       <label className="inline-control"><input type="checkbox" checked={highContrast} onChange={() => setHighContrast(!highContrast)} />High contrast</label>
       <nav className="stages">{STAGES.map((item) => <button key={item} className={stage === item ? 'pill active' : 'pill'} onClick={() => setStage(item)} disabled={!profile && item !== 'create'}>{item}</button>)}</nav>
@@ -265,9 +271,9 @@ export function AppShell() {
       {stage === 'create' && <><div className="row"><label className="inline-control"><input type="checkbox" checked={selectedRoles.includes('decoy')} onChange={() => setSelectedRoles((c) => c.includes('decoy') ? c.filter((x) => x !== 'decoy') : [...c, 'decoy'])} />Decoy slot</label><label className="inline-control"><input type="checkbox" checked={selectedRoles.includes('critical')} onChange={() => setSelectedRoles((c) => c.includes('critical') ? c.filter((x) => x !== 'critical') : [...c, 'critical'])} />Critical slot</label></div>
       <div className="row"><label className="inline-control"><input type="checkbox" checked={includeConsentReceipts} onChange={() => setIncludeConsentReceipts((v) => !v)} />Include consent receipts</label><label className="inline-control"><input type="checkbox" checked={portableMode} onChange={() => setPortableMode((v) => !v)} />Portable mode metadata</label></div>
       <div className="status-grid"><article className="status-card"><label>Decoy passphrase<input type="password" value={decoyPassphrase} onChange={(e) => setDecoyPassphrase(e.target.value)} /></label><progress max={100} value={Math.min(decoyEntropy, 100)} /><p className={`summary ${entropyBand(decoyEntropy).className}`}>Entropy {decoyEntropy} bits · {entropyBand(decoyEntropy).label}</p></article><article className="status-card"><label>Critical passphrase<input type="password" value={criticalPassphrase} onChange={(e) => setCriticalPassphrase(e.target.value)} /></label><progress max={100} value={Math.min(criticalEntropy, 100)} /><p className={`summary ${entropyBand(criticalEntropy).className}`}>Entropy {criticalEntropy} bits · {entropyBand(criticalEntropy).label}</p></article></div>
-      <button disabled={running || selectedRoles.length === 0} onClick={runCreateBackup}>Create Backup</button></>}
-      {stage === 'verify' && <><button disabled={running || !profile} onClick={runVerify}>Verify Backup</button>{verifyResult && <><p className={verifyResult.checks.some((check) => check.status === 'warn') ? 'summary warn' : 'summary ok'}>{verifyResult.checks.length} deterministic checks completed at {verifyResult.verifiedAt}.</p><ul className="log-list">{verifyResult.checks.map((check) => <li key={check.label}>{check.label}: {check.status.toUpperCase()} · {check.detail}</li>)}</ul><p className={verifyResult.manifest.verified ? 'summary ok' : 'summary warn'}>Signed manifest: {verifyResult.manifest.verified ? `verified (${verifyResult.manifest.signatureKeyId})` : 'verification failed'}.</p></>}</>}
-      {stage === 'restore' && <><label>Restore passphrase<input type="password" value={restorePassphrase} onChange={(e) => setRestorePassphrase(e.target.value)} /></label><label className="inline-control"><input type="checkbox" checked={restoreBackoffEnabled} onChange={() => setRestoreBackoffEnabled((value) => !value)} />Enable unlock retry backoff (CLI-aligned default)</label><div className="row"><button onClick={simulateFailedUnlock}>Simulate wrong passphrase</button><button disabled={running || unlockDelayMs > 0} onClick={runRestore}>Test Restore</button></div>{unlockDelayMs > 0 && <p className="summary warn">Backoff active: {unlockDelayMs}ms. Repeated failures intentionally slow unlock retries.</p>}<p className="hint">Backoff schedule: {BACKOFF_STEPS_MS.join('ms -> ')}ms.</p>{restoreResult && <p className="summary ok">Recovered: {restoreResult.restoredArtifacts.join(', ')}</p>}</>}
+      <button disabled={running || selectedRoles.length === 0 || mockRuntimeBlocked} onClick={runCreateBackup}>Create Backup</button></>}
+      {stage === 'verify' && <><button disabled={running || !profile || mockRuntimeBlocked} onClick={runVerify}>Verify Backup</button>{verifyResult && <><p className={verifyResult.checks.some((check) => check.status === 'warn') ? 'summary warn' : 'summary ok'}>{verifyResult.checks.length} deterministic checks completed at {verifyResult.verifiedAt}.</p><ul className="log-list">{verifyResult.checks.map((check) => <li key={check.label}>{check.label}: {check.status.toUpperCase()} · {check.detail}</li>)}</ul><p className={verifyResult.manifest.verified ? 'summary ok' : 'summary warn'}>Signed manifest: {verifyResult.manifest.verified ? `verified (${verifyResult.manifest.signatureKeyId})` : 'verification failed'}.</p></>}</>}
+      {stage === 'restore' && <><label>Restore passphrase<input type="password" value={restorePassphrase} onChange={(e) => setRestorePassphrase(e.target.value)} /></label><label className="inline-control"><input type="checkbox" checked={restoreBackoffEnabled} onChange={() => setRestoreBackoffEnabled((value) => !value)} />Enable unlock retry backoff (CLI-aligned default)</label><div className="row"><button onClick={simulateFailedUnlock}>Simulate wrong passphrase</button><button disabled={running || unlockDelayMs > 0 || mockRuntimeBlocked} onClick={runRestore}>Test Restore</button></div>{unlockDelayMs > 0 && <p className="summary warn">Backoff active: {unlockDelayMs}ms. Repeated failures intentionally slow unlock retries.</p>}<p className="hint">Backoff schedule: {BACKOFF_STEPS_MS.join('ms -> ')}ms.</p>{restoreResult && <p className="summary ok">Recovered: {restoreResult.restoredArtifacts.join(', ')}</p>}</>}
       {stage === 'eject' && <><button onClick={runFlushWrites}>Flush pending writes</button><label className="inline-control"><input type="checkbox" checked={ejectChecks.duplicateMedia} onChange={() => setEjectChecks((p) => ({ ...p, duplicateMedia: !p.duplicateMedia }))} />Duplicate backup stored separately</label><p className={safeToEject ? 'summary ok' : 'summary warn'}>{safeToEject ? 'Checklist complete. Safe to eject.' : 'Complete all checklist steps before ejection.'}</p>
       <p className="summary warn">Do not unplug during write/flush operations. Unexpected removal can corrupt vault headers and slot metadata.</p>
       {selectedDrive && <p className="hint">Safe eject guidance: {platformEjectGuidance[selectedDrive.platform]}</p>}
