@@ -267,6 +267,7 @@ mod tests {
         cli_error_id_from_stdout, cli_error_id_from_value, command_to_cli_args,
         contains_sensitive_keys, parse_cli_json, BackupCommandResponse, CONTRACT_VERSION,
     };
+    use std::path::Path;
 
     #[test]
     fn cli_command_mapping_covers_required_backup_commands() {
@@ -406,6 +407,12 @@ mod tests {
         assert!(output.get("error_id").is_some());
     }
 
+    #[test]
+    fn preflight_target_path_reports_path_invalid_for_missing_path() {
+        let result = super::preflight_target_path(Path::new("/tmp/vaultier-missing-path"));
+        assert_eq!(result, Err("path_invalid"));
+    }
+
 }
 
 #[cfg(feature = "desktop-runtime")]
@@ -427,6 +434,23 @@ fn looks_removable(path: &Path) -> bool {
     platform_mount_prefixes()
         .iter()
         .any(|prefix| path_str.starts_with(prefix))
+}
+
+#[cfg(feature = "desktop-runtime")]
+fn preflight_target_path(target: &Path) -> Result<(), &'static str> {
+    if !target.exists() {
+        return Err("path_invalid");
+    }
+    if !looks_removable(target) {
+        return Err("media_unavailable");
+    }
+    let Ok(metadata) = fs::metadata(target) else {
+        return Err("path_invalid");
+    };
+    if metadata.permissions().readonly() {
+        return Err("mount_unwritable");
+    }
+    Ok(())
 }
 
 #[cfg(feature = "desktop-runtime")]
@@ -528,13 +552,18 @@ pub fn discover_removable_drives() -> serde_json::Value {
 #[tauri::command]
 pub fn flush_vault_writes(payload: TargetPathPayload) -> serde_json::Value {
     let target = PathBuf::from(&payload.target_path);
-    if !target.exists() {
+    if let Err(error_id) = preflight_target_path(&target) {
+        let detail = match error_id {
+            "mount_unwritable" => "target path is mounted read-only",
+            "media_unavailable" => "target path is not classified as removable media",
+            _ => "target path does not exist",
+        };
         return serde_json::json!({
             "status": "error",
-            "error_id": "path_invalid",
+            "error_id": error_id,
             "targetPath": payload.target_path,
             "flushConfirmed": false,
-            "errors": ["target path does not exist"],
+            "errors": [detail],
         });
     }
     let mut flushed = false;
@@ -572,15 +601,31 @@ pub fn flush_vault_writes(payload: TargetPathPayload) -> serde_json::Value {
 #[tauri::command]
 pub fn safe_eject_media(payload: TargetPathPayload) -> serde_json::Value {
     let target = PathBuf::from(&payload.target_path);
+    if let Err(error_id) = preflight_target_path(&target) {
+        let reason = match error_id {
+            "mount_unwritable" => "Target path is mounted read-only.",
+            "media_unavailable" => "Target path is not classified as removable media.",
+            _ => "Target path does not exist.",
+        };
+        return serde_json::json!({
+            "ok": false,
+            "status": "error",
+            "error_id": error_id,
+            "targetPath": payload.target_path,
+            "details": {
+                "mode": "manual_eject_required",
+                "reason": reason,
+            },
+        });
+    }
     let mut ejected = false;
     let mut details = serde_json::json!({
         "mode": "manual_eject_required",
         "reason": "Runtime command unavailable for this path/OS combination."
     });
 
-    if looks_removable(&target) {
-        #[cfg(target_os = "linux")]
-        {
+    #[cfg(target_os = "linux")]
+    {
             match Command::new("udisksctl")
                 .args(["unmount", "-b"])
                 .arg(&target)
@@ -613,8 +658,8 @@ pub fn safe_eject_media(payload: TargetPathPayload) -> serde_json::Value {
             }
         }
 
-        #[cfg(target_os = "macos")]
-        {
+    #[cfg(target_os = "macos")]
+    {
             match Command::new("diskutil")
                 .args(["unmount", payload.target_path.as_str()])
                 .output()
@@ -641,8 +686,8 @@ pub fn safe_eject_media(payload: TargetPathPayload) -> serde_json::Value {
             }
         }
 
-        #[cfg(target_os = "windows")]
-        {
+    #[cfg(target_os = "windows")]
+    {
             let script = format!(
                 "(New-Object -ComObject Shell.Application).Namespace(17).ParseName('{}').InvokeVerb('Eject')",
                 payload.target_path.replace('\'', "''")
@@ -671,7 +716,6 @@ pub fn safe_eject_media(payload: TargetPathPayload) -> serde_json::Value {
                     });
                 }
             }
-        }
     }
 
     serde_json::json!({
