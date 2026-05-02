@@ -69,3 +69,11 @@ If those commands fail, export `PKG_CONFIG_PATH` to the directory that contains 
 - Desktop app is implemented as a runnable Vaultier desktop surface (`wallet/desktop` + `vaultier`).
 - Current bridge strategy is intentionally cautious: runtime commands delegate to wallet CLI JSON contracts until in-process wallet-core bindings are finalized.
 - Not yet production-complete: packaging/signing, full OS-native removable-media adapters, and bridge hardening audits are still tracked in the checklist at `citizen-protocol/docs/WALLET_ENCRYPTED_BACKUP_VAULT_IMPLEMENTATION_CHECKLIST.md`.
+
+## Known Limitations (Current Desktop Rehearsal Build)
+
+- **Unsigned local/dev builds:** local Tauri builds are intended for rehearsal and CI parity work, not trust-on-first-use production distribution. Signed/reproducible release artifacts are still pending checklist closure.
+- **WB-mode and bridge boundaries:** Vaultier WB-mode remains the default rehearsal profile; runtime bridge parity is still converging and CLI-shell fallback is still present for several operations.
+- **Removable-media emulation caveat:** automated tests and local drills may use temp directories/emulated paths, which do not prove physical USB unplug/write-failure behavior on all platforms.
+- **Linux runtime prerequisites:** WebKitGTK/JavascriptCore native packages are required for runtime execution and can block `pnpm tauri:dev` until installed.
+- **Security hardening still open:** final memory/logging bridge audit and cross-platform removable-media adapter evidence are not yet complete, so avoid production readiness claims.

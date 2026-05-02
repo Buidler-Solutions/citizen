@@ -568,7 +568,7 @@ Use this backlog to convert the portable app milestone tracker into small implem
 5. **PR-F5: Desktop smoke and packaging gate**
    - [ ] Add CI smoke workflow that runs create/add-slot/export/verify/restore against ephemeral temp volumes per OS runner.
    - [ ] Produce signed/nightly artifacts with reproducible build metadata attached to release notes.
-   - [ ] Add “known limitations” section in desktop docs for unsigned local dev builds and removable-media emulation caveats.
+   - [x] Add “known limitations” section in desktop docs for unsigned local dev builds and removable-media emulation caveats. (`wallet/desktop/README.md` now includes a dedicated known-limitations section for unsigned dev builds, Linux runtime package prerequisites, WB-mode rehearsal boundaries, removable-media emulation caveats, and production-signing caveats.)
 
 **Exit criteria**
 - [ ] PR-F1 through PR-F5 merged with green cross-platform smoke checks.
@@ -617,3 +617,9 @@ Use this rubric during UX and maintainer review so “sleek” is measurable, no
 - Confirmed Checkpoint 8.5 priority gate remains complete (`pending=0`, `partial=0`), so continuation work can focus on portable-app gap closure.
 - Closed the stale unchecked “format stability note” item by adding the explicit v1 format-stability note above and cross-linking the existing wallet docs that already reference the format contract.
 - Remaining unchecked items are intentionally open and still require implementation evidence (cross-platform smoke/package signing, in-process bridge hardening, extension-side completion, and formal UX/security sign-off).
+
+### Delta Update (2026-05-02, checklist + stale-gap verification rerun)
+
+- Re-ran `pnpm check:priority-gap` and confirmed Checkpoint 8.5 remains clear (`pending=0`, `partial=0`).
+- Re-ran `node checklist-audit.mjs`; current aggregate state is `pending=110`, `partial=17`, `complete=111`, and stale-candidate gaps were reviewed before continuing Tauri implementation work.
+- Closed PR-F5 documentation subtask by adding desktop “Known limitations” coverage in `wallet/desktop/README.md`; remaining PR-F5 items (cross-platform smoke CI + signed reproducible artifacts) remain open by design.
