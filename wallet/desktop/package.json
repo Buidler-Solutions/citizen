@@ -6,6 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "doctor:linux": "bash ./scripts/doctor-linux-runtime.sh",
+    "doctor:linux:fix": "bash ./scripts/doctor-linux-runtime.sh --fix",
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build"
   },
