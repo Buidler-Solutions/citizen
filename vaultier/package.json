@@ -9,7 +9,7 @@
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "start": "vite",
-    "test:headless-contract": "pnpm check:priority-gap && node headless-contract-check.mjs && node wb-mode-fixture-check.mjs && node operation-copy-check.mjs",
+    "test:headless-contract": "pnpm check:priority-gap && node headless-contract-check.mjs && node runtime-parity-check.mjs && node wb-mode-fixture-check.mjs && node operation-copy-check.mjs",
     "check:priority-gap": "node checklist-gap-check.mjs",
     "check:priority-gap:json": "node checklist-gap-check.mjs --json",
     "check:priority-gap:strict": "pnpm check:priority-gap",
