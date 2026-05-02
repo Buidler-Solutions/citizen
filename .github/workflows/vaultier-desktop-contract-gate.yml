@@ -1,0 +1,41 @@
+name: Vaultier Desktop Contract Gate
+
+on:
+  pull_request:
+    paths:
+      - 'vaultier/**'
+      - 'wallet/desktop/**'
+      - '.github/workflows/vaultier-desktop-contract-gate.yml'
+  push:
+    branches: [ main ]
+    paths:
+      - 'vaultier/**'
+      - 'wallet/desktop/**'
+      - '.github/workflows/vaultier-desktop-contract-gate.yml'
+
+jobs:
+  vaultier-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.12.1
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+          cache-dependency-path: vaultier/pnpm-lock.yaml
+
+      - name: Install dependencies
+        working-directory: vaultier
+        run: pnpm install --frozen-lockfile
+
+      - name: Run WB-mode contract gates
+        working-directory: vaultier
+        run: pnpm test:headless-contract

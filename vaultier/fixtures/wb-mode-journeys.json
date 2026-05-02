@@ -1,0 +1,27 @@
+{
+  "schemaVersion": "v1alpha1",
+  "contractVersion": "2026-05-01",
+  "journeys": [
+    {
+      "id": "wb-decoy-create-verify-restore",
+      "description": "WB-mode decoy slot rehearsal from init to verify and restore.",
+      "steps": [
+        { "command": "backup_init", "targetPath": "/Volumes/CITIZEN_USB", "roles": ["decoy"], "expectOk": true },
+        { "command": "backup_export_credentials", "targetPath": "/Volumes/CITIZEN_USB", "role": "decoy", "expectOk": true },
+        { "command": "backup_verify", "targetPath": "/Volumes/CITIZEN_USB", "role": "decoy", "expectOk": true },
+        { "command": "backup_restore", "targetPath": "/Volumes/CITIZEN_USB", "role": "decoy", "expectOk": true }
+      ]
+    },
+    {
+      "id": "wb-critical-create-verify-restore",
+      "description": "WB-mode critical slot rehearsal from init to verify and restore.",
+      "steps": [
+        { "command": "backup_init", "targetPath": "/Volumes/CITIZEN_USB", "roles": ["critical"], "expectOk": true },
+        { "command": "backup_add_slot", "targetPath": "/Volumes/CITIZEN_USB", "role": "critical", "expectOk": true },
+        { "command": "backup_export_credentials", "targetPath": "/Volumes/CITIZEN_USB", "role": "critical", "expectOk": true },
+        { "command": "backup_verify", "targetPath": "/Volumes/CITIZEN_USB", "role": "critical", "expectOk": true },
+        { "command": "backup_restore", "targetPath": "/Volumes/CITIZEN_USB", "role": "critical", "expectOk": true }
+      ]
+    }
+  ]
+}

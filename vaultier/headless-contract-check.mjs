@@ -7,9 +7,15 @@ assert.match(readFileSync(new URL('./src/lib/runtimeBridge.ts', import.meta.url)
 assert.match(source, /contractVersion:\s*'2026-05-01'/, 'contractVersion must remain pinned');
 assert.match(source, /schemaVersion:\s*'v1alpha1'/, 'schemaVersion must remain pinned');
 assert.match(source, /command === 'backup_init'/, 'backup_init command branch missing');
-assert.match(source, /command === 'backup_verify'/, 'backup_verify command branch missing');
+assert.match(source, /backup_add_slot/, 'backup_add_slot command branch missing');
+assert.match(source, /backup_export_credentials/, 'backup_export_credentials command branch missing');
+assert.match(source, /backup_verify/, 'backup_verify command branch missing');
+assert.match(source, /backup_restore/, 'backup_restore command branch missing');
 assert.match(source, /restored_role/, 'backup_restore contract payload missing restored_role');
 assert.match(source, /manifest_signature_missing/, 'deterministic manifest signature error missing');
+assert.match(source, /wallet\.export\.performance/, 'export performance operation log marker missing');
+assert.match(source, /wallet\.verify\.performance/, 'verify performance operation log marker missing');
+assert.match(source, /wallet\.restore\.performance/, 'restore performance operation log marker missing');
 assert.match(source, /scanForSecretFields/, 'headless response redaction scan missing');
 assert.match(source, /invalid_payload/, 'deterministic invalid_payload code missing');
 
