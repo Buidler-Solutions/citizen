@@ -321,7 +321,7 @@ To translate the CLI-first vault implementation into a polished portable app exp
 
 - [x] Export diagnostic bundle (non-secret) containing version, platform, vault header metadata, and recent operation logs.
 - [x] Add scriptable headless mode parity for CI/recovery labs using the same command contract as `wallet backup ... --json`.
-- [ ] Publish app-to-CLI compatibility matrix per release (vault format version, schema version, migration notes).
+- [x] Publish app-to-CLI compatibility matrix per release (vault format version, schema version, migration notes). (Published baseline matrix in `citizen-protocol/docs/WALLET_DESKTOP_CLI_COMPATIBILITY_MATRIX.md`; keep updated each release.)
 
 **Exit criteria**
 - [ ] Portable app passes cross-platform smoke suite (create/add-slot/export/verify/restore/eject guidance).
@@ -495,7 +495,7 @@ This slice starts the desktop productization track without blocking on extension
 4. **PR-E4: Headless parity + diagnostics**
    - [~] Add desktop headless mode that mirrors `wallet backup ... --json` contract for CI/recovery labs. (Vaultier headless command surface now includes `backup_diagnostics` and contract tests for diagnostics payload shape; remaining work is wiring real desktop runtime adapters.)
    - [x] Add diagnostic export bundle (non-secret): app version, OS, vault header metadata, deterministic error history.
-   - [ ] Publish app↔CLI compatibility table in docs per release.
+   - [x] Publish app↔CLI compatibility table in docs per release. (Baseline table now documented in `citizen-protocol/docs/WALLET_DESKTOP_CLI_COMPATIBILITY_MATRIX.md`; release updates remain required.)
 
 **Exit criteria**
 - [ ] Desktop smoke suite passes on Linux/macOS/Windows runners for create/add-slot/export/verify/restore happy paths.
