@@ -1,0 +1,11 @@
+{
+  "schemaVersion": "v1alpha1",
+  "contractVersion": "2026-05-01",
+  "commands": {
+    "backup_init": ["command", "contractVersion", "ok", "result", "schemaVersion"],
+    "backup_add_slot": ["command", "contractVersion", "ok", "result", "schemaVersion"],
+    "backup_export_credentials": ["command", "contractVersion", "ok", "result", "schemaVersion"],
+    "backup_verify": ["command", "contractVersion", "ok", "result", "schemaVersion"],
+    "backup_restore": ["command", "contractVersion", "ok", "result", "schemaVersion"]
+  }
+}
