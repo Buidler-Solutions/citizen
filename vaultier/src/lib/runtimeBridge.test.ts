@@ -13,7 +13,18 @@ type InvokeFn = (name: string, args?: unknown) => Promise<unknown>;
 const resultShapeFixturePath = decodeURIComponent(new URL('../../fixtures/command-result-shape.v1.json', import.meta.url).pathname);
 const resultShapeFixture = JSON.parse(readFileSync(resultShapeFixturePath, 'utf8')) as {
   commands: Record<string, string[]>;
+  expectedTopLevelValues: Record<string, unknown>;
 };
+
+
+function assertTopLevelFixtureValues(response: Record<string, unknown>, expected: Record<string, unknown>, command: string): void {
+  for (const [key, value] of Object.entries(expected)) {
+    assert(
+      JSON.stringify(response[key]) === JSON.stringify(value),
+      `runtime parity snapshot value drift for ${command}:${key}`,
+    );
+  }
+}
 
 function withTauriInvoke(invoke?: InvokeFn): void {
   (globalThis as unknown as { window?: unknown }).window = invoke ? ({ __TAURI__: { core: { invoke } } } as unknown) : ({} as unknown);
@@ -84,9 +95,7 @@ async function main() {
 
     const fixtureKeys = resultShapeFixture.commands[name] ?? [];
     const response: Record<string, unknown> = {
-      schemaVersion: 'v1alpha1',
-      contractVersion: '2026-05-01',
-      ok: true,
+      ...resultShapeFixture.expectedTopLevelValues,
       command: name,
       result: {},
     };
@@ -102,7 +111,9 @@ async function main() {
 
   for (const parity of parityCommands) {
     const response = await invokeBackupCommandViaTauri(parity.payload as Parameters<typeof invokeBackupCommandViaTauri>[0]);
-    const responseKeys = Object.keys(response).sort();
+    const responseRecord = response as Record<string, unknown>;
+    assertTopLevelFixtureValues(responseRecord, resultShapeFixture.expectedTopLevelValues, parity.command);
+    const responseKeys = Object.keys(responseRecord).sort();
     const expectedKeys = [...resultShapeFixture.commands[parity.command]].sort();
     assert(JSON.stringify(responseKeys) === JSON.stringify(expectedKeys), `runtime parity snapshot key drift for ${parity.command}`);
   }
