@@ -75,6 +75,28 @@ async function main() {
     assert(message.includes('tauri_backup_verify_failed'), 'bridge failures should include deterministic command prefix');
     assert(!message.includes('super-secret'), 'bridge failure details must redact secrets when present');
   }
+
+  withTauriInvoke(async (name) => {
+    if (name === 'backup_verify') {
+      return {
+        schemaVersion: 'v1alpha1',
+        contractVersion: '2026-05-01',
+        ok: true,
+        command: 'backup_verify',
+        result: { backupPassword: 'should-never-leak' },
+      } satisfies HeadlessResponse;
+    }
+    throw new Error(`unexpected_command:${name}`);
+  });
+
+  try {
+    await invokeBackupCommandViaTauri({ command: 'backup_verify', targetPath: '/media/usb/vault.cvb', expectedVaultVersion: '1', requireSignedManifest: true });
+    throw new Error('expected redaction failure');
+  } catch (error) {
+    const message = String((error as Error).message);
+    assert(message.includes('tauri_backup_verify_failed'), 'redaction failures should still use deterministic command prefix');
+    assert(!message.includes('should-never-leak'), 'redaction failures must not expose raw secret values');
+  }
 }
 
 main();
