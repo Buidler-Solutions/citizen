@@ -296,7 +296,7 @@ To translate the CLI-first vault implementation into a polished portable app exp
 
 2. **TV-2: Tauri bridge parity path**
    - [ ] Keep Tauri bridge responses field-compatible with the CLI v1 contract while replacing shell fallback incrementally.
-   - [ ] Add per-command parity snapshots to detect contract drift between WB-mode simulation and runtime adapter outputs.
+   - [~] Add per-command parity snapshots to detect contract drift between WB-mode simulation and runtime adapter outputs. (Added `vaultier/runtime-parity-check.mjs` and wired it into `pnpm test:headless-contract` so CI now enforces command coverage parity for `init`/`add-slot`/`export-credentials`/`verify`/`restore` between WB-mode contract fixtures and the Tauri bridge command surface; response payload snapshot parity remains pending runtime adapter hardening.)
    - [ ] Extend redaction checks so secret-like fields are rejected identically in WB-mode and runtime modes.
 
 3. **TV-3: Cross-platform completion gates**
