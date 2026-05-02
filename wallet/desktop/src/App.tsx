@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
 type BackupResponse = {
   contract_version: string;
@@ -22,6 +22,19 @@ const utilityCommands = ["discover_removable_drives", "flush_vault_writes", "saf
 
 type DesktopCommand = (typeof backupCommands)[number] | (typeof utilityCommands)[number];
 
+const commandArgHints: Record<DesktopCommand, string> = {
+  backup_init: "--vault-path /media/operator/citizen-vault.json --role critical --json",
+  backup_add_slot: "--vault-path /media/operator/citizen-vault.json --role decoy --json",
+  backup_export_credentials:
+    "--vault-path /media/operator/citizen-vault.json --role critical --include-identity --include-accounts --json",
+  backup_verify: "--vault-path /media/operator/citizen-vault.json --role critical --json",
+  backup_restore: "--vault-path /media/operator/citizen-vault.json --role critical --json",
+  backup_diagnostics: "--vault-path /media/operator/citizen-vault.json --json",
+  discover_removable_drives: "No args required.",
+  flush_vault_writes: "Provide target path below and optionally set args such as --force.",
+  safe_eject_media: "Provide target path below and optionally set args such as --force.",
+};
+
 async function invokeDesktop(command: DesktopCommand, payload: JsonRecord = {}): Promise<unknown> {
   const tauriInvoke = (globalThis as { __TAURI__?: { core?: { invoke?: Function } } }).__TAURI__?.core?.invoke;
   if (!tauriInvoke) {
@@ -36,18 +49,29 @@ async function invokeDesktop(command: DesktopCommand, payload: JsonRecord = {}):
   return tauriInvoke(command, { payload });
 }
 
+function parseArgs(input: string): string[] {
+  return input
+    .split(/\s+/)
+    .map((part) => part.trim())
+    .filter((part) => part.length > 0);
+}
+
 export function App() {
   const [selected, setSelected] = useState<DesktopCommand>("backup_init");
   const [response, setResponse] = useState<unknown>(null);
   const [targetPath, setTargetPath] = useState<string>("");
+  const [argsInput, setArgsInput] = useState<string>(commandArgHints.backup_init);
+
+  const isPathCommand = selected === "flush_vault_writes" || selected === "safe_eject_media";
+  const argHint = useMemo(() => commandArgHints[selected], [selected]);
 
   async function runSelectedCommand() {
     const payload: JsonRecord = {
       source: "vaultier-desktop-ui",
-      args: [],
+      args: parseArgs(argsInput),
     };
 
-    if (selected === "flush_vault_writes" || selected === "safe_eject_media") {
+    if (isPathCommand) {
       payload.targetPath = targetPath.trim();
     }
 
@@ -55,12 +79,18 @@ export function App() {
     setResponse(result);
   }
 
+  function handleCommandChange(next: DesktopCommand) {
+    setSelected(next);
+    setArgsInput(commandArgHints[next]);
+    setResponse(null);
+  }
+
   return (
     <main className="shell">
       <h1>Vaultier Desktop Bridge</h1>
       <p>Desktop runtime for Citizen wallet backup operations (Tauri-first).</p>
       <div className="controls">
-        <select value={selected} onChange={(e) => setSelected(e.target.value as DesktopCommand)}>
+        <select value={selected} onChange={(e) => handleCommandChange(e.target.value as DesktopCommand)}>
           <optgroup label="Wallet backup">
             {backupCommands.map((cmd) => (
               <option key={cmd} value={cmd}>
@@ -79,7 +109,17 @@ export function App() {
         <button onClick={runSelectedCommand}>Run Command</button>
       </div>
 
-      {(selected === "flush_vault_writes" || selected === "safe_eject_media") && (
+      <label>
+        CLI args passed via desktop bridge
+        <input
+          type="text"
+          placeholder={argHint}
+          value={argsInput}
+          onChange={(event) => setArgsInput(event.target.value)}
+        />
+      </label>
+
+      {isPathCommand && (
         <label>
           Target path for removable media operation
           <input
