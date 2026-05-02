@@ -279,31 +279,6 @@ To translate the CLI-first vault implementation into a polished portable app exp
 
 ### Desktop Packaging & Runtime
 
-### Tauri Guideline Update (2026-05-02)
-
-- [x] **Guideline update:** the Tauri desktop app must follow the **Vaultier WB-mode simulation adapter** as the default execution profile for rehearsal, CI parity, and UX-state validation before any production-runtime bridge claims.
-- [x] WB-mode simulation adapter behavior must remain contract-compatible with `wallet backup ... --json` and preserve deterministic operation-state transitions (`preflight`, `writing`, `flushing`, `verify_required`, `completed`, `action_required`).
-- [ ] Any new Tauri desktop flow should land with WB-mode simulation tests first, then add real runtime adapter parity tests in a follow-up hardening PR.
-
-> WB-mode directive: treat Vaultier WB simulation as the canonical safety rehearsal layer for Tauri until cross-platform native adapter evidence (packaging/signing/removable-media/security audit) is complete.
-
-### Continue Tauri Vaultier Desktop Version (Execution Queue)
-
-1. **TV-1: WB-mode first hardening**
-   - [ ] Make WB-mode simulation adapter the default profile in desktop rehearsal builds.
-   - [ ] Add deterministic fixtures for decoy/critical create->verify->restore journeys under WB-mode.
-   - [ ] Gate merges on WB-mode contract checks for `init`, `add-slot`, `export-credentials`, `verify`, and `restore`.
-
-2. **TV-2: Tauri bridge parity path**
-   - [ ] Keep Tauri bridge responses field-compatible with the CLI v1 contract while replacing shell fallback incrementally.
-   - [ ] Add per-command parity snapshots to detect contract drift between WB-mode simulation and runtime adapter outputs.
-   - [ ] Extend redaction checks so secret-like fields are rejected identically in WB-mode and runtime modes.
-
-3. **TV-3: Cross-platform completion gates**
-   - [ ] Complete OS-native removable-media adapter coverage (Linux/macOS/Windows) with deterministic error parity.
-   - [ ] Produce signed/reproducible desktop artifacts and publish compatibility notes per release.
-   - [ ] Close final memory/logging bridge audit and attach evidence links in this checklist.
-
 - [~] Choose runtime shell (Tauri remains the production target for Rust-native crypto reuse; Vaultier now hard-gates create/verify/restore behind an explicit mock-runtime rehearsal override whenever Tauri bridge evidence is unavailable, so desktop packaging sign-off still pending before marking complete).
 - [ ] Package signed builds for macOS/Windows/Linux with reproducible build metadata.
 - [~] Implement removable-drive discovery abstraction with platform-specific adapters and deterministic error mapping (Vaultier now routes discovery through explicit per-platform adapter boundaries, deterministic media disconnect detection (`media_unavailable`), and a Tauri runtime bridge contract that validates compatibility/free-space/writability constraints before surfacing candidate drives; real OS-native adapters still pending).
