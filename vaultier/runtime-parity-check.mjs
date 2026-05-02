@@ -9,7 +9,7 @@ const resultShapeFixture = JSON.parse(
   readFileSync(new URL('./fixtures/command-result-shape.v1.json', import.meta.url), 'utf8'),
 );
 
-const commands = ['backup_init', 'backup_add_slot', 'backup_export_credentials', 'backup_verify', 'backup_restore'];
+const commands = ['backup_init', 'backup_add_slot', 'backup_export_credentials', 'backup_verify', 'backup_restore', 'backup_diagnostics'];
 
 assert.equal(resultShapeFixture.schemaVersion, 'v1alpha1', 'result-shape fixture schema version drifted');
 assert.equal(resultShapeFixture.contractVersion, '2026-05-01', 'result-shape fixture contract version drifted');
