@@ -60,3 +60,15 @@ The near-term direction is to keep Vaultier implementation-first and portable-op
 3. Add crash-safe write strategy (temp file + fsync + atomic rename) in the desktop bridge.
 4. Add safe-eject adapters for macOS, Windows, and Linux.
 5. Package signed portable desktop builds (Tauri target).
+
+
+## Maintainer evidence packet
+
+To assemble reproducible command evidence for Checkpoint 8.5 sign-off:
+
+```bash
+cd vaultier
+pnpm check:evidence-packet
+```
+
+This writes timestamped logs and JSON/Markdown summaries to `citizen-protocol/docs/evidence/wallet-backup-vault/`.
