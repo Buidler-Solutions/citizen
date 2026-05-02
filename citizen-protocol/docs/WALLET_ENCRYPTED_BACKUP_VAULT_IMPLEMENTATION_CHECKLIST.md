@@ -430,6 +430,7 @@ This slice starts the desktop productization track without blocking on extension
 1. **PR-E1: Desktop shell bootstrap (Tauri-first)**
    - [x] Create `wallet/desktop` scaffold with Tauri runtime and workspace-level build wiring (new `wallet/desktop` package now includes a Tauri shell, config, and deterministic command bridge placeholder for Vaultier runtime handoff).
    - [~] Expose minimal command bridge for `backup init`, `backup add-slot`, `backup export-credentials`, `backup verify`, `backup restore` using typed request/response DTOs. (`vaultier/src/lib/runtimeBridge.ts` now defines typed Tauri bridge contracts for all five commands and `runHeadlessCommand` routes through that bridge when available; remaining work is wiring these bridge endpoints in the real Tauri shell.)
+   - [~] Desktop shell now includes a runnable React+Vite app surface under `wallet/desktop` that invokes `run_backup_command` through the Tauri bridge with deterministic contract/error rendering for `backup_init`/`backup_add_slot`/`backup_export_credentials`/`backup_verify`/`backup_restore`; wallet-core command wiring remains pending.
    - [~] Enforce “no secret in UI logs” guardrails in bridge layer with redaction helpers and deny-list tests. (Vaultier Tauri bridge now sanitizes command payloads before surfaced error details and ships deterministic deny-list coverage in `vaultier/src/lib/runtimeBridge.test.ts`; full bridge-wide log sink audit remains pending.)
 
 ### Delta Update (2026-05-01, priority continuation)
