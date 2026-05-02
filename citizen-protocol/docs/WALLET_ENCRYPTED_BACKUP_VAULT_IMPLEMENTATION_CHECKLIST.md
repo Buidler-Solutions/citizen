@@ -426,7 +426,7 @@ This section extends the checklist with concrete near-term implementation work i
 - [x] Add fuzz/property harness for malformed/truncated vault files and randomized metadata mutation. (proptest-based randomized metadata mutation harness + byte-level fuzz-style mutation corpus runner implemented in wallet CLI tests.)
 - [x] Add performance bench for unlock/verify latency with the default Argon2id profile (`cargo test -p citizen-wallet backup_command_path_performance_evidence_harness -- --ignored --nocapture`, configurable with `CITIZEN_WALLET_BACKUP_PERF_ITERATIONS`).
 - [x] Add regression fixtures for role mismatch and cross-slot password confusion cases. (wallet CLI adversarial suite now includes malformed duplicated-role-entry fixture coverage and deterministic cross-slot password confusion failure mapping to `decrypt_failed`.)
-- [ ] Ensure backup-vault suite is wired into CI for wallet crate changes.
+- [x] Ensure backup-vault suite is wired into CI for wallet crate changes (covered by `citizen-protocol/.github/workflows/wallet-backup-vault-ci.yml` wallet backup regression/performance gate and enforced in the 2026-05-02 sign-off evidence packet).
 
 **Exit criteria**
 - [ ] CI gate includes unit + integration + adversarial + fuzz/property coverage for backup-vault code paths.
@@ -514,6 +514,12 @@ This slice starts the desktop productization track without blocking on extension
 | M5 — Release hardening | Planned | Signed builds, compatibility matrix, cross-platform smoke + security sign-off. |
 
 ### Delta Update (2026-05-02, checklist gap audit continuation)
+
+### Delta Update (2026-05-02, Tauri continuation gap reconciliation)
+
+- Re-audited this checklist against the current `wallet/desktop` + `vaultier/` implementation and prior 8.5 evidence artifacts to catch items that were implemented but left unchecked.
+- Marked **Next Slice C / CI wiring** as complete because the dedicated wallet backup CI workflow is in-repo and already referenced in sign-off evidence.
+- Remaining unchecked Tauri items continue to represent real implementation gaps (in-process wallet-core bridge, signed packaging, full OS-native removable-media adapter parity, and final bridge memory/logging audit), so they stay open intentionally until code + evidence land.
 
 - Re-audited checklist-to-implementation parity for the Tauri/Vaultier desktop path and updated checkbox state where functionality is now implemented but previously left unchecked.
 - Confirmed that portable profile persistence + UI rendering and safe-removal checklist UX are present in Vaultier and should be tracked as complete in the PR-E3 checklist line item.
