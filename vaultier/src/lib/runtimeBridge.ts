@@ -15,6 +15,15 @@ type TauriBridgeApi = {
   backup_diagnostics: (payload: Omit<Extract<HeadlessCommand, { command: 'backup_diagnostics' }>, 'command'>) => Promise<HeadlessResponse>;
 };
 
+type TauriBridgeWrappedResponse = {
+  contract_version: string;
+  status: 'ok' | 'error';
+  error_id?: string | null;
+  details?: {
+    wallet_cli?: HeadlessResponse;
+  };
+};
+
 const hasTauriRuntime = () => typeof window !== 'undefined' && '__TAURI__' in window;
 
 const SECRET_KEY_MARKERS = ['passphrase', 'password', 'secret', 'seed', 'mnemonic', 'privatekey', 'private_key'];
@@ -75,6 +84,29 @@ async function invokeTauri<T>(command: keyof TauriBridgeApi, payload?: unknown):
   return invoke<T>(command, payload);
 }
 
+function normalizeBackupResponse(commandName: HeadlessCommand['command'], response: HeadlessResponse | TauriBridgeWrappedResponse): HeadlessResponse {
+  if ('schemaVersion' in response && 'contractVersion' in response && 'ok' in response) {
+    return response;
+  }
+
+  const wrapped = response as TauriBridgeWrappedResponse;
+  if (wrapped.status === 'ok' && wrapped.details?.wallet_cli) {
+    return wrapped.details.wallet_cli;
+  }
+
+  return {
+    schemaVersion: 'v1alpha1',
+    contractVersion: wrapped.contract_version ?? 'citizen.wallet.backup.desktop.v1alpha1',
+    ok: false,
+    command: commandName,
+    errorId: wrapped.error_id ?? 'wallet_cli_error',
+    result: {
+      error_id: wrapped.error_id ?? 'wallet_cli_error',
+      message: 'Tauri runtime command failed before CLI contract payload could be returned.',
+    },
+  };
+}
+
 export function detectRuntimeShell(): RuntimeShell {
   const profile = resolveRuntimeProfile();
   if (profile === 'tauri-runtime' && hasTauriRuntime()) return 'tauri';
@@ -120,7 +152,8 @@ export async function invokeBackupCommandViaTauri(command: HeadlessCommand): Pro
   const sanitizedPayload = sanitizePayload(payload);
 
   try {
-    const response = await invokeTauri<HeadlessResponse>(commandName, payload);
+    const raw = await invokeTauri<HeadlessResponse | TauriBridgeWrappedResponse>(commandName, payload);
+    const response = normalizeBackupResponse(commandName, raw);
     const redaction = scanForSecretFields(response.result);
     if (!redaction.ok) {
       throw new Error(`tauri_response_redaction_blocked:${redaction.redactedFields.join(',')}`);
