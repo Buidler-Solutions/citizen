@@ -39,7 +39,8 @@ type DriveDiscoveryAdapter = {
 
 const supportedFilesystems: Array<DriveRecord['filesystem']> = ['exfat', 'ntfs', 'apfs', 'ext4'];
 const REQUIRED_CRASH_SAFE_STEPS: CrashSafeWriteStep['step'][] = ['temp_write', 'fsync_file', 'atomic_rename', 'fsync_parent'];
-const SECRET_FIELD_MARKERS = ['passphrase', 'password', 'secret', 'seed', 'private_key', 'mnemonic'];
+const SECRET_FIELD_MARKERS = ['passphrase', 'password', 'secret', 'seed', 'privatekey', 'private_key', 'mnemonic'];
+const SECRET_VALUE_MARKERS = ['passphrase=', 'password=', 'secret=', 'seed=', 'mnemonic=', 'private-key=', 'private_key='];
 const COMMAND_PERFORMANCE_TARGETS_MS = {
   backup_export_credentials: 1_500,
   backup_verify: 2_000,
@@ -81,6 +82,13 @@ function scanForSecretFields(payload: unknown): RedactionScanResult {
   const redactedFields: string[] = [];
 
   const walk = (value: unknown, path: string) => {
+    if (typeof value === 'string') {
+      const lowered = value.toLowerCase();
+      if (SECRET_VALUE_MARKERS.some((marker) => lowered.includes(marker))) {
+        redactedFields.push(path || '$');
+      }
+      return;
+    }
     if (!value || typeof value !== 'object') {
       return;
     }
