@@ -454,7 +454,7 @@ Use this queue to keep momentum without reopening resolved design choices. Each 
 
 3. **PR-D3: Vault structure adversarial harness**
    - [x] Add malformed-vault fixture set (missing schema, wrong version type, empty slots, duplicated role entries, invalid ciphertext envelope). (wallet CLI malformed structure matrix now enforces deterministic failure coverage for missing-schema, wrong-version-type, empty-slot, duplicated-role-entry, and invalid-ciphertext-envelope fixtures.)
-   - [~] Add property tests for randomized metadata mutation and truncated payload handling. (truncated ciphertext handling is now covered; randomized metadata mutation property harness is now implemented)
+   - [x] Add property tests for randomized metadata mutation and truncated payload handling. (truncated ciphertext handling is now covered; randomized metadata mutation property harness is now implemented)
    - [x] Ensure tests assert deterministic error identifiers from PR-D1.
 
 4. **PR-D4: Format stability + migration note**
