@@ -9,8 +9,9 @@
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "start": "vite",
-    "test:headless-contract": "node headless-contract-check.mjs && node operation-copy-check.mjs",
-    "check:priority-gap": "node checklist-gap-check.mjs"
+    "test:headless-contract": "pnpm check:priority-gap && node headless-contract-check.mjs && node operation-copy-check.mjs",
+    "check:priority-gap": "node checklist-gap-check.mjs",
+    "check:priority-gap:strict": "pnpm check:priority-gap"
   },
   "dependencies": {
     "react": "^18.3.1",
