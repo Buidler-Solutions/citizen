@@ -42,5 +42,39 @@
     "schemaVersion": "v1alpha1",
     "contractVersion": "2026-05-01",
     "ok": true
+  },
+  "expectedResultKeys": {
+    "backup_init": [
+      "createdAt",
+      "performance",
+      "portableMode",
+      "roles",
+      "targetPath"
+    ],
+    "backup_add_slot": [
+      "addedAt",
+      "performance",
+      "role",
+      "targetPath"
+    ],
+    "backup_export_credentials": [
+      "exportedAt",
+      "includes",
+      "performance",
+      "role",
+      "targetPath"
+    ],
+    "backup_verify": [
+      "performance",
+      "requireSignedManifest",
+      "targetPath",
+      "verifiedAt"
+    ],
+    "backup_restore": [
+      "performance",
+      "restoredAt",
+      "role",
+      "targetPath"
+    ]
   }
 }
