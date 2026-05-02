@@ -283,7 +283,7 @@ To translate the CLI-first vault implementation into a polished portable app exp
 
 - [x] **Guideline update:** the Tauri desktop app must follow the **Vaultier WB-mode simulation adapter** as the default execution profile for rehearsal, CI parity, and UX-state validation before any production-runtime bridge claims.
 - [x] WB-mode simulation adapter behavior must remain contract-compatible with `wallet backup ... --json` and preserve deterministic operation-state transitions (`preflight`, `writing`, `flushing`, `verify_required`, `completed`, `action_required`).
-- [ ] Any new Tauri desktop flow should land with WB-mode simulation tests first, then add real runtime adapter parity tests in a follow-up hardening PR.
+- [~] Any new Tauri desktop flow should land with WB-mode simulation tests first, then add real runtime adapter parity tests in a follow-up hardening PR. (Current Tauri bridge extensions continue to be paired with WB-mode/runtime contract tests; broader real-runtime parity expansion remains pending as hardening follow-up.)
 
 > WB-mode directive: treat Vaultier WB simulation as the canonical safety rehearsal layer for Tauri until cross-platform native adapter evidence (packaging/signing/removable-media/security audit) is complete.
 
@@ -300,7 +300,7 @@ To translate the CLI-first vault implementation into a polished portable app exp
    - [~] Extend redaction checks so secret-like fields are rejected identically in WB-mode and runtime modes. (Runtime parity gate now asserts both `runtimeBridge` and WB-mode simulator keep deterministic redaction rejection markers, and runtime bridge tests now enforce command-by-command redaction-failure parity for `init`/`add-slot`/`export-credentials`/`verify`/`restore`/`diagnostics`; full runtime adapter evidence against the in-process bridge remains pending final hardening.)
 
 3. **TV-3: Cross-platform completion gates**
-   - [ ] Complete OS-native removable-media adapter coverage (Linux/macOS/Windows) with deterministic error parity.
+   - [~] Complete OS-native removable-media adapter coverage (Linux/macOS/Windows) with deterministic error parity. (Tauri bridge now attempts OS-native safe-eject commands on Linux (`udisksctl`/`umount`), macOS (`diskutil unmount`), and Windows (PowerShell eject verb) and preserves deterministic fallback error mapping; full signed cross-platform smoke evidence is still pending.)
    - [ ] Produce signed/reproducible desktop artifacts and publish compatibility notes per release.
    - [ ] Close final memory/logging bridge audit and attach evidence links in this checklist.
 
