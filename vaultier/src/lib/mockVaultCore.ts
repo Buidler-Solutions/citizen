@@ -46,6 +46,37 @@ const COMMAND_PERFORMANCE_TARGETS_MS = {
   backup_restore: 2_500,
 } as const;
 
+function inferPlatformFromPath(targetPath: string): RuntimePlatform | null {
+  if (/^[a-zA-Z]:\\/.test(targetPath)) {
+    return 'windows';
+  }
+  if (targetPath.startsWith('/Volumes/')) {
+    return 'macos';
+  }
+  if (targetPath.startsWith('/media/') || targetPath.startsWith('/mnt/')) {
+    return 'linux';
+  }
+  return null;
+}
+
+function validateMountedRemovablePath(targetPath: string): { ok: true } | { ok: false; reason: string } {
+  const platform = inferPlatformFromPath(targetPath);
+  if (!platform) {
+    return {
+      ok: false,
+      reason: 'Target path must be a mounted removable path (macOS /Volumes/*, Linux /media/* or /mnt/*, Windows X:\\*).',
+    };
+  }
+
+  if (platform === 'windows' && !/^[a-zA-Z]:\\[^*?"<>|]+/.test(targetPath)) {
+    return { ok: false, reason: 'Windows removable paths must include a drive root and valid segment characters.' };
+  }
+  if ((platform === 'macos' || platform === 'linux') && targetPath.includes('//')) {
+    return { ok: false, reason: 'POSIX removable paths cannot contain duplicate separators.' };
+  }
+  return { ok: true };
+}
+
 function scanForSecretFields(payload: unknown): RedactionScanResult {
   const redactedFields: string[] = [];
 
@@ -418,6 +449,10 @@ export async function runHeadlessCommand(command: HeadlessCommand): Promise<Head
 
   if (!command.targetPath.trim()) {
     return fail('path_invalid', 'Target path is required.');
+  }
+  const pathValidation = validateMountedRemovablePath(command.targetPath.trim());
+  if (!pathValidation.ok) {
+    return fail('path_invalid', pathValidation.reason);
   }
 
   if (command.command === 'backup_init') {

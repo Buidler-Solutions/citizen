@@ -94,6 +94,25 @@ async function main() {
   assert(manifestPolicy.ok === false, 'manifest policy failure should return error');
   assert(manifestPolicy.error?.code === 'manifest_signature_missing', 'expected manifest_signature_missing error code');
 
+  const invalidPath = await runHeadlessCommand({
+    command: 'backup_init',
+    targetPath: './relative/path',
+    roles: ['decoy'],
+    includeConsentReceipts: false,
+    portableMode: true,
+  });
+  assert(invalidPath.ok === false, 'relative non-mounted path should be rejected');
+  assert(invalidPath.error?.code === 'path_invalid', 'expected path_invalid for non-mounted path');
+
+  const windowsPath = await runHeadlessCommand({
+    command: 'backup_init',
+    targetPath: 'E:\\Vaultier\\wallet-backup.cvb',
+    roles: ['decoy'],
+    includeConsentReceipts: false,
+    portableMode: true,
+  });
+  assert(windowsPath.ok === true, 'windows mounted removable path should be accepted');
+
   const diagnostics = await runHeadlessCommand({
     command: 'backup_diagnostics',
     targetPath: '/Volumes/CITIZEN_USB',
