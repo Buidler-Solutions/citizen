@@ -1,0 +1,15 @@
+$ pnpm check:priority-gap
+
+
+> vaultier@0.1.0 check:priority-gap /home/green/citizen/vaultier
+> node checklist-gap-check.mjs
+
+checklist-gap-check: checkpoint-8.5 pending=4 partial=1 complete=15
+checklist-gap-check: open priority-gate items:
+  1. [~] Assemble a maintainer sign-off evidence packet with reproducible command logs (Vaultier now ships `pnpm check:evidence-packet` to generate timestamped command logs + JSON/Markdown packet summaries under `citizen-protocol/docs/evidence/wallet-backup-vault/`, including wallet regression/performance harness output and priority-gap status; wallet+crypto maintainer approval decision still pending).
+  2. [ ] Execute wallet+crypto maintainer review and record production-security sign-off outcome.
+  3. [ ] `wallet backup` command suite has no open critical/high security findings.
+  4. [ ] Required CI suite (unit + integration + fuzz/property + performance envelope checks) is green (CI workflow now explicitly runs regression, schema-compatibility, latency-envelope, and ignored performance-evidence harness steps in `citizen-protocol/.github/workflows/wallet-backup-vault-ci.yml`; maintainers must confirm green status on protected branches).
+  5. [ ] Vaultier integration track may proceed to real runtime bridge only after this checkpoint is accepted.
+ ELIFECYCLE  Command failed with exit code 2.
+
