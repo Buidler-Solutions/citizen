@@ -1,9 +1,12 @@
+import type { PortableProfile } from './types';
+
 export type ReminderPolicy = {
   enabled: boolean;
   cadenceDays: number;
 };
 
-const STORAGE_KEY = 'vaultier.reminder_policy.v1';
+const REMINDER_STORAGE_KEY = 'vaultier.reminder_policy.v1';
+const PROFILE_STORAGE_KEY = 'vaultier.portable_profile.v1';
 const DEFAULT_POLICY: ReminderPolicy = { enabled: true, cadenceDays: 30 };
 
 export function defaultReminderPolicy(): ReminderPolicy {
@@ -16,7 +19,7 @@ export function loadReminderSettings(): ReminderPolicy {
   }
 
   try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
+    const raw = window.localStorage.getItem(REMINDER_STORAGE_KEY);
     if (!raw) return defaultReminderPolicy();
 
     const parsed = JSON.parse(raw) as Partial<ReminderPolicy>;
@@ -38,7 +41,43 @@ export function saveReminderSettings(policy: ReminderPolicy): void {
     cadenceDays: clampCadence(policy.cadenceDays),
   };
 
-  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(normalized));
+  window.localStorage.setItem(REMINDER_STORAGE_KEY, JSON.stringify(normalized));
+}
+
+export function savePortableProfile(profile: PortableProfile): void {
+  if (typeof window === 'undefined' || !window.localStorage) return;
+
+  const normalized: PortableProfile = {
+    portableLabel: profile.portableLabel,
+    schemaVersion: profile.schemaVersion,
+    createdAt: profile.createdAt,
+    lastVerifiedAt: profile.lastVerifiedAt,
+  };
+
+  window.localStorage.setItem(PROFILE_STORAGE_KEY, JSON.stringify(normalized));
+}
+
+export function loadPortableProfile(): PortableProfile | null {
+  if (typeof window === 'undefined' || !window.localStorage) return null;
+
+  try {
+    const raw = window.localStorage.getItem(PROFILE_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<PortableProfile>;
+
+    if (typeof parsed.portableLabel !== 'string' || typeof parsed.schemaVersion !== 'string' || typeof parsed.createdAt !== 'string') {
+      return null;
+    }
+
+    return {
+      portableLabel: parsed.portableLabel,
+      schemaVersion: parsed.schemaVersion,
+      createdAt: parsed.createdAt,
+      lastVerifiedAt: typeof parsed.lastVerifiedAt === 'string' ? parsed.lastVerifiedAt : undefined,
+    };
+  } catch {
+    return null;
+  }
 }
 
 export function getNextReminderAt(lastVerifiedAt: string, policy: ReminderPolicy): string | null {
@@ -46,7 +85,8 @@ export function getNextReminderAt(lastVerifiedAt: string, policy: ReminderPolicy
   const base = new Date(lastVerifiedAt);
   if (Number.isNaN(base.valueOf())) return null;
 
-  const next = new Date(base.getTime() + clampCadence(policy.cadenceDays) * 24 * 60 * 60 * 1000);
+  const next = new Date(base);
+  next.setUTCDate(next.getUTCDate() + clampCadence(policy.cadenceDays));
   return next.toISOString();
 }
 
