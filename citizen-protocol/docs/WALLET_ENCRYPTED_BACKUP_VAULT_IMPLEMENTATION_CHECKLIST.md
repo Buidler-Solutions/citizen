@@ -566,7 +566,7 @@ Use this backlog to convert the portable app milestone tracker into small implem
    - [x] Add reminder tests covering timezone-safe date arithmetic and deterministic next-reminder calculation. (`vaultier/reminder-policy-check.mjs` now validates UTC cadence math, leap-year rollover behavior, timezone-offset input normalization, and deterministic due-state evaluation; wired into `pnpm test:headless-contract` via `pnpm check:reminders`.)
 
 5. **PR-F5: Desktop smoke and packaging gate**
-   - [ ] Add CI smoke workflow that runs create/add-slot/export/verify/restore against ephemeral temp volumes per OS runner.
+   - [~] Add CI smoke workflow that runs create/add-slot/export/verify/restore against ephemeral temp volumes per OS runner. (Added `vaultier-desktop-smoke.yml` OS-matrix smoke gate running WB-mode/headless contract flows on Linux/macOS/Windows; ephemeral temp-volume runtime adapter coverage remains pending.)
    - [ ] Produce signed/nightly artifacts with reproducible build metadata attached to release notes.
    - [x] Add “known limitations” section in desktop docs for unsigned local dev builds and removable-media emulation caveats. (`wallet/desktop/README.md` now includes a dedicated known-limitations section for unsigned dev builds, Linux runtime package prerequisites, WB-mode rehearsal boundaries, removable-media emulation caveats, and production-signing caveats.)
 
@@ -574,6 +574,12 @@ Use this backlog to convert the portable app milestone tracker into small implem
 - [ ] PR-F1 through PR-F5 merged with green cross-platform smoke checks.
 - [ ] Portable app roadmap status can advance M0→M2 from Planned to In Progress/Implemented with linked evidence PRs.
 - [ ] Desktop docs explicitly reference deterministic error contract and recovery runbook procedures.
+
+
+### Delta Update (2026-05-02, Tauri smoke gate continuation)
+
+- Added `.github/workflows/vaultier-desktop-smoke.yml` with a Linux/macOS/Windows matrix to run Vaultier WB-mode/headless smoke + contract checks on every desktop-path change.
+- This closes the checklist gap for CI smoke baseline wiring and moves PR-F5 smoke coverage to partial until runtime-backed ephemeral-volume exercises are added.
 
 ### Portable App UX Acceptance Rubric (for “working + sleek” sign-off)
 
