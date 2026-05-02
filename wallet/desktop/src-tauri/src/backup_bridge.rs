@@ -267,7 +267,8 @@ mod tests {
 
     use super::{
         cli_error_id_from_stdout, cli_error_id_from_value, command_to_cli_args,
-        contains_sensitive_keys, parse_cli_json, BackupCommandResponse, CONTRACT_VERSION,
+        contains_sensitive_keys, looks_removable_for_os, parse_cli_json, BackupCommandResponse,
+        CONTRACT_VERSION,
     };
     use std::path::Path;
 
@@ -415,25 +416,56 @@ mod tests {
         assert_eq!(result, Err("path_invalid"));
     }
 
+    #[test]
+    fn removable_path_detection_supports_linux_path_shapes() {
+        assert!(looks_removable_for_os(Path::new("/media/operator/vault"), "linux"));
+        assert!(looks_removable_for_os(Path::new("/mnt/usb/vault"), "linux"));
+        assert!(!looks_removable_for_os(Path::new("/var/tmp/vault"), "linux"));
+    }
+
+    #[test]
+    fn removable_path_detection_supports_macos_path_shapes() {
+        assert!(looks_removable_for_os(
+            Path::new("/Volumes/CITIZEN_BACKUP/vault"),
+            "macos"
+        ));
+        assert!(!looks_removable_for_os(Path::new("/Users/operator/vault"), "macos"));
+    }
+
+    #[test]
+    fn removable_path_detection_supports_windows_path_shapes() {
+        assert!(looks_removable_for_os(Path::new("E:\\vault\\backup.json"), "windows"));
+        assert!(!looks_removable_for_os(
+            Path::new("C:\\Users\\operator\\vault"),
+            "windows"
+        ));
+    }
+
 }
 
 #[cfg(feature = "desktop-runtime")]
-fn platform_mount_prefixes() -> &'static [&'static str] {
-    if cfg!(target_os = "macos") {
-        &["/Volumes/"]
-    } else if cfg!(target_os = "windows") {
-        &[
+fn mount_prefixes_for_os(os: &str) -> &'static [&'static str] {
+    match os {
+        "macos" => &["/Volumes/"],
+        "windows" => &[
             "A:\\", "B:\\", "D:\\", "E:\\", "F:\\", "G:\\", "H:\\", "I:\\",
-        ]
-    } else {
-        &["/media/", "/mnt/"]
+        ],
+        _ => &["/media/", "/mnt/"],
     }
+}
+
+#[cfg(feature = "desktop-runtime")]
+fn looks_removable_for_os(path: &Path, os: &str) -> bool {
+    let path_str = path.to_string_lossy();
+    mount_prefixes_for_os(os)
+        .iter()
+        .any(|prefix| path_str.starts_with(prefix))
 }
 
 #[cfg(feature = "desktop-runtime")]
 fn looks_removable(path: &Path) -> bool {
     let path_str = path.to_string_lossy();
-    platform_mount_prefixes()
+    mount_prefixes_for_os(std::env::consts::OS)
         .iter()
         .any(|prefix| path_str.starts_with(prefix))
 }
