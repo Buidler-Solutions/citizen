@@ -248,6 +248,15 @@ To keep implementation sequencing unambiguous, treat **Checkpoint 8.5 — Priori
 
 ## Portable Application Track (Working + Sleek)
 
+
+### Desktop App Implementation Status (Vaultier + `wallet/desktop`)
+
+- [x] Desktop app implementation exists in-repo: `wallet/desktop` provides a runnable Tauri shell and `vaultier/` provides the React UX + typed runtime bridge contract consumed by the shell.
+- [~] Current runtime bridge still uses cautious CLI shell execution (`citizen-wallet wallet backup ... --json`) as a temporary implementation bridge; in-process wallet-core bindings remain open.
+- [ ] Production desktop readiness remains blocked on cross-platform packaging/signing, OS-native removable-media adapters, and final bridge memory/logging audit sign-off.
+
+> Implementation caution: treat the desktop app as implemented and runnable for operator rehearsal, but not yet production-ready until the remaining checklist gates above are complete and evidenced.
+
 To translate the CLI-first vault implementation into a polished portable app experience, execute this cross-platform track in parallel with Checkpoints 5–9.
 
 ### UX/Product Requirements

@@ -26,3 +26,9 @@ cargo check --manifest-path src-tauri/Cargo.toml --features desktop-runtime
 - Current bridge execution shells out to `cargo run -p citizen-wallet -- wallet backup ... --json` from `citizen-protocol/` and is intended as a cautious implementation step until native in-process wallet-core bindings land.
 
 - Linux note: `desktop-runtime` intentionally gates Tauri/WebKitGTK dependencies so plain `cargo check --manifest-path src-tauri/Cargo.toml` can run without `javascriptcoregtk` system packages; runtime builds still require system WebKitGTK/JavascriptCore packages.
+
+## Implementation Status
+
+- Desktop app is implemented as a runnable Vaultier desktop surface (`wallet/desktop` + `vaultier`).
+- Current bridge strategy is intentionally cautious: runtime commands delegate to wallet CLI JSON contracts until in-process wallet-core bindings are finalized.
+- Not yet production-complete: packaging/signing, full OS-native removable-media adapters, and bridge hardening audits are still tracked in the checklist at `citizen-protocol/docs/WALLET_ENCRYPTED_BACKUP_VAULT_IMPLEMENTATION_CHECKLIST.md`.
