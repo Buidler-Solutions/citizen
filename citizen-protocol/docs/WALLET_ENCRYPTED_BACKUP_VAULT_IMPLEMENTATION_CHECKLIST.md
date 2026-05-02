@@ -50,7 +50,7 @@ To keep implementation sequencing unambiguous, treat **Checkpoint 8.5 — Priori
 
 - [x] Support vault creation directly on mounted removable drives (Linux/macOS/Windows path semantics now enforced in Vaultier headless command preflight path validation: macOS `/Volumes/*`, Linux `/media/*` or `/mnt/*`, Windows `X:\\*`).
 - [x] Add optional “portable mode” metadata for cross-machine restore checks.
-- [ ] Provide safe eject + write flush guidance in CLI and extension flows.
+- [~] Provide safe eject + write flush guidance in CLI and extension flows (CLI + Vaultier desktop now expose explicit flush/safe-eject guidance and commands; browser extension recovery surface guidance remains pending).
 - [~] Detect common removable-media failure modes (Vaultier now surfaces deterministic `media_unavailable` disconnect detection + refresh checks, existing filesystem compatibility warnings, and flush-strategy completeness enforcement before marking safe-eject complete; wallet CLI now persists vault files through atomic temp-write + `sync_all` + rename durability steps, while true runtime-backed partial-write prevention in desktop adapters remains pending).
 - [x] Define minimum recommended USB durability/performance profile for operators (Vaultier now surfaces an explicit operator-facing USB durability profile panel with capacity headroom, endurance, filesystem, throughput, and duplicate-media guidance, and wallet CLI removable-media warnings now mirror the same durability/throughput/duplicate-copy guidance for operator parity).
 
