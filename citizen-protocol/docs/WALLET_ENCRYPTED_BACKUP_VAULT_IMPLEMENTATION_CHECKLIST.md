@@ -225,7 +225,7 @@ This initiative should replicate key VeraCrypt-style operating properties while 
 
 **Exit criteria**
 - [ ] `wallet backup` command suite has no open critical/high security findings.
-- [ ] Required CI suite (unit + integration + fuzz/property + performance envelope checks) is green.
+- [ ] Required CI suite (unit + integration + fuzz/property + performance envelope checks) is green (CI workflow now explicitly runs regression, schema-compatibility, latency-envelope, and ignored performance-evidence harness steps in `citizen-protocol/.github/workflows/wallet-backup-vault-ci.yml`; maintainers must confirm green status on protected branches).
 - [x] CLI JSON contract is versioned and validated against documentation examples (wallet CLI centralizes deterministic JSON contract output builders for `init`/`verify`/`restore`, regression assertions enforce `citizen.wallet.backup.cli.v1` + required schema fields, and operator-facing docs now include verbatim contract examples in `citizen-protocol/docs/WALLET_BACKUP_VAULT_FORMAT.md`).
 - [ ] Vaultier integration track may proceed to real runtime bridge only after this checkpoint is accepted.
 

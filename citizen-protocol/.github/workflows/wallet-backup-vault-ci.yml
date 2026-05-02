@@ -32,8 +32,14 @@ jobs:
         with:
           workspaces: citizen-protocol
 
-      - name: Run wallet backup regression suite
+      - name: Run wallet backup regression suite (unit + integration + adversarial/property)
         run: cargo test -p citizen-wallet backup_
+
+      - name: Run wallet backup schema compatibility gate
+        run: cargo test -p citizen-wallet backup_vault_schema_fixture_remains_compatible
 
       - name: Run wallet backup performance envelope regression
         run: cargo test -p citizen-wallet backup_command_path_latency_envelope_stays_within_thresholds
+
+      - name: Emit wallet backup performance evidence harness
+        run: cargo test -p citizen-wallet backup_command_path_performance_evidence_harness -- --ignored --nocapture
