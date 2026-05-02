@@ -134,6 +134,17 @@ function validateDriveRecords(platform: RuntimePlatform, drives: DriveRecord[]):
   return { drives: safeDrives, issues };
 }
 
+function canonicalizeDriveRecord(platform: RuntimePlatform, drive: DriveRecord, index: number): DriveRecord & { platform: RuntimePlatform } {
+  return {
+    ...drive,
+    id: drive.id || `${platform}-drive-${index + 1}`,
+    label: drive.label.trim() || `${platform.toUpperCase()}_DRIVE_${index + 1}`,
+    mountPath: drive.mountPath.trim(),
+    filesystem: drive.filesystem.toLowerCase() as DriveRecord['filesystem'],
+    platform,
+  };
+}
+
 const mockDiscoveryAdapters: DriveDiscoveryAdapter[] = [
   {
     platform: 'macos',
@@ -169,25 +180,34 @@ export async function discoverRemovableDrives(): Promise<DriveDiscoveryResult> {
   if (getRuntimeShell() === 'tauri') {
     const tauriResult = await discoverDrivesViaTauri();
     const tauriValidated = tauriResult.drives.reduce<DriveDiscoveryResult>(
-      (acc, drive) => {
-        const validated = validateDriveRecords(drive.platform, [drive]);
+      (acc, drive, index) => {
+        const normalized = canonicalizeDriveRecord(drive.platform, drive, index);
+        const validated = validateDriveRecords(normalized.platform, [normalized]);
         acc.drives.push(...validated.drives.map((safeDrive) => ({ ...safeDrive, platform: drive.platform })));
         acc.errors.push(...validated.issues);
         return acc;
       },
       { drives: [], errors: [...tauriResult.issues] },
     );
+    tauriValidated.drives.sort((a, b) => a.platform.localeCompare(b.platform) || a.mountPath.localeCompare(b.mountPath));
     return tauriValidated;
   }
   const results = await Promise.all(mockDiscoveryAdapters.map((adapter) => adapter.discover().then((result) => ({ platform: adapter.platform, ...result }))));
-  return results.reduce<DriveDiscoveryResult>(
+  const simulated = results.reduce<DriveDiscoveryResult>(
     (acc, result) => {
-      acc.drives.push(...result.drives.map((drive) => ({ ...drive, platform: result.platform })));
+      acc.drives.push(...result.drives.map((drive, index) => canonicalizeDriveRecord(result.platform, drive, index)));
       acc.errors.push(...result.issues);
       return acc;
     },
     { drives: [], errors: [] },
   );
+  simulated.errors.unshift({
+    mountPath: 'runtime://web-mock',
+    code: 'media_unavailable',
+    detail: 'Web-mock drive results are simulation-only. Use Tauri runtime for real removable-drive operations.',
+  });
+  simulated.drives.sort((a, b) => a.platform.localeCompare(b.platform) || a.mountPath.localeCompare(b.mountPath));
+  return simulated;
 }
 
 export async function flushPendingWrites(targetPath: string): Promise<OperationLog[]> {
@@ -233,15 +253,15 @@ export async function flushPendingWritesWithStrategy(targetPath: string): Promis
     }
     return { logs, strategy: tauri.strategy };
   }
-  const fallbackStrategy: CrashSafeWriteStep[] = [
-    { step: 'temp_write', status: 'ok', detail: 'Write encrypted payload to .tmp container file.' },
-    { step: 'fsync_file', status: 'ok', detail: 'Sync temporary file bytes before rename.' },
-    { step: 'atomic_rename', status: 'ok', detail: 'Replace prior container atomically where supported.' },
-    { step: 'fsync_parent', status: 'ok', detail: 'Sync parent directory metadata for crash consistency.' },
-  ];
+  logs.unshift({
+    at: now(),
+    action: 'vault.flush.runtime_required',
+    status: 'warn',
+    details: 'Web-mock runtime cannot attest crash-safe write durability. Use Tauri runtime bridge before safe eject.',
+  });
   return {
     logs,
-    strategy: fallbackStrategy,
+    strategy: [],
   };
 }
 
@@ -264,7 +284,7 @@ export async function safeEjectMedia(targetPath: string): Promise<SafeEjectResul
     };
   }
   return {
-    ok: true,
+    ok: false,
     logs: [
       {
         at,

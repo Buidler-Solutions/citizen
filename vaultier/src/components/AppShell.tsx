@@ -82,7 +82,6 @@ export function AppShell() {
   const [ejectChecks, setEjectChecks] = useState({ verified: false, restoreTest: false, flushComplete: false, duplicateMedia: false });
   const [reminderPolicy, setReminderPolicy] = useState<ReminderPolicy>(defaultReminderPolicy());
   const [runtimeShell, setRuntimeShell] = useState<RuntimeShell>('web-mock');
-  const [allowMockRuntimeOps, setAllowMockRuntimeOps] = useState(false);
   const [flushStrategy, setFlushStrategy] = useState<CrashSafeWriteStep[]>([]);
   const [ejectCompleted, setEjectCompleted] = useState(false);
   const [performanceMeasurements, setPerformanceMeasurements] = useState<PerformanceMeasurement[]>([]);
@@ -117,7 +116,8 @@ export function AppShell() {
   }, [discovery, targetPath]);
 
   const selectedDrive = useMemo(() => discovery.drives.find((d) => d.mountPath === targetPath), [discovery, targetPath]);
-  const mockRuntimeBlocked = runtimeShell !== 'tauri' && !allowMockRuntimeOps;
+  const mockRuntimeBlocked = runtimeShell !== 'tauri';
+  const runtimeShellLabel = runtimeShell === 'tauri' ? 'Tauri bridge active' : 'Web mock adapter';
   const safeToEject = useMemo(() => Object.values(ejectChecks).every(Boolean), [ejectChecks]);
   const decoyEntropy = estimateEntropyBits(decoyPassphrase);
   const criticalEntropy = estimateEntropyBits(criticalPassphrase);
@@ -260,9 +260,21 @@ export function AppShell() {
   }, [activeError]);
 
   return <main className={highContrast ? 'shell high-contrast' : 'shell'}>
-    <section className="card" aria-live="polite"><h1>Vaultier</h1><p className="subtitle">Portable encrypted backup vault for Citizen wallet recovery.</p>
-      <article className="state-panel"><strong>{OPERATION_STATE_COPY[operationState].title}</strong><p className="hint">{OPERATION_STATE_COPY[operationState].detail}</p><p className="hint">Runtime shell: {runtimeShell === 'tauri' ? 'Tauri bridge' : 'Web mock adapter'}.</p>{runtimeShell !== 'tauri' && <p className="summary warn">Production-grade USB write/flush protections require Tauri runtime bridge evidence. Mock runtime is for UX rehearsal only.</p>}{activeError && <div className="error-panel"><strong>Error code: {activeError}</strong><p>{ERROR_COPY[activeError].headline}</p><p className="hint">Next action: {ERROR_COPY[activeError].nextAction}</p></div>}</article>
-      {runtimeShell !== 'tauri' && <label className="inline-control"><input type="checkbox" checked={allowMockRuntimeOps} onChange={() => setAllowMockRuntimeOps((value) => !value)} />Allow mock runtime operations for local rehearsal</label>}
+    <section className="hero card">
+      <div>
+        <p className="eyebrow">Citizen Recovery Vault</p>
+        <h1>Vaultier</h1>
+        <p className="subtitle">Portable encrypted backup vault for Citizen wallet recovery.</p>
+      </div>
+      <div className="hero-chips">
+        <span className={runtimeShell === 'tauri' ? 'badge ok' : 'badge warn'}>{runtimeShellLabel}</span>
+        <span className={safeToEject ? 'badge ok' : 'badge warn'}>{safeToEject ? 'Eject checklist complete' : 'Eject checklist pending'}</span>
+        <span className={reminderDue ? 'badge warn' : 'badge ok'}>{reminderDue ? 'Verification due' : 'Verification cadence healthy'}</span>
+      </div>
+    </section>
+    <section className="card" aria-live="polite"><h2>Backup workflow</h2><p className="subtitle">Portable encrypted backup vault for Citizen wallet recovery.</p>
+      <article className="state-panel"><strong>{OPERATION_STATE_COPY[operationState].title}</strong><p className="hint">{OPERATION_STATE_COPY[operationState].detail}</p><p className="hint">Runtime shell: {runtimeShellLabel}.</p>{runtimeShell !== 'tauri' && <p className="summary warn">Production-grade USB write/flush protections require Tauri runtime bridge evidence. Mock runtime is for UX rehearsal only.</p>}{activeError && <div className="error-panel"><strong>Error code: {activeError}</strong><p>{ERROR_COPY[activeError].headline}</p><p className="hint">Next action: {ERROR_COPY[activeError].nextAction}</p></div>}</article>
+      {runtimeShell !== 'tauri' && <p className="summary warn">Create/verify/restore/eject operations are blocked in web-mock mode. Launch under Tauri bridge for real media operations.</p>}
       {reminderDue && <p className="summary warn">Verification reminder is due. Run verify before relying on this media.</p>}
       <label className="inline-control"><input type="checkbox" checked={highContrast} onChange={() => setHighContrast(!highContrast)} />High contrast</label>
       <nav className="stages">{STAGES.map((item) => <button key={item} className={stage === item ? 'pill active' : 'pill'} onClick={() => setStage(item)} disabled={!profile && item !== 'create'}>{item}</button>)}</nav>
