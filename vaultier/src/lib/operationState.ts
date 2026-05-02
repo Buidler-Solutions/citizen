@@ -3,6 +3,7 @@ export type OperationState =
   | 'preflight'
   | 'writing'
   | 'flushing'
+  | 'verified'
   | 'verify_required'
   | 'completed'
   | 'action_required';
@@ -45,6 +46,10 @@ export const OPERATION_STATE_COPY: Record<OperationState, { title: string; detai
   verify_required: {
     title: 'Verification required',
     detail: 'Run deterministic verification before marking this media as recovery-ready.',
+  },
+  verified: {
+    title: 'Verification complete',
+    detail: 'Vault integrity checks passed. Continue to test restore before safe removal.',
   },
   completed: {
     title: 'Operation completed',

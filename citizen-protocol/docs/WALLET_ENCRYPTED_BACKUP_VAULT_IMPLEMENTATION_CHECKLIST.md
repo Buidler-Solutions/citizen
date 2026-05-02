@@ -485,7 +485,7 @@ This slice starts the desktop productization track without blocking on extension
 2. **PR-E2: Removable media discovery + safe-write pipeline**
    - [ ] Implement cross-platform removable-drive discovery abstraction with deterministic adapter error mapping.
    - [ ] Add crash-safe write path (`.tmp` write -> fsync -> atomic rename -> parent fsync when supported).
-   - [ ] Add UI-facing operation state machine (`preflight`, `writing`, `flushing`, `verified`, `action_required`) for deterministic progress copy.
+  - [x] Add UI-facing operation state machine (`preflight`, `writing`, `flushing`, `verified`, `action_required`) for deterministic progress copy. (Vaultier operation-state contract now includes an explicit `verified` checkpoint between deterministic verify completion and restore rehearsal, while preserving `verify_required` guidance for pre-verify flows in `vaultier/src/lib/operationState.ts` and guided flow transitions.)
 
 3. **PR-E3: Sleek guided flows (MVP UX)**
    - [ ] Ship single-screen “Create Backup” flow with decoy + critical setup, passphrase strength guidance, and progress timeline.

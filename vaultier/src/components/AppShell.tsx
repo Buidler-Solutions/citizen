@@ -188,7 +188,7 @@ export function AppShell() {
       if (tamperSignal?.label === 'Slot inventory') setActiveError('slot_table_tampered');
       if (tamperSignal?.label === 'Rollback counter') setActiveError('rollback_counter_mismatch');
       setEjectChecks((p) => ({ ...p, verified: result.manifest.verified }));
-      setStage('restore'); setOperationState(result.manifest.verified ? 'completed' : 'action_required');
+      setStage('restore'); setOperationState(result.manifest.verified ? 'verified' : 'action_required');
       const elapsedMs = Math.round(performance.now() - startedAt);
       recordPerformance('verify', elapsedMs, PERFORMANCE_TARGETS.verify);
     } finally { setRunning(false); }
