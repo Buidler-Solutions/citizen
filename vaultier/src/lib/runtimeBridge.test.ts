@@ -1,4 +1,4 @@
-import { detectRuntimeShell, discoverDrivesViaTauri, flushViaTauri, invokeBackupCommandViaTauri, sanitizeTauriPayloadForLogs } from './runtimeBridge';
+import { detectRuntimeShell, discoverDrivesViaTauri, flushViaTauri, invokeBackupCommandViaTauri, safeEjectViaTauri, sanitizeTauriPayloadForLogs } from './runtimeBridge';
 import type { HeadlessResponse } from './types';
 
 function assert(condition: unknown, message: string): void {
@@ -23,6 +23,8 @@ async function main() {
   assert((await discoverDrivesViaTauri()).issues[0]?.code === 'media_unavailable', 'discovery fallback should emit media_unavailable issue');
   assert((await flushViaTauri('/mnt/usb')).bridgeIssue?.code === 'media_unavailable', 'flush fallback should emit media_unavailable issue');
 
+  assert((await safeEjectViaTauri('/mnt/usb')).bridgeIssue?.code === 'media_unavailable', 'safe-eject fallback should emit media_unavailable issue');
+
   withTauriInvoke(async (name, args) => {
     if (name === 'discover_removable_drives') {
       return {
@@ -40,6 +42,11 @@ async function main() {
         ],
       };
     }
+
+    if (name === 'safe_eject_media') {
+      assert((args as { targetPath: string }).targetPath === '/media/usb/vault.cvb', 'safe-eject should forward targetPath payload');
+      return { ok: true };
+    }
     if (name === 'backup_verify') {
       const response: HeadlessResponse = { schemaVersion: 'v1alpha1', contractVersion: '2026-05-01', ok: true, command: 'backup_verify', result: {} };
       return response;
@@ -50,6 +57,7 @@ async function main() {
   assert(detectRuntimeShell() === 'tauri', 'runtime detection should report tauri when bridge exists');
   assert((await discoverDrivesViaTauri()).drives.length === 1, 'tauri discovery should surface bridged drive records');
   assert((await flushViaTauri('/media/usb/vault.cvb')).strategy.length > 0, 'tauri flush should return strategy evidence');
+  assert((await safeEjectViaTauri('/media/usb/vault.cvb')).ok === true, 'tauri safe-eject should return bridged result');
 
   const verify = await invokeBackupCommandViaTauri({ command: 'backup_verify', targetPath: '/media/usb/vault.cvb', expectedVaultVersion: '1', requireSignedManifest: true });
   assert(verify.ok === true, 'verify bridge command should return headless response payload');
