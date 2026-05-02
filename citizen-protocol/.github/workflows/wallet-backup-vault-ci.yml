@@ -1,0 +1,39 @@
+name: wallet-backup-vault-ci
+
+on:
+  push:
+    paths:
+      - 'citizen-protocol/crates/wallet/**'
+      - 'citizen-protocol/docs/WALLET_BACKUP_*.md'
+      - 'citizen-protocol/docs/WALLET_ENCRYPTED_BACKUP_VAULT_IMPLEMENTATION_CHECKLIST.md'
+      - 'citizen-protocol/.github/workflows/wallet-backup-vault-ci.yml'
+  pull_request:
+    paths:
+      - 'citizen-protocol/crates/wallet/**'
+      - 'citizen-protocol/docs/WALLET_BACKUP_*.md'
+      - 'citizen-protocol/docs/WALLET_ENCRYPTED_BACKUP_VAULT_IMPLEMENTATION_CHECKLIST.md'
+      - 'citizen-protocol/.github/workflows/wallet-backup-vault-ci.yml'
+
+jobs:
+  wallet-backup-regression:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: citizen-protocol
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo artifacts
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: citizen-protocol
+
+      - name: Run wallet backup regression suite
+        run: cargo test -p citizen-wallet backup_
+
+      - name: Run wallet backup performance envelope regression
+        run: cargo test -p citizen-wallet backup_command_path_latency_envelope_stays_within_thresholds

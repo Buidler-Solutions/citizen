@@ -179,7 +179,7 @@ This initiative should replicate key VeraCrypt-style operating properties while 
 - [ ] Performance tests: unlock latency targets across workstation/laptop profiles.
 
 **Exit criteria**
-- [ ] CI includes backup-vault test suite and regression fixtures.
+- [x] CI includes backup-vault test suite and regression fixtures (added `citizen-protocol/.github/workflows/wallet-backup-vault-ci.yml` to enforce wallet backup regression + latency envelope checks on wallet/docs/workflow changes).
 - [ ] No critical/high findings open from pre-merge security review.
 
 ---
