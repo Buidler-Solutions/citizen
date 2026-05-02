@@ -76,5 +76,39 @@
       "role",
       "targetPath"
     ]
+  },
+  "expectedResultValues": {
+    "backup_init": {
+      "targetPath": "fixture-backup_init-targetPath",
+      "portableMode": "fixture-backup_init-portableMode",
+      "createdAt": "fixture-backup_init-createdAt",
+      "roles": "fixture-backup_init-roles",
+      "performance": "fixture-backup_init-performance"
+    },
+    "backup_add_slot": {
+      "targetPath": "fixture-backup_add_slot-targetPath",
+      "role": "fixture-backup_add_slot-role",
+      "addedAt": "fixture-backup_add_slot-addedAt",
+      "performance": "fixture-backup_add_slot-performance"
+    },
+    "backup_export_credentials": {
+      "targetPath": "fixture-backup_export_credentials-targetPath",
+      "role": "fixture-backup_export_credentials-role",
+      "includes": "fixture-backup_export_credentials-includes",
+      "exportedAt": "fixture-backup_export_credentials-exportedAt",
+      "performance": "fixture-backup_export_credentials-performance"
+    },
+    "backup_verify": {
+      "targetPath": "fixture-backup_verify-targetPath",
+      "verifiedAt": "fixture-backup_verify-verifiedAt",
+      "requireSignedManifest": "fixture-backup_verify-requireSignedManifest",
+      "performance": "fixture-backup_verify-performance"
+    },
+    "backup_restore": {
+      "targetPath": "fixture-backup_restore-targetPath",
+      "role": "fixture-backup_restore-role",
+      "restoredAt": "fixture-backup_restore-restoredAt",
+      "performance": "fixture-backup_restore-performance"
+    }
   }
 }
