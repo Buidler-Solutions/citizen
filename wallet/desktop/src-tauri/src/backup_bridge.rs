@@ -9,6 +9,8 @@ use std::process::Command;
 
 #[cfg(feature = "desktop-runtime")]
 const CONTRACT_VERSION: &str = "citizen.wallet.backup.desktop.v1alpha1";
+#[cfg(feature = "desktop-runtime")]
+const MIN_FREE_SPACE_BYTES: u64 = 64 * 1024 * 1024;
 
 #[cfg(feature = "desktop-runtime")]
 #[derive(Debug, Deserialize)]
@@ -450,7 +452,27 @@ fn preflight_target_path(target: &Path) -> Result<(), &'static str> {
     if metadata.permissions().readonly() {
         return Err("mount_unwritable");
     }
+    if let Some(free_bytes) = free_space_bytes(target) {
+        if free_bytes < MIN_FREE_SPACE_BYTES {
+            return Err("insufficient_space");
+        }
+    }
     Ok(())
+}
+
+#[cfg(feature = "desktop-runtime")]
+fn free_space_bytes(target: &Path) -> Option<u64> {
+    if cfg!(target_os = "windows") {
+        return None;
+    }
+    let output = Command::new("df").arg("-Pk").arg(target).output().ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let stdout = String::from_utf8(output.stdout).ok()?;
+    let line = stdout.lines().nth(1)?;
+    let available_kb = line.split_whitespace().nth(3)?.parse::<u64>().ok()?;
+    Some(available_kb.saturating_mul(1024))
 }
 
 #[cfg(feature = "desktop-runtime")]
@@ -556,6 +578,7 @@ pub fn flush_vault_writes(payload: TargetPathPayload) -> serde_json::Value {
         let detail = match error_id {
             "mount_unwritable" => "target path is mounted read-only",
             "media_unavailable" => "target path is not classified as removable media",
+            "insufficient_space" => "target path does not have enough free space",
             _ => "target path does not exist",
         };
         return serde_json::json!({
@@ -605,6 +628,7 @@ pub fn safe_eject_media(payload: TargetPathPayload) -> serde_json::Value {
         let reason = match error_id {
             "mount_unwritable" => "Target path is mounted read-only.",
             "media_unavailable" => "Target path is not classified as removable media.",
+            "insufficient_space" => "Target path does not have enough free space for safe operations.",
             _ => "Target path does not exist.",
         };
         return serde_json::json!({
