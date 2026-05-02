@@ -23,7 +23,7 @@ struct BackupCommandRequest {
 pub(crate) struct BackupCommandResponse {
     contract_version: &'static str,
     status: &'static str,
-    error_id: Option<&'static str>,
+    error_id: Option<String>,
     details: serde_json::Value,
 }
 
@@ -94,6 +94,28 @@ fn parse_cli_json(stdout: &str) -> Result<serde_json::Value, String> {
 }
 
 #[cfg(feature = "desktop-runtime")]
+fn cli_error_id_from_value(value: &serde_json::Value) -> Option<String> {
+    value
+        .get("error_id")
+        .and_then(|v| v.as_str())
+        .map(str::to_owned)
+        .or_else(|| {
+            value
+                .get("result")
+                .and_then(|result| result.get("error_id"))
+                .and_then(|v| v.as_str())
+                .map(str::to_owned)
+        })
+}
+
+#[cfg(feature = "desktop-runtime")]
+fn cli_error_id_from_stdout(stdout: &str) -> Option<String> {
+    serde_json::from_str::<serde_json::Value>(stdout)
+        .ok()
+        .and_then(|value| cli_error_id_from_value(&value))
+}
+
+#[cfg(feature = "desktop-runtime")]
 fn contains_sensitive_keys(value: &serde_json::Value) -> bool {
     match value {
         serde_json::Value::Object(map) => map.iter().any(|(key, nested)| {
@@ -118,7 +140,7 @@ fn execute_backup_command(request: BackupCommandRequest) -> BackupCommandRespons
             return BackupCommandResponse {
                 contract_version: CONTRACT_VERSION,
                 status: "error",
-                error_id: Some("unsupported_command"),
+                error_id: Some("unsupported_command".to_owned()),
                 details: serde_json::json!({
                     "message": "Unsupported desktop backup command.",
                     "command": request.command,
@@ -133,7 +155,7 @@ fn execute_backup_command(request: BackupCommandRequest) -> BackupCommandRespons
             return BackupCommandResponse {
                 contract_version: CONTRACT_VERSION,
                 status: "error",
-                error_id: Some("workspace_unavailable"),
+                error_id: Some("workspace_unavailable".to_owned()),
                 details: serde_json::json!({ "message": err }),
             }
         }
@@ -145,7 +167,7 @@ fn execute_backup_command(request: BackupCommandRequest) -> BackupCommandRespons
             return BackupCommandResponse {
                 contract_version: CONTRACT_VERSION,
                 status: "error",
-                error_id: Some("invalid_payload"),
+                error_id: Some("invalid_payload".to_owned()),
                 details: serde_json::json!({
                     "message": err,
                     "command": request.command,
@@ -172,7 +194,7 @@ fn execute_backup_command(request: BackupCommandRequest) -> BackupCommandRespons
             return BackupCommandResponse {
                 contract_version: CONTRACT_VERSION,
                 status: "error",
-                error_id: Some("command_failed"),
+                error_id: Some("command_failed".to_owned()),
                 details: serde_json::json!({
                     "message": format!("Failed to invoke wallet CLI: {err}"),
                 }),
@@ -190,7 +212,7 @@ fn execute_backup_command(request: BackupCommandRequest) -> BackupCommandRespons
                 return BackupCommandResponse {
                     contract_version: CONTRACT_VERSION,
                     status: "error",
-                    error_id: Some("invalid_payload"),
+                    error_id: Some("invalid_payload".to_owned()),
                     details: serde_json::json!({
                         "command": request.command,
                         "message": err,
@@ -204,7 +226,7 @@ fn execute_backup_command(request: BackupCommandRequest) -> BackupCommandRespons
             return BackupCommandResponse {
                 contract_version: CONTRACT_VERSION,
                 status: "error",
-                error_id: Some("invalid_payload"),
+                error_id: Some("invalid_payload".to_owned()),
                 details: serde_json::json!({
                     "command": request.command,
                     "message": "wallet CLI payload contained non-redacted sensitive fields",
@@ -227,7 +249,8 @@ fn execute_backup_command(request: BackupCommandRequest) -> BackupCommandRespons
         BackupCommandResponse {
             contract_version: CONTRACT_VERSION,
             status: "error",
-            error_id: Some("wallet_cli_error"),
+            error_id: cli_error_id_from_stdout(&stdout)
+                .or_else(|| Some("wallet_cli_error".to_owned())),
             details: serde_json::json!({
                 "command": request.command,
                 "wallet_cli_stdout": stdout,
@@ -241,8 +264,8 @@ fn execute_backup_command(request: BackupCommandRequest) -> BackupCommandRespons
 mod tests {
 
     use super::{
-        command_to_cli_args, contains_sensitive_keys, parse_cli_json, BackupCommandResponse,
-        CONTRACT_VERSION,
+        cli_error_id_from_stdout, cli_error_id_from_value, command_to_cli_args,
+        contains_sensitive_keys, parse_cli_json, BackupCommandResponse, CONTRACT_VERSION,
     };
 
     #[test]
@@ -310,6 +333,24 @@ mod tests {
 
         let value = serde_json::to_value(response).expect("response serializes");
         assert!(contains_sensitive_keys(&value));
+    }
+
+    #[test]
+    fn cli_error_id_parser_reads_top_level_error() {
+        let value = serde_json::json!({"status":"error","error_id":"checksum_mismatch"});
+        assert_eq!(
+            cli_error_id_from_value(&value).as_deref(),
+            Some("checksum_mismatch")
+        );
+    }
+
+    #[test]
+    fn cli_error_id_parser_reads_nested_result_error() {
+        let stdout = r#"{"status":"ok","result":{"error_id":"decrypt_failed"}}"#;
+        assert_eq!(
+            cli_error_id_from_stdout(stdout).as_deref(),
+            Some("decrypt_failed")
+        );
     }
 
     #[test]
@@ -551,7 +592,8 @@ pub fn safe_eject_media(payload: TargetPathPayload) -> serde_json::Value {
             {
                 Ok(output) if output.status.success() => {
                     ejected = true;
-                    details = serde_json::json!({"mode": "os_command", "command": "diskutil unmount"});
+                    details =
+                        serde_json::json!({"mode": "os_command", "command": "diskutil unmount"});
                 }
                 Ok(output) => {
                     details = serde_json::json!({
@@ -582,7 +624,8 @@ pub fn safe_eject_media(payload: TargetPathPayload) -> serde_json::Value {
             {
                 Ok(output) if output.status.success() => {
                     ejected = true;
-                    details = serde_json::json!({"mode": "os_command", "command": "powershell eject"});
+                    details =
+                        serde_json::json!({"mode": "os_command", "command": "powershell eject"});
                 }
                 Ok(output) => {
                     details = serde_json::json!({
