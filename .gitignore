@@ -73,3 +73,6 @@ mempalace.yaml
 entities.json
 vaultier/node_modules/
 vaultier/dist/
+wallet/desktop/dist/
+wallet/desktop/node_modules/
+wallet/desktop/src-tauri/target/
