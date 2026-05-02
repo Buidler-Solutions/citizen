@@ -100,7 +100,7 @@ function normalizeBackupResponse(commandName: HeadlessCommand['command'], respon
     ok: false,
     command: commandName,
     error: {
-      code: 'invalid_payload',
+      code: wrapped.error_id ?? 'invalid_payload',
       message: wrapped.error_id ?? 'wallet_cli_error',
     },
     result: {

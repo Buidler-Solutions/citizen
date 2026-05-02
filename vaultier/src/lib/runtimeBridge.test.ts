@@ -147,6 +147,7 @@ async function main() {
   });
   const wrappedFailure = await invokeBackupCommandViaTauri({ command: 'backup_restore', targetPath: '/media/usb/vault.cvb', role: 'critical', restoreIdentityKeys: true, restoreAccountKeys: true, restoreConsentReceipts: true });
   assert(wrappedFailure.ok === false, 'wrapped tauri error responses should normalize to failed headless contract response');
+  assert(wrappedFailure.error?.code === 'decrypt_failed', 'wrapped tauri error responses should preserve deterministic error codes');
   assert(wrappedFailure.error?.message === 'decrypt_failed', 'wrapped tauri error responses should preserve deterministic error identifiers');
 
   const parityCommands = [
