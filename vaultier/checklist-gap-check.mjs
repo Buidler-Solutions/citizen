@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 const emitJson = process.argv.includes('--json');
+const strictStaleUnchecked = process.argv.includes('--strict-stale-unchecked');
 const checklistPath = resolve('../citizen-protocol/docs/WALLET_ENCRYPTED_BACKUP_VAULT_IMPLEMENTATION_CHECKLIST.md');
 const doc = readFileSync(checklistPath, 'utf8');
 
@@ -35,6 +36,34 @@ for (const rawLine of lines) {
 const pendingItems = openItems.filter((item) => item.status === ' ');
 const partialItems = openItems.filter((item) => item.status === '~');
 
+const completionHints = /(implemented|now includes|now enforces|validated|captured|exists in-repo|documented|recorded|added|wired|published|confirmed|accept(ed|ance))/i;
+const remainingWorkHints = /(pending|remains pending|still pending|remaining|follow-up|follow up|open|yet|not\s+yet|still requires|still open|before marking complete|until .* complete)/i;
+const staleUnchecked = [];
+let sectionTitle = 'ROOT';
+
+for (const rawLine of doc.split('\n')) {
+  if (rawLine.startsWith('## ')) {
+    sectionTitle = rawLine.replace(/^##\s+/, '');
+    continue;
+  }
+
+  const line = rawLine.trim();
+  const match = line.match(/^- \[([ x~])\] (.+)$/);
+  if (!match) continue;
+
+  const status = match[1];
+  const text = match[2];
+  if (status === 'x') continue;
+  if (completionHints.test(text) && !remainingWorkHints.test(text)) {
+    staleUnchecked.push({
+      section: sectionTitle,
+      status: status === '~' ? 'partial' : 'pending',
+      checklistBadge: status === '~' ? '[~]' : '[ ]',
+      text,
+    });
+  }
+}
+
 const summary = {
   checkpoint: '8.5',
   status: openItems.length === 0 ? 'complete' : 'blocked',
@@ -49,6 +78,7 @@ const summary = {
     checklistBadge: item.status === '~' ? '[~]' : '[ ]',
     text: item.text,
   })),
+  staleUncheckedCandidates: staleUnchecked,
 };
 
 if (emitJson) {
@@ -66,8 +96,17 @@ if (emitJson) {
   } else {
     console.log('checklist-gap-check: priority gate complete; non-blocking tracks may proceed.');
   }
+
+  if (staleUnchecked.length > 0) {
+    console.log(`checklist-gap-check: stale unchecked candidates=${staleUnchecked.length} (review before continuing Tauri work):`);
+    staleUnchecked.forEach((item, index) => {
+      console.log(`  ${index + 1}. ${item.checklistBadge} (${item.section}) ${item.text}`);
+    });
+  } else {
+    console.log('checklist-gap-check: no likely stale unchecked checklist markers detected.');
+  }
 }
 
-if (openItems.length > 0) {
+if (openItems.length > 0 || (strictStaleUnchecked && staleUnchecked.length > 0)) {
   process.exitCode = 2;
 }

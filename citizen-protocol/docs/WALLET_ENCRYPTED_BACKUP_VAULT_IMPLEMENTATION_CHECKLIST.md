@@ -623,3 +623,5 @@ Use this rubric during UX and maintainer review so “sleek” is measurable, no
 - Re-ran `pnpm check:priority-gap` and confirmed Checkpoint 8.5 remains clear (`pending=0`, `partial=0`).
 - Re-ran `node checklist-audit.mjs`; current aggregate state is `pending=110`, `partial=17`, `complete=111`, and stale-candidate gaps were reviewed before continuing Tauri implementation work.
 - Closed PR-F5 documentation subtask by adding desktop “Known limitations” coverage in `wallet/desktop/README.md`; remaining PR-F5 items (cross-platform smoke CI + signed reproducible artifacts) remain open by design.
+
+- Extended `vaultier/checklist-gap-check.mjs` to also emit candidate stale unchecked checklist items (implemented-but-unchecked heuristics) so each Tauri continuation pass can reconcile gaps before coding; optional `--strict-stale-unchecked` now fails the check when stale candidates are still present.
