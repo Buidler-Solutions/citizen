@@ -34,6 +34,18 @@ This initiative should replicate key VeraCrypt-style operating properties while 
 
 ---
 
+## Required Execution Order (Priority-First)
+
+To keep implementation sequencing unambiguous, treat **Checkpoint 8.5 — Priority Gate: CLI Production-Grade Readiness** as the mandatory next gate before continuing non-blocking tracks.
+
+1. **Complete Checkpoint 8.5 in full first** (including maintainer review/sign-off and green required CI evidence).
+2. Then resume remaining incomplete checklist items in Checkpoints 0–8.
+3. Continue Portable Application Track items that are explicitly marked as parallel-safe, but do not treat them as a substitute for 8.5 acceptance.
+
+> Enforcement rule: if a task conflicts with finishing 8.5 acceptance criteria, defer that task and prioritize the 8.5 blocker path.
+
+---
+
 ## USB-Centric Operating Requirements
 
 - [x] Support vault creation directly on mounted removable drives (Linux/macOS/Windows path semantics now enforced in Vaultier headless command preflight path validation: macOS `/Volumes/*`, Linux `/media/*` or `/mnt/*`, Windows `X:\\*`).
@@ -198,7 +210,7 @@ This initiative should replicate key VeraCrypt-style operating properties while 
 
 ---
 
-## Checkpoint 8.5 — Priority Gate: CLI Production-Grade Readiness (Blocker Before Vaultier Continuation)
+## Checkpoint 8.5 — Priority Gate (Do First): CLI Production-Grade Readiness (Blocker Before Vaultier Continuation)
 
 > Priority directive: complete this checkpoint before continuing Vaultier real-runtime integration beyond mock adapter boundaries.
 >
