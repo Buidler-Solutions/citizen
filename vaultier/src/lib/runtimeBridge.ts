@@ -1,4 +1,4 @@
-import type { CrashSafeWriteStep, DriveProbeIssue, DriveRecord, HeadlessCommand, HeadlessResponse, RuntimePlatform, RuntimeShell } from './types';
+import type { CrashSafeWriteStep, DriveProbeIssue, DriveRecord, HeadlessCommand, HeadlessResponse, RuntimePlatform, RuntimeProfile, RuntimeShell } from './types';
 
 type BridgeDrive = DriveRecord & { platform: RuntimePlatform };
 
@@ -17,6 +17,27 @@ type TauriBridgeApi = {
 const hasTauriRuntime = () => typeof window !== 'undefined' && '__TAURI__' in window;
 
 const SECRET_KEY_MARKERS = ['passphrase', 'password', 'secret', 'seed', 'mnemonic', 'privatekey', 'private_key'];
+const RUNTIME_PROFILE_KEY = 'vaultier.runtime.profile';
+
+function resolveRuntimeProfile(): RuntimeProfile {
+  if (typeof window === 'undefined') return 'wb-simulation';
+  const query = new URLSearchParams(window.location.search).get('runtime_profile');
+  if (query === 'tauri-runtime' || query === 'wb-simulation') return query;
+
+  const stored = window.localStorage.getItem(RUNTIME_PROFILE_KEY);
+  if (stored === 'tauri-runtime' || stored === 'wb-simulation') return stored;
+
+  return 'wb-simulation';
+}
+
+export function getRuntimeProfile(): RuntimeProfile {
+  return resolveRuntimeProfile();
+}
+
+export function setRuntimeProfile(profile: RuntimeProfile): void {
+  if (typeof window === 'undefined') return;
+  window.localStorage.setItem(RUNTIME_PROFILE_KEY, profile);
+}
 
 function sanitizePayload(value: unknown): unknown {
   if (Array.isArray(value)) {
@@ -49,7 +70,9 @@ async function invokeTauri<T>(command: keyof TauriBridgeApi, payload?: unknown):
 }
 
 export function detectRuntimeShell(): RuntimeShell {
-  return hasTauriRuntime() ? 'tauri' : 'web-mock';
+  const profile = resolveRuntimeProfile();
+  if (profile === 'tauri-runtime' && hasTauriRuntime()) return 'tauri';
+  return 'web-mock';
 }
 
 export async function discoverDrivesViaTauri(): Promise<{ drives: BridgeDrive[]; issues: DriveProbeIssue[] }> {

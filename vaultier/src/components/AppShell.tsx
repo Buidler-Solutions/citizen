@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { createBackup, discoverRemovableDrives, exportDiagnosticBundle, flushPendingWritesWithStrategy, getRuntimeShell, safeEjectMedia, testRestore, verifyBackup } from '../lib/mockVaultCore';
-import type { BackupRequest, CrashSafeWriteStep, DiagnosticBundle, DriveDiscoveryResult, OperationLog, PerformanceMeasurement, PortableProfile, RestoreResult, RuntimeShell, VerifyResult, VaultRole } from '../lib/types';
+import { getRuntimeProfile, setRuntimeProfile } from '../lib/runtimeBridge';
+import type { BackupRequest, CrashSafeWriteStep, DiagnosticBundle, DriveDiscoveryResult, OperationLog, PerformanceMeasurement, PortableProfile, RestoreResult, RuntimeProfile, RuntimeShell, VerifyResult, VaultRole } from '../lib/types';
 import { ERROR_COPY, OPERATION_STATE_COPY, type ErrorIdentifier, type OperationState } from '../lib/operationState';
 import { defaultReminderPolicy, getNextReminderAt, isReminderDue, loadPortableProfile, loadReminderSettings, savePortableProfile, saveReminderSettings, type ReminderPolicy } from '../lib/reminders';
 
@@ -82,6 +83,7 @@ export function AppShell() {
   const [ejectChecks, setEjectChecks] = useState({ verified: false, restoreTest: false, flushComplete: false, duplicateMedia: false });
   const [reminderPolicy, setReminderPolicy] = useState<ReminderPolicy>(defaultReminderPolicy());
   const [runtimeShell, setRuntimeShell] = useState<RuntimeShell>('web-mock');
+  const [runtimeProfile, setRuntimeProfileState] = useState<RuntimeProfile>('wb-simulation');
   const [flushStrategy, setFlushStrategy] = useState<CrashSafeWriteStep[]>([]);
   const [ejectCompleted, setEjectCompleted] = useState(false);
   const [performanceMeasurements, setPerformanceMeasurements] = useState<PerformanceMeasurement[]>([]);
@@ -92,7 +94,7 @@ export function AppShell() {
       if (result.errors.length > 0) setActiveError(toUiError(result.errors[0].code));
     });
   }, []);
-  useEffect(() => { setRuntimeShell(getRuntimeShell()); }, []);
+  useEffect(() => { setRuntimeProfileState(getRuntimeProfile()); setRuntimeShell(getRuntimeShell()); }, []);
   useEffect(() => { setReminderPolicy(loadReminderSettings()); setProfile(loadPortableProfile()); }, []);
   useEffect(() => { saveReminderSettings(reminderPolicy); }, [reminderPolicy]);
   useEffect(() => { if (profile) savePortableProfile(profile); }, [profile]);
@@ -117,7 +119,7 @@ export function AppShell() {
 
   const selectedDrive = useMemo(() => discovery.drives.find((d) => d.mountPath === targetPath), [discovery, targetPath]);
   const mockRuntimeBlocked = runtimeShell !== 'tauri';
-  const runtimeShellLabel = runtimeShell === 'tauri' ? 'Tauri bridge active' : 'Web mock adapter';
+  const runtimeShellLabel = runtimeShell === 'tauri' ? 'Tauri bridge active' : 'WB simulation adapter';
   const safeToEject = useMemo(() => Object.values(ejectChecks).every(Boolean), [ejectChecks]);
   const decoyEntropy = estimateEntropyBits(decoyPassphrase);
   const criticalEntropy = estimateEntropyBits(criticalPassphrase);
@@ -276,6 +278,7 @@ export function AppShell() {
       <article className="state-panel"><strong>{OPERATION_STATE_COPY[operationState].title}</strong><p className="hint">{OPERATION_STATE_COPY[operationState].detail}</p><p className="hint">Runtime shell: {runtimeShellLabel}.</p>{runtimeShell !== 'tauri' && <p className="summary warn">Production-grade USB write/flush protections require Tauri runtime bridge evidence. Mock runtime is for UX rehearsal only.</p>}{activeError && <div className="error-panel"><strong>Error code: {activeError}</strong><p>{ERROR_COPY[activeError].headline}</p><p className="hint">Next action: {ERROR_COPY[activeError].nextAction}</p></div>}</article>
       {runtimeShell !== 'tauri' && <p className="summary warn">Create/verify/restore/eject operations are blocked in web-mock mode. Launch under Tauri bridge for real media operations.</p>}
       {reminderDue && <p className="summary warn">Verification reminder is due. Run verify before relying on this media.</p>}
+      <label>Runtime profile<select value={runtimeProfile} onChange={(e) => { const profile = e.target.value as RuntimeProfile; setRuntimeProfile(profile); setRuntimeProfileState(profile); setRuntimeShell(getRuntimeShell()); }}><option value="wb-simulation">WB simulation (default)</option><option value="tauri-runtime">Tauri runtime bridge</option></select></label>
       <label className="inline-control"><input type="checkbox" checked={highContrast} onChange={() => setHighContrast(!highContrast)} />High contrast</label>
       <nav className="stages">{STAGES.map((item) => <button key={item} className={stage === item ? 'pill active' : 'pill'} onClick={() => setStage(item)} disabled={!profile && item !== 'create'}>{item}</button>)}</nav>
       <label>Detected removable drives<select value={targetPath} onChange={(e) => setTargetPath(e.target.value)}>{discovery.drives.map((d) => <option key={d.id} value={d.mountPath}>{d.label} · {d.mountPath} · {d.filesystem} · {d.estimatedFreeGb}GB free</option>)}</select></label>

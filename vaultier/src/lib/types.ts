@@ -177,6 +177,8 @@ export type DriveDiscoveryResult = {
 
 export type RuntimeShell = 'tauri' | 'web-mock';
 
+export type RuntimeProfile = 'wb-simulation' | 'tauri-runtime';
+
 export type RuntimePlatform = 'macos' | 'windows' | 'linux';
 
 export type DriveRecord = {
