@@ -1,4 +1,4 @@
-import type { CrashSafeWriteStep, DriveProbeIssue, DriveRecord, HeadlessCommand, HeadlessResponse, RuntimePlatform, RuntimeProfile, RuntimeShell } from './types';
+import type { CrashSafeWriteStep, DriveProbeIssue, DriveRecord, HeadlessCommand, HeadlessResponse, RuntimePlatform, RuntimeProfile, RuntimeShell, VaultierErrorCode } from './types';
 import { scanForSecretFields } from './redaction';
 
 type BridgeDrive = DriveRecord & { platform: RuntimePlatform };
@@ -29,6 +29,31 @@ const hasTauriRuntime = () => typeof window !== 'undefined' && '__TAURI__' in wi
 const SECRET_KEY_MARKERS = ['passphrase', 'password', 'secret', 'seed', 'mnemonic', 'privatekey', 'private_key'];
 const SECRET_VALUE_MARKERS = ['passphrase=', 'password=', 'secret=', 'seed=', 'mnemonic=', 'private-key=', 'private_key='];
 const RUNTIME_PROFILE_KEY = 'vaultier.runtime.profile';
+
+
+const VAULTIER_ERROR_CODES: ReadonlySet<VaultierErrorCode> = new Set([
+  'path_invalid',
+  'mount_unwritable',
+  'insufficient_space',
+  'filesystem_incompatible',
+  'critical_entropy_too_low',
+  'manifest_signature_missing',
+  'manifest_signature_invalid',
+  'header_auth_failed',
+  'slot_table_tampered',
+  'rollback_counter_mismatch',
+  'decrypt_failed',
+  'slot_not_found',
+  'checksum_mismatch',
+  'invalid_payload',
+]);
+
+function normalizeErrorCode(errorId: string | null | undefined): VaultierErrorCode {
+  if (errorId && VAULTIER_ERROR_CODES.has(errorId as VaultierErrorCode)) {
+    return errorId as VaultierErrorCode;
+  }
+  return 'invalid_payload';
+}
 
 function resolveRuntimeProfile(): RuntimeProfile {
   if (typeof window === 'undefined') return 'wb-simulation';
@@ -100,7 +125,7 @@ function normalizeBackupResponse(commandName: HeadlessCommand['command'], respon
     ok: false,
     command: commandName,
     error: {
-      code: wrapped.error_id ?? 'invalid_payload',
+      code: normalizeErrorCode(wrapped.error_id),
       message: wrapped.error_id ?? 'wallet_cli_error',
     },
     result: {

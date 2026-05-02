@@ -158,6 +158,9 @@ export type VaultierErrorCode =
   | 'header_auth_failed'
   | 'slot_table_tampered'
   | 'rollback_counter_mismatch'
+  | 'decrypt_failed'
+  | 'slot_not_found'
+  | 'checksum_mismatch'
   | 'invalid_payload';
 
 export type RemovableDrive = {
