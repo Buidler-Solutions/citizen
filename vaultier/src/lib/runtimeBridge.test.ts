@@ -112,6 +112,43 @@ async function main() {
   const verify = await invokeBackupCommandViaTauri({ command: 'backup_verify', targetPath: '/media/usb/vault.cvb', expectedVaultVersion: '1', requireSignedManifest: true });
   assert(verify.ok === true, 'verify bridge command should return headless response payload');
 
+  withTauriInvoke(async (name) => {
+    if (name === 'backup_verify') {
+      return {
+        contract_version: 'citizen.wallet.backup.desktop.v1alpha1',
+        status: 'ok',
+        error_id: null,
+        details: {
+          wallet_cli: {
+            schemaVersion: 'v1alpha1',
+            contractVersion: '2026-05-01',
+            ok: true,
+            command: 'backup_verify',
+            result: { status: 'verified' },
+          },
+        },
+      };
+    }
+    throw new Error(`unexpected_command:${name}`);
+  });
+  const wrappedVerify = await invokeBackupCommandViaTauri({ command: 'backup_verify', targetPath: '/media/usb/vault.cvb', expectedVaultVersion: '1', requireSignedManifest: true });
+  assert(wrappedVerify.ok === true, 'wrapped tauri backup response should normalize to CLI headless contract');
+
+  withTauriInvoke(async (name) => {
+    if (name === 'backup_restore') {
+      return {
+        contract_version: 'citizen.wallet.backup.desktop.v1alpha1',
+        status: 'error',
+        error_id: 'decrypt_failed',
+        details: { command: 'backup_restore' },
+      };
+    }
+    throw new Error(`unexpected_command:${name}`);
+  });
+  const wrappedFailure = await invokeBackupCommandViaTauri({ command: 'backup_restore', targetPath: '/media/usb/vault.cvb', role: 'critical', password: 'critical-pass' });
+  assert(wrappedFailure.ok === false, 'wrapped tauri error responses should normalize to failed headless contract response');
+  assert(wrappedFailure.errorId === 'decrypt_failed', 'wrapped tauri error responses should preserve deterministic error identifiers');
+
   const parityCommands = [
     { command: 'backup_init', payload: { command: 'backup_init', targetPath: '/media/usb/vault.cvb', decoyPassword: 'decoy-pass', criticalPassword: 'critical-pass' } },
     { command: 'backup_add_slot', payload: { command: 'backup_add_slot', targetPath: '/media/usb/vault.cvb', role: 'critical', password: 'critical-pass' } },

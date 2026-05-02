@@ -37,8 +37,8 @@ for (const command of commands) {
 
 assert.match(
   runtimeBridge,
-  /invokeTauri<HeadlessResponse>\(commandName, payload\)/,
-  'runtime bridge must preserve CLI command-name passthrough parity',
+  /invokeTauri<HeadlessResponse \| TauriBridgeWrappedResponse>\(commandName, payload\)/,
+  'runtime bridge must preserve command-name passthrough while accepting wrapped desktop responses',
 );
 
 assert.match(runtimeBridge, /sanitizePayload\(payload\)/, 'runtime bridge must sanitize payload before logging failures');
@@ -78,6 +78,6 @@ console.log('runtime-parity-check: wb-mode snapshots, tauri bridge coverage, and
 
 assert.match(
   runtimeBridge,
-  /const response = await invokeTauri<HeadlessResponse>\(commandName, payload\)/,
+  /const raw = await invokeTauri<HeadlessResponse \| TauriBridgeWrappedResponse>\(commandName, payload\)/,
   'runtime bridge command invocation path must remain deterministic for parity snapshots',
 );
