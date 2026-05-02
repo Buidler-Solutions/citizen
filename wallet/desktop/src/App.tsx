@@ -50,10 +50,19 @@ async function invokeDesktop(command: DesktopCommand, payload: JsonRecord = {}):
 }
 
 function parseArgs(input: string): string[] {
-  return input
-    .split(/\s+/)
-    .map((part) => part.trim())
-    .filter((part) => part.length > 0);
+  const trimmed = input.trim();
+  if (!trimmed) {
+    return [];
+  }
+
+  const args: string[] = [];
+  const tokenPattern = /"([^"]*)"|'([^']*)'|(\S+)/g;
+
+  for (const match of trimmed.matchAll(tokenPattern)) {
+    args.push(match[1] ?? match[2] ?? match[3]);
+  }
+
+  return args;
 }
 
 export function App() {
@@ -61,18 +70,25 @@ export function App() {
   const [response, setResponse] = useState<unknown>(null);
   const [targetPath, setTargetPath] = useState<string>("");
   const [argsInput, setArgsInput] = useState<string>(commandArgHints.backup_init);
+  const [uiError, setUiError] = useState<string | null>(null);
 
   const isPathCommand = selected === "flush_vault_writes" || selected === "safe_eject_media";
   const argHint = useMemo(() => commandArgHints[selected], [selected]);
 
   async function runSelectedCommand() {
+    setUiError(null);
     const payload: JsonRecord = {
       source: "vaultier-desktop-ui",
       args: parseArgs(argsInput),
     };
 
     if (isPathCommand) {
-      payload.targetPath = targetPath.trim();
+      const normalizedPath = targetPath.trim();
+      if (!normalizedPath) {
+        setUiError("Target path is required for removable-media commands.");
+        return;
+      }
+      payload.targetPath = normalizedPath;
     }
 
     const result = await invokeDesktop(selected, payload);
@@ -83,6 +99,7 @@ export function App() {
     setSelected(next);
     setArgsInput(commandArgHints[next]);
     setResponse(null);
+    setUiError(null);
   }
 
   return (
@@ -130,6 +147,8 @@ export function App() {
           />
         </label>
       )}
+
+      {uiError && <p role="alert">{uiError}</p>}
 
       <aside>
         <strong>USB safety:</strong> Always wait for flush completion before unplugging removable media,

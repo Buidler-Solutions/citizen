@@ -145,16 +145,16 @@ async function main() {
     }
     throw new Error(`unexpected_command:${name}`);
   });
-  const wrappedFailure = await invokeBackupCommandViaTauri({ command: 'backup_restore', targetPath: '/media/usb/vault.cvb', role: 'critical', password: 'critical-pass' });
+  const wrappedFailure = await invokeBackupCommandViaTauri({ command: 'backup_restore', targetPath: '/media/usb/vault.cvb', role: 'critical', restoreIdentityKeys: true, restoreAccountKeys: true, restoreConsentReceipts: true });
   assert(wrappedFailure.ok === false, 'wrapped tauri error responses should normalize to failed headless contract response');
-  assert(wrappedFailure.errorId === 'decrypt_failed', 'wrapped tauri error responses should preserve deterministic error identifiers');
+  assert(wrappedFailure.error?.message === 'decrypt_failed', 'wrapped tauri error responses should preserve deterministic error identifiers');
 
   const parityCommands = [
-    { command: 'backup_init', payload: { command: 'backup_init', targetPath: '/media/usb/vault.cvb', decoyPassword: 'decoy-pass', criticalPassword: 'critical-pass' } },
-    { command: 'backup_add_slot', payload: { command: 'backup_add_slot', targetPath: '/media/usb/vault.cvb', role: 'critical', password: 'critical-pass' } },
-    { command: 'backup_export_credentials', payload: { command: 'backup_export_credentials', targetPath: '/media/usb/vault.cvb', role: 'critical', password: 'critical-pass' } },
+    { command: 'backup_init', payload: { command: 'backup_init', targetPath: '/media/usb/vault.cvb', roles: ['decoy', 'critical'], includeConsentReceipts: true, portableMode: true } },
+    { command: 'backup_add_slot', payload: { command: 'backup_add_slot', targetPath: '/media/usb/vault.cvb', role: 'critical' } },
+    { command: 'backup_export_credentials', payload: { command: 'backup_export_credentials', targetPath: '/media/usb/vault.cvb', role: 'critical', includeIdentityKeys: true, includeAccountKeys: true, includeConsentReceipts: true } },
     { command: 'backup_verify', payload: { command: 'backup_verify', targetPath: '/media/usb/vault.cvb', expectedVaultVersion: '1', requireSignedManifest: true } },
-    { command: 'backup_restore', payload: { command: 'backup_restore', targetPath: '/media/usb/vault.cvb', role: 'critical', password: 'critical-pass' } },
+    { command: 'backup_restore', payload: { command: 'backup_restore', targetPath: '/media/usb/vault.cvb', role: 'critical', restoreIdentityKeys: true, restoreAccountKeys: true, restoreConsentReceipts: true } },
     { command: 'backup_diagnostics', payload: { command: 'backup_diagnostics', targetPath: '/media/usb/vault.cvb', profile: { portableLabel: 'Citizen Vault', schemaVersion: 'citizen.wallet.backup.v1', createdAt: '2026-05-02T00:00:00.000Z' }, recentLogs: [], recentErrors: [], performanceMeasurements: [] } },
   ] as const;
 
@@ -233,11 +233,11 @@ async function main() {
 
 
   const commandsForRedaction = [
-    { command: 'backup_init', payload: { command: 'backup_init', targetPath: '/media/usb/vault.cvb', decoyPassword: 'decoy-pass', criticalPassword: 'critical-pass' } },
-    { command: 'backup_add_slot', payload: { command: 'backup_add_slot', targetPath: '/media/usb/vault.cvb', role: 'critical', password: 'critical-pass' } },
-    { command: 'backup_export_credentials', payload: { command: 'backup_export_credentials', targetPath: '/media/usb/vault.cvb', role: 'critical', password: 'critical-pass' } },
+    { command: 'backup_init', payload: { command: 'backup_init', targetPath: '/media/usb/vault.cvb', roles: ['decoy', 'critical'], includeConsentReceipts: true, portableMode: true } },
+    { command: 'backup_add_slot', payload: { command: 'backup_add_slot', targetPath: '/media/usb/vault.cvb', role: 'critical' } },
+    { command: 'backup_export_credentials', payload: { command: 'backup_export_credentials', targetPath: '/media/usb/vault.cvb', role: 'critical', includeIdentityKeys: true, includeAccountKeys: true, includeConsentReceipts: true } },
     { command: 'backup_verify', payload: { command: 'backup_verify', targetPath: '/media/usb/vault.cvb', expectedVaultVersion: '1', requireSignedManifest: true } },
-    { command: 'backup_restore', payload: { command: 'backup_restore', targetPath: '/media/usb/vault.cvb', role: 'critical', password: 'critical-pass' } },
+    { command: 'backup_restore', payload: { command: 'backup_restore', targetPath: '/media/usb/vault.cvb', role: 'critical', restoreIdentityKeys: true, restoreAccountKeys: true, restoreConsentReceipts: true } },
     {
       command: 'backup_diagnostics',
       payload: {
