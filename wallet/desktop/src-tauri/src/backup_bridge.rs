@@ -20,7 +20,7 @@ struct BackupCommandRequest {
 
 #[cfg(feature = "desktop-runtime")]
 #[derive(Debug, Serialize)]
-struct BackupCommandResponse {
+pub(crate) struct BackupCommandResponse {
     contract_version: &'static str,
     status: &'static str,
     error_id: Option<&'static str>,
@@ -41,7 +41,7 @@ struct RemovableDriveRecord {
 #[cfg(feature = "desktop-runtime")]
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct TargetPathPayload {
+pub(crate) struct TargetPathPayload {
     target_path: String,
 }
 
@@ -502,29 +502,102 @@ pub fn flush_vault_writes(payload: TargetPathPayload) -> serde_json::Value {
 #[tauri::command]
 pub fn safe_eject_media(payload: TargetPathPayload) -> serde_json::Value {
     let target = PathBuf::from(&payload.target_path);
-    let can_attempt_linux_umount = cfg!(target_os = "linux") && looks_removable(&target);
     let mut ejected = false;
-    let mut details = serde_json::json!({"mode": "manual_eject_required"});
+    let mut details = serde_json::json!({
+        "mode": "manual_eject_required",
+        "reason": "Runtime command unavailable for this path/OS combination."
+    });
 
-    if can_attempt_linux_umount {
-        match Command::new("umount").arg(&target).output() {
-            Ok(output) if output.status.success() => {
-                ejected = true;
-                details = serde_json::json!({"mode": "os_command", "command": "umount"});
+    if looks_removable(&target) {
+        #[cfg(target_os = "linux")]
+        {
+            match Command::new("udisksctl")
+                .args(["unmount", "-b"])
+                .arg(&target)
+                .output()
+            {
+                Ok(output) if output.status.success() => {
+                    ejected = true;
+                    details = serde_json::json!({"mode": "os_command", "command": "udisksctl unmount -b"});
+                }
+                _ => match Command::new("umount").arg(&target).output() {
+                    Ok(output) if output.status.success() => {
+                        ejected = true;
+                        details = serde_json::json!({"mode": "os_command", "command": "umount"});
+                    }
+                    Ok(output) => {
+                        details = serde_json::json!({
+                            "mode": "manual_eject_required",
+                            "command": "umount",
+                            "stderr": String::from_utf8_lossy(&output.stderr).trim(),
+                        });
+                    }
+                    Err(err) => {
+                        details = serde_json::json!({
+                            "mode": "manual_eject_required",
+                            "command": "umount",
+                            "error": err.to_string(),
+                        });
+                    }
+                },
             }
-            Ok(output) => {
-                details = serde_json::json!({
-                    "mode": "manual_eject_required",
-                    "command": "umount",
-                    "stderr": String::from_utf8_lossy(&output.stderr).trim(),
-                });
+        }
+
+        #[cfg(target_os = "macos")]
+        {
+            match Command::new("diskutil")
+                .args(["unmount", payload.target_path.as_str()])
+                .output()
+            {
+                Ok(output) if output.status.success() => {
+                    ejected = true;
+                    details = serde_json::json!({"mode": "os_command", "command": "diskutil unmount"});
+                }
+                Ok(output) => {
+                    details = serde_json::json!({
+                        "mode": "manual_eject_required",
+                        "command": "diskutil unmount",
+                        "stderr": String::from_utf8_lossy(&output.stderr).trim(),
+                    });
+                }
+                Err(err) => {
+                    details = serde_json::json!({
+                        "mode": "manual_eject_required",
+                        "command": "diskutil unmount",
+                        "error": err.to_string(),
+                    });
+                }
             }
-            Err(err) => {
-                details = serde_json::json!({
-                    "mode": "manual_eject_required",
-                    "command": "umount",
-                    "error": err.to_string(),
-                });
+        }
+
+        #[cfg(target_os = "windows")]
+        {
+            let script = format!(
+                "(New-Object -ComObject Shell.Application).Namespace(17).ParseName('{}').InvokeVerb('Eject')",
+                payload.target_path.replace('\'', "''")
+            );
+            match Command::new("powershell")
+                .args(["-NoProfile", "-Command", script.as_str()])
+                .output()
+            {
+                Ok(output) if output.status.success() => {
+                    ejected = true;
+                    details = serde_json::json!({"mode": "os_command", "command": "powershell eject"});
+                }
+                Ok(output) => {
+                    details = serde_json::json!({
+                        "mode": "manual_eject_required",
+                        "command": "powershell eject",
+                        "stderr": String::from_utf8_lossy(&output.stderr).trim(),
+                    });
+                }
+                Err(err) => {
+                    details = serde_json::json!({
+                        "mode": "manual_eject_required",
+                        "command": "powershell eject",
+                        "error": err.to_string(),
+                    });
+                }
             }
         }
     }
