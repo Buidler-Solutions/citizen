@@ -17,6 +17,7 @@ type TauriBridgeApi = {
 const hasTauriRuntime = () => typeof window !== 'undefined' && '__TAURI__' in window;
 
 const SECRET_KEY_MARKERS = ['passphrase', 'password', 'secret', 'seed', 'mnemonic', 'privatekey', 'private_key'];
+const SECRET_VALUE_MARKERS = ['passphrase=', 'password=', 'secret=', 'seed=', 'mnemonic=', 'private-key=', 'private_key='];
 const RUNTIME_PROFILE_KEY = 'vaultier.runtime.profile';
 
 function resolveRuntimeProfile(): RuntimeProfile {
@@ -42,6 +43,10 @@ export function setRuntimeProfile(profile: RuntimeProfile): void {
 function sanitizePayload(value: unknown): unknown {
   if (Array.isArray(value)) {
     return value.map((item) => sanitizePayload(item));
+  }
+  if (typeof value === 'string') {
+    const lowered = value.toLowerCase();
+    return SECRET_VALUE_MARKERS.some((marker) => lowered.includes(marker)) ? '[REDACTED]' : value;
   }
   if (!value || typeof value !== 'object') {
     return value;
