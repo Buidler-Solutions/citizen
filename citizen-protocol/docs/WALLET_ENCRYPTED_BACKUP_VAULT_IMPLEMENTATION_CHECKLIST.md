@@ -189,11 +189,11 @@ To keep implementation sequencing unambiguous, treat **Checkpoint 8.5 — Priori
 - [x] Property/fuzz tests: malformed headers, truncated ciphertext, random bit flips (wallet CLI adversarial tests cover deterministic failures for truncated ciphertext + random bit-flip tampering, proptest-based randomized metadata mutation coverage verifies deterministic failures for malformed schema/version/manifest/hash permutations, and byte-level mutation corpus tests now enforce deterministic failures across serialized-vault offsets).
 - [x] Integration tests: create 2-slot vault on USB media, export credentials, delete local wallet, restore, verify identity continuity.
 - [x] Adversarial tests: wrong-passphrase throttling behavior, tamper detection, replay/rollback attempts.
-- [ ] Performance tests: unlock latency targets across workstation/laptop profiles.
+- [x] Performance tests: unlock latency targets across workstation/laptop profiles (validated via the reproducible wallet performance evidence harness logs captured in `citizen-protocol/docs/evidence/wallet-backup-vault/2026-05-02T02-39-54.261Z-wallet-backup-performance-harness.log`, `citizen-protocol/docs/evidence/wallet-backup-vault/2026-05-02T02-52-59.806Z-wallet-backup-performance-harness.log`, and maintainer sign-off packet `citizen-protocol/docs/evidence/wallet-backup-vault/WALLET_BACKUP_8_5_SIGNOFF_2026-05-02.md`).
 
 **Exit criteria**
 - [x] CI includes backup-vault test suite and regression fixtures (added `citizen-protocol/.github/workflows/wallet-backup-vault-ci.yml` to enforce wallet backup regression + latency envelope checks on wallet/docs/workflow changes).
-- [ ] No critical/high findings open from pre-merge security review.
+- [x] No critical/high findings open from pre-merge security review (wallet+crypto maintainer sign-off confirms no open critical/high findings for `wallet backup` in `citizen-protocol/docs/evidence/wallet-backup-vault/WALLET_BACKUP_8_5_SIGNOFF_2026-05-02.md`).
 
 ---
 
@@ -431,7 +431,7 @@ This section extends the checklist with concrete near-term implementation work i
 
 **Exit criteria**
 - [ ] CI gate includes unit + integration + adversarial + fuzz/property coverage for backup-vault code paths.
-- [ ] No unresolved critical severity findings remain in wallet backup security review notes.
+- [x] No unresolved critical severity findings remain in wallet backup security review notes (confirmed in the wallet+crypto maintainer review packet `citizen-protocol/docs/evidence/wallet-backup-vault/WALLET_BACKUP_8_5_SIGNOFF_2026-05-02.md`).
 
 
 ### Next Slice D — Immediate implementation PR queue (ordered)
