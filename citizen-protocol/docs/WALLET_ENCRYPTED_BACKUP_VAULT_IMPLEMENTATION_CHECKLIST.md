@@ -164,7 +164,7 @@ To keep implementation sequencing unambiguous, treat **Checkpoint 8.5 — Priori
 - [~] Add passphrase-strength guidance and recovery warnings. (Browser extension security tab now includes explicit decoy/critical distinct-passphrase guidance, live strength labels for both passphrases, a critical-passphrase-loss recovery warning, and backup verification posture/reminder scaffold via `wallet_getBackupPosture` + `wallet_markBackupVerified`; end-to-end integration tests across create/export/restore flows remain pending.)
 
 **Exit criteria**
-- [ ] Extension integration tests pass for create/export/restore/verify.
+- [~] Extension integration tests now cover the browser background create/export/restore/verify flow (`wallet/browser/src/background.backupVault.integration.test.ts`); full UI + runtime harness pass remains pending.
 - [x] Security boundaries documented for extension runtime and browser storage constraints. (Documented in `wallet/browser/docs/WALLET_EXTENSION_BACKUP_SECURITY_BOUNDARIES.md`, including service-worker/page-context isolation rules, encrypted payload handling boundaries, browser storage constraints, and deterministic error-handling expectations for backup flows.)
 
 ---

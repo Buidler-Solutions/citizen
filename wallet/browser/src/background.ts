@@ -2490,6 +2490,10 @@ async function handleWalletRequest(
   }
 }
 
+export const __testHooks = {
+  handleWalletRequest,
+};
+
 chrome.runtime.onMessage.addListener((
   message: WalletRequest,
   sender: chrome.runtime.MessageSender,
