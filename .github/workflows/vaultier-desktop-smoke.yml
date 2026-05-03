@@ -40,6 +40,6 @@ jobs:
         working-directory: vaultier
         run: pnpm install --frozen-lockfile
 
-      - name: Run desktop WB-mode smoke + contract checks
+      - name: Run desktop WB-mode smoke + strict checklist contract checks
         working-directory: vaultier
-        run: pnpm test:headless-contract
+        run: pnpm test:headless-contract:strict
