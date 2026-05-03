@@ -900,3 +900,15 @@ Use this rubric during UX and maintainer review so “sleek” is measurable, no
 - Reconfirmed Portable Application Track continuation remains gated on blocker-class desktop evidence (in-process wallet-core bridge, signed packaging/signing lane, signed cross-platform removable-media smoke evidence, and bridge memory/logging audit closure).
 - Kept all related blocker items in explicit `[ ]`/`[~]` state with no premature promotion to `[x]`, so execution-queue hardening progress does not overstate production-readiness.
 - Recorded this status-sync pass to keep `#continue-tauri-vaultier-desktop-version-execution-queue` history contiguous with prior 2026-05-03 execution-queue parity updates.
+
+### Delta Update (2026-05-03, checkpoint-9 closure execution packet staging)
+
+- Added a checkpoint-9 continuation sync for `#continue-tauri-vaultier-desktop-version-execution-queue` so rollout work can proceed immediately once TV-3 evidence is attached.
+- Locked the next actionable checkpoint-9 order to **R9-D -> R9-E -> R9-F decision memo** with no bypass path, matching the existing enforcement note and preventing beta-flag drift before packaging/audit closure.
+- Pre-staged the exact evidence bundle expected when blockers clear:
+  - signed/reproducible desktop artifact digests per OS,
+  - final bridge memory/logging audit record URI,
+  - completed alpha drill packet links (Linux/macOS/Windows),
+  - local-only telemetry threshold summary from the R9-C spec.
+- Confirmed checkpoint markers remain unchanged for blocked closure items (`[ ]` on R9-D/R9-E and rollout exit criteria) because this slice is sequencing/logistics hardening only.
+- Checkpoint-9 implementation can now proceed as soon as TV-3 packaging/signing and bridge-audit evidence is produced, without reopening structure or approval routing decisions.
