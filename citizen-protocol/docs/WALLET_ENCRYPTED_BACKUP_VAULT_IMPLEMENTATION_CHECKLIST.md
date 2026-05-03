@@ -518,6 +518,7 @@ This slice starts the desktop productization track without blocking on extension
 - Reconciled checklist status against current `wallet/desktop` and `vaultier` implementation so completed guided-flow and bridge-baseline work is no longer left unchecked.
 - Marked PR-E2 removable-media/safe-write items as in-progress (`[~]`) to reflect implemented deterministic bridge checks + flush-strategy reporting while preserving remaining native parity blockers.
 - Marked PR-E3 guided create/verify/restore implementation items as complete (`[x]`) to match the current runnable Vaultier rehearsal UX.
+- Added deterministic parser coverage for macOS (`/Volumes/*`) and Windows (`X:\\`) removable-drive discovery input normalization in the Tauri bridge tests, tightening cross-platform adapter guardrails without changing the pending signed-smoke blocker status.
 
 - Added milestone-tracker parity updates so M3 (restore confidence UX) and M4 (operator/CI parity) now reflect implemented Vaultier/Tauri rehearsal capabilities instead of remaining marked as purely planned.
 - Kept release-blocking items unchecked where evidence is still required (signed artifacts, cross-platform smoke suite, and final bridge memory/logging audit sign-off).
