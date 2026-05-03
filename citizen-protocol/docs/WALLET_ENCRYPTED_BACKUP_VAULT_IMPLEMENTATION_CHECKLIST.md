@@ -768,6 +768,8 @@ Use this rubric during UX and maintainer review so “sleek” is measurable, no
 
 - Added utility-surface runtime parity assertions in `vaultier/src/lib/runtimeBridge.test.ts` for `discover_removable_drives`, `flush_vault_writes`, and `safe_eject_media` response-shape compatibility so WB-mode/runtime continuation catches utility contract drift earlier.
 - New assertions now pin deterministic top-level key shape for discovery/flush/safe-eject payloads and drive-record key compatibility, complementing existing backup command parity snapshots.
+- Added serialized Tauri backup-command execution-queue behavior in `vaultier/src/lib/runtimeBridge.ts` so concurrent desktop command invocations run deterministically one-at-a-time, reducing CLI-shell bridge contention risk while in-process wallet-core bindings remain pending.
+- Added runtime-bridge queue parity coverage in `vaultier/src/lib/runtimeBridge.test.ts` that fires concurrent `backup_verify` calls and asserts deterministic start/end ordering across queued execution.
 - Checklist status markers remain unchanged for blocker-class desktop items (`[ ]`/`[~]`) because this slice hardens test coverage only; it does not yet deliver the in-process wallet-core bridge, signed packaging artifacts, or final memory/logging audit evidence.
   - final memory/logging bridge audit sign-off.
 
