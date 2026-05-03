@@ -60,7 +60,7 @@ impl BackupCommandExecutor for InProcessExecutor {
             status: "error",
             error_id: Some("in_process_unavailable".to_owned()),
             details: serde_json::json!({
-                "message": "In-process wallet-core execution is not yet available for this desktop build.",
+                "message": "In-process wallet-core execution is not yet available for this desktop build; set CITIZEN_WALLET_DESKTOP_EXECUTION_MODE=shell-fallback (default) to continue using the CLI bridge.",
                 "command": request.command,
                 "execution_mode_requested": "in_process",
             }),
@@ -74,7 +74,7 @@ fn configured_execution_mode() -> BridgeExecutionMode {
         .ok()
         .as_deref()
     {
-        Some("in-process") => BridgeExecutionMode::InProcess,
+        Some("in-process") | Some("in_process") => BridgeExecutionMode::InProcess,
         _ => BridgeExecutionMode::ShellFallback,
     }
 }
@@ -1414,6 +1414,16 @@ mod tests {
     use super::{configured_execution_mode, run_named_backup_command, BridgeExecutionMode};
 
     #[test]
+    #[test]
+    fn legacy_in_process_mode_spelling_is_supported() {
+        std::env::set_var("CITIZEN_WALLET_DESKTOP_EXECUTION_MODE", "in_process");
+        assert_eq!(
+            configured_execution_mode(),
+            BridgeExecutionMode::InProcess
+        );
+        std::env::remove_var("CITIZEN_WALLET_DESKTOP_EXECUTION_MODE");
+    }
+
     fn defaults_to_shell_fallback_execution_mode() {
         std::env::remove_var("CITIZEN_WALLET_DESKTOP_EXECUTION_MODE");
         assert_eq!(
