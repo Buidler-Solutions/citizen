@@ -483,13 +483,13 @@ This slice starts the desktop productization track without blocking on extension
 - Remaining PR-D2 closure is documentation: add safe-eject and write-completion snippet in wallet operator docs/runbook and cross-link from this checklist.
 
 2. **PR-E2: Removable media discovery + safe-write pipeline**
-   - [ ] Implement cross-platform removable-drive discovery abstraction with deterministic adapter error mapping.
-   - [ ] Add crash-safe write path (`.tmp` write -> fsync -> atomic rename -> parent fsync when supported).
+   - [~] Implement cross-platform removable-drive discovery abstraction with deterministic adapter error mapping. (Tauri desktop bridge now exposes `discover_removable_drives` with deterministic compatibility/writable/free-space checks and explicit adapter warnings, but fully native removable-media adapter parity + signed smoke evidence is still open.)
+   - [~] Add crash-safe write path (`.tmp` write -> fsync -> atomic rename -> parent fsync when supported). (Wallet CLI path is now crash-safe via temp-write + flush + atomic rename durability steps and the Tauri bridge reports flush strategy/steps for desktop guidance; remaining closure is full native enforcement parity in packaged desktop releases.)
   - [x] Add UI-facing operation state machine (`preflight`, `writing`, `flushing`, `verified`, `action_required`) for deterministic progress copy. (Vaultier operation-state contract now includes an explicit `verified` checkpoint between deterministic verify completion and restore rehearsal, while preserving `verify_required` guidance for pre-verify flows in `vaultier/src/lib/operationState.ts` and guided flow transitions.)
 
 3. **PR-E3: Sleek guided flows (MVP UX)**
-   - [ ] Ship single-screen “Create Backup” flow with decoy + critical setup, passphrase strength guidance, and progress timeline.
-   - [ ] Ship “Verify Backup” quick action and “Test Restore” wizard with expandable technical details panel.
+   - [x] Ship single-screen “Create Backup” flow with decoy + critical setup, passphrase strength guidance, and progress timeline. (Implemented in Vaultier guided flow shell with deterministic operation-state timeline + passphrase-strength affordances.)
+   - [x] Ship “Verify Backup” quick action and “Test Restore” wizard with expandable technical details panel. (Implemented in Vaultier guided verify/restore rehearsal flows with deterministic technical details surfaced for operator drill usage.)
    - [x] Add portable profile card (label, schema version, created-at, last verified-at) and safe-removal checklist drawer. (Vaultier `AppShell` now renders a portable profile card with `portableLabel`/`schemaVersion`/`createdAt`/`lastVerifiedAt` fields, and ships a safe-removal checklist section that tracks verification, restore rehearsal, flush completion, and duplicate-media confirmation before safe-eject.)
 
 4. **PR-E4: Headless parity + diagnostics**
@@ -512,6 +512,12 @@ This slice starts the desktop productization track without blocking on extension
 | M3 — Restore confidence UX | Planned | Verify + test-restore flows with deterministic technical detail panel. |
 | M4 — Operator/CI parity | Planned | Headless mode and diagnostics aligned with CLI JSON contract. |
 | M5 — Release hardening | Planned | Signed builds, compatibility matrix, cross-platform smoke + security sign-off. |
+
+### Delta Update (2026-05-03, checklist status reconciliation)
+
+- Reconciled checklist status against current `wallet/desktop` and `vaultier` implementation so completed guided-flow and bridge-baseline work is no longer left unchecked.
+- Marked PR-E2 removable-media/safe-write items as in-progress (`[~]`) to reflect implemented deterministic bridge checks + flush-strategy reporting while preserving remaining native parity blockers.
+- Marked PR-E3 guided create/verify/restore implementation items as complete (`[x]`) to match the current runnable Vaultier rehearsal UX.
 
 ### Delta Update (2026-05-02, checklist gap audit continuation)
 
