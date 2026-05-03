@@ -82,6 +82,31 @@ After any disaster restore (especially after corruption/tamper indicators):
 4. Verify the new backup immediately with `wallet backup verify`.
 5. Retire superseded backup media using approved destruction/custody policy.
 
+## 5.1) Slot lifecycle hygiene (wipe + passphrase rotation)
+
+Use slot-scoped lifecycle commands to keep decoy/critical separation credible and to prevent stale
+credentials from persisting in active media.
+
+1. **Rotate slot passphrases on schedule and after elevated-risk events** (travel media exposure,
+   host compromise suspicion, coercion drill execution):
+   ```bash
+   cargo run -p citizen-wallet -- wallet backup rotate-passphrase \
+     --vault-path <vault.json> \
+     --role <decoy|critical|archive> \
+     --json
+   ```
+2. **Wipe slots before reuse or retirement**:
+   ```bash
+   cargo run -p citizen-wallet -- wallet backup wipe-slot \
+     --vault-path <vault.json> \
+     --role <decoy|critical|archive> \
+     --json
+   ```
+3. Require successful role/passphrase authentication before either command; treat
+   `decrypt_failed` or `slot_not_found` as hard-stop conditions that require operator review.
+4. After rotation or wipe, run `wallet backup verify --json` and capture evidence output in the
+   drill/recovery record.
+
 ## 6) Operator evidence checklist
 
 Capture the following artifacts for each drill or production recovery:
