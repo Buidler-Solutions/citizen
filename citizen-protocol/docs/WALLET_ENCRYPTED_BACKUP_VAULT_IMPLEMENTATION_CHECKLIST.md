@@ -382,6 +382,18 @@ To translate the CLI-first vault implementation into a polished portable app exp
 
 - [x] R9-G pre-staging artifacts are now landed; R9-D/R9-E remain evidence-blocked but no longer blocked on report/checklist document scaffolding.
 
+
+8. **R9-H — Evidence-collection runbook wiring for checkpoint-9 closure (ready-to-execute once TV-3 blockers clear)**
+   - [x] Pin the closure execution order to `TV-3 signed packaging/signing + bridge audit` -> `R9-D checklist sign-off` -> `R9-E post-rollout validation` -> `R9-F beta memo decision` with no parallel bypass path.
+   - [x] Define a deterministic command/evidence capture bundle for each target OS drill cycle:
+     - `pnpm --dir vaultier test:headless-contract` (WB-mode contract gate snapshot)
+     - `cargo test -p citizen-wallet wallet_backup` (wallet backup regression baseline)
+     - packaged desktop smoke logs for `create/add-slot/export/verify/restore/flush/eject` attached to the R9-E packet
+   - [x] Require immutable artifact references in checkpoint-9 evidence docs (release artifact digest, signing identity, build timestamp, and bridge-audit record URI) before any beta opt-in flag change is approved.
+   - [x] Require dated owner acknowledgement entries (wallet + desktop/runtime + security) in both R9-D and R9-E templates so approval provenance is captured before R9-F go/no-go review.
+
+- [x] R9-H execution wiring is now documented so checkpoint-9 closure can run immediately after TV-3 packaging/signing and bridge-audit blockers are cleared, without reopening sequencing decisions.
+
 **Exit criteria**
 - [ ] Release checklist signed off.
 - [ ] Post-rollout validation report completed.
