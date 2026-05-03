@@ -838,3 +838,9 @@ Use this rubric during UX and maintainer review so “sleek” is measurable, no
 - Extended Tauri bridge serialization in `vaultier/src/lib/runtimeBridge.ts` so removable-media utility calls (`discover_removable_drives`, `flush_vault_writes`, `safe_eject_media`) now share the same single-flight execution queue already used by backup commands.
 - Added runtime queue coverage in `vaultier/src/lib/runtimeBridge.test.ts` that fires concurrent discovery/flush/safe-eject requests and asserts deterministic one-at-a-time start/end ordering.
 - Checklist blocker markers remain intentionally unchanged (`[ ]`/`[~]`): this continuation closes execution-queue parity hardening gaps but does not yet satisfy in-process wallet-core replacement, packaging/signing evidence, or final bridge memory/logging audit sign-off.
+
+### Delta Update (2026-05-03, execution-queue continuation status sync)
+
+- Reconfirmed Portable Application Track continuation remains gated on blocker-class desktop evidence (in-process wallet-core bridge, signed packaging/signing lane, signed cross-platform removable-media smoke evidence, and bridge memory/logging audit closure).
+- Kept all related blocker items in explicit `[ ]`/`[~]` state with no premature promotion to `[x]`, so execution-queue hardening progress does not overstate production-readiness.
+- Recorded this status-sync pass to keep `#continue-tauri-vaultier-desktop-version-execution-queue` history contiguous with prior 2026-05-03 execution-queue parity updates.
