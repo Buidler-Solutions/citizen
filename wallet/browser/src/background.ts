@@ -234,6 +234,18 @@ type BackupPosture = {
   reminderIntervalDays: number;
 };
 
+type BackupSlotRole = 'decoy' | 'critical';
+type BackupVaultSlot = {
+  role: BackupSlotRole;
+  passphraseHint: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+type BackupVaultState = {
+  version: 1;
+  slots: BackupVaultSlot[];
+};
+
 async function getBackupPosture(): Promise<BackupPosture> {
   const stored = await chrome.storage.local.get(BACKUP_POSTURE_KEY);
   const posture = stored[BACKUP_POSTURE_KEY] as Partial<BackupPosture> | undefined;
@@ -254,6 +266,58 @@ async function markBackupVerifiedNow(): Promise<BackupPosture> {
   };
   await chrome.storage.local.set({ [BACKUP_POSTURE_KEY]: next });
   return next;
+}
+
+const BACKUP_VAULT_STATE_KEY = 'citizen.browser.wallet.backup_vault_state.v1';
+const BACKUP_KDF_ITERATIONS = 210_000;
+
+function normalizeBackupRole(value: unknown): BackupSlotRole | null {
+  return value === 'decoy' || value === 'critical' ? value : null;
+}
+
+function requirePassphrase(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  return trimmed.length >= 12 ? trimmed : null;
+}
+
+async function deriveBackupAesKey(passphrase: string, salt: Uint8Array): Promise<CryptoKey> {
+  const material = await crypto.subtle.importKey('raw', new TextEncoder().encode(passphrase), 'PBKDF2', false, ['deriveKey']);
+  return crypto.subtle.deriveKey(
+    { name: 'PBKDF2', hash: 'SHA-256', iterations: BACKUP_KDF_ITERATIONS, salt },
+    material,
+    { name: 'AES-GCM', length: 256 },
+    false,
+    ['encrypt', 'decrypt'],
+  );
+}
+
+async function encryptBackupPayload(passphrase: string, payload: unknown): Promise<string> {
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const key = await deriveBackupAesKey(passphrase, salt);
+  const ciphertext = new Uint8Array(
+    await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, new TextEncoder().encode(JSON.stringify(payload))),
+  );
+  const envelope = { version: 1, algorithm: 'aes-256-gcm', kdf: { name: 'pbkdf2-sha256', iterations: BACKUP_KDF_ITERATIONS }, salt: toHex(salt), iv: toHex(iv), ciphertext: toHex(ciphertext) };
+  return btoa(JSON.stringify(envelope));
+}
+
+async function decryptBackupPayload(passphrase: string, encoded: string): Promise<unknown> {
+  const json = JSON.parse(atob(encoded)) as { salt?: string; iv?: string; ciphertext?: string };
+  if (typeof json.salt !== 'string' || typeof json.iv !== 'string' || typeof json.ciphertext !== 'string') {
+    throw new Error('Malformed encrypted backup envelope.');
+  }
+  const key = await deriveBackupAesKey(passphrase, fromHex(json.salt));
+  const plaintext = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: fromHex(json.iv) }, key, fromHex(json.ciphertext));
+  return JSON.parse(new TextDecoder().decode(plaintext));
+}
+
+async function getBackupVaultState(): Promise<BackupVaultState> {
+  const stored = await chrome.storage.local.get(BACKUP_VAULT_STATE_KEY);
+  const state = stored[BACKUP_VAULT_STATE_KEY] as BackupVaultState | undefined;
+  if (!state || !Array.isArray(state.slots)) return { version: 1, slots: [] };
+  return state;
 }
 
 function isNetworkId(value: unknown): value is NetworkId {
@@ -1989,6 +2053,76 @@ async function handleWalletRequest(
       return walletError('ERR_UNAUTHORIZED', 'Unauthorized wallet method.');
     }
     return { ok: true, result: await markBackupVerifiedNow() };
+  }
+
+  if (request.method === 'wallet_createBackupVault') {
+    if (!isUiRequest) return walletError('ERR_UNAUTHORIZED', 'Unauthorized wallet method.');
+    const [decoyPassphrase, criticalPassphrase, decoyHint, criticalHint] = request.params ?? [];
+    const decoy = requirePassphrase(decoyPassphrase);
+    const critical = requirePassphrase(criticalPassphrase);
+    if (!decoy || !critical) {
+      return walletError('ERR_MALFORMED_REQUEST', 'Both decoy and critical passphrases must be at least 12 characters.');
+    }
+    if (decoy === critical) {
+      return walletError('ERR_MALFORMED_REQUEST', 'Decoy and critical passphrases must be different.');
+    }
+    const now = new Date().toISOString();
+    const state: BackupVaultState = {
+      version: 1,
+      slots: [
+        { role: 'decoy', passphraseHint: typeof decoyHint === 'string' ? decoyHint : null, createdAt: now, updatedAt: now },
+        { role: 'critical', passphraseHint: typeof criticalHint === 'string' ? criticalHint : null, createdAt: now, updatedAt: now },
+      ],
+    };
+    await chrome.storage.local.set({ [BACKUP_VAULT_STATE_KEY]: state });
+    return { ok: true, result: state };
+  }
+
+  if (request.method === 'wallet_exportBackupVault') {
+    if (!isUiRequest) return walletError('ERR_UNAUTHORIZED', 'Unauthorized wallet method.');
+    const [roleParam, passphrase] = request.params ?? [];
+    const role = normalizeBackupRole(roleParam);
+    const normalizedPassphrase = requirePassphrase(passphrase);
+    if (!role || !normalizedPassphrase) {
+      return walletError('ERR_MALFORMED_REQUEST', 'Export requires role and passphrase.');
+    }
+    const vault = await ensureVaultInitialized();
+    const exported = vault.map((wallet) => ({
+      id: wallet.id, name: wallet.name, createdAt: wallet.createdAt,
+      mnemonicPhrase: wallet.mnemonicPhrase ?? null, derivationPath: wallet.derivationPath ?? null,
+    }));
+    const payload = await encryptBackupPayload(normalizedPassphrase, { schema: 'citizen.wallet.extension.backup.v1', role, exportedAt: new Date().toISOString(), wallets: exported });
+    return { ok: true, result: { role, payloadBase64: payload, fileName: `citizen-${role}-backup-${Date.now()}.cwb` } };
+  }
+
+  if (request.method === 'wallet_restoreBackupVault') {
+    if (!isUiRequest) return walletError('ERR_UNAUTHORIZED', 'Unauthorized wallet method.');
+    const [roleParam, passphrase, payloadBase64, conflictResolution] = request.params ?? [];
+    const role = normalizeBackupRole(roleParam);
+    const normalizedPassphrase = requirePassphrase(passphrase);
+    if (!role || !normalizedPassphrase || typeof payloadBase64 !== 'string') {
+      return walletError('ERR_MALFORMED_REQUEST', 'Restore requires role, passphrase, and encrypted payload.');
+    }
+    try {
+      const decoded = await decryptBackupPayload(normalizedPassphrase, payloadBase64) as { role?: string; wallets?: StoredWallet[] };
+      if (decoded.role !== role || !Array.isArray(decoded.wallets)) {
+        return walletError('ERR_BACKUP_INTEGRITY', 'Backup payload role mismatch or malformed payload.');
+      }
+      const current = await ensureVaultInitialized();
+      const existingById = new Map(current.map((wallet) => [wallet.id, wallet]));
+      let imported = 0;
+      for (const wallet of decoded.wallets) {
+        if (existingById.has(wallet.id) && conflictResolution !== 'replace') continue;
+        existingById.set(wallet.id, wallet);
+        imported += 1;
+      }
+      const merged = Array.from(existingById.values()).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+      await saveWalletVault(merged, merged[0]?.id);
+      await markBackupVerifiedNow();
+      return { ok: true, result: { imported, total: merged.length } };
+    } catch (error) {
+      return walletError('ERR_BACKUP_DECRYPT_FAILED', error instanceof Error ? error.message : 'Unable to decrypt backup payload.');
+    }
   }
 
   if (request.method === 'wallet_directSubmitLatestSignedArtifact') {

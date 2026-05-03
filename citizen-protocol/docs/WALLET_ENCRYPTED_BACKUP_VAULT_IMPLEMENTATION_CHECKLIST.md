@@ -157,9 +157,9 @@ To keep implementation sequencing unambiguous, treat **Checkpoint 8.5 — Priori
 
 ## Checkpoint 5 — Browser Extension Integration
 
-- [ ] Add extension UI flow for creating decoy + critical backup vaults.
-- [ ] Add secure export bridge for encrypted payload creation (never raw secret exfiltration to page context).
-- [ ] Add restore flow with integrity checks and clear conflict resolution strategy.
+- [~] Add extension UI flow for creating decoy + critical backup vaults. (Security tab now includes an in-extension create flow that requires distinct decoy/critical passphrases and initializes deterministic slot metadata in extension-local storage; passphrase policy hardening/copy polish remains open.)
+- [~] Add secure export bridge for encrypted payload creation (never raw secret exfiltration to page context). (Extension background worker now performs passphrase-based AES-256-GCM export envelope creation with PBKDF2-SHA256 derivation and returns encrypted base64 payload artifacts only; richer envelope signing/manifest alignment with CLI format remains pending.)
+- [~] Add restore flow with integrity checks and clear conflict resolution strategy. (Extension restore path now decrypts in background, validates role/payload structure, and applies deterministic merge/replace conflict handling before vault refresh; end-to-end integration tests and operator-facing conflict UX copy remain pending.)
 - [x] Add UX affordances for backup freshness indicator and verification reminders.
 - [~] Add passphrase-strength guidance and recovery warnings. (Browser extension security tab now includes explicit decoy/critical distinct-passphrase guidance plus backup verification posture/reminder scaffold via `wallet_getBackupPosture` + `wallet_markBackupVerified`; full create/export/restore warning copy integration remains pending with end-to-end backup flows.)
 

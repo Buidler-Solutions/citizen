@@ -304,6 +304,10 @@ export function App() {
   const [consentShareSigningPayload, setConsentShareSigningPayload] = useState(false);
   const [directSubmitReceipts, setDirectSubmitReceipts] = useState<DirectSubmitReceipt[]>([]);
   const [backupPosture, setBackupPosture] = useState<BackupPosture | null>(null);
+  const [backupDecoyPassphrase, setBackupDecoyPassphrase] = useState('');
+  const [backupCriticalPassphrase, setBackupCriticalPassphrase] = useState('');
+  const [backupPayload, setBackupPayload] = useState('');
+  const [backupRole, setBackupRole] = useState<'decoy' | 'critical'>('critical');
   const [profile, setProfile] = useState<ProfileDetails>({
     fullName: '',
     email: '',
@@ -1127,6 +1131,31 @@ export function App() {
     setStatus('Backup verification timestamp updated.');
   };
 
+  const handleCreateBackupVault = async () => {
+    const response = await callWallet('wallet_createBackupVault', [backupDecoyPassphrase, backupCriticalPassphrase]);
+    setStatus(response.ok ? 'Backup vault initialized with decoy + critical slots.' : response.error ?? 'Unable to initialize backup vault.');
+  };
+
+  const handleExportBackup = async () => {
+    const passphrase = backupRole === 'decoy' ? backupDecoyPassphrase : backupCriticalPassphrase;
+    const response = await callWallet('wallet_exportBackupVault', [backupRole, passphrase]);
+    if (!response.ok) {
+      setStatus(response.error ?? 'Unable to export encrypted backup.');
+      return;
+    }
+    const result = response.result as { payloadBase64: string; fileName: string };
+    setBackupPayload(result.payloadBase64);
+    await navigator.clipboard.writeText(result.payloadBase64);
+    setStatus(`Encrypted ${backupRole} backup exported and copied to clipboard (${result.fileName}).`);
+  };
+
+  const handleRestoreBackup = async () => {
+    const passphrase = backupRole === 'decoy' ? backupDecoyPassphrase : backupCriticalPassphrase;
+    const response = await callWallet('wallet_restoreBackupVault', [backupRole, passphrase, backupPayload, 'replace']);
+    setStatus(response.ok ? 'Encrypted backup restored and wallet vault refreshed.' : response.error ?? 'Unable to restore encrypted backup.');
+    if (response.ok) await refreshState();
+  };
+
   const blockedOrigins = useMemo(
     () => originPermissions.filter((entry) => entry.permission === 'blocked'),
     [originPermissions],
@@ -1912,10 +1941,22 @@ export function App() {
 
               <article className="request-card">
                 <h2>Encrypted backup vault posture</h2>
-                <p className="meta-text">Checkpoint 5 scaffold: decoy + critical vault workflows are in progress. Use distinct passphrases (16+ chars) per slot.</p>
+                <p className="meta-text">Use distinct passphrases (16+ chars recommended) for decoy and critical slots. Exports remain encrypted end-to-end and are never emitted as plaintext secrets.</p>
                 <p className="meta-text">
                   Last backup verification: {backupPosture?.lastVerifiedAt ? new Date(backupPosture.lastVerifiedAt).toLocaleString() : 'Not recorded'}.
                 </p>
+                <div className="form-grid">
+                  <input type="password" placeholder="Decoy backup passphrase" value={backupDecoyPassphrase} onChange={(event) => setBackupDecoyPassphrase(event.target.value)} />
+                  <input type="password" placeholder="Critical backup passphrase" value={backupCriticalPassphrase} onChange={(event) => setBackupCriticalPassphrase(event.target.value)} />
+                  <button className="ghost" onClick={() => void handleCreateBackupVault()}>Create decoy + critical backup vault</button>
+                  <select value={backupRole} onChange={(event) => setBackupRole(event.target.value as 'decoy' | 'critical')}>
+                    <option value="decoy">Decoy slot</option>
+                    <option value="critical">Critical slot</option>
+                  </select>
+                  <button className="ghost" onClick={() => void handleExportBackup()}>Export encrypted backup payload</button>
+                  <textarea rows={5} value={backupPayload} onChange={(event) => setBackupPayload(event.target.value)} placeholder="Paste encrypted backup payload to restore." />
+                  <button className="ghost" onClick={() => void handleRestoreBackup()}>Restore from encrypted payload</button>
+                </div>
                 <button className="ghost" onClick={() => void handleMarkBackupVerified()}>Mark backup verified now</button>
               </article>
             </>
