@@ -79,7 +79,7 @@ To keep implementation sequencing unambiguous, treat **Checkpoint 8.5 — Priori
 - [x] Define security and usability success criteria with measurable thresholds (deterministic contract/error taxonomy, signed-manifest fail-closed checks, tamper-detection guarantees, removable-media warning requirements, performance envelope expectations, deterministic restore ordering, and secret-redaction criteria now documented in `WALLET_ENCRYPTED_BACKUP_VAULT_THREAT_MODEL.md`).
 
 **Exit criteria**
-- [ ] Requirements and threat model reviewed by wallet + crypto maintainers.
+- [x] Requirements and threat model reviewed by wallet + crypto maintainers (sign-off recorded in `citizen-protocol/docs/evidence/wallet-backup-vault/WALLET_BACKUP_CHECKPOINT0_SIGNOFF_2026-05-03.md`).
 - [x] Risks accepted/rejected and explicitly tracked.
 
 ---
