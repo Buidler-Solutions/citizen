@@ -518,6 +518,17 @@ This slice starts the desktop productization track without blocking on extension
 ### Delta Update (2026-05-02, Tauri continuation gap reconciliation)
 
 - Re-audited this checklist against the current `wallet/desktop` + `vaultier/` implementation and prior 8.5 evidence artifacts to catch items that were implemented but left unchecked.
+
+### Delta Update (2026-05-03, Tauri checklist gap audit)
+
+- Re-validated desktop/Tauri checklist items against the current `vaultier` bridge tests and `wallet/desktop` runtime wiring to identify implementation gaps vs stale checkbox state.
+- Confirmed that several parity safeguards are now implemented and evidenced in test coverage, but remain intentionally marked partial where the in-process wallet-core bridge replacement and signed cross-platform packaging evidence are still open.
+- Confirmed no unchecked desktop checklist item can be safely promoted to complete (`[x]`) without new production-hardening evidence for:
+  - signed/reproducible macOS/Windows/Linux artifact pipeline,
+  - final memory/logging bridge audit sign-off artifact links,
+  - runtime parity evidence against a non-shell in-process wallet-core adapter.
+- Added explicit reconciliation note that current status markers (`[~]`) are accurate for TV-2/TV-3 bridge hardening items and should not be force-checked prematurely.
+
 - Tauri desktop bridge now forwards CLI top-level parity markers (`contract_version`, `status`) in deterministic response details (`wallet_cli_contract_version`, `wallet_cli_status`) so WB-mode/runtime contract-drift checks can assert field compatibility without parsing nested payload internals.
 - Marked **Next Slice C / CI wiring** as complete because the dedicated wallet backup CI workflow is in-repo and already referenced in sign-off evidence.
 - Remaining unchecked Tauri items continue to represent real implementation gaps (in-process wallet-core bridge, signed packaging, full OS-native removable-media adapter parity, and final bridge memory/logging audit), so they stay open intentionally until code + evidence land.
