@@ -366,9 +366,19 @@ To translate the CLI-first vault implementation into a polished portable app exp
 
 > Checkpoint-9 enforcement note: R9-D and R9-E remain blocked until TV-3 packaging/signing evidence and the desktop bridge security audit are both complete; do not mark Checkpoint 9 exit criteria complete before those prerequisites are attached.
 
+### Checkpoint 9 Next Execution Slice (unblocks checkpoint-9 closure once TV-3 evidence lands)
+
+6. **R9-F — Beta promotion decision pack (prepare now, execute after R9-D/R9-E evidence)**
+   - [ ] Pre-stage a beta promotion memo template with required attachments: signed artifact digests, bridge audit record, completed alpha drill packet set, and telemetry threshold summary.
+   - [ ] Define explicit go/no-go thresholds for beta opt-in enablement (per-OS drill pass count, removable-media parity pass rate, and zero unresolved redaction regressions).
+   - [ ] Add owner-routed escalation map for any failed threshold so rollback remains deterministic before user-facing opt-in changes.
+
+- [x] Checkpoint 9 continuation now has a fully ordered queue (`R9-D` -> `R9-E` -> `R9-F`) with prerequisite gating documented; this keeps checkpoint-9 execution unambiguous while packaging/signing + bridge-audit blockers are still open.
+
 **Exit criteria**
 - [ ] Release checklist signed off.
 - [ ] Post-rollout validation report completed.
+- [ ] Beta promotion decision pack approved by wallet + desktop/runtime + security owners.
 
 ---
 
