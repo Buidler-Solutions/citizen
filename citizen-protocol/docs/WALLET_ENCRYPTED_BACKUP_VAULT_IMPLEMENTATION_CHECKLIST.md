@@ -178,8 +178,8 @@ To keep implementation sequencing unambiguous, treat **Checkpoint 8.5 — Priori
 - [x] Add key-rotation post-restore playbook (documented in `citizen-protocol/docs/WALLET_BACKUP_DISASTER_RECOVERY_RUNBOOK.md` with staged post-restore rotation workflow).
 
 **Exit criteria**
-- [~] Recovery drills executed for both CLI and extension scenarios. (CLI cross-machine USB drill is evidenced in `citizen-protocol/docs/evidence/wallet-backup-vault/WALLET_BACKUP_USB_CROSS_MACHINE_DRILL_2026-05-02.md`; equivalent extension drill evidence remains pending.)
-- [~] Runbook approved by maintainers responsible for wallet support. (Wallet/crypto maintainer review and sign-off are recorded for the CLI path in `citizen-protocol/docs/evidence/wallet-backup-vault/WALLET_BACKUP_8_5_SIGNOFF_2026-05-02.md`; extension-specific support approval remains open.)
+- [~] Recovery drills executed for both CLI and extension scenarios. (CLI cross-machine USB drill is evidenced in `citizen-protocol/docs/evidence/wallet-backup-vault/WALLET_BACKUP_USB_CROSS_MACHINE_DRILL_2026-05-02.md`; extension drill capture is now scaffolded via `citizen-protocol/docs/evidence/wallet-backup-vault/WALLET_BACKUP_EXTENSION_RECOVERY_DRILL_TEMPLATE_2026-05-03.md` and remains pending completion/sign-off.)
+- [~] Runbook approved by maintainers responsible for wallet support. (Wallet/crypto maintainer review and sign-off are recorded for the CLI path in `citizen-protocol/docs/evidence/wallet-backup-vault/WALLET_BACKUP_8_5_SIGNOFF_2026-05-02.md`; extension-specific support approval remains open and must be attached to a completed extension drill evidence record.)
 
 ---
 
