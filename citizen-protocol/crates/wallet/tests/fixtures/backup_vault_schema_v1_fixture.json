@@ -10,17 +10,32 @@
         "keys"
       ],
       "encrypted_payload": {
-        "algorithm": "argon2id-aes256gcm",
-        "ciphertext_hex": "00",
-        "nonce_hex": "00112233445566778899aabb",
-        "salt_hex": "00112233445566778899aabbccddeeff",
-        "kdf_params": {
-          "memory_kib": 65536,
-          "iterations": 3,
-          "parallelism": 1,
-          "output_length": 32
+        "wrapped_master_key": {
+          "algorithm": "argon2id-aes256gcm",
+          "ciphertext_hex": "00",
+          "nonce_hex": "00112233445566778899aabb",
+          "salt_hex": "00112233445566778899aabbccddeeff",
+          "kdf_params": {
+            "memory_kib": 65536,
+            "iterations": 3,
+            "parallelism": 1,
+            "output_length": 32
+          },
+          "kdf": "argon2id"
         },
-        "kdf": "argon2id"
+        "object_envelope": {
+          "algorithm": "argon2id-aes256gcm",
+          "ciphertext_hex": "11",
+          "nonce_hex": "00112233445566778899aabc",
+          "salt_hex": "00112233445566778899aabbccddeef0",
+          "kdf_params": {
+            "memory_kib": 65536,
+            "iterations": 3,
+            "parallelism": 1,
+            "output_length": 32
+          },
+          "kdf": "argon2id"
+        }
       },
       "exported_at": 1736500001,
       "payload_sha256": "abcd",
@@ -38,17 +53,32 @@
         "recovery-metadata"
       ],
       "encrypted_payload": {
-        "algorithm": "argon2id-aes256gcm",
-        "ciphertext_hex": "11",
-        "nonce_hex": "ffeeddccbbaa998877665544",
-        "salt_hex": "ffeeddccbbaa99887766554433221100",
-        "kdf_params": {
-          "memory_kib": 65536,
-          "iterations": 3,
-          "parallelism": 1,
-          "output_length": 32
+        "wrapped_master_key": {
+          "algorithm": "argon2id-aes256gcm",
+          "ciphertext_hex": "22",
+          "nonce_hex": "ffeeddccbbaa998877665544",
+          "salt_hex": "ffeeddccbbaa99887766554433221100",
+          "kdf_params": {
+            "memory_kib": 65536,
+            "iterations": 3,
+            "parallelism": 1,
+            "output_length": 32
+          },
+          "kdf": "argon2id"
         },
-        "kdf": "argon2id"
+        "object_envelope": {
+          "algorithm": "argon2id-aes256gcm",
+          "ciphertext_hex": "33",
+          "nonce_hex": "ffeeddccbbaa998877665545",
+          "salt_hex": "ffeeddccbbaa99887766554433221101",
+          "kdf_params": {
+            "memory_kib": 65536,
+            "iterations": 3,
+            "parallelism": 1,
+            "output_length": 32
+          },
+          "kdf": "argon2id"
+        }
       },
       "exported_at": 1736500003,
       "payload_sha256": "ef01",
