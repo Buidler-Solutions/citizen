@@ -757,6 +757,13 @@ Use this rubric during UX and maintainer review so “sleek” is measurable, no
   - signed removable-media smoke evidence on release-grade builds,
   - final memory/logging bridge audit sign-off.
 
+### Delta Update (2026-05-03, in-process bridge execution-mode scaffold)
+
+- Added an explicit Tauri bridge execution-mode selector (`CITIZEN_WALLET_DESKTOP_EXECUTION_MODE`) so desktop rehearsals can deterministically exercise shell-fallback vs. in-process wiring paths without changing the DTO boundary.
+- Added a deterministic in-process placeholder response (`error_id: in_process_unavailable`) to prevent silent fallback behavior while wallet-core bindings are still pending.
+- Added desktop bridge unit coverage that asserts default shell-fallback behavior and deterministic in-process placeholder error semantics.
+- Checklist status remains intentionally unchanged (`[ ]` in-process bridge blocker) because this is scaffolding only; full wallet-core in-process command wiring is still required before completion.
+
 ### Delta Update (2026-05-03, full-checklist actionable gap report enhancement)
 
 - Extended `vaultier/checklist-gap-check.mjs` with an optional `--full-open-items` mode so strict checklist passes can emit section-by-section open-item details (not only aggregate counts).

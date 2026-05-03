@@ -22,3 +22,10 @@ pub(crate) struct BackupCommandResponse {
 pub(crate) trait BackupCommandExecutor {
     fn execute(&self, request: &BackupCommandRequest) -> BackupCommandResponse;
 }
+
+#[cfg(feature = "desktop-runtime")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum BridgeExecutionMode {
+    InProcess,
+    ShellFallback,
+}
