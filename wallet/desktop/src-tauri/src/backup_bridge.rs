@@ -355,6 +355,7 @@ fn execute_backup_command_internal(request: &BackupCommandRequest) -> BackupComm
                     "command": request.command,
                     "message": "backup target path failed removable-media preflight checks",
                     "target_path": target_path,
+                    "removable_classification": removable_classification(&target_path),
                 }),
             };
         }
@@ -840,6 +841,15 @@ fn looks_removable(path: &Path) -> bool {
     mount_prefixes_for_os(std::env::consts::OS)
         .iter()
         .any(|prefix| path_str.starts_with(prefix))
+}
+
+#[cfg(feature = "desktop-runtime")]
+fn removable_classification(path: &Path) -> &'static str {
+    if looks_removable(path) {
+        "likely_removable"
+    } else {
+        "unknown"
+    }
 }
 
 #[cfg(feature = "desktop-runtime")]
