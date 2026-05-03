@@ -175,6 +175,8 @@ fn sensitive_arg_values(args: &[String]) -> Vec<String> {
         "--decoy-password",
         "--critical-password",
         "--slot-password",
+        "--password",
+        "--encryption-passphrase",
         "--passphrase",
         "--mnemonic",
         "--private-key",
@@ -490,12 +492,28 @@ mod tests {
             "--slot-password=top-secret".to_owned(),
             "--role=critical".to_owned(),
             "--decoy-password=decoy-secret".to_owned(),
+            "--encryption-passphrase=enc-secret".to_owned(),
         ];
 
         assert_eq!(
             sensitive_arg_values(&args),
-            vec!["top-secret".to_owned(), "decoy-secret".to_owned()]
+            vec![
+                "top-secret".to_owned(),
+                "decoy-secret".to_owned(),
+                "enc-secret".to_owned()
+            ]
         );
+    }
+
+    #[test]
+    fn sensitive_arg_values_extracts_password_flag_variant() {
+        let args = vec![
+            "--vault-path".to_owned(),
+            "/media/operator/vault.json".to_owned(),
+            "--password".to_owned(),
+            "slot-pass".to_owned(),
+        ];
+        assert_eq!(sensitive_arg_values(&args), vec!["slot-pass".to_owned()]);
     }
 
     #[test]
