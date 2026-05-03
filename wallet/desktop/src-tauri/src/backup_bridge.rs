@@ -42,6 +42,69 @@ pub struct BackupBridgeStatus {
 }
 
 #[cfg(feature = "desktop-runtime")]
+fn has_command(command: &str) -> bool {
+    std::env::var_os("PATH").is_some_and(|paths| {
+        std::env::split_paths(&paths).any(|path| {
+            let candidate = path.join(command);
+            if candidate.is_file() {
+                return true;
+            }
+            #[cfg(windows)]
+            {
+                let exe_candidate = path.join(format!("{command}.exe"));
+                if exe_candidate.is_file() {
+                    return true;
+                }
+            }
+            false
+        })
+    })
+}
+
+#[cfg(feature = "desktop-runtime")]
+fn removable_media_adapter_blocker() -> Option<&'static str> {
+    #[cfg(target_os = "linux")]
+    {
+        if has_command("udisksctl") || has_command("umount") {
+            return None;
+        }
+        return Some("os-native removable-media adapter evidence is incomplete for Linux (missing udisksctl/umount)");
+    }
+    #[cfg(target_os = "macos")]
+    {
+        if has_command("diskutil") {
+            return None;
+        }
+        return Some("os-native removable-media adapter evidence is incomplete for macOS (missing diskutil)");
+    }
+    #[cfg(target_os = "windows")]
+    {
+        if has_command("powershell") || has_command("pwsh") {
+            return None;
+        }
+        return Some("os-native removable-media adapter evidence is incomplete for Windows (missing PowerShell)");
+    }
+    #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
+    {
+        Some("os-native removable-media adapter evidence is incomplete on this platform")
+    }
+}
+
+#[cfg(feature = "desktop-runtime")]
+fn bridge_status_blockers(execution_mode: BridgeExecutionMode) -> Vec<&'static str> {
+    let mut blockers = Vec::new();
+    if execution_mode == BridgeExecutionMode::ShellFallback {
+        blockers.push("desktop bridge defaults to CLI shell fallback for wallet backup execution");
+    }
+    blockers.push("cross-platform packaging/signing evidence is still pending");
+    blockers.push("final memory/logging bridge audit sign-off is still pending");
+    if let Some(blocker) = removable_media_adapter_blocker() {
+        blockers.push(blocker);
+    }
+    blockers
+}
+
+#[cfg(feature = "desktop-runtime")]
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct TargetPathPayload {
@@ -1443,26 +1506,27 @@ pub fn backup_diagnostics(payload: serde_json::Value) -> BackupCommandResponse {
 #[cfg(feature = "desktop-runtime")]
 #[tauri::command]
 pub fn backup_bridge_status() -> BackupBridgeStatus {
-    let execution_mode = match configured_execution_mode() {
+    let configured_mode = configured_execution_mode();
+    let execution_mode = match configured_mode {
         BridgeExecutionMode::InProcess => "in_process",
         BridgeExecutionMode::ShellFallback => "shell_fallback",
     };
+    let blockers = bridge_status_blockers(configured_mode);
     BackupBridgeStatus {
         contract_version: CONTRACT_VERSION,
         cli_contract_version: CLI_CONTRACT_VERSION,
         execution_mode,
-        production_ready: false,
-        blockers: vec![
-            "desktop bridge defaults to CLI shell fallback for wallet backup execution",
-            "cross-platform packaging/signing evidence is still pending",
-            "final memory/logging bridge audit sign-off is still pending",
-        ],
+        production_ready: blockers.is_empty(),
+        blockers,
     }
 }
 
 #[cfg(all(test, feature = "desktop-runtime"))]
 mod tests {
-    use super::{configured_execution_mode, run_named_backup_command, BridgeExecutionMode};
+    use super::{
+        bridge_status_blockers, configured_execution_mode, run_named_backup_command,
+        BridgeExecutionMode,
+    };
 
     #[test]
     fn legacy_in_process_mode_spelling_is_supported() {
@@ -1490,5 +1554,21 @@ mod tests {
         assert_eq!(response.status, "error");
         assert_eq!(response.error_id.as_deref(), Some("wallet_binary_unavailable"));
         std::env::remove_var("CITIZEN_WALLET_DESKTOP_EXECUTION_MODE");
+    }
+
+    #[test]
+    fn shell_fallback_mode_surfaces_shell_blocker() {
+        let blockers = bridge_status_blockers(BridgeExecutionMode::ShellFallback);
+        assert!(blockers
+            .iter()
+            .any(|entry| entry.contains("shell fallback")));
+    }
+
+    #[test]
+    fn in_process_mode_omits_shell_blocker() {
+        let blockers = bridge_status_blockers(BridgeExecutionMode::InProcess);
+        assert!(!blockers
+            .iter()
+            .any(|entry| entry.contains("shell fallback")));
     }
 }

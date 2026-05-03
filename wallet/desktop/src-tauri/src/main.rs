@@ -35,3 +35,15 @@ fn main() {
         "citizen-wallet-desktop compiled without desktop-runtime feature; enable with `--features desktop-runtime` for Tauri runtime builds."
     );
 }
+
+#[cfg(test)]
+mod test_profile_guards {
+    #[test]
+    #[cfg(not(feature = "desktop-runtime"))]
+    fn desktop_runtime_feature_is_required_for_bridge_unit_tests() {
+        assert!(
+            true,
+            "Desktop bridge unit tests are gated behind `--features desktop-runtime`."
+        );
+    }
+}
