@@ -122,12 +122,12 @@ To keep implementation sequencing unambiguous, treat **Checkpoint 8.5 — Priori
 
 - [x] Support creation of 2+ independent encrypted vault slots in one container or linked containers. (Wallet CLI supports decoy+critical initialization and explicit archive-slot expansion via `wallet backup add-slot`; regression coverage now asserts 3-slot flows in a single vault container.)
 - [~] Implement explicit role metadata (`decoy`, `critical`, optional `archive`). (`wallet backup` role enum now includes `archive` in addition to existing `decoy`/`critical` slot metadata wiring.)
-- [ ] Ensure decoy and critical slots are cryptographically unlinkable from ciphertext patterns as far as practical.
+- [x] Ensure decoy and critical slots are cryptographically unlinkable from ciphertext patterns as far as practical. (Wallet backup envelope encryption now wraps slot payloads inside `citizen.wallet.backup.cover.v1` blinded payloads with per-export random cover nonce and randomized cover padding to reduce deterministic role/payload-size fingerprinting across decoy/critical slots while preserving deterministic decrypt-failure behavior.)
 - [x] Implement access policy:
   - [x] decoy passphrase unlocks only decoy slot
   - [x] critical passphrase unlocks critical slot(s)
   (Regression test coverage now enforces deterministic `decrypt_failed` outcomes for cross-role passphrase confusion and successful same-role restore paths after decoy passphrase rotation.)
-- [ ] Add optional duress-safe UX guidance (without false guarantees).
+- [x] Add optional duress-safe UX guidance (without false guarantees). (Operator-facing bounded deniability/duress guidance is now documented in `citizen-protocol/docs/WALLET_BACKUP_DISASTER_RECOVERY_RUNBOOK.md` with explicit residual forensic risk language.)
 - [~] Implement slot-level wipe, rotation, and passphrase update. (Initial CLI primitives now exist via `wallet backup rotate-passphrase` and `wallet backup wipe-slot`; follow-up hardening still required for secure wipe semantics and UX/runbook integration.)
 
 **Exit criteria**
