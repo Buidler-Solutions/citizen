@@ -55,8 +55,8 @@ To keep implementation sequencing unambiguous, treat **Checkpoint 8.5 — Priori
 - [x] Define minimum recommended USB durability/performance profile for operators (Vaultier now surfaces an explicit operator-facing USB durability profile panel with capacity headroom, endurance, filesystem, throughput, and duplicate-media guidance, and wallet CLI removable-media warnings now mirror the same durability/throughput/duplicate-copy guidance for operator parity).
 
 **Exit criteria**
-- [ ] End-to-end USB create/export/verify/restore drills pass on representative OS environments.
-- [ ] Runbook includes USB hygiene guidance (offline custody, duplicate media, periodic integrity recheck).
+- [x] End-to-end USB create/export/verify/restore drills pass on representative OS environments. (See CLI cross-machine USB drill evidence in `citizen-protocol/docs/evidence/wallet-backup-vault/WALLET_BACKUP_USB_CROSS_MACHINE_DRILL_2026-05-02.md` and the 8.5 revalidation packet in `citizen-protocol/docs/evidence/wallet-backup-vault/WALLET_BACKUP_8_5_REVALIDATION_2026-05-03.md`.)
+- [x] Runbook includes USB hygiene guidance (offline custody, duplicate media, periodic integrity recheck). (`citizen-protocol/docs/WALLET_BACKUP_DISASTER_RECOVERY_RUNBOOK.md` now explicitly documents offline custody posture, duplicate-media rotation, safe-eject expectations, and periodic integrity re-verification cadence.)
 
 ---
 
