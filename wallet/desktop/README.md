@@ -20,6 +20,8 @@ pnpm tauri:dev
 cargo check --manifest-path src-tauri/Cargo.toml --features desktop-runtime
 # package-scoped tests (package name is citizen-wallet-desktop)
 cargo test -p citizen-wallet-desktop --manifest-path src-tauri/Cargo.toml
+# shortcut to avoid package-id typos
+pnpm test:tauri
 ```
 
 ## Notes

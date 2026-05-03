@@ -11,6 +11,8 @@ use std::process::Command;
 const CONTRACT_VERSION: &str = "citizen.wallet.backup.desktop.v1alpha1";
 #[cfg(feature = "desktop-runtime")]
 const MIN_FREE_SPACE_BYTES: u64 = 64 * 1024 * 1024;
+#[cfg(feature = "desktop-runtime")]
+const CLI_CONTRACT_VERSION: &str = "citizen.wallet.backup.cli.v1";
 
 #[cfg(feature = "desktop-runtime")]
 #[derive(Debug, Deserialize)]
@@ -343,6 +345,20 @@ fn execute_backup_command(request: BackupCommandRequest) -> BackupCommandRespons
             .get("contract_version")
             .and_then(|v| v.as_str())
             .map(str::to_owned);
+        if cli_contract_version.as_deref() != Some(CLI_CONTRACT_VERSION) {
+            return BackupCommandResponse {
+                contract_version: CONTRACT_VERSION,
+                status: "error",
+                error_id: Some("contract_version_mismatch".to_owned()),
+                details: serde_json::json!({
+                    "command": request.command,
+                    "message": "wallet CLI contract version mismatch",
+                    "expected_contract_version": CLI_CONTRACT_VERSION,
+                    "wallet_cli_contract_version": cli_contract_version,
+                    "wallet_cli_stderr": stderr,
+                }),
+            };
+        }
         let cli_status = parsed
             .get("status")
             .and_then(|v| v.as_str())
@@ -563,6 +579,11 @@ mod tests {
         let stdout = "E:\ninvalid\nF:\n \nC:\\not-root\n";
         let parsed = parse_windows_drive_lines(stdout).collect::<Vec<_>>();
         assert_eq!(parsed, vec!["E:\\".to_owned(), "F:\\".to_owned()]);
+    }
+
+    #[test]
+    fn cli_contract_version_constant_matches_expected_cli_contract() {
+        assert_eq!(super::CLI_CONTRACT_VERSION, "citizen.wallet.backup.cli.v1");
     }
 
     #[test]
