@@ -1,5 +1,7 @@
 #[cfg(feature = "desktop-runtime")]
-use crate::backup_core_bridge::{BackupCommandExecutor, BackupCommandRequest, BackupCommandResponse};
+use crate::backup_core_bridge::{
+    BackupCommandExecutor, BackupCommandRequest, BackupCommandResponse, BridgeExecutionMode,
+};
 #[cfg(feature = "desktop-runtime")]
 use serde::{Deserialize, Serialize};
 #[cfg(feature = "desktop-runtime")]
@@ -44,6 +46,35 @@ struct ShellFallbackExecutor;
 impl BackupCommandExecutor for ShellFallbackExecutor {
     fn execute(&self, request: &BackupCommandRequest) -> BackupCommandResponse {
         execute_backup_command_internal(request)
+    }
+}
+
+#[cfg(feature = "desktop-runtime")]
+struct InProcessExecutor;
+
+#[cfg(feature = "desktop-runtime")]
+impl BackupCommandExecutor for InProcessExecutor {
+    fn execute(&self, request: &BackupCommandRequest) -> BackupCommandResponse {
+        BackupCommandResponse {
+            contract_version: CONTRACT_VERSION,
+            status: "error",
+            error_id: Some("in_process_unavailable".to_owned()),
+            details: serde_json::json!({
+                "message": "In-process wallet-core execution is not yet available for this desktop build.",
+                "command": request.command,
+            }),
+        }
+    }
+}
+
+#[cfg(feature = "desktop-runtime")]
+fn configured_execution_mode() -> BridgeExecutionMode {
+    match std::env::var("CITIZEN_WALLET_DESKTOP_EXECUTION_MODE")
+        .ok()
+        .as_deref()
+    {
+        Some("in-process") => BridgeExecutionMode::InProcess,
+        _ => BridgeExecutionMode::ShellFallback,
     }
 }
 
@@ -504,11 +535,14 @@ fn execute_backup_command_internal(request: &BackupCommandRequest) -> BackupComm
 
 #[cfg(feature = "desktop-runtime")]
 fn execute_backup_command(request: BackupCommandRequest) -> BackupCommandResponse {
-    ShellFallbackExecutor.execute(&request)
+    match configured_execution_mode() {
+        BridgeExecutionMode::InProcess => InProcessExecutor.execute(&request),
+        BridgeExecutionMode::ShellFallback => ShellFallbackExecutor.execute(&request),
+    }
 }
 
 #[cfg(all(test, feature = "desktop-runtime"))]
-mod tests {
+mod execution_mode_tests {
 
     use super::{
         cli_error_id_from_stdout, cli_error_id_from_value, command_requires_removable_preflight, command_to_cli_args,
@@ -1368,4 +1402,26 @@ pub fn backup_restore(payload: serde_json::Value) -> BackupCommandResponse {
 #[tauri::command]
 pub fn backup_diagnostics(payload: serde_json::Value) -> BackupCommandResponse {
     run_named_backup_command("backup_diagnostics", payload)
+}
+
+#[cfg(all(test, feature = "desktop-runtime"))]
+mod tests {
+    use super::{configured_execution_mode, run_named_backup_command, BridgeExecutionMode};
+
+    #[test]
+    fn defaults_to_shell_fallback_execution_mode() {
+        std::env::remove_var("CITIZEN_WALLET_DESKTOP_EXECUTION_MODE");
+        assert_eq!(
+            configured_execution_mode(),
+            BridgeExecutionMode::ShellFallback
+        );
+    }
+
+    #[test]
+    fn in_process_mode_returns_deterministic_unavailable_error_until_wired() {
+        std::env::set_var("CITIZEN_WALLET_DESKTOP_EXECUTION_MODE", "in-process");
+        let response = run_named_backup_command("backup_verify", serde_json::json!({}));
+        assert_eq!(response.status, "error");
+        assert_eq!(response.error_id.as_deref(), Some("in_process_unavailable"));
+    }
 }
