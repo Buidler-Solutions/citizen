@@ -76,7 +76,7 @@ To keep implementation sequencing unambiguous, treat **Checkpoint 8.5 — Priori
 - [x] Define plausible-deniability assumptions and limits for decoy vault behavior.
 - [x] Define supported backup targets (USB/local filesystem required for GA-v1, optional cloud object-store adapter later; Tauri desktop bridge now fail-closed rejects remote URL vault targets so backup commands remain local-filesystem scoped by default).
 - [x] Produce STRIDE/LINDDUN-lite threat model appendix tied to wallet recovery flows.
-- [x] Define security and usability success criteria with measurable thresholds (deterministic contract/error taxonomy, signed-manifest fail-closed checks, tamper-detection guarantees, removable-media warning requirements, performance envelope expectations, deterministic restore ordering, and secret-redaction criteria now documented in `WALLET_ENCRYPTED_BACKUP_VAULT_THREAT_MODEL.md`).
+- [x] Define security and usability success criteria with measurable thresholds (deterministic contract/error taxonomy, signed-manifest fail-closed checks, tamper-detection guarantees, removable-media warning requirements, performance envelope expectations, deterministic restore ordering, and secret-redaction criteria now documented in `WALLET_ENCRYPTED_BACKUP_VAULT_THREAT_MODEL.md`; Tauri desktop bridge redaction coverage now explicitly scrubs `--password` and `--encryption-passphrase` argument variants in addition to slot-role password flags).
 
 **Exit criteria**
 - [x] Requirements and threat model reviewed by wallet + crypto maintainers (sign-off recorded in `citizen-protocol/docs/evidence/wallet-backup-vault/WALLET_BACKUP_CHECKPOINT0_SIGNOFF_2026-05-03.md`).
