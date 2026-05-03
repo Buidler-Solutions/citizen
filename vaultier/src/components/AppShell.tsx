@@ -301,6 +301,14 @@ export function AppShell() {
       {ejectCompleted && <p className="summary ok">Safe eject completed. You can now remove the media.</p>}
       <p className="summary warn">Do not unplug during write/flush operations. Unexpected removal can corrupt vault headers and slot metadata.</p>
       {selectedDrive && <p className="hint">Safe eject guidance: {platformEjectGuidance[selectedDrive.platform]}</p>}
+      {selectedDrive && <details>
+        <summary>Manual OS eject fallback commands</summary>
+        <ul className="log-list">
+          <li>Linux: <code>udisksctl unmount -b /dev/&lt;device&gt;</code> then <code>udisksctl power-off -b /dev/&lt;device&gt;</code> (or <code>umount &lt;mount-path&gt;</code>).</li>
+          <li>macOS: <code>diskutil unmount &lt;mount-path&gt;</code> (or Finder Eject button for the volume).</li>
+          <li>Windows PowerShell: <code>(New-Object -comObject Shell.Application).NameSpace(17).ParseName('&lt;drive-letter&gt;').InvokeVerb('Eject')</code>.</li>
+        </ul>
+      </details>}
       {selectedDrive && <p className="hint">Filesystem compatibility note: preferred formats are exFAT, NTFS, APFS, or ext4 for cross-machine restore reliability.</p>}
       {flushStrategy.length > 0 && <details><summary>Crash-safe write strategy</summary><ul>{flushStrategy.map((step) => <li key={step.step}>{step.step} · {step.status} · {step.detail}</li>)}</ul></details>}</>}
     </section>
