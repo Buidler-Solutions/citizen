@@ -369,11 +369,12 @@ To translate the CLI-first vault implementation into a polished portable app exp
 ### Checkpoint 9 Next Execution Slice (unblocks checkpoint-9 closure once TV-3 evidence lands)
 
 6. **R9-F — Beta promotion decision pack (prepare now, execute after R9-D/R9-E evidence)**
-   - [ ] Pre-stage a beta promotion memo template with required attachments: signed artifact digests, bridge audit record, completed alpha drill packet set, and telemetry threshold summary.
-   - [ ] Define explicit go/no-go thresholds for beta opt-in enablement (per-OS drill pass count, removable-media parity pass rate, and zero unresolved redaction regressions).
-   - [ ] Add owner-routed escalation map for any failed threshold so rollback remains deterministic before user-facing opt-in changes.
+   - [x] Pre-stage a beta promotion memo template with required attachments: signed artifact digests, bridge audit record, completed alpha drill packet set, and telemetry threshold summary. (Template added in `citizen-protocol/docs/WALLET_DESKTOP_BETA_PROMOTION_MEMO_TEMPLATE.md`.)
+   - [x] Define explicit go/no-go thresholds for beta opt-in enablement (per-OS drill pass count, removable-media parity pass rate, and zero unresolved redaction regressions). (Threshold policy now documented in `citizen-protocol/docs/WALLET_DESKTOP_BETA_PROMOTION_THRESHOLDS.md`.)
+   - [x] Add owner-routed escalation map for any failed threshold so rollback remains deterministic before user-facing opt-in changes. (Escalation routing + rollback expectations now documented in `citizen-protocol/docs/WALLET_DESKTOP_BETA_PROMOTION_THRESHOLDS.md`.)
 
 - [x] Checkpoint 9 continuation now has a fully ordered queue (`R9-D` -> `R9-E` -> `R9-F`) with prerequisite gating documented; this keeps checkpoint-9 execution unambiguous while packaging/signing + bridge-audit blockers are still open.
+- [x] R9-F preparation artifacts are now landed so checkpoint-9 closure can execute immediately once R9-D/R9-E evidence is attached.
 
 **Exit criteria**
 - [ ] Release checklist signed off.
