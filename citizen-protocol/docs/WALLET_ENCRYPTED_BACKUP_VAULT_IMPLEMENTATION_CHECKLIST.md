@@ -91,7 +91,7 @@ To keep implementation sequencing unambiguous, treat **Checkpoint 8.5 — Priori
   - [ ] `wallet/backup-vault` remains a future extraction option if extension/runtime sharing pressure grows.
 - [x] Define stable data model crates/modules for vault headers, key-derivation config, slot metadata, and backup manifests.
 - [x] Define trait boundaries for storage backend adapters (filesystem first, with `BackupVaultStorage` and `FilesystemBackupVaultStorage` backing the current CLI path).
-- [ ] Define interop contract for CLI and extension clients (common schema + versioning).
+- [~] Define interop contract for CLI and extension clients (common schema + versioning). (Vaultier Tauri bridge now enforces deterministic desktop bridge contract-version pinning (`citizen.wallet.backup.desktop.v1alpha1`) before accepting wrapped CLI payloads, preventing silent schema drift between desktop runtime and wallet CLI contract output; extension-side contract convergence remains open.)
 
 **Exit criteria**
 - [ ] Architecture decision record (ADR) merged.
