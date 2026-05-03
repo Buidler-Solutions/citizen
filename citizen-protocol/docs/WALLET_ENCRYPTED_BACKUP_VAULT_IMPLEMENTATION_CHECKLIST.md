@@ -513,6 +513,24 @@ This slice starts the desktop productization track without blocking on extension
 | M4 — Operator/CI parity | In Progress | Headless command contract and diagnostics export are implemented; remaining work is runtime-adapter parity evidence in packaged desktop releases. |
 | M5 — Release hardening | Planned | Signed builds, compatibility matrix, cross-platform smoke + security sign-off. |
 
+
+### Desktop Gap Backlog (2026-05-03, Tauri continuation)
+
+To continue implementation without drifting from completed checklist work, use this gap-focused queue:
+
+- [x] **Reconciled completed-vs-unchecked desktop items** across TV-1/TV-2/TV-3 and PR-E1..PR-E4 so implementation-complete work is not left unmarked in this checklist.
+- [ ] **Implement in-process wallet-core bridge** to replace shell invocation in `wallet/desktop/src-tauri/src/main.rs` while preserving the `citizen.wallet.backup.cli.v1` response contract.
+- [ ] **Finish cross-platform packaging/signing lane** (macOS/Windows/Linux) with reproducible build metadata and release-note compatibility callouts.
+- [ ] **Publish signed cross-platform removable-media smoke evidence** covering `discover_removable_drives`, `flush_vault_writes`, and `safe_eject_media` parity checks.
+- [ ] **Close bridge memory/logging audit** with explicit evidence that secrets are not retained in UI logs, runtime logs, crash artifacts, or diagnostics export payloads.
+
+**Immediate next coding slice (desktop/Tauri)**
+
+1. Swap `run_backup_command` shell fallback for in-process wallet-core invocation behind the same typed DTO boundary.
+2. Add parity regression tests that compare WB-mode and runtime adapter outputs after in-process wiring.
+3. Extend desktop CI to run platform-tagged smoke tests for removable-media discovery/flush/eject command surfaces.
+4. Attach evidence links in this checklist as each gate is completed.
+
 ### Delta Update (2026-05-03, checklist status reconciliation)
 
 - Reconciled checklist status against current `wallet/desktop` and `vaultier` implementation so completed guided-flow and bridge-baseline work is no longer left unchecked.
