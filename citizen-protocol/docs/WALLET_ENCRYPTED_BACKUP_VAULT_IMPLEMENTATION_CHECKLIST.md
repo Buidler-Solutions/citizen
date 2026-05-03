@@ -71,12 +71,12 @@ To keep implementation sequencing unambiguous, treat **Checkpoint 8.5 — Priori
 
 ## Checkpoint 0 — Discovery, Threat Model, and Requirements
 
-- [ ] Enumerate credential artifacts that need backup from CLI and extension (seed material, keypairs, metadata, consent receipts where relevant).
+- [x] Enumerate credential artifacts that need backup from CLI/desktop and extension (implemented CLI export scopes (`keys`, `recovery-metadata`, `consent-receipts`), vault continuity metadata, and non-secret portable profile metadata inventory is now documented in `WALLET_ENCRYPTED_BACKUP_VAULT_THREAT_MODEL.md`).
 - [x] Define attacker classes (device theft, cloud sync compromise, coercion, malware with filesystem access, backup corruption).
 - [x] Define plausible-deniability assumptions and limits for decoy vault behavior.
 - [x] Define supported backup targets (USB/local filesystem required for GA-v1, optional cloud object-store adapter later).
 - [x] Produce STRIDE/LINDDUN-lite threat model appendix tied to wallet recovery flows.
-- [ ] Define security and usability success criteria with measurable thresholds.
+- [x] Define security and usability success criteria with measurable thresholds (deterministic contract/error taxonomy, signed-manifest fail-closed checks, tamper-detection guarantees, removable-media warning requirements, performance envelope expectations, deterministic restore ordering, and secret-redaction criteria now documented in `WALLET_ENCRYPTED_BACKUP_VAULT_THREAT_MODEL.md`).
 
 **Exit criteria**
 - [ ] Requirements and threat model reviewed by wallet + crypto maintainers.
