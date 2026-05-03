@@ -135,6 +135,41 @@ fn contains_sensitive_keys(value: &serde_json::Value) -> bool {
 }
 
 #[cfg(feature = "desktop-runtime")]
+fn sensitive_arg_values(args: &[String]) -> Vec<String> {
+    let sensitive_flags = [
+        "--decoy-password",
+        "--critical-password",
+        "--slot-password",
+        "--passphrase",
+        "--mnemonic",
+        "--private-key",
+        "--seed",
+    ];
+    let mut values = Vec::new();
+    let mut i = 0usize;
+    while i < args.len() {
+        if sensitive_flags.contains(&args[i].as_str()) && i + 1 < args.len() {
+            values.push(args[i + 1].clone());
+            i += 2;
+            continue;
+        }
+        i += 1;
+    }
+    values
+}
+
+#[cfg(feature = "desktop-runtime")]
+fn scrub_sensitive_text(raw: &str, sensitive_values: &[String]) -> String {
+    sensitive_values.iter().fold(raw.to_owned(), |acc, value| {
+        if value.is_empty() {
+            acc
+        } else {
+            acc.replace(value, "[REDACTED]")
+        }
+    })
+}
+
+#[cfg(feature = "desktop-runtime")]
 fn execute_backup_command(request: BackupCommandRequest) -> BackupCommandResponse {
     let cli_args = match command_to_cli_args(&request.command) {
         Some(args) => args,
@@ -178,6 +213,8 @@ fn execute_backup_command(request: BackupCommandRequest) -> BackupCommandRespons
         }
     };
 
+    let sensitive_values = sensitive_arg_values(&dynamic_args);
+
     let mut command = Command::new("cargo");
     command
         .arg("run")
@@ -204,8 +241,14 @@ fn execute_backup_command(request: BackupCommandRequest) -> BackupCommandRespons
         }
     };
 
-    let stdout = String::from_utf8_lossy(&output.stdout).trim().to_owned();
-    let stderr = String::from_utf8_lossy(&output.stderr).trim().to_owned();
+    let stdout = scrub_sensitive_text(
+        String::from_utf8_lossy(&output.stdout).trim(),
+        &sensitive_values,
+    );
+    let stderr = scrub_sensitive_text(
+        String::from_utf8_lossy(&output.stderr).trim(),
+        &sensitive_values,
+    );
 
     if output.status.success() {
         let parsed = match parse_cli_json(&stdout) {
@@ -278,8 +321,8 @@ mod tests {
 
     use super::{
         cli_error_id_from_stdout, cli_error_id_from_value, command_to_cli_args,
-        contains_sensitive_keys, looks_removable_for_os, parse_cli_json, BackupCommandResponse,
-        CONTRACT_VERSION,
+        contains_sensitive_keys, looks_removable_for_os, parse_cli_json, scrub_sensitive_text,
+        sensitive_arg_values, BackupCommandResponse, CONTRACT_VERSION,
     };
     use std::path::Path;
 
@@ -367,6 +410,26 @@ mod tests {
             cli_error_id_from_stdout(stdout).as_deref(),
             Some("decrypt_failed")
         );
+    }
+
+    #[test]
+    fn sensitive_arg_values_extracts_password_inputs() {
+        let args = vec![
+            "--vault".to_owned(),
+            "/tmp/vault.json".to_owned(),
+            "--slot-password".to_owned(),
+            "top-secret".to_owned(),
+            "--role".to_owned(),
+            "critical".to_owned(),
+        ];
+        assert_eq!(sensitive_arg_values(&args), vec!["top-secret".to_owned()]);
+    }
+
+    #[test]
+    fn scrub_sensitive_text_redacts_secrets_from_bridge_logs() {
+        let raw = "wallet backup failed with password top-secret";
+        let scrubbed = scrub_sensitive_text(raw, &["top-secret".to_owned()]);
+        assert_eq!(scrubbed, "wallet backup failed with password [REDACTED]");
     }
 
     #[test]
