@@ -18,7 +18,11 @@ const backupCommands = [
   "backup_diagnostics",
 ] as const;
 
-const utilityCommands = ["discover_removable_drives", "flush_vault_writes", "safe_eject_media"] as const;
+const utilityCommands = [
+  "discover_removable_drives",
+  "flush_vault_writes",
+  "safe_eject_media",
+] as const;
 
 type DesktopCommand = (typeof backupCommands)[number] | (typeof utilityCommands)[number];
 
@@ -46,7 +50,16 @@ async function invokeDesktop(command: DesktopCommand, payload: JsonRecord = {}):
     } satisfies BackupResponse;
   }
 
-  return tauriInvoke(command, { payload });
+  if (command === "backup_init" ||
+      command === "backup_add_slot" ||
+      command === "backup_export_credentials" ||
+      command === "backup_verify" ||
+      command === "backup_restore" ||
+      command === "backup_diagnostics") {
+    return tauriInvoke(command, { payload });
+  }
+
+  return tauriInvoke(command, payload);
 }
 
 function parseArgs(input: string): string[] {
