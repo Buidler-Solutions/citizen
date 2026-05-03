@@ -43,9 +43,15 @@ pub(crate) struct TargetPathPayload {
 struct ShellFallbackExecutor;
 
 #[cfg(feature = "desktop-runtime")]
+enum CommandResolutionMode {
+    AllowCargoFallback,
+    BinaryOnly,
+}
+
+#[cfg(feature = "desktop-runtime")]
 impl BackupCommandExecutor for ShellFallbackExecutor {
     fn execute(&self, request: &BackupCommandRequest) -> BackupCommandResponse {
-        execute_backup_command_internal(request)
+        execute_backup_command_internal(request, CommandResolutionMode::AllowCargoFallback)
     }
 }
 
@@ -55,16 +61,7 @@ struct InProcessExecutor;
 #[cfg(feature = "desktop-runtime")]
 impl BackupCommandExecutor for InProcessExecutor {
     fn execute(&self, request: &BackupCommandRequest) -> BackupCommandResponse {
-        BackupCommandResponse {
-            contract_version: CONTRACT_VERSION,
-            status: "error",
-            error_id: Some("in_process_unavailable".to_owned()),
-            details: serde_json::json!({
-                "message": "In-process wallet-core execution is not yet available for this desktop build; set CITIZEN_WALLET_DESKTOP_EXECUTION_MODE=shell-fallback (default) to continue using the CLI bridge.",
-                "command": request.command,
-                "execution_mode_requested": "in_process",
-            }),
-        }
+        execute_backup_command_internal(request, CommandResolutionMode::BinaryOnly)
     }
 }
 
@@ -317,7 +314,7 @@ fn scrub_sensitive_text(raw: &str, sensitive_values: &[String]) -> String {
 #[cfg(feature = "desktop-runtime")]
 
 #[cfg(feature = "desktop-runtime")]
-fn resolve_wallet_cli_command(root: &Path) -> Command {
+fn resolve_wallet_cli_command(root: &Path, mode: CommandResolutionMode) -> Result<Command, String> {
     let mut candidates: Vec<PathBuf> = Vec::new();
     if let Ok(explicit) = std::env::var("CITIZEN_WALLET_BIN") {
         candidates.push(PathBuf::from(explicit));
@@ -329,19 +326,29 @@ fn resolve_wallet_cli_command(root: &Path) -> Command {
     if let Some(path) = candidates.into_iter().find(|candidate| candidate.is_file()) {
         let mut command = Command::new(path);
         command.current_dir(protocol_root);
-        return command;
+        return Ok(command);
     }
 
-    let mut command = Command::new("cargo");
-    command
-        .arg("run")
-        .arg("-p")
-        .arg("citizen-wallet")
-        .arg("--")
-        .current_dir(protocol_root);
-    command
+    if matches!(mode, CommandResolutionMode::AllowCargoFallback) {
+        let mut command = Command::new("cargo");
+        command
+            .arg("run")
+            .arg("-p")
+            .arg("citizen-wallet")
+            .arg("--")
+            .current_dir(protocol_root);
+        return Ok(command);
+    }
+
+    Err(
+        "wallet binary unavailable for in-process desktop execution mode; set CITIZEN_WALLET_BIN or build citizen-wallet first"
+            .to_owned(),
+    )
 }
-fn execute_backup_command_internal(request: &BackupCommandRequest) -> BackupCommandResponse {
+fn execute_backup_command_internal(
+    request: &BackupCommandRequest,
+    mode: CommandResolutionMode,
+) -> BackupCommandResponse {
     let cli_args = match command_to_cli_args(&request.command) {
         Some(args) => args,
         None => {
@@ -423,7 +430,20 @@ fn execute_backup_command_internal(request: &BackupCommandRequest) -> BackupComm
         }
     }
 
-    let mut command = resolve_wallet_cli_command(&root);
+    let mut command = match resolve_wallet_cli_command(&root, mode) {
+        Ok(command) => command,
+        Err(err) => {
+            return BackupCommandResponse {
+                contract_version: CONTRACT_VERSION,
+                status: "error",
+                error_id: Some("wallet_binary_unavailable".to_owned()),
+                details: serde_json::json!({
+                    "message": err,
+                    "command": request.command,
+                }),
+            }
+        }
+    };
     command
         .arg("wallet")
         .args(cli_args)
@@ -1414,7 +1434,6 @@ mod tests {
     use super::{configured_execution_mode, run_named_backup_command, BridgeExecutionMode};
 
     #[test]
-    #[test]
     fn legacy_in_process_mode_spelling_is_supported() {
         std::env::set_var("CITIZEN_WALLET_DESKTOP_EXECUTION_MODE", "in_process");
         assert_eq!(
@@ -1424,6 +1443,7 @@ mod tests {
         std::env::remove_var("CITIZEN_WALLET_DESKTOP_EXECUTION_MODE");
     }
 
+    #[test]
     fn defaults_to_shell_fallback_execution_mode() {
         std::env::remove_var("CITIZEN_WALLET_DESKTOP_EXECUTION_MODE");
         assert_eq!(
@@ -1437,6 +1457,7 @@ mod tests {
         std::env::set_var("CITIZEN_WALLET_DESKTOP_EXECUTION_MODE", "in-process");
         let response = run_named_backup_command("backup_verify", serde_json::json!({}));
         assert_eq!(response.status, "error");
-        assert_eq!(response.error_id.as_deref(), Some("in_process_unavailable"));
+        assert_eq!(response.error_id.as_deref(), Some("wallet_binary_unavailable"));
+        std::env::remove_var("CITIZEN_WALLET_DESKTOP_EXECUTION_MODE");
     }
 }
