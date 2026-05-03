@@ -121,13 +121,13 @@ To keep implementation sequencing unambiguous, treat **Checkpoint 8.5 — Priori
 ## Checkpoint 3 — Multi-Vault / Decoy Capability
 
 - [ ] Support creation of 2+ independent encrypted vault slots in one container or linked containers.
-- [ ] Implement explicit role metadata (`decoy`, `critical`, optional `archive`).
+- [~] Implement explicit role metadata (`decoy`, `critical`, optional `archive`). (`wallet backup` role enum now includes `archive` in addition to existing `decoy`/`critical` slot metadata wiring.)
 - [ ] Ensure decoy and critical slots are cryptographically unlinkable from ciphertext patterns as far as practical.
 - [ ] Implement access policy:
   - [ ] decoy passphrase unlocks only decoy slot
   - [ ] critical passphrase unlocks critical slot(s)
 - [ ] Add optional duress-safe UX guidance (without false guarantees).
-- [ ] Implement slot-level wipe, rotation, and passphrase update.
+- [~] Implement slot-level wipe, rotation, and passphrase update. (Initial CLI primitives now exist via `wallet backup rotate-passphrase` and `wallet backup wipe-slot`; follow-up hardening still required for secure wipe semantics and UX/runbook integration.)
 
 **Exit criteria**
 - [ ] Demonstrated creation/unlock/rotation for decoy + critical flows in integration tests.
