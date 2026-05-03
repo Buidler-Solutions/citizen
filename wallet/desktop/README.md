@@ -70,6 +70,13 @@ If those commands fail, export `PKG_CONFIG_PATH` to the directory that contains 
 - Current bridge strategy is intentionally cautious: runtime commands delegate to wallet CLI JSON contracts until in-process wallet-core bindings are finalized.
 - Not yet production-complete: packaging/signing, full OS-native removable-media adapters, and bridge hardening audits are still tracked in the checklist at `citizen-protocol/docs/WALLET_ENCRYPTED_BACKUP_VAULT_IMPLEMENTATION_CHECKLIST.md`.
 
+## Deterministic Error Contract + Recovery Runbook References
+
+- Runtime and WB-mode flows must keep deterministic machine error identifiers aligned with the `wallet backup ... --json` contract family (`citizen.wallet.backup.cli.v1` envelopes and wallet backup error IDs such as `unsupported_schema`, `slot_not_found`, `decrypt_failed`, `checksum_mismatch`, and `invalid_payload`).
+- Desktop/Tauri integration work should treat `citizen-protocol/docs/WALLET_BACKUP_VAULT_FORMAT.md` as the contract source-of-truth for response shape/versioning requirements.
+- Recovery drill and incident actions for corrupted or partial backups must follow `citizen-protocol/docs/WALLET_BACKUP_DISASTER_RECOVERY_RUNBOOK.md` (restore ordering, verification cadence, and post-restore key rotation).
+- Threat boundaries and removable-media hygiene expectations remain documented in `citizen-protocol/docs/WALLET_ENCRYPTED_BACKUP_VAULT_THREAT_MODEL.md`; desktop UX copy should stay consistent with those operator warnings.
+
 ## Known Limitations (Current Desktop Rehearsal Build)
 
 - **Unsigned local/dev builds:** local Tauri builds are intended for rehearsal and CI parity work, not trust-on-first-use production distribution. Signed/reproducible release artifacts are still pending checklist closure.
