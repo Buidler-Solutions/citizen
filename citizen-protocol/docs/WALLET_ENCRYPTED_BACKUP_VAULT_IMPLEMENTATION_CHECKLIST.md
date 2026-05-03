@@ -348,8 +348,10 @@ To translate the CLI-first vault implementation into a polished portable app exp
    - [x] Define a repeatable internal alpha drill cadence (create/add-slot/export/verify/restore/flush/eject) across Linux/macOS/Windows rehearsal environments. (Cadence + execution rubric captured in `citizen-protocol/docs/WALLET_DESKTOP_ALPHA_DRILL_SCHEDULE.md`.)
    - [x] Add a deterministic evidence packet skeleton under `citizen-protocol/docs/evidence/wallet-backup-vault/` for alpha pass/fail logging before beta promotion decisions. (Added `citizen-protocol/docs/evidence/wallet-backup-vault/WALLET_BACKUP_ALPHA_DRILL_PACKET_TEMPLATE.md`.)
 3. **R9-C — Privacy-preserving telemetry + incident hooks (pre-beta)**
-   - [ ] Specify local-only success/failure counters and confidence markers that exclude secret-bearing payload fields.
-   - [ ] Define rollback/incident triggers for desktop bridge regressions (contract drift, removable-media failures, redaction/audit failures) with named owner handoff.
+   - [x] Specify local-only success/failure counters and confidence markers that exclude secret-bearing payload fields. (Defined in `citizen-protocol/docs/WALLET_DESKTOP_ALPHA_TELEMETRY_SPEC.md` with deterministic local-only event/counter contract and redaction constraints.)
+   - [x] Define rollback/incident triggers for desktop bridge regressions (contract drift, removable-media failures, redaction/audit failures) with named owner handoff. (Defined in `citizen-protocol/docs/WALLET_DESKTOP_BRIDGE_INCIDENT_RESPONSE.md` with severity, rollback steps, and owner matrix.)
+
+- [x] Checkpoint 9 execution queue continuation items R9-A through R9-C are now fully specified; remaining Checkpoint 9 closure work is release-checklist sign-off and post-rollout validation evidence after packaging/signing and bridge-audit gates complete.
 
 **Exit criteria**
 - [ ] Release checklist signed off.
