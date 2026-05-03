@@ -5,6 +5,7 @@ use clap::{Args, Parser, Subcommand, ValueEnum};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
+use rand::RngCore;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs::{self, File};
 use std::io::Write;
@@ -531,7 +532,7 @@ struct BackupVaultSlot {
     #[serde(default = "default_backup_slot_version")]
     slot_version: u32,
     scopes: Vec<BackupExportScope>,
-    encrypted_payload: EncryptedPayload,
+    encrypted_payload: BackupEncryptedEnvelope,
     exported_at: i64,
     payload_sha256: String,
     #[serde(default)]
@@ -555,6 +556,12 @@ struct BackupSignedManifest {
     key_id: String,
     signed_at: i64,
     payload_sha256: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+struct BackupEncryptedEnvelope {
+    wrapped_master_key: EncryptedPayload,
+    object_envelope: EncryptedPayload,
 }
 
 #[derive(Debug, Serialize)]
@@ -2079,7 +2086,7 @@ fn backup_export_credentials(args: BackupExportArgs) -> anyhow::Result<()> {
     let keystore = Keystore::load_or_create(&args.path)?;
     let payload_value = build_backup_export_payload(&keystore, &args.scopes)?;
     let payload = serde_json::to_vec(&payload_value)?;
-    let encrypted_payload = encrypt_payload(&payload_value, &password)?;
+    let encrypted_payload = encrypt_backup_envelope(&payload_value, &password)?;
     let slot = BackupVaultSlot {
         role: args.role,
         slot_version: 1,
@@ -2112,7 +2119,7 @@ fn backup_verify(args: BackupVerifyArgs) -> anyhow::Result<()> {
             .iter()
             .find(|slot| slot.role == role)
             .ok_or_else(|| backup_error_anyhow(BackupErrorCode::SlotNotFound, "slot not found"))?;
-        let payload_value = decrypt_payload(&slot.encrypted_payload, &password)
+        let payload_value = decrypt_backup_envelope(&slot.encrypted_payload, &password)
             .map_err(|_| backup_error_anyhow(BackupErrorCode::DecryptFailed, "decrypt failed"))?;
         let payload = serde_json::to_vec(&payload_value)
             .map_err(|_| backup_error_anyhow(BackupErrorCode::InvalidPayload, "invalid payload"))?;
@@ -2174,7 +2181,7 @@ fn backup_restore(args: BackupRestoreArgs) -> anyhow::Result<()> {
         .iter()
         .find(|slot| slot.role == args.role)
         .ok_or_else(|| backup_error_anyhow(BackupErrorCode::SlotNotFound, "slot not found"))?;
-    let payload_value = decrypt_payload(&slot.encrypted_payload, &password)
+    let payload_value = decrypt_backup_envelope(&slot.encrypted_payload, &password)
         .map_err(|_| backup_error_anyhow(BackupErrorCode::DecryptFailed, "decrypt failed"))?;
     let payload = serde_json::to_vec(&payload_value)
         .map_err(|_| backup_error_anyhow(BackupErrorCode::InvalidPayload, "invalid payload"))?;
@@ -2392,7 +2399,7 @@ fn empty_slot_with_kdf_profile(
 ) -> anyhow::Result<BackupVaultSlot> {
     let placeholder_value = json!({"placeholder": true, "role": format!("{role:?}")});
     let payload = serde_json::to_vec(&placeholder_value)?;
-    let encrypted_payload = encrypt_payload_with_kdf_params(
+    let encrypted_payload = encrypt_backup_envelope_with_kdf_params(
         &placeholder_value,
         password,
         memory_kib,
@@ -2410,6 +2417,71 @@ fn empty_slot_with_kdf_profile(
         tamper_counter: 0,
         signed_manifest: Some(build_signed_manifest(&payload)),
     })
+}
+
+fn encrypt_backup_envelope(payload: &Value, password: &str) -> anyhow::Result<BackupEncryptedEnvelope> {
+    encrypt_backup_envelope_with_kdf_params(
+        payload,
+        password,
+        19_456,
+        2,
+        1,
+        32,
+    )
+}
+
+fn encrypt_backup_envelope_with_kdf_params(
+    payload: &Value,
+    password: &str,
+    memory_kib: u32,
+    iterations: u32,
+    parallelism: u32,
+    output_length: usize,
+) -> anyhow::Result<BackupEncryptedEnvelope> {
+    let mut object_master_key = [0u8; 32];
+    rand::rng().fill_bytes(&mut object_master_key);
+    let object_master_key_hex = hex::encode(object_master_key);
+    let wrapped_master_key = encrypt_payload_with_kdf_params(
+        &json!({ "master_key_hex": object_master_key_hex }),
+        password,
+        memory_kib,
+        iterations,
+        parallelism,
+        output_length,
+    )?;
+    let object_envelope = encrypt_payload(
+        &json!({
+            "master_key_hex": object_master_key_hex,
+            "payload": payload
+        }),
+        &object_master_key_hex,
+    )?;
+    object_master_key.fill(0);
+    Ok(BackupEncryptedEnvelope {
+        wrapped_master_key,
+        object_envelope,
+    })
+}
+
+fn decrypt_backup_envelope(envelope: &BackupEncryptedEnvelope, password: &str) -> anyhow::Result<Value> {
+    let wrapped_value = decrypt_payload(&envelope.wrapped_master_key, password).map_err(|_| {
+        backup_error_anyhow(BackupErrorCode::DecryptFailed, "backup slot unlock failed")
+    })?;
+    let master_key_hex = wrapped_value
+        .get("master_key_hex")
+        .and_then(Value::as_str)
+        .ok_or_else(|| backup_error_anyhow(BackupErrorCode::InvalidPayload, "wrapped master key is missing"))?
+        .to_string();
+    let mut object_value = decrypt_payload(&envelope.object_envelope, &master_key_hex).map_err(|_| {
+        backup_error_anyhow(BackupErrorCode::DecryptFailed, "backup slot unlock failed")
+    })?;
+    drop(wrapped_value);
+    let payload = object_value
+        .get_mut("payload")
+        .map(std::mem::take)
+        .ok_or_else(|| backup_error_anyhow(BackupErrorCode::InvalidPayload, "object payload is missing"))?;
+    drop(object_value);
+    Ok(payload)
 }
 
 fn build_signed_manifest(payload: &[u8]) -> BackupSignedManifest {
@@ -2999,7 +3071,7 @@ mod tests {
             .iter_mut()
             .find(|slot| slot.role == BackupSlotRole::Critical)
             .expect("critical slot exists");
-        slot.encrypted_payload.ciphertext_hex = "00".to_string();
+        slot.encrypted_payload.object_envelope.ciphertext_hex = "00".to_string();
         save_backup_vault(&vault_path, &vault).expect("save tampered vault");
 
         let err = backup_verify(BackupVerifyArgs {
@@ -3059,11 +3131,11 @@ mod tests {
             .iter_mut()
             .find(|slot| slot.role == BackupSlotRole::Critical)
             .expect("critical slot exists");
-        let mut ciphertext = slot.encrypted_payload.ciphertext_hex.clone().into_bytes();
+        let mut ciphertext = slot.encrypted_payload.object_envelope.ciphertext_hex.clone().into_bytes();
         assert!(!ciphertext.is_empty(), "ciphertext should not be empty");
         let tamper_index = ciphertext.len() / 2;
         ciphertext[tamper_index] = if ciphertext[tamper_index] == b'0' { b'1' } else { b'0' };
-        slot.encrypted_payload.ciphertext_hex =
+        slot.encrypted_payload.object_envelope.ciphertext_hex =
             String::from_utf8(ciphertext).expect("tampered ciphertext remains utf8");
         save_backup_vault(&vault_path, &vault).expect("save tampered vault");
 
@@ -3129,6 +3201,7 @@ mod tests {
             .find(|slot| slot.role == BackupSlotRole::Critical)
             .expect("critical slot exists")
             .encrypted_payload
+            .object_envelope
             .ciphertext_hex
             .clone();
 
@@ -3147,7 +3220,7 @@ mod tests {
                 .iter_mut()
                 .find(|slot| slot.role == BackupSlotRole::Critical)
                 .expect("critical slot exists");
-            let mut ciphertext = slot.encrypted_payload.ciphertext_hex.clone().into_bytes();
+            let mut ciphertext = slot.encrypted_payload.object_envelope.ciphertext_hex.clone().into_bytes();
             assert!(!ciphertext.is_empty(), "ciphertext should not be empty");
 
             let bounded_index = tamper_index.min(ciphertext.len() - 1);
@@ -3156,7 +3229,7 @@ mod tests {
             } else {
                 b'0'
             };
-            slot.encrypted_payload.ciphertext_hex =
+            slot.encrypted_payload.object_envelope.ciphertext_hex =
                 String::from_utf8(ciphertext).expect("tampered ciphertext remains utf8");
             save_backup_vault(&vault_path, &vault_case).expect("save tampered vault");
 
@@ -3180,7 +3253,7 @@ mod tests {
             .iter_mut()
             .find(|slot| slot.role == BackupSlotRole::Critical)
         {
-            slot.encrypted_payload.ciphertext_hex = original_ciphertext_hex;
+            slot.encrypted_payload.object_envelope.ciphertext_hex = original_ciphertext_hex;
             save_backup_vault(&vault_path, &restored_vault).expect("restore original vault");
         }
     }
