@@ -148,11 +148,22 @@ fn sensitive_arg_values(args: &[String]) -> Vec<String> {
     let mut values = Vec::new();
     let mut i = 0usize;
     while i < args.len() {
-        if sensitive_flags.contains(&args[i].as_str()) && i + 1 < args.len() {
+        let arg = &args[i];
+
+        if let Some((flag, value)) = arg.split_once('=') {
+            if sensitive_flags.contains(&flag) && !value.is_empty() {
+                values.push(value.to_owned());
+            }
+            i += 1;
+            continue;
+        }
+
+        if sensitive_flags.contains(&arg.as_str()) && i + 1 < args.len() {
             values.push(args[i + 1].clone());
             i += 2;
             continue;
         }
+
         i += 1;
     }
     values
@@ -424,6 +435,21 @@ mod tests {
             "critical".to_owned(),
         ];
         assert_eq!(sensitive_arg_values(&args), vec!["top-secret".to_owned()]);
+    }
+
+    #[test]
+    fn sensitive_arg_values_extracts_equals_style_sensitive_flags() {
+        let args = vec![
+            "--vault=/tmp/vault.json".to_owned(),
+            "--slot-password=top-secret".to_owned(),
+            "--role=critical".to_owned(),
+            "--decoy-password=decoy-secret".to_owned(),
+        ];
+
+        assert_eq!(
+            sensitive_arg_values(&args),
+            vec!["top-secret".to_owned(), "decoy-secret".to_owned()]
+        );
     }
 
     #[test]
