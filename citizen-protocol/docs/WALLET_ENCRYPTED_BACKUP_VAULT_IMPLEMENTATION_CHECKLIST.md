@@ -640,3 +640,9 @@ Use this rubric during UX and maintainer review so “sleek” is measurable, no
   - extension runtime/browser storage security-boundary documentation,
   - at least one recorded end-to-end USB drill artifact in docs.
 - This keeps Tauri continuation checks focused on actionable checklist drift without auto-flagging items that are intentionally pending formal sign-off.
+
+### Delta Update (2026-05-02, full-checklist gap scanner refinement)
+
+- Expanded `vaultier/checklist-gap-check.mjs` so Tauri continuation passes can optionally emit a **full checklist open-gap summary** (all `##` sections), not only Checkpoint 8.5 status.
+- Added strict mode wiring in `vaultier/package.json` so `pnpm check:priority-gap:strict` now fails when stale unchecked candidates remain and prints section-by-section pending/partial counts.
+- Re-ran the updated checker to confirm Priority Gate remains clear and to generate a deterministic open-gap inventory before continuing desktop implementation slices.
