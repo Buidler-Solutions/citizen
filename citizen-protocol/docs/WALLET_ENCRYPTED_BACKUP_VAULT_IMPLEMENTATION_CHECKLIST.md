@@ -804,3 +804,18 @@ Use this rubric during UX and maintainer review so “sleek” is measurable, no
   - signed cross-platform removable-media smoke evidence,
   - final bridge memory/logging audit sign-off.
 - Recorded strict-check advisory output noting one possible over-checked marker candidate in Checkpoint 7; left checkbox state unchanged in this pass pending maintainer review so this checklist does not silently downgrade or reclassify previously accepted sign-off evidence.
+
+### Delta Update (2026-05-03, strict gap-check continuation for portable track)
+
+- Re-ran `pnpm check:priority-gap:strict` from `vaultier/` before continuing portable-app implementation slices.
+- Confirmed Checkpoint 8.5 remains fully clear (`pending=0`, `partial=0`, `complete=21`) so desktop continuation can proceed without priority-gate conflicts.
+- Captured refreshed open-gap inventory from strict mode to keep execution sequencing anchored to active blockers:
+  - Portable Application Track: `pending=7`, `partial=10`,
+  - Checkpoint 9 — Rollout Plan: `pending=7`,
+  - Implementation Continuation Plan: `pending=26`, `partial=10`.
+- Strict stale-marker scan still reports no implemented-but-unchecked drift; blockers remain intentionally open for:
+  - in-process wallet-core bridge replacement,
+  - signed/reproducible cross-platform packaging artifacts,
+  - signed removable-media smoke evidence,
+  - final bridge memory/logging audit sign-off.
+- Logged one strict-check **over-checked candidate** for maintainer follow-up (Checkpoint 7 no-critical/high finding line) so checklist confidence stays evidence-driven while continuation work proceeds.
