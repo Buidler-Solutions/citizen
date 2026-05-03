@@ -306,7 +306,7 @@ To translate the CLI-first vault implementation into a polished portable app exp
 
 - [~] Choose runtime shell (Tauri remains the production target for Rust-native crypto reuse; Vaultier now hard-gates create/verify/restore behind an explicit mock-runtime rehearsal override whenever Tauri bridge evidence is unavailable, so desktop packaging sign-off still pending before marking complete).
 - [ ] Package signed builds for macOS/Windows/Linux with reproducible build metadata.
-- [~] Implement removable-drive discovery abstraction with platform-specific adapters and deterministic error mapping (Vaultier now routes discovery through explicit per-platform adapter boundaries, deterministic media disconnect detection (`media_unavailable`), and a Tauri runtime bridge contract that validates compatibility/free-space/writability constraints before surfacing candidate drives; real OS-native adapters still pending).
+- [~] Implement removable-drive discovery abstraction with platform-specific adapters and deterministic error mapping (Vaultier now routes discovery through explicit per-platform adapter boundaries, deterministic media disconnect detection (`media_unavailable`), and a Tauri runtime bridge contract that validates compatibility/free-space/writability constraints before surfacing candidate drives; desktop runtime now includes Linux `lsblk` discovery plus macOS (`diskutil`) and Windows (PowerShell/CIM DriveType=2) removable-drive discovery adapters, with signed cross-platform smoke evidence still pending).
 - [~] Add crash-safe write strategy (temp file + fsync + atomic rename) for vault container updates (Vaultier now exposes explicit flush workflow in UX, validates required crash-safe steps before allowing safe-eject completion, includes Tauri bridge contracts for both flush strategy reporting and safe-eject execution (`flush_vault_writes`, `safe_eject_media`), and now hard-blocks safe-eject in Tauri mode when runtime-backed evidence is missing; full OS-native adapter enforcement remains pending).
 - [ ] Add secure memory handling audit for desktop bridge boundaries (Rust core <-> UI layer).
 
@@ -673,3 +673,8 @@ Use this rubric during UX and maintainer review so “sleek” is measurable, no
 - Expanded `vaultier/checklist-gap-check.mjs` so Tauri continuation passes can optionally emit a **full checklist open-gap summary** (all `##` sections), not only Checkpoint 8.5 status.
 - Added strict mode wiring in `vaultier/package.json` so `pnpm check:priority-gap:strict` now fails when stale unchecked candidates remain and prints section-by-section pending/partial counts.
 - Re-ran the updated checker to confirm Priority Gate remains clear and to generate a deterministic open-gap inventory before continuing desktop implementation slices.
+
+### Delta Update (2026-05-03, Tauri runtime bridge continuation)
+
+- Added OS-native removable-drive discovery adapters in the Tauri desktop bridge for macOS (`diskutil`) and Windows (PowerShell/CIM `DriveType=2`) while keeping Linux `lsblk` discovery in place.
+- Kept checklist status as in-progress (`[~]`) because signed cross-platform smoke evidence and packaging/signing closure are still pending blocker items for production readiness.

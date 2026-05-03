@@ -641,10 +641,103 @@ fn discover_linux_removable_drives() -> Vec<RemovableDriveRecord> {
 }
 
 #[cfg(feature = "desktop-runtime")]
+#[cfg(target_os = "macos")]
+fn discover_macos_removable_drives() -> Vec<RemovableDriveRecord> {
+    let Ok(output) = Command::new("diskutil").args(["list", "-plist"]).output() else {
+        return Vec::new();
+    };
+    if !output.status.success() {
+        return Vec::new();
+    }
+    // Keep parser intentionally conservative: only rely on mount roots that pass removable heuristics.
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    stdout
+        .lines()
+        .filter_map(|line| {
+            let candidate = line.trim();
+            if candidate.starts_with("/Volumes/") {
+                Some(candidate.to_owned())
+            } else {
+                None
+            }
+        })
+        .map(|mount_path| RemovableDriveRecord {
+            label: Path::new(&mount_path)
+                .file_name()
+                .map(|name| name.to_string_lossy().to_string()),
+            filesystem: None,
+            writable: fs::metadata(&mount_path)
+                .map(|m| !m.permissions().readonly())
+                .unwrap_or(false),
+            removable: true,
+            platform: std::env::consts::OS.to_owned(),
+            mount_path,
+        })
+        .collect()
+}
+
+#[cfg(feature = "desktop-runtime")]
+#[cfg(target_os = "windows")]
+fn discover_windows_removable_drives() -> Vec<RemovableDriveRecord> {
+    let Ok(output) = Command::new("powershell")
+        .args([
+            "-NoProfile",
+            "-Command",
+            "Get-CimInstance Win32_LogicalDisk | Where-Object { $_.DriveType -eq 2 } | Select-Object -ExpandProperty DeviceID",
+        ])
+        .output()
+    else {
+        return Vec::new();
+    };
+    if !output.status.success() {
+        return Vec::new();
+    }
+    String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .filter_map(|line| {
+            let drive = line.trim();
+            if drive.len() == 2 && drive.ends_with(':') {
+                Some(format!("{drive}\\"))
+            } else {
+                None
+            }
+        })
+        .map(|mount_path| RemovableDriveRecord {
+            label: Some(mount_path.clone()),
+            filesystem: None,
+            writable: fs::metadata(&mount_path)
+                .map(|m| !m.permissions().readonly())
+                .unwrap_or(false),
+            removable: true,
+            platform: std::env::consts::OS.to_owned(),
+            mount_path,
+        })
+        .collect()
+}
+
+#[cfg(feature = "desktop-runtime")]
 #[tauri::command]
 pub fn discover_removable_drives() -> serde_json::Value {
     let mut drives = if cfg!(target_os = "linux") {
         discover_linux_removable_drives()
+    } else if cfg!(target_os = "macos") {
+        #[cfg(target_os = "macos")]
+        {
+            discover_macos_removable_drives()
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            Vec::new()
+        }
+    } else if cfg!(target_os = "windows") {
+        #[cfg(target_os = "windows")]
+        {
+            discover_windows_removable_drives()
+        }
+        #[cfg(not(target_os = "windows"))]
+        {
+            Vec::new()
+        }
     } else {
         Vec::new()
     };
