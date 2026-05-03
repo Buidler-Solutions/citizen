@@ -23,6 +23,7 @@ type TauriBridgeWrappedResponse = {
     wallet_cli?: HeadlessResponse;
   };
 };
+const TAURI_BRIDGE_CONTRACT_VERSION = 'citizen.wallet.backup.desktop.v1alpha1';
 
 const hasTauriRuntime = () => typeof window !== 'undefined' && '__TAURI__' in window;
 
@@ -115,6 +116,22 @@ function normalizeBackupResponse(commandName: HeadlessCommand['command'], respon
   }
 
   const wrapped = response as TauriBridgeWrappedResponse;
+  if (wrapped.contract_version !== TAURI_BRIDGE_CONTRACT_VERSION) {
+    return {
+      schemaVersion: 'v1alpha1',
+      contractVersion: '2026-05-01',
+      ok: false,
+      command: commandName,
+      error: {
+        code: 'invalid_payload',
+        message: `unexpected tauri bridge contract version: ${wrapped.contract_version}`,
+      },
+      result: {
+        error_id: 'invalid_payload',
+        message: 'Tauri runtime bridge contract_version mismatch.',
+      },
+    };
+  }
   if (wrapped.status === 'ok' && wrapped.details?.wallet_cli) {
     return wrapped.details.wallet_cli;
   }

@@ -135,6 +135,29 @@ async function main() {
   assert(wrappedVerify.ok === true, 'wrapped tauri backup response should normalize to CLI headless contract');
 
   withTauriInvoke(async (name) => {
+    if (name === 'backup_verify') {
+      return {
+        contract_version: 'citizen.wallet.backup.desktop.v999',
+        status: 'ok',
+        error_id: null,
+        details: {
+          wallet_cli: {
+            schemaVersion: 'v1alpha1',
+            contractVersion: '2026-05-01',
+            ok: true,
+            command: 'backup_verify',
+            result: { status: 'verified' },
+          },
+        },
+      };
+    }
+    throw new Error(`unexpected_command:${name}`);
+  });
+  const wrappedVersionMismatch = await invokeBackupCommandViaTauri({ command: 'backup_verify', targetPath: '/media/usb/vault.cvb', expectedVaultVersion: '1', requireSignedManifest: true });
+  assert(wrappedVersionMismatch.ok === false, 'tauri wrapper should reject unexpected desktop contract versions');
+  assert(wrappedVersionMismatch.error?.code === 'invalid_payload', 'version mismatch should map to invalid_payload error code');
+
+  withTauriInvoke(async (name) => {
     if (name === 'backup_restore') {
       return {
         contract_version: 'citizen.wallet.backup.desktop.v1alpha1',
