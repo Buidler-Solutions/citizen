@@ -31,6 +31,17 @@ struct RemovableDriveRecord {
 }
 
 #[cfg(feature = "desktop-runtime")]
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BackupBridgeStatus {
+    contract_version: &'static str,
+    cli_contract_version: &'static str,
+    execution_mode: &'static str,
+    production_ready: bool,
+    blockers: Vec<&'static str>,
+}
+
+#[cfg(feature = "desktop-runtime")]
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct TargetPathPayload {
@@ -1427,6 +1438,26 @@ pub fn backup_restore(payload: serde_json::Value) -> BackupCommandResponse {
 #[tauri::command]
 pub fn backup_diagnostics(payload: serde_json::Value) -> BackupCommandResponse {
     run_named_backup_command("backup_diagnostics", payload)
+}
+
+#[cfg(feature = "desktop-runtime")]
+#[tauri::command]
+pub fn backup_bridge_status() -> BackupBridgeStatus {
+    let execution_mode = match configured_execution_mode() {
+        BridgeExecutionMode::InProcess => "in_process",
+        BridgeExecutionMode::ShellFallback => "shell_fallback",
+    };
+    BackupBridgeStatus {
+        contract_version: CONTRACT_VERSION,
+        cli_contract_version: CLI_CONTRACT_VERSION,
+        execution_mode,
+        production_ready: false,
+        blockers: vec![
+            "desktop bridge defaults to CLI shell fallback for wallet backup execution",
+            "cross-platform packaging/signing evidence is still pending",
+            "final memory/logging bridge audit sign-off is still pending",
+        ],
+    }
 }
 
 #[cfg(all(test, feature = "desktop-runtime"))]

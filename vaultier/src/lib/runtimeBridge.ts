@@ -4,6 +4,13 @@ import { scanForSecretFields } from './redaction';
 type BridgeDrive = DriveRecord & { platform: RuntimePlatform };
 
 type TauriBridgeApi = {
+  backup_bridge_status: () => Promise<{
+    contractVersion: string;
+    cliContractVersion: string;
+    executionMode: 'in_process' | 'shell_fallback';
+    productionReady: boolean;
+    blockers: string[];
+  }>;
   discover_removable_drives: () => Promise<{ drives: BridgeDrive[] }>;
   flush_vault_writes: (payload: { targetPath: string }) => Promise<{ strategy: CrashSafeWriteStep[] }>;
   safe_eject_media: (payload: { targetPath: string }) => Promise<{ ok: boolean }>;
@@ -156,6 +163,24 @@ export function detectRuntimeShell(): RuntimeShell {
   const profile = resolveRuntimeProfile();
   if (profile === 'tauri-runtime' && hasTauriRuntime()) return 'tauri';
   return 'web-mock';
+}
+
+export async function fetchBridgeStatusViaTauri(): Promise<{
+  executionMode: 'in_process' | 'shell_fallback';
+  productionReady: boolean;
+  blockers: string[];
+} | null> {
+  if (!hasTauriRuntime()) return null;
+  try {
+    const response = await invokeTauri<{
+      executionMode: 'in_process' | 'shell_fallback';
+      productionReady: boolean;
+      blockers: string[];
+    }>('backup_bridge_status');
+    return response;
+  } catch {
+    return null;
+  }
 }
 
 export async function discoverDrivesViaTauri(): Promise<{ drives: BridgeDrive[]; issues: DriveProbeIssue[] }> {

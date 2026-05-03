@@ -5,8 +5,9 @@ mod backup_core_bridge;
 
 #[cfg(feature = "desktop-runtime")]
 use backup_bridge::{
-    backup_add_slot, backup_diagnostics, backup_export_credentials, backup_init, backup_restore,
-    backup_verify, discover_removable_drives, flush_vault_writes, safe_eject_media,
+    backup_add_slot, backup_bridge_status, backup_diagnostics, backup_export_credentials,
+    backup_init, backup_restore, backup_verify, discover_removable_drives, flush_vault_writes,
+    safe_eject_media,
 };
 
 #[cfg(feature = "desktop-runtime")]
@@ -22,6 +23,7 @@ fn main() {
             backup_verify,
             backup_restore,
             backup_diagnostics,
+            backup_bridge_status,
         ])
         .run(tauri::generate_context!())
         .expect("error while running vaultier desktop shell");
