@@ -171,14 +171,14 @@ To keep implementation sequencing unambiguous, treat **Checkpoint 8.5 — Priori
 ## Checkpoint 6 — Recovery Safety and Operator Runbooks
 
 - [x] Define deterministic restore ordering when multiple backups exist.
-- [ ] Add checksum + signed manifest verification for backup bundles (partial: deterministic checksum validation implemented; signed manifest verification pending).
-- [ ] Add disaster-recovery runbook updates for wallet credential restoration.
-- [ ] Add corrupted/partial-backup recovery guidance.
-- [ ] Add key-rotation post-restore playbook.
+- [x] Add checksum + signed manifest verification for backup bundles (wallet CLI + Vaultier verify/restore paths now enforce required signed manifest presence and deterministic schema/key-id/hash validation).
+- [x] Add disaster-recovery runbook updates for wallet credential restoration (captured in `citizen-protocol/docs/WALLET_BACKUP_DISASTER_RECOVERY_RUNBOOK.md` with deterministic restore ordering and operator drill sequencing).
+- [x] Add corrupted/partial-backup recovery guidance (documented in `citizen-protocol/docs/WALLET_BACKUP_DISASTER_RECOVERY_RUNBOOK.md` and exercised in the 2026-05-02 evidence packet).
+- [x] Add key-rotation post-restore playbook (documented in `citizen-protocol/docs/WALLET_BACKUP_DISASTER_RECOVERY_RUNBOOK.md` with staged post-restore rotation workflow).
 
 **Exit criteria**
-- [ ] Recovery drills executed for both CLI and extension scenarios.
-- [ ] Runbook approved by maintainers responsible for wallet support.
+- [~] Recovery drills executed for both CLI and extension scenarios. (CLI cross-machine USB drill is evidenced in `citizen-protocol/docs/evidence/wallet-backup-vault/WALLET_BACKUP_USB_CROSS_MACHINE_DRILL_2026-05-02.md`; equivalent extension drill evidence remains pending.)
+- [~] Runbook approved by maintainers responsible for wallet support. (Wallet/crypto maintainer review and sign-off are recorded for the CLI path in `citizen-protocol/docs/evidence/wallet-backup-vault/WALLET_BACKUP_8_5_SIGNOFF_2026-05-02.md`; extension-specific support approval remains open.)
 
 ---
 
