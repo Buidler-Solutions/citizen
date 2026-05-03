@@ -113,8 +113,8 @@ To keep implementation sequencing unambiguous, treat **Checkpoint 8.5 — Priori
 - [x] Define corruption detection and deterministic error codes.
 
 **Exit criteria**
-- [ ] Crypto design reviewed against current repo wallet/off-chain encryption patterns.
-- [ ] Test vectors committed for key derivation, encryption, decryption, and tamper failure.
+- [x] Crypto design reviewed against current repo wallet/off-chain encryption patterns. (Wallet + crypto maintainer checkpoint-2 closure review and alignment findings are recorded in `citizen-protocol/docs/evidence/wallet-backup-vault/WALLET_BACKUP_CHECKPOINT2_CRYPTO_REVIEW_2026-05-03.md`.)
+- [x] Test vectors committed for key derivation, encryption, decryption, and tamper failure. (Deterministic Argon2id + ChaCha20-Poly1305 vector coverage and tamper-failure assertions are enforced in wallet regression tests and captured in the 2026-05-03 checkpoint-2 crypto review record.)
 
 ---
 
