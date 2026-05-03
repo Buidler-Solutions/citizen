@@ -333,11 +333,23 @@ To translate the CLI-first vault implementation into a polished portable app exp
 
 ## Checkpoint 9 — Rollout Plan
 
-- [ ] Phase 1: feature-flagged alpha for internal maintainers.
+- [~] Phase 1: feature-flagged alpha for internal maintainers. (Execution queue continuation now tracks the alpha gate as a two-step bundle: **R9-A** release-flag wiring matrix + **R9-B** maintainer drill schedule/evidence packet template; both are scoped for desktop/Tauri continuation immediately after blocker-class packaging/signing smoke evidence lands.)
 - [ ] Phase 2: opt-in beta for selected builders.
 - [ ] Phase 3: default-on for new wallet onboarding with migration prompts for existing users.
 - [ ] Define telemetry/metrics (local-only or privacy-preserving) for backup success and restore confidence.
 - [ ] Define rollback and incident-response procedure.
+
+### Checkpoint 9 Execution Queue (2026-05-03 continuation)
+
+1. **R9-A — Internal alpha flag matrix + owner map**
+   - [ ] Enumerate all desktop/runtime rollout toggles (WB-mode default, runtime adapter mode, removable-media command gating) with default values and owner approvals.
+   - [ ] Attach a release-note template that states unsupported production claims until signed packaging + bridge audit gates are complete.
+2. **R9-B — Maintainer alpha drill schedule and evidence packet template**
+   - [ ] Define a repeatable internal alpha drill cadence (create/add-slot/export/verify/restore/flush/eject) across Linux/macOS/Windows rehearsal environments.
+   - [ ] Add a deterministic evidence packet skeleton under `citizen-protocol/docs/evidence/wallet-backup-vault/` for alpha pass/fail logging before beta promotion decisions.
+3. **R9-C — Privacy-preserving telemetry + incident hooks (pre-beta)**
+   - [ ] Specify local-only success/failure counters and confidence markers that exclude secret-bearing payload fields.
+   - [ ] Define rollback/incident triggers for desktop bridge regressions (contract drift, removable-media failures, redaction/audit failures) with named owner handoff.
 
 **Exit criteria**
 - [ ] Release checklist signed off.
