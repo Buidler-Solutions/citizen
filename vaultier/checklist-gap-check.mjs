@@ -3,6 +3,7 @@ import { resolve } from 'node:path';
 
 const emitJson = process.argv.includes('--json');
 const strictStaleUnchecked = process.argv.includes('--strict-stale-unchecked');
+const includeFullSummary = process.argv.includes('--full-summary');
 const checklistPath = resolve('../citizen-protocol/docs/WALLET_ENCRYPTED_BACKUP_VAULT_IMPLEMENTATION_CHECKLIST.md');
 const doc = readFileSync(checklistPath, 'utf8');
 
@@ -66,6 +67,47 @@ for (const rawLine of doc.split('\n')) {
   }
 }
 
+
+const fullSectionSummaries = [];
+let currentFullSection = 'ROOT';
+for (const rawLine of doc.split('\n')) {
+  if (rawLine.startsWith('## ')) {
+    currentFullSection = rawLine.replace(/^##\s+/, '');
+    continue;
+  }
+
+  const line = rawLine.trim();
+  const match = line.match(/^- \[([ x~])\] (.+)$/);
+  if (!match) continue;
+
+  const status = match[1];
+  const text = match[2];
+  const bucket =
+    status === 'x'
+      ? 'complete'
+      : status === '~'
+        ? 'partial'
+        : 'pending';
+
+  const existing = fullSectionSummaries.find((entry) => entry.section === currentFullSection);
+  if (!existing) {
+    fullSectionSummaries.push({
+      section: currentFullSection,
+      counts: { pending: 0, partial: 0, complete: 0 },
+      openItems: [],
+    });
+  }
+
+  const target = fullSectionSummaries.find((entry) => entry.section === currentFullSection);
+  target.counts[bucket] += 1;
+  if (bucket !== 'complete') {
+    target.openItems.push({
+      checklistBadge: bucket === 'partial' ? '[~]' : '[ ]',
+      text,
+      status: bucket,
+    });
+  }
+}
 const summary = {
   checkpoint: '8.5',
   status: openItems.length === 0 ? 'complete' : 'blocked',
@@ -81,6 +123,7 @@ const summary = {
     text: item.text,
   })),
   staleUncheckedCandidates: staleUnchecked,
+  fullSectionSummaries,
 };
 
 if (emitJson) {
@@ -97,6 +140,17 @@ if (emitJson) {
     }
   } else {
     console.log('checklist-gap-check: priority gate complete; non-blocking tracks may proceed.');
+  }
+
+
+  if (includeFullSummary) {
+    console.log('checklist-gap-check: full checklist open-gap summary:');
+    for (const section of fullSectionSummaries) {
+      if (section.counts.pending === 0 && section.counts.partial === 0) continue;
+      console.log(
+        `  - ${section.section}: pending=${section.counts.pending} partial=${section.counts.partial} complete=${section.counts.complete}`
+      );
+    }
   }
 
   if (staleUnchecked.length > 0) {
