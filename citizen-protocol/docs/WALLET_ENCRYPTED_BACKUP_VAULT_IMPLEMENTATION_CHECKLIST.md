@@ -91,11 +91,11 @@ To keep implementation sequencing unambiguous, treat **Checkpoint 8.5 — Priori
   - [ ] `wallet/backup-vault` remains a future extraction option if extension/runtime sharing pressure grows.
 - [x] Define stable data model crates/modules for vault headers, key-derivation config, slot metadata, and backup manifests.
 - [x] Define trait boundaries for storage backend adapters (filesystem first, with `BackupVaultStorage` and `FilesystemBackupVaultStorage` backing the current CLI path).
-- [~] Define interop contract for CLI and extension clients (common schema + versioning). (Vaultier Tauri bridge now enforces deterministic desktop bridge contract-version pinning (`citizen.wallet.backup.desktop.v1alpha1`) before accepting wrapped CLI payloads, preventing silent schema drift between desktop runtime and wallet CLI contract output; extension-side contract convergence remains open.)
+- [x] Define interop contract for CLI and extension clients (common schema + versioning). (Contract boundaries + versioning policy are now frozen in `citizen-protocol/docs/WALLET_BACKUP_VAULT_INTEROP_ADR.md`: CLI automation stays on `citizen.wallet.backup.cli.v1`, desktop transport wrapper remains `citizen.wallet.backup.desktop.v1alpha1` until promotion gates are met, and extension/web clients must preserve CLI `v1` envelope semantics for deterministic compatibility.)
 
 **Exit criteria**
-- [ ] Architecture decision record (ADR) merged.
-- [ ] Public interfaces versioned (`v1alpha1`/`v1`) with forward migration notes.
+- [x] Architecture decision record (ADR) merged. (Accepted ADR: `citizen-protocol/docs/WALLET_BACKUP_VAULT_INTEROP_ADR.md`, dated 2026-05-03.)
+- [x] Public interfaces versioned (`v1alpha1`/`v1`) with forward migration notes. (Same ADR now captures stable `cli.v1`, pre-stable `desktop.v1alpha1`, and major-version migration requirements.)
 
 ---
 
