@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://citizen.dev/schemas/wallet/backup-command-envelope.v1.schema.json",
+  "title": "Citizen Wallet Backup Command Envelope v1",
+  "type": "object",
+  "required": [
+    "contract_version",
+    "success",
+    "error",
+    "result"
+  ],
+  "properties": {
+    "contract_version": {
+      "type": "string",
+      "const": "citizen.wallet.backup.cli.v1"
+    },
+    "success": { "type": "boolean" },
+    "error": {
+      "type": ["object", "null"],
+      "required": ["code", "message"],
+      "properties": {
+        "code": { "type": "string", "minLength": 1 },
+        "message": { "type": "string", "minLength": 1 },
+        "details": { "type": ["string", "null"] }
+      },
+      "additionalProperties": true
+    },
+    "result": {
+      "type": ["object", "null"],
+      "description": "Command-specific result payload"
+    }
+  },
+  "additionalProperties": true
+}

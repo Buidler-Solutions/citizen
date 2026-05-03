@@ -88,7 +88,7 @@ To keep implementation sequencing unambiguous, treat **Checkpoint 8.5 — Priori
 
 - [x] Choose component location(s):
   - [x] wallet crate integration under `citizen-protocol/crates/wallet` + CLI adapters is now the active implementation path.
-  - [ ] `wallet/backup-vault` remains a future extraction option if extension/runtime sharing pressure grows.
+  - [x] `wallet/backup-vault` extraction seam is now scaffolded with a shared contract package stub (`wallet/backup-vault/README.md` + `schemas/backup-command-envelope.v1.schema.json`) so extension/desktop sharing can promote without relocating wallet-core cryptography.
 - [x] Define stable data model crates/modules for vault headers, key-derivation config, slot metadata, and backup manifests.
 - [x] Define trait boundaries for storage backend adapters (filesystem first, with `BackupVaultStorage` and `FilesystemBackupVaultStorage` backing the current CLI path).
 - [x] Define interop contract for CLI and extension clients (common schema + versioning). (Contract boundaries + versioning policy are now frozen in `citizen-protocol/docs/WALLET_BACKUP_VAULT_INTEROP_ADR.md`: CLI automation stays on `citizen.wallet.backup.cli.v1`, desktop transport wrapper remains `citizen.wallet.backup.desktop.v1alpha1` until promotion gates are met, and extension/web clients must preserve CLI `v1` envelope semantics for deterministic compatibility.)
