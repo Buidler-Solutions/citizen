@@ -3452,6 +3452,125 @@ mod tests {
         );
     }
 
+    #[test]
+    fn backup_multi_slot_decoy_critical_rotation_flow_isolated() {
+        let base = unique_test_path("backup-multi-slot-decoy-critical-rotation");
+        let keystore_path = base.join("wallet.json");
+        let vault_path = base.join("vault.json");
+        let restored_decoy_path = base.join("wallet-decoy-restored.json");
+        let restored_critical_path = base.join("wallet-critical-restored.json");
+        fs::create_dir_all(&base).expect("create test directory");
+
+        let mut keystore = Keystore {
+            version: 1,
+            keys: vec![],
+        };
+        keystore.add_key(KeyRecord {
+            key_id: Uuid::new_v4(),
+            label: Some("multi-slot-rotation".to_string()),
+            public_key_hex: "12".repeat(32),
+            secret_key_hex: Some("34".repeat(32)),
+            encrypted_secret_key: None,
+            created_at: Utc::now().timestamp(),
+        });
+        keystore.save(&keystore_path).expect("save keystore");
+
+        backup_init(BackupInitArgs {
+            vault_path: vault_path.clone(),
+            portable_label: Some("usb-multi-slot".to_string()),
+            decoy_password: Some("decoy-pass".to_string()),
+            critical_password: Some("critical-pass".to_string()),
+            kdf_profile: BackupKdfProfile::Balanced,
+            json: true,
+            assume_removable_media_risk: true,
+        })
+        .expect("init vault");
+
+        backup_add_slot(BackupAddSlotArgs {
+            vault_path: vault_path.clone(),
+            role: BackupSlotRole::Archive,
+            password: Some("archive-pass".to_string()),
+        })
+        .expect("add archive slot");
+
+        backup_export_credentials(BackupExportArgs {
+            path: keystore_path.clone(),
+            vault_path: vault_path.clone(),
+            role: BackupSlotRole::Decoy,
+            password: Some("decoy-pass".to_string()),
+            scopes: vec![BackupExportScope::Keys],
+            assume_removable_media_risk: true,
+        })
+        .expect("export decoy credentials");
+        backup_export_credentials(BackupExportArgs {
+            path: keystore_path,
+            vault_path: vault_path.clone(),
+            role: BackupSlotRole::Critical,
+            password: Some("critical-pass".to_string()),
+            scopes: vec![BackupExportScope::Keys],
+            assume_removable_media_risk: true,
+        })
+        .expect("export critical credentials");
+
+        backup_rotate_passphrase(BackupRotatePassphraseArgs {
+            vault_path: vault_path.clone(),
+            role: BackupSlotRole::Decoy,
+            current_password: Some("decoy-pass".to_string()),
+            new_password: Some("decoy-pass-rotated".to_string()),
+        })
+        .expect("rotate decoy passphrase");
+
+        backup_restore(BackupRestoreArgs {
+            vault_path: vault_path.clone(),
+            role: BackupSlotRole::Decoy,
+            password: Some("decoy-pass-rotated".to_string()),
+            output_path: restored_decoy_path,
+            json: true,
+            assume_removable_media_risk: true,
+        })
+        .expect("restore decoy with rotated passphrase");
+
+        let decoy_with_critical = backup_restore(BackupRestoreArgs {
+            vault_path: vault_path.clone(),
+            role: BackupSlotRole::Decoy,
+            password: Some("critical-pass".to_string()),
+            output_path: base.join("wallet-decoy-should-fail.json"),
+            json: true,
+            assume_removable_media_risk: true,
+        })
+        .expect_err("critical passphrase must not unlock decoy slot");
+        assert!(
+            decoy_with_critical.to_string().contains("decrypt_failed"),
+            "cross-role unlock failure should map to decrypt_failed"
+        );
+
+        backup_restore(BackupRestoreArgs {
+            vault_path: vault_path.clone(),
+            role: BackupSlotRole::Critical,
+            password: Some("critical-pass".to_string()),
+            output_path: restored_critical_path,
+            json: true,
+            assume_removable_media_risk: true,
+        })
+        .expect("restore critical after decoy rotation");
+
+        let critical_with_old_decoy = backup_restore(BackupRestoreArgs {
+            vault_path,
+            role: BackupSlotRole::Critical,
+            password: Some("decoy-pass".to_string()),
+            output_path: base.join("wallet-critical-should-fail.json"),
+            json: true,
+            assume_removable_media_risk: true,
+        })
+        .expect_err("old decoy passphrase must not unlock critical slot");
+        assert!(
+            critical_with_old_decoy
+                .to_string()
+                .contains("decrypt_failed"),
+            "cross-role unlock failure should map to decrypt_failed"
+        );
+    }
+
     proptest! {
         #[test]
         fn backup_verify_rejects_randomized_metadata_mutations(

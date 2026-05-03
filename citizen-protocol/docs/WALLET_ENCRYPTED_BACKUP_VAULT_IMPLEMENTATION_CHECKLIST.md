@@ -120,17 +120,18 @@ To keep implementation sequencing unambiguous, treat **Checkpoint 8.5 — Priori
 
 ## Checkpoint 3 — Multi-Vault / Decoy Capability
 
-- [ ] Support creation of 2+ independent encrypted vault slots in one container or linked containers.
+- [x] Support creation of 2+ independent encrypted vault slots in one container or linked containers. (Wallet CLI supports decoy+critical initialization and explicit archive-slot expansion via `wallet backup add-slot`; regression coverage now asserts 3-slot flows in a single vault container.)
 - [~] Implement explicit role metadata (`decoy`, `critical`, optional `archive`). (`wallet backup` role enum now includes `archive` in addition to existing `decoy`/`critical` slot metadata wiring.)
 - [ ] Ensure decoy and critical slots are cryptographically unlinkable from ciphertext patterns as far as practical.
-- [ ] Implement access policy:
-  - [ ] decoy passphrase unlocks only decoy slot
-  - [ ] critical passphrase unlocks critical slot(s)
+- [x] Implement access policy:
+  - [x] decoy passphrase unlocks only decoy slot
+  - [x] critical passphrase unlocks critical slot(s)
+  (Regression test coverage now enforces deterministic `decrypt_failed` outcomes for cross-role passphrase confusion and successful same-role restore paths after decoy passphrase rotation.)
 - [ ] Add optional duress-safe UX guidance (without false guarantees).
 - [~] Implement slot-level wipe, rotation, and passphrase update. (Initial CLI primitives now exist via `wallet backup rotate-passphrase` and `wallet backup wipe-slot`; follow-up hardening still required for secure wipe semantics and UX/runbook integration.)
 
 **Exit criteria**
-- [ ] Demonstrated creation/unlock/rotation for decoy + critical flows in integration tests.
+- [x] Demonstrated creation/unlock/rotation for decoy + critical flows in integration tests. (See wallet CLI regression test `backup_multi_slot_decoy_critical_rotation_flow_isolated`.)
 - [ ] Security review note explicitly states deniability boundaries and residual forensic risk.
 
 ---
