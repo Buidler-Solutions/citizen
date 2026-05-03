@@ -7,7 +7,7 @@
     "dev": "vite",
     "lint": "tsc --noEmit && tsc --noEmit -p tsconfig.node.json",
     "pretest": "node ./scripts/ensure-test-deps.mjs",
-    "test": "npx --yes vitest run --environment jsdom",
+    "test": "node ./scripts/run-vitest.mjs",
     "build": "tsc -b && vite build",
     "preview": "vite preview"
   },

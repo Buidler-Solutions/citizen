@@ -161,7 +161,7 @@ To keep implementation sequencing unambiguous, treat **Checkpoint 8.5 — Priori
 - [ ] Add secure export bridge for encrypted payload creation (never raw secret exfiltration to page context).
 - [ ] Add restore flow with integrity checks and clear conflict resolution strategy.
 - [x] Add UX affordances for backup freshness indicator and verification reminders.
-- [ ] Add passphrase-strength guidance and recovery warnings.
+- [~] Add passphrase-strength guidance and recovery warnings. (Browser extension security tab now includes explicit decoy/critical distinct-passphrase guidance plus backup verification posture/reminder scaffold via `wallet_getBackupPosture` + `wallet_markBackupVerified`; full create/export/restore warning copy integration remains pending with end-to-end backup flows.)
 
 **Exit criteria**
 - [ ] Extension integration tests pass for create/export/restore/verify.
