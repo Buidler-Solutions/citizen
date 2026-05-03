@@ -510,27 +510,44 @@ enum BackupExportScope {
 
 #[derive(Debug, Serialize, Deserialize)]
 struct BackupVaultFile {
+    #[serde(default = "default_backup_vault_magic")]
+    magic: String,
     schema: String,
+    #[serde(default = "default_backup_vault_version")]
     version: u32,
     #[serde(default)]
     #[serde(skip_serializing_if = "Option::is_none")]
     portable_label: Option<String>,
     #[serde(default)]
     created_at: i64,
+    #[serde(default)]
+    rollback_counter: u64,
     slots: Vec<BackupVaultSlot>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 struct BackupVaultSlot {
     role: BackupSlotRole,
+    #[serde(default = "default_backup_slot_version")]
+    slot_version: u32,
     scopes: Vec<BackupExportScope>,
     encrypted_payload: EncryptedPayload,
     exported_at: i64,
     payload_sha256: String,
     #[serde(default)]
+    tamper_counter: u64,
+    #[serde(default)]
     #[serde(skip_serializing_if = "Option::is_none")]
     signed_manifest: Option<BackupSignedManifest>,
 }
+
+const BACKUP_VAULT_MAGIC: &str = "CITIZEN_BKVLT";
+const BACKUP_VAULT_SCHEMA: &str = "citizen.wallet.backup.v1";
+const BACKUP_VAULT_VERSION: u32 = 1;
+
+fn default_backup_vault_magic() -> String { BACKUP_VAULT_MAGIC.to_string() }
+fn default_backup_vault_version() -> u32 { BACKUP_VAULT_VERSION }
+fn default_backup_slot_version() -> u32 { 1 }
 
 #[derive(Debug, Serialize, Deserialize)]
 struct BackupSignedManifest {
@@ -1993,10 +2010,12 @@ fn backup_init(args: BackupInitArgs) -> anyhow::Result<()> {
     let critical_password =
         load_backup_password(args.critical_password, "CITIZEN_BACKUP_CRITICAL_PASSWORD")?;
     let mut vault = BackupVaultFile {
-        schema: "citizen.wallet.backup.v1".to_string(),
-        version: 1,
+        magic: BACKUP_VAULT_MAGIC.to_string(),
+        schema: BACKUP_VAULT_SCHEMA.to_string(),
+        version: BACKUP_VAULT_VERSION,
         portable_label: args.portable_label.clone(),
         created_at: Utc::now().timestamp(),
+        rollback_counter: 0,
         slots: vec![],
     };
     let (memory_kib, iterations, parallelism, output_length): (u32, u32, u32, usize) =
@@ -2049,6 +2068,7 @@ fn backup_add_slot(args: BackupAddSlotArgs) -> anyhow::Result<()> {
     let mut vault = load_backup_vault(&args.vault_path)?;
     let password = load_backup_password(args.password, "CITIZEN_BACKUP_SLOT_PASSWORD")?;
     vault.slots.push(empty_slot(args.role, &password)?);
+    vault.rollback_counter = vault.rollback_counter.saturating_add(1);
     save_backup_vault(&args.vault_path, &vault)
 }
 
@@ -2062,14 +2082,17 @@ fn backup_export_credentials(args: BackupExportArgs) -> anyhow::Result<()> {
     let encrypted_payload = encrypt_payload(&payload_value, &password)?;
     let slot = BackupVaultSlot {
         role: args.role,
+        slot_version: 1,
         scopes: args.scopes,
         encrypted_payload,
         exported_at: Utc::now().timestamp(),
         payload_sha256: hash_hex(&payload),
+        tamper_counter: vault.rollback_counter.saturating_add(1),
         signed_manifest: Some(build_signed_manifest(&payload)),
     };
     vault.slots.retain(|existing| existing.role != slot.role);
     vault.slots.push(slot);
+    vault.rollback_counter = vault.rollback_counter.saturating_add(1);
     save_backup_vault(&args.vault_path, &vault)?;
     println!(
         "Exported wallet credentials into vault {}",
@@ -2190,9 +2213,11 @@ fn backup_init_json_output(
 ) -> Value {
     json!({
         "contract_version": BACKUP_JSON_CONTRACT_VERSION,
+        "magic": vault.magic,
         "vault_path": vault_path.display().to_string(),
         "schema": vault.schema,
         "version": vault.version,
+        "rollback_counter": vault.rollback_counter,
         "portable_label": vault.portable_label,
         "kdf_profile": match kdf_profile {
             BackupKdfProfile::Balanced => "balanced",
@@ -2211,8 +2236,10 @@ fn backup_init_json_output(
 fn backup_verify_json_output(vault: &BackupVaultFile, slots: &[Value]) -> Value {
     json!({
         "contract_version": BACKUP_JSON_CONTRACT_VERSION,
+        "magic": vault.magic,
         "schema": vault.schema,
         "version": vault.version,
+        "rollback_counter": vault.rollback_counter,
         "portable_label": vault.portable_label,
         "created_at": vault.created_at,
         "slots": slots
@@ -2249,6 +2276,9 @@ fn emit_removable_media_warning(command: &str, acknowledged: bool) {
 
 #[derive(Clone, Copy, Debug)]
 enum BackupErrorCode {
+    InvalidMagic,
+    UnsupportedVersion,
+    RollbackDetected,
     UnsupportedSchema,
     SlotNotFound,
     DecryptFailed,
@@ -2262,6 +2292,9 @@ impl BackupErrorCode {
     fn as_str(self) -> &'static str {
         match self {
             Self::UnsupportedSchema => "unsupported_schema",
+            Self::InvalidMagic => "invalid_magic",
+            Self::UnsupportedVersion => "unsupported_version",
+            Self::RollbackDetected => "rollback_detected",
             Self::SlotNotFound => "slot_not_found",
             Self::DecryptFailed => "decrypt_failed",
             Self::ChecksumMismatch => "checksum_mismatch",
@@ -2288,9 +2321,7 @@ impl BackupVaultStorage for FilesystemBackupVaultStorage {
     fn load(&self, path: &Path) -> anyhow::Result<BackupVaultFile> {
         let contents = fs::read_to_string(path)?;
         let vault: BackupVaultFile = serde_json::from_str(&contents)?;
-        if vault.schema != "citizen.wallet.backup.v1" {
-            return Err(anyhow::anyhow!("unsupported backup vault schema"));
-        }
+        validate_backup_vault(&vault)?;
         Ok(vault)
     }
 
@@ -2321,7 +2352,30 @@ fn load_backup_vault(path: &Path) -> anyhow::Result<BackupVaultFile> {
 }
 
 fn save_backup_vault(path: &Path, vault: &BackupVaultFile) -> anyhow::Result<()> {
+    validate_backup_vault(vault)?;
     FilesystemBackupVaultStorage.save(path, vault)
+}
+
+fn validate_backup_vault(vault: &BackupVaultFile) -> anyhow::Result<()> {
+    if vault.magic != BACKUP_VAULT_MAGIC {
+        return Err(backup_error_anyhow(BackupErrorCode::InvalidMagic, "invalid backup vault magic"));
+    }
+    if vault.schema != BACKUP_VAULT_SCHEMA {
+        return Err(backup_error_anyhow(BackupErrorCode::UnsupportedSchema, "unsupported backup vault schema"));
+    }
+    if vault.version != BACKUP_VAULT_VERSION {
+        return Err(backup_error_anyhow(BackupErrorCode::UnsupportedVersion, "unsupported backup vault version"));
+    }
+    let max_counter = vault
+        .slots
+        .iter()
+        .map(|slot| slot.tamper_counter)
+        .max()
+        .unwrap_or(0);
+    if vault.rollback_counter < max_counter {
+        return Err(backup_error_anyhow(BackupErrorCode::RollbackDetected, "rollback counter is lower than slot tamper counters"));
+    }
+    Ok(())
 }
 
 fn empty_slot(role: BackupSlotRole, password: &str) -> anyhow::Result<BackupVaultSlot> {
@@ -2348,10 +2402,12 @@ fn empty_slot_with_kdf_profile(
     )?;
     Ok(BackupVaultSlot {
         role,
+        slot_version: 1,
         scopes: vec![BackupExportScope::Keys],
         encrypted_payload,
         exported_at: Utc::now().timestamp(),
         payload_sha256: hash_hex(&payload),
+        tamper_counter: 0,
         signed_manifest: Some(build_signed_manifest(&payload)),
     })
 }
@@ -3640,10 +3696,12 @@ mod tests {
     #[test]
     fn backup_json_contract_examples_match_v1_schema() {
         let vault = BackupVaultFile {
-            schema: "citizen.wallet.backup.v1".to_string(),
-            version: 1,
+            magic: BACKUP_VAULT_MAGIC.to_string(),
+            schema: BACKUP_VAULT_SCHEMA.to_string(),
+            version: BACKUP_VAULT_VERSION,
             portable_label: Some("usb-primary".to_string()),
             created_at: 1_736_500_000,
+            rollback_counter: 0,
             slots: vec![],
         };
         let init = backup_init_json_output(
