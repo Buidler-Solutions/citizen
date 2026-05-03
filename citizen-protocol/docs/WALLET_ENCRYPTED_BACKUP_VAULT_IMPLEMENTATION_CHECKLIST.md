@@ -742,3 +742,17 @@ Use this rubric during UX and maintainer review so “sleek” is measurable, no
 - Re-ran `pnpm test:headless-contract:strict` from `vaultier/` to enforce full-checklist reconciliation before additional desktop changes; Checkpoint 8.5 remains clear and strict stale-marker detection still reports no implemented-but-unchecked items.
 - Hardened `.github/workflows/vaultier-desktop-smoke.yml` to also execute `cargo test --lib` in `wallet/desktop/src-tauri`, so desktop-path PRs now gate on Rust bridge/parser unit coverage in addition to WB-mode/headless contract checks.
 - This keeps Tauri continuation aligned with the immediate coding queue by tightening platform-tagged smoke validation around removable-media adapter/parser behavior without prematurely marking signed-artifact or in-process bridge blockers as complete.
+
+### Delta Update (2026-05-03, strict gap-check rerun for Tauri continuation)
+
+- Re-ran `pnpm check:priority-gap:strict` from `vaultier/` before continuing desktop implementation slices and confirmed Checkpoint 8.5 remains complete (`pending=0`, `partial=0`, `complete=20`).
+- Confirmed strict stale-marker detection still reports **no implemented-but-unchecked checklist items**, so current remaining `[ ]`/`[~]` markers continue to represent real open work rather than checklist drift.
+- Captured refreshed open-gap counts by section from the strict checker output to keep implementation sequencing tied to current blockers:
+  - Portable Application Track: `pending=8`, `partial=9`,
+  - Implementation Continuation Plan: `pending=31`, `partial=10`,
+  - Checkpoint 2 (Crypto/format) and Checkpoint 3 (multi-vault capability) remain the largest unresolved pending clusters.
+- Preserved blocker-class Tauri items as open pending implementation evidence:
+  - in-process wallet-core bridge replacement for shell-backed execution,
+  - signed/reproducible cross-platform packaging artifacts,
+  - signed removable-media smoke evidence on release-grade builds,
+  - final memory/logging bridge audit sign-off.
