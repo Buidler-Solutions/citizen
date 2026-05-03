@@ -304,14 +304,25 @@ To translate the CLI-first vault implementation into a polished portable app exp
 
 3. **TV-3: Cross-platform completion gates**
    - [~] Complete OS-native removable-media adapter coverage (Linux/macOS/Windows) with deterministic error parity. (Tauri bridge now attempts OS-native safe-eject commands on Linux (`udisksctl`/`umount`), macOS (`diskutil unmount`), and Windows (PowerShell eject verb) and preserves deterministic fallback error mapping; full signed cross-platform smoke evidence is still pending.)
-   - [ ] Produce signed/reproducible desktop artifacts and publish compatibility notes per release.
-   - [ ] Close final memory/logging bridge audit and attach evidence links in this checklist.
+   - [~] Produce signed/reproducible desktop artifacts and publish compatibility notes per release.
+     - [x] Define a deterministic artifact manifest contract per release: artifact filename, SHA-256 digest, signing identity, build timestamp, target OS/arch, and builder provenance metadata. (Use `citizen-protocol/docs/WALLET_DESKTOP_RELEASE_CHECKLIST_TEMPLATE.md` + `citizen-protocol/docs/WALLET_DESKTOP_CLI_COMPATIBILITY_MATRIX.md` as required publishing anchors.)
+     - [ ] Attach first signed Linux artifact set + immutable digest links.
+     - [ ] Attach first signed macOS artifact set + immutable digest links.
+     - [ ] Attach first signed Windows artifact set + immutable digest links.
+     - [ ] Cross-link the published artifact manifest into checkpoint-9 R9-D sign-off evidence.
+   - [~] Close final memory/logging bridge audit and attach evidence links in this checklist.
+     - [x] Lock the audit scope to runtime bridge boundaries only: Rust command adapter, JSON response normalization, redaction filters, diagnostics export payload, and crash/log artifact surfaces.
+     - [x] Require deterministic evidence outputs: redaction test transcript, secret-scrub grep output over generated logs/diagnostics, and reviewer sign-off record with date + owner role.
+     - [ ] Attach Linux bridge audit packet evidence link.
+     - [ ] Attach macOS bridge audit packet evidence link.
+     - [ ] Attach Windows bridge audit packet evidence link.
+     - [ ] Attach consolidated wallet+desktop+security maintainer sign-off URI.
 
 - [~] Choose runtime shell (Tauri remains the production target for Rust-native crypto reuse; Vaultier now hard-gates create/verify/restore behind an explicit mock-runtime rehearsal override whenever Tauri bridge evidence is unavailable, so desktop packaging sign-off still pending before marking complete).
-- [ ] Package signed builds for macOS/Windows/Linux with reproducible build metadata.
+- [~] Package signed builds for macOS/Windows/Linux with reproducible build metadata. (Execution is now explicitly tracked as TV-3 packaging sub-gates above and remains blocked until per-OS signed artifact evidence is attached.)
 - [~] Implement removable-drive discovery abstraction with platform-specific adapters and deterministic error mapping (Vaultier now routes discovery through explicit per-platform adapter boundaries, deterministic media disconnect detection (`media_unavailable`), and a Tauri runtime bridge contract that validates compatibility/free-space/writability constraints before surfacing candidate drives; desktop runtime now includes Linux `lsblk` discovery plus macOS (`diskutil`) and Windows (PowerShell/CIM DriveType=2) removable-drive discovery adapters, with signed cross-platform smoke evidence still pending).
 - [~] Add crash-safe write strategy (temp file + fsync + atomic rename) for vault container updates (Vaultier now exposes explicit flush workflow in UX, validates required crash-safe steps before allowing safe-eject completion, includes Tauri bridge contracts for both flush strategy reporting and safe-eject execution (`flush_vault_writes`, `safe_eject_media`), and now hard-blocks safe-eject in Tauri mode when runtime-backed evidence is missing; full OS-native adapter enforcement remains pending).
-- [ ] Add secure memory handling audit for desktop bridge boundaries (Rust core <-> UI layer).
+- [~] Add secure memory handling audit for desktop bridge boundaries (Rust core <-> UI layer). (Scope/evidence requirements are now pinned under TV-3 memory/logging audit sub-gates; implementation remains open until per-OS audit packets + consolidated sign-off are attached.)
 
 ### Security & Integrity UX
 
