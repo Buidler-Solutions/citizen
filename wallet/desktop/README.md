@@ -18,6 +18,8 @@ pnpm doctor:linux:fix # Linux only: attempts distro-aware package installation
 pnpm tauri:dev
 # or build runtime explicitly
 cargo check --manifest-path src-tauri/Cargo.toml --features desktop-runtime
+# package-scoped tests (package name is citizen-wallet-desktop)
+cargo test -p citizen-wallet-desktop --manifest-path src-tauri/Cargo.toml
 ```
 
 ## Notes
