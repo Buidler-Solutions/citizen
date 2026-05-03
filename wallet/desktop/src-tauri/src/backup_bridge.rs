@@ -90,6 +90,40 @@ fn payload_args(payload: &serde_json::Value) -> Result<Vec<String>, String> {
 }
 
 #[cfg(feature = "desktop-runtime")]
+fn extract_flag_value(args: &[String], flags: &[&str]) -> Option<String> {
+    let mut i = 0usize;
+    while i < args.len() {
+        let arg = &args[i];
+        if let Some((flag, value)) = arg.split_once('=') {
+            if flags.contains(&flag) && !value.is_empty() {
+                return Some(value.to_owned());
+            }
+            i += 1;
+            continue;
+        }
+        if flags.contains(&arg.as_str()) && i + 1 < args.len() {
+            return Some(args[i + 1].clone());
+        }
+        i += 1;
+    }
+    None
+}
+
+#[cfg(feature = "desktop-runtime")]
+fn validate_backup_target_arg(args: &[String]) -> Result<(), String> {
+    let Some(target) = extract_flag_value(args, &["--vault-path", "--vault"]) else {
+        return Ok(());
+    };
+    if target.contains("://") {
+        return Err("remote URL targets are not supported for desktop backup commands".to_owned());
+    }
+    if target.trim().is_empty() {
+        return Err("vault target path must not be empty".to_owned());
+    }
+    Ok(())
+}
+
+#[cfg(feature = "desktop-runtime")]
 fn parse_cli_json(stdout: &str) -> Result<serde_json::Value, String> {
     serde_json::from_str(stdout)
         .map_err(|err| format!("wallet CLI did not emit valid JSON output: {err}"))
@@ -225,6 +259,17 @@ fn execute_backup_command(request: BackupCommandRequest) -> BackupCommandRespons
     };
 
     let sensitive_values = sensitive_arg_values(&dynamic_args);
+    if let Err(err) = validate_backup_target_arg(&dynamic_args) {
+        return BackupCommandResponse {
+            contract_version: CONTRACT_VERSION,
+            status: "error",
+            error_id: Some("invalid_payload".to_owned()),
+            details: serde_json::json!({
+                "command": request.command,
+                "message": err,
+            }),
+        };
+    }
 
     let mut command = Command::new("cargo");
     command
@@ -334,7 +379,7 @@ mod tests {
         cli_error_id_from_stdout, cli_error_id_from_value, command_to_cli_args,
         contains_sensitive_keys, looks_removable_for_os, parse_cli_json, parse_macos_mount_lines,
         parse_windows_drive_lines, scrub_sensitive_text, sensitive_arg_values,
-        BackupCommandResponse, CONTRACT_VERSION,
+        validate_backup_target_arg, BackupCommandResponse, CONTRACT_VERSION,
     };
     use std::path::Path;
 
@@ -457,6 +502,28 @@ mod tests {
         let raw = "wallet backup failed with password top-secret";
         let scrubbed = scrub_sensitive_text(raw, &["top-secret".to_owned()]);
         assert_eq!(scrubbed, "wallet backup failed with password [REDACTED]");
+    }
+
+    #[test]
+    fn validate_backup_target_arg_rejects_remote_url_targets() {
+        let err = validate_backup_target_arg(&[
+            "--vault-path".to_owned(),
+            "s3://bucket/citizen-vault.json".to_owned(),
+        ])
+        .expect_err("remote URL vault targets must be rejected");
+        assert!(err.contains("remote URL targets are not supported"));
+    }
+
+    #[test]
+    fn validate_backup_target_arg_accepts_local_path_targets() {
+        assert!(
+            validate_backup_target_arg(&[
+                "--vault-path".to_owned(),
+                "/media/operator/citizen-vault.json".to_owned(),
+            ])
+            .is_ok()
+        );
+        assert!(validate_backup_target_arg(&["--vault=C:\\vault\\backup.json".to_owned()]).is_ok());
     }
 
     #[test]
