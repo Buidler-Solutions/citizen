@@ -321,8 +321,9 @@ mod tests {
 
     use super::{
         cli_error_id_from_stdout, cli_error_id_from_value, command_to_cli_args,
-        contains_sensitive_keys, looks_removable_for_os, parse_cli_json, scrub_sensitive_text,
-        sensitive_arg_values, BackupCommandResponse, CONTRACT_VERSION,
+        contains_sensitive_keys, looks_removable_for_os, parse_cli_json, parse_macos_mount_lines,
+        parse_windows_drive_lines, scrub_sensitive_text, sensitive_arg_values,
+        BackupCommandResponse, CONTRACT_VERSION,
     };
     use std::path::Path;
 
@@ -430,6 +431,26 @@ mod tests {
         let raw = "wallet backup failed with password top-secret";
         let scrubbed = scrub_sensitive_text(raw, &["top-secret".to_owned()]);
         assert_eq!(scrubbed, "wallet backup failed with password [REDACTED]");
+    }
+
+    #[test]
+    fn parse_macos_mount_lines_only_accepts_volume_paths() {
+        let stdout = "header\n/Volumes/CitizenVault\n /Volumes/USB2 \n/tmp/not-removable\n";
+        let parsed = parse_macos_mount_lines(stdout).collect::<Vec<_>>();
+        assert_eq!(
+            parsed,
+            vec![
+                "/Volumes/CitizenVault".to_owned(),
+                "/Volumes/USB2".to_owned()
+            ]
+        );
+    }
+
+    #[test]
+    fn parse_windows_drive_lines_only_accepts_drive_letters() {
+        let stdout = "E:\ninvalid\nF:\n \nC:\\not-root\n";
+        let parsed = parse_windows_drive_lines(stdout).collect::<Vec<_>>();
+        assert_eq!(parsed, vec!["E:\\".to_owned(), "F:\\".to_owned()]);
     }
 
     #[test]
@@ -651,16 +672,7 @@ fn discover_macos_removable_drives() -> Vec<RemovableDriveRecord> {
     }
     // Keep parser intentionally conservative: only rely on mount roots that pass removable heuristics.
     let stdout = String::from_utf8_lossy(&output.stdout);
-    stdout
-        .lines()
-        .filter_map(|line| {
-            let candidate = line.trim();
-            if candidate.starts_with("/Volumes/") {
-                Some(candidate.to_owned())
-            } else {
-                None
-            }
-        })
+    parse_macos_mount_lines(&stdout)
         .map(|mount_path| RemovableDriveRecord {
             label: Path::new(&mount_path)
                 .file_name()
@@ -674,6 +686,17 @@ fn discover_macos_removable_drives() -> Vec<RemovableDriveRecord> {
             mount_path,
         })
         .collect()
+}
+
+fn parse_macos_mount_lines(stdout: &str) -> impl Iterator<Item = String> + '_ {
+    stdout.lines().filter_map(|line| {
+        let candidate = line.trim();
+        if candidate.starts_with("/Volumes/") {
+            Some(candidate.to_owned())
+        } else {
+            None
+        }
+    })
 }
 
 #[cfg(feature = "desktop-runtime")]
@@ -692,16 +715,7 @@ fn discover_windows_removable_drives() -> Vec<RemovableDriveRecord> {
     if !output.status.success() {
         return Vec::new();
     }
-    String::from_utf8_lossy(&output.stdout)
-        .lines()
-        .filter_map(|line| {
-            let drive = line.trim();
-            if drive.len() == 2 && drive.ends_with(':') {
-                Some(format!("{drive}\\"))
-            } else {
-                None
-            }
-        })
+    parse_windows_drive_lines(&String::from_utf8_lossy(&output.stdout))
         .map(|mount_path| RemovableDriveRecord {
             label: Some(mount_path.clone()),
             filesystem: None,
@@ -713,6 +727,17 @@ fn discover_windows_removable_drives() -> Vec<RemovableDriveRecord> {
             mount_path,
         })
         .collect()
+}
+
+fn parse_windows_drive_lines(stdout: &str) -> impl Iterator<Item = String> + '_ {
+    stdout.lines().filter_map(|line| {
+        let drive = line.trim();
+        if drive.len() == 2 && drive.ends_with(':') {
+            Some(format!("{drive}\\"))
+        } else {
+            None
+        }
+    })
 }
 
 #[cfg(feature = "desktop-runtime")]
