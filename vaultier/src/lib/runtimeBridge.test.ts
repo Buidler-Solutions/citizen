@@ -271,6 +271,36 @@ async function main() {
     'discover_removable_drives drive shape parity',
   );
 
+  withTauriInvoke(async (name) => {
+    if (name === 'discover_removable_drives') {
+      return {
+        drives: [
+          {
+            id: 'usb-3',
+            label: 'Citizen Backup Windows',
+            mountPath: 'E:\\',
+            filesystem: 'ntfs',
+            estimatedFreeGb: 256,
+            writable: true,
+            platform: 'windows',
+          },
+        ],
+        issues: [],
+      };
+    }
+    throw new Error(`unexpected_command:${name}`);
+  });
+
+  const windowsDiscoveryParity = await discoverDrivesViaTauri();
+  assert(windowsDiscoveryParity.drives.length === 1, 'windows discovery parity should preserve drive array');
+  assert(
+    windowsDiscoveryParity.drives[0]?.mountPath === 'E:\\',
+    'windows discovery parity should preserve drive-letter mount paths',
+  );
+  assert(
+    windowsDiscoveryParity.drives[0]?.platform === 'windows',
+    'windows discovery parity should preserve runtime platform markers',
+  );
 
   withTauriInvoke(async () => {
     throw new Error('bridge_failure');
