@@ -1,6 +1,7 @@
 import { HDNodeWallet, Mnemonic, Wallet } from 'ethers';
 import { x25519 } from '@noble/curves/ed25519';
 import { chacha20Poly1305Decrypt } from './chacha20poly1305';
+import { normalizePassphrase, validateDistinctPassphrases } from './backupPassphrasePolicy';
 import {
   DAPP_SIGNING_METHOD,
   type DappSigningRequestEnvelope,
@@ -276,9 +277,7 @@ function normalizeBackupRole(value: unknown): BackupSlotRole | null {
 }
 
 function requirePassphrase(value: unknown): string | null {
-  if (typeof value !== 'string') return null;
-  const trimmed = value.trim();
-  return trimmed.length >= 12 ? trimmed : null;
+  return normalizePassphrase(value);
 }
 
 async function deriveBackupAesKey(passphrase: string, salt: Uint8Array): Promise<CryptoKey> {
@@ -2058,13 +2057,9 @@ async function handleWalletRequest(
   if (request.method === 'wallet_createBackupVault') {
     if (!isUiRequest) return walletError('ERR_UNAUTHORIZED', 'Unauthorized wallet method.');
     const [decoyPassphrase, criticalPassphrase, decoyHint, criticalHint] = request.params ?? [];
-    const decoy = requirePassphrase(decoyPassphrase);
-    const critical = requirePassphrase(criticalPassphrase);
-    if (!decoy || !critical) {
-      return walletError('ERR_MALFORMED_REQUEST', 'Both decoy and critical passphrases must be at least 12 characters.');
-    }
-    if (decoy === critical) {
-      return walletError('ERR_MALFORMED_REQUEST', 'Decoy and critical passphrases must be different.');
+    const policyError = validateDistinctPassphrases(decoyPassphrase, criticalPassphrase);
+    if (policyError) {
+      return walletError('ERR_MALFORMED_REQUEST', policyError);
     }
     const now = new Date().toISOString();
     const state: BackupVaultState = {
