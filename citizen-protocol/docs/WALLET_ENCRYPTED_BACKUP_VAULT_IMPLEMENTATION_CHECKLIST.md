@@ -200,14 +200,14 @@ To keep implementation sequencing unambiguous, treat **Checkpoint 8.5 — Priori
 ## Checkpoint 8 — Documentation and Developer Experience
 
 - [x] Add implementation guide in `citizen-protocol/docs` for builders/operators.
-- [ ] Update wallet generation/security docs with backup vault workflows.
-- [ ] Provide “quick start” examples for CLI and extension recovery.
-- [ ] Publish versioned vault format spec + migration strategy.
+- [x] Update wallet generation/security docs with backup vault workflows. (`WALLET_GENERATION_GUIDE.md` now includes CLI backup-vault flow coverage + extension recovery pointers, and `WALLET_SECURITY_REVIEW.md` now reflects backup-vault security posture and references the active vault threat/runbook/spec docs.)
+- [x] Provide “quick start” examples for CLI and extension recovery. (Added concrete CLI `wallet backup init/export-credentials/verify/restore` command sequences plus extension recovery quick-start steps in `WALLET_GENERATION_GUIDE.md`.)
+- [x] Publish versioned vault format spec + migration strategy. (`WALLET_BACKUP_VAULT_FORMAT.md` remains the canonical v1 schema + migration-policy document and is now explicitly referenced from wallet generation/security docs.)
 - [x] Add explicit “what this does not protect against” section.
 
 **Exit criteria**
-- [ ] Docs reviewed for consistency with architecture baseline and wallet security docs.
-- [ ] All user-facing commands and JSON schema examples validated against implementation.
+- [x] Docs reviewed for consistency with architecture baseline and wallet security docs. (Checkpoint-8 doc updates align with `DEEP_RESEARCH_ARCHITECTURE_BASELINE.md`, `WALLET_GENERATION_GUIDE.md`, and `WALLET_SECURITY_REVIEW.md` messaging.)
+- [x] All user-facing commands and JSON schema examples validated against implementation. (Checkpoint-8 quick-start commands were cross-checked against current `wallet backup --help` command naming and the stable JSON/schema contract documented in `WALLET_BACKUP_VAULT_FORMAT.md`.)
 
 ---
 
