@@ -122,6 +122,23 @@ fn validate_backup_target_arg(args: &[String]) -> Result<(), String> {
     let Some(target) = extract_flag_value(args, &["--vault-path", "--vault"]) else {
         return Ok(());
     };
+    validate_local_target_path(&target)
+}
+
+#[cfg(feature = "desktop-runtime")]
+fn validate_backup_target_payload(payload: &serde_json::Value) -> Result<(), String> {
+    let target = payload
+        .get("targetPath")
+        .or_else(|| payload.get("target_path"))
+        .and_then(|v| v.as_str());
+    let Some(target) = target else {
+        return Ok(());
+    };
+    validate_local_target_path(target)
+}
+
+#[cfg(feature = "desktop-runtime")]
+fn validate_local_target_path(target: &str) -> Result<(), String> {
     if is_remote_target_path(&target) {
         return Err("remote URL targets are not supported for desktop backup commands".to_owned());
     }
@@ -280,6 +297,17 @@ fn execute_backup_command(request: BackupCommandRequest) -> BackupCommandRespons
             }),
         };
     }
+    if let Err(err) = validate_backup_target_payload(&request.payload) {
+        return BackupCommandResponse {
+            contract_version: CONTRACT_VERSION,
+            status: "error",
+            error_id: Some("invalid_payload".to_owned()),
+            details: serde_json::json!({
+                "command": request.command,
+                "message": err,
+            }),
+        };
+    }
 
     let mut command = Command::new("cargo");
     command
@@ -401,9 +429,10 @@ mod tests {
 
     use super::{
         cli_error_id_from_stdout, cli_error_id_from_value, command_to_cli_args,
-        contains_sensitive_keys, is_remote_target_path, looks_removable_for_os, parse_cli_json,
-        parse_macos_mount_lines, parse_windows_drive_lines, scrub_sensitive_text, sensitive_arg_values,
-        validate_backup_target_arg, BackupCommandResponse, CONTRACT_VERSION,
+        contains_sensitive_keys, is_path_shape_compatible, is_remote_target_path,
+        looks_removable_for_os, parse_cli_json, parse_macos_mount_lines, parse_windows_drive_lines,
+        scrub_sensitive_text, sensitive_arg_values, validate_backup_target_arg,
+        BackupCommandResponse, CONTRACT_VERSION,
     };
     use std::path::Path;
 
@@ -564,6 +593,25 @@ mod tests {
             .is_ok()
         );
         assert!(validate_backup_target_arg(&["--vault=C:\\vault\\backup.json".to_owned()]).is_ok());
+    }
+
+    #[test]
+    fn validate_backup_target_payload_rejects_remote_url_targets() {
+        let err = super::validate_backup_target_payload(&serde_json::json!({
+            "targetPath": "https://example.com/vault.json"
+        }))
+        .expect_err("remote payload targets must be rejected");
+        assert!(err.contains("remote URL targets are not supported"));
+    }
+
+    #[test]
+    fn validate_backup_target_payload_accepts_local_path_targets() {
+        assert!(
+            super::validate_backup_target_payload(&serde_json::json!({
+                "target_path": "/media/operator/citizen-vault.json"
+            }))
+            .is_ok()
+        );
     }
 
     #[test]
