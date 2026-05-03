@@ -509,8 +509,8 @@ This slice starts the desktop productization track without blocking on extension
 | M0 — Runtime decision + shell bootstrap | Implemented (hardening pending) | Tauri scaffold plus a working bridge command now lives in `wallet/desktop` and executes wallet backup CLI JSON paths; next step is replacing shell-based execution with wallet-core API bindings and hardened secret transport before production sign-off. |
 | M1 — Reliable removable-media writes | In Progress | Deterministic mount/path preflight, flush/fsync reporting, and safe-eject command adapters are implemented with remaining work on full OS-native parity evidence + signed-release hardening. |
 | M2 — Guided backup UX | In Progress | Guided create/verify/restore flows, operation-state copy pack, portable profile card, and reminder cadence are implemented; remaining work is formal <3 minute UX sign-off evidence and final copy/security review. |
-| M3 — Restore confidence UX | Planned | Verify + test-restore flows with deterministic technical detail panel. |
-| M4 — Operator/CI parity | Planned | Headless mode and diagnostics aligned with CLI JSON contract. |
+| M3 — Restore confidence UX | In Progress | Verify + test-restore flows with deterministic technical detail panel are implemented in Vaultier rehearsal UX; remaining work is formal <3 minute UX sign-off evidence and final copy/security review. |
+| M4 — Operator/CI parity | In Progress | Headless command contract and diagnostics export are implemented; remaining work is runtime-adapter parity evidence in packaged desktop releases. |
 | M5 — Release hardening | Planned | Signed builds, compatibility matrix, cross-platform smoke + security sign-off. |
 
 ### Delta Update (2026-05-03, checklist status reconciliation)
@@ -518,6 +518,9 @@ This slice starts the desktop productization track without blocking on extension
 - Reconciled checklist status against current `wallet/desktop` and `vaultier` implementation so completed guided-flow and bridge-baseline work is no longer left unchecked.
 - Marked PR-E2 removable-media/safe-write items as in-progress (`[~]`) to reflect implemented deterministic bridge checks + flush-strategy reporting while preserving remaining native parity blockers.
 - Marked PR-E3 guided create/verify/restore implementation items as complete (`[x]`) to match the current runnable Vaultier rehearsal UX.
+
+- Added milestone-tracker parity updates so M3 (restore confidence UX) and M4 (operator/CI parity) now reflect implemented Vaultier/Tauri rehearsal capabilities instead of remaining marked as purely planned.
+- Kept release-blocking items unchecked where evidence is still required (signed artifacts, cross-platform smoke suite, and final bridge memory/logging audit sign-off).
 
 ### Delta Update (2026-05-02, checklist gap audit continuation)
 
