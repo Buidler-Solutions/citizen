@@ -62,6 +62,7 @@ impl BackupCommandExecutor for InProcessExecutor {
             details: serde_json::json!({
                 "message": "In-process wallet-core execution is not yet available for this desktop build.",
                 "command": request.command,
+                "execution_mode_requested": "in_process",
             }),
         }
     }
@@ -537,7 +538,11 @@ fn execute_backup_command_internal(request: &BackupCommandRequest) -> BackupComm
 fn execute_backup_command(request: BackupCommandRequest) -> BackupCommandResponse {
     match configured_execution_mode() {
         BridgeExecutionMode::InProcess => InProcessExecutor.execute(&request),
-        BridgeExecutionMode::ShellFallback => ShellFallbackExecutor.execute(&request),
+        BridgeExecutionMode::ShellFallback => {
+            let mut response = ShellFallbackExecutor.execute(&request);
+            response.details["execution_mode"] = serde_json::json!("shell_fallback");
+            response
+        }
     }
 }
 
