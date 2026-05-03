@@ -135,11 +135,15 @@ fn validate_backup_target_payload(payload: &serde_json::Value) -> Result<(), Str
 
 #[cfg(feature = "desktop-runtime")]
 fn validate_local_target_path(target: &str) -> Result<(), String> {
-    if is_remote_target_path(&target) {
-        return Err("remote URL targets are not supported for desktop backup commands".to_owned());
-    }
-    if target.trim().is_empty() {
+    let trimmed = target.trim();
+    if trimmed.is_empty() {
         return Err("vault target path must not be empty".to_owned());
+    }
+    if trimmed.starts_with("\\") {
+        return Err("network share targets are not supported for desktop backup commands".to_owned());
+    }
+    if is_remote_target_path(trimmed) {
+        return Err("remote URL targets are not supported for desktop backup commands".to_owned());
     }
     Ok(())
 }
@@ -670,6 +674,15 @@ mod tests {
             }))
             .is_ok()
         );
+    }
+
+    #[test]
+    fn validate_backup_target_payload_rejects_unc_network_share_targets() {
+        let err = super::validate_backup_target_payload(&serde_json::json!({
+            "targetPath": "\\\\server\\backup\\wallet.vault"
+        }))
+        .expect_err("UNC path targets should be rejected");
+        assert!(err.contains("network share targets are not supported"));
     }
 
     #[test]
