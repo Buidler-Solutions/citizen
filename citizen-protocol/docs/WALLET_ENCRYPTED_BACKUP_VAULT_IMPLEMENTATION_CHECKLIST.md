@@ -138,7 +138,7 @@ To keep implementation sequencing unambiguous, treat **Checkpoint 8.5 — Priori
 
 ## Checkpoint 4 — Wallet CLI Integration
 
-- [ ] Add commands for backup vault lifecycle:
+- [x] Add commands for backup vault lifecycle:
   - [x] `wallet backup init`
   - [x] `wallet backup add-slot`
   - [x] `wallet backup export-credentials`
