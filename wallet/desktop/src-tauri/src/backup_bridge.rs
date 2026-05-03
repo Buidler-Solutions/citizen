@@ -283,6 +283,32 @@ fn scrub_sensitive_text(raw: &str, sensitive_values: &[String]) -> String {
 }
 
 #[cfg(feature = "desktop-runtime")]
+
+#[cfg(feature = "desktop-runtime")]
+fn resolve_wallet_cli_command(root: &Path) -> Command {
+    let mut candidates: Vec<PathBuf> = Vec::new();
+    if let Ok(explicit) = std::env::var("CITIZEN_WALLET_BIN") {
+        candidates.push(PathBuf::from(explicit));
+    }
+    let protocol_root = root.join("citizen-protocol");
+    candidates.push(protocol_root.join("target/debug/citizen-wallet"));
+    candidates.push(protocol_root.join("target/release/citizen-wallet"));
+
+    if let Some(path) = candidates.into_iter().find(|candidate| candidate.is_file()) {
+        let mut command = Command::new(path);
+        command.current_dir(protocol_root);
+        return command;
+    }
+
+    let mut command = Command::new("cargo");
+    command
+        .arg("run")
+        .arg("-p")
+        .arg("citizen-wallet")
+        .arg("--")
+        .current_dir(protocol_root);
+    command
+}
 fn execute_backup_command_internal(request: &BackupCommandRequest) -> BackupCommandResponse {
     let cli_args = match command_to_cli_args(&request.command) {
         Some(args) => args,
@@ -365,17 +391,12 @@ fn execute_backup_command_internal(request: &BackupCommandRequest) -> BackupComm
         }
     }
 
-    let mut command = Command::new("cargo");
+    let mut command = resolve_wallet_cli_command(&root);
     command
-        .arg("run")
-        .arg("-p")
-        .arg("citizen-wallet")
-        .arg("--")
         .arg("wallet")
         .args(cli_args)
         .args(dynamic_args)
-        .arg("--json")
-        .current_dir(root.join("citizen-protocol"));
+        .arg("--json");
 
     let output = match command.output() {
         Ok(output) => output,
