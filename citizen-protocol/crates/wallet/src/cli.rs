@@ -414,6 +414,10 @@ enum BackupCommands {
     ///
     /// After restore, rotate high-impact keys according to the disaster-recovery runbook.
     Restore(BackupRestoreArgs),
+    /// Update a slot passphrase without changing the encrypted payload.
+    RotatePassphrase(BackupRotatePassphraseArgs),
+    /// Wipe encrypted payload material for a slot while keeping role metadata.
+    WipeSlot(BackupWipeSlotArgs),
 }
 
 #[derive(Debug, Args)]
@@ -499,6 +503,27 @@ struct BackupRestoreArgs {
 enum BackupSlotRole {
     Decoy,
     Critical,
+    Archive,
+}
+
+#[derive(Debug, Args)]
+struct BackupRotatePassphraseArgs {
+    #[arg(long)]
+    vault_path: PathBuf,
+    #[arg(long)]
+    role: BackupSlotRole,
+    #[arg(long)]
+    current_password: Option<String>,
+    #[arg(long)]
+    new_password: Option<String>,
+}
+
+#[derive(Debug, Args)]
+struct BackupWipeSlotArgs {
+    #[arg(long)]
+    vault_path: PathBuf,
+    #[arg(long)]
+    role: BackupSlotRole,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, ValueEnum, PartialEq, Eq)]
@@ -762,6 +787,8 @@ pub fn run() -> anyhow::Result<()> {
             BackupCommands::ExportCredentials(args) => backup_export_credentials(args)?,
             BackupCommands::Verify(args) => backup_verify(args)?,
             BackupCommands::Restore(args) => backup_restore(args)?,
+            BackupCommands::RotatePassphrase(args) => backup_rotate_passphrase(args)?,
+            BackupCommands::WipeSlot(args) => backup_wipe_slot(args)?,
         },
         Commands::Init { path } => {
             let store = Keystore {
@@ -2204,6 +2231,45 @@ fn backup_restore(args: BackupRestoreArgs) -> anyhow::Result<()> {
     } else {
         println!("Restored wallet to {}", args.output_path.display());
     }
+    Ok(())
+}
+
+fn backup_rotate_passphrase(args: BackupRotatePassphraseArgs) -> anyhow::Result<()> {
+    let mut vault = load_backup_vault(&args.vault_path)?;
+    let current_password =
+        load_backup_password(args.current_password, "CITIZEN_BACKUP_SLOT_PASSWORD")?;
+    let new_password = load_backup_password(args.new_password, "CITIZEN_BACKUP_NEW_SLOT_PASSWORD")?;
+    let slot = vault
+        .slots
+        .iter_mut()
+        .find(|slot| slot.role == args.role)
+        .ok_or_else(|| backup_error_anyhow(BackupErrorCode::SlotNotFound, "slot not found"))?;
+    let payload = decrypt_backup_envelope(&slot.encrypted_payload, &current_password)
+        .map_err(|_| backup_error_anyhow(BackupErrorCode::DecryptFailed, "decrypt failed"))?;
+    slot.encrypted_payload = encrypt_backup_envelope(&payload, &new_password)?;
+    slot.tamper_counter = slot.tamper_counter.saturating_add(1);
+    vault.rollback_counter = vault.rollback_counter.saturating_add(1);
+    save_backup_vault(&args.vault_path, &vault)?;
+    println!("Rotated passphrase for {:?} slot", args.role);
+    Ok(())
+}
+
+fn backup_wipe_slot(args: BackupWipeSlotArgs) -> anyhow::Result<()> {
+    let mut vault = load_backup_vault(&args.vault_path)?;
+    let slot = vault
+        .slots
+        .iter_mut()
+        .find(|slot| slot.role == args.role)
+        .ok_or_else(|| backup_error_anyhow(BackupErrorCode::SlotNotFound, "slot not found"))?;
+    slot.scopes = vec![];
+    slot.encrypted_payload = encrypt_backup_envelope(&json!({}), "wiped-slot-placeholder")?;
+    slot.exported_at = Utc::now().timestamp();
+    slot.payload_sha256 = hash_hex(&serde_json::to_vec(&json!({}))?);
+    slot.tamper_counter = slot.tamper_counter.saturating_add(1);
+    slot.signed_manifest = Some(build_signed_manifest(&serde_json::to_vec(&json!({}))?));
+    vault.rollback_counter = vault.rollback_counter.saturating_add(1);
+    save_backup_vault(&args.vault_path, &vault)?;
+    println!("Wiped {:?} slot payload material", args.role);
     Ok(())
 }
 
