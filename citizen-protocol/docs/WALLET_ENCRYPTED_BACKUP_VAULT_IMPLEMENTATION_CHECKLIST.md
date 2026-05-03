@@ -567,6 +567,7 @@ To continue implementation without drifting from completed checklist work, use t
   - final memory/logging bridge audit sign-off artifact links,
   - runtime parity evidence against a non-shell in-process wallet-core adapter.
 - Added explicit reconciliation note that current status markers (`[~]`) are accurate for TV-2/TV-3 bridge hardening items and should not be force-checked prematurely.
+- Tightened desktop smoke gating to run strict checklist parity (`pnpm test:headless-contract:strict`) so CI now fails on newly detected stale unchecked markers before WB-mode/runtime contract checks proceed.
 
 - Tauri desktop bridge now forwards CLI top-level parity markers (`contract_version`, `status`) in deterministic response details (`wallet_cli_contract_version`, `wallet_cli_status`) so WB-mode/runtime contract-drift checks can assert field compatibility without parsing nested payload internals.
 - Marked **Next Slice C / CI wiring** as complete because the dedicated wallet backup CI workflow is in-repo and already referenced in sign-off evidence.
