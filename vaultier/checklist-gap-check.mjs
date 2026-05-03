@@ -6,6 +6,7 @@ const emitJson = process.argv.includes('--json');
 const strictStaleUnchecked = process.argv.includes('--strict-stale-unchecked');
 const includeFullSummary = process.argv.includes('--full-summary');
 const emitMarkdown = process.argv.includes('--markdown');
+const includeOpenItemDetails = process.argv.includes('--full-open-items');
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const checklistPath = resolve(scriptDir, '../citizen-protocol/docs/WALLET_ENCRYPTED_BACKUP_VAULT_IMPLEMENTATION_CHECKLIST.md');
 const doc = readFileSync(checklistPath, 'utf8');
@@ -164,6 +165,16 @@ if (staleUnchecked.length === 0) {
 }
 
 if (emitMarkdown) {
+  if (includeOpenItemDetails) {
+    markdownLines.push('', '## Full checklist open items');
+    for (const section of fullSectionSummaries) {
+      if (section.openItems.length === 0) continue;
+      markdownLines.push('', `### ${section.section}`);
+      for (const item of section.openItems) {
+        markdownLines.push(`- ${item.checklistBadge} ${item.text}`);
+      }
+    }
+  }
   console.log(markdownLines.join('\n'));
 }
 
@@ -191,6 +202,16 @@ if (emitJson) {
       console.log(
         `  - ${section.section}: pending=${section.counts.pending} partial=${section.counts.partial} complete=${section.counts.complete}`
       );
+    }
+  }
+  if (includeOpenItemDetails) {
+    console.log('checklist-gap-check: full checklist open-item details:');
+    for (const section of fullSectionSummaries) {
+      if (section.openItems.length === 0) continue;
+      console.log(`  ${section.section}:`);
+      for (const item of section.openItems) {
+        console.log(`    - ${item.checklistBadge} ${item.text}`);
+      }
     }
   }
 

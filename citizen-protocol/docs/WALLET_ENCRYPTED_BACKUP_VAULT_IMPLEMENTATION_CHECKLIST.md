@@ -756,3 +756,9 @@ Use this rubric during UX and maintainer review so “sleek” is measurable, no
   - signed/reproducible cross-platform packaging artifacts,
   - signed removable-media smoke evidence on release-grade builds,
   - final memory/logging bridge audit sign-off.
+
+### Delta Update (2026-05-03, full-checklist actionable gap report enhancement)
+
+- Extended `vaultier/checklist-gap-check.mjs` with an optional `--full-open-items` mode so strict checklist passes can emit section-by-section open-item details (not only aggregate counts).
+- Added `pnpm run check:priority-gap:markdown:full` in `vaultier/package.json` to produce a human-reviewable markdown report listing every remaining `[ ]` and `[~]` item by checklist section before continuing Tauri coding.
+- Re-ran strict priority gap checks after this enhancement; Checkpoint 8.5 remains complete and stale unchecked markers are still not detected.
