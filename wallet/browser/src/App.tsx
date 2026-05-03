@@ -308,6 +308,7 @@ export function App() {
   const [backupCriticalPassphrase, setBackupCriticalPassphrase] = useState('');
   const [backupPayload, setBackupPayload] = useState('');
   const [backupRole, setBackupRole] = useState<'decoy' | 'critical'>('critical');
+  const [backupConflictResolution, setBackupConflictResolution] = useState<'replace' | 'skip-existing'>('replace');
   const [profile, setProfile] = useState<ProfileDetails>({
     fullName: '',
     email: '',
@@ -1151,7 +1152,10 @@ export function App() {
 
   const handleRestoreBackup = async () => {
     const passphrase = backupRole === 'decoy' ? backupDecoyPassphrase : backupCriticalPassphrase;
-    const response = await callWallet('wallet_restoreBackupVault', [backupRole, passphrase, backupPayload, 'replace']);
+    const response = await callWallet(
+      'wallet_restoreBackupVault',
+      [backupRole, passphrase, backupPayload, backupConflictResolution === 'replace' ? 'replace' : 'skip'],
+    );
     setStatus(response.ok ? 'Encrypted backup restored and wallet vault refreshed.' : response.error ?? 'Unable to restore encrypted backup.');
     if (response.ok) await refreshState();
   };
@@ -1942,6 +1946,7 @@ export function App() {
               <article className="request-card">
                 <h2>Encrypted backup vault posture</h2>
                 <p className="meta-text">Use distinct passphrases (16+ chars recommended) for decoy and critical slots. Exports remain encrypted end-to-end and are never emitted as plaintext secrets.</p>
+                <p className="meta-text">Recovery warning: if a critical passphrase is lost, encrypted critical-slot exports cannot be recovered by Citizen services.</p>
                 <p className="meta-text">
                   Last backup verification: {backupPosture?.lastVerifiedAt ? new Date(backupPosture.lastVerifiedAt).toLocaleString() : 'Not recorded'}.
                 </p>
@@ -1952,6 +1957,10 @@ export function App() {
                   <select value={backupRole} onChange={(event) => setBackupRole(event.target.value as 'decoy' | 'critical')}>
                     <option value="decoy">Decoy slot</option>
                     <option value="critical">Critical slot</option>
+                  </select>
+                  <select value={backupConflictResolution} onChange={(event) => setBackupConflictResolution(event.target.value as 'replace' | 'skip-existing')}>
+                    <option value="replace">Restore mode: replace existing IDs</option>
+                    <option value="skip-existing">Restore mode: keep existing IDs</option>
                   </select>
                   <button className="ghost" onClick={() => void handleExportBackup()}>Export encrypted backup payload</button>
                   <textarea rows={5} value={backupPayload} onChange={(event) => setBackupPayload(event.target.value)} placeholder="Paste encrypted backup payload to restore." />
