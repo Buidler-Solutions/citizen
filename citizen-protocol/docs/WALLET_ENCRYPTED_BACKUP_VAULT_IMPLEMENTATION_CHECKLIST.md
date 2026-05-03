@@ -762,3 +762,10 @@ Use this rubric during UX and maintainer review so “sleek” is measurable, no
 - Extended `vaultier/checklist-gap-check.mjs` with an optional `--full-open-items` mode so strict checklist passes can emit section-by-section open-item details (not only aggregate counts).
 - Added `pnpm run check:priority-gap:markdown:full` in `vaultier/package.json` to produce a human-reviewable markdown report listing every remaining `[ ]` and `[~]` item by checklist section before continuing Tauri coding.
 - Re-ran strict priority gap checks after this enhancement; Checkpoint 8.5 remains complete and stale unchecked markers are still not detected.
+
+### Delta Update (2026-05-03, full-checklist evidence report automation)
+
+- Added `--markdown-file=<path>` output support to `vaultier/checklist-gap-check.mjs` so continuation passes can persist a complete markdown gap report artifact instead of only printing to stdout.
+- Added `pnpm run check:priority-gap:report` in `vaultier/package.json` to generate a canonical full-checklist report at `citizen-protocol/docs/evidence/wallet-backup-vault/latest-checklist-gap-report.md`.
+- Re-ran the new report workflow and confirmed Checkpoint 8.5 remains complete (`pending=0`, `partial=0`) and strict stale-marker detection still reports no implemented-but-unchecked markers.
+- Captured the current open-gap inventory in the generated evidence report to drive next desktop/Tauri coding slices (in-process wallet-core bridge, signed packaging/smoke evidence, memory/logging audit closure).
