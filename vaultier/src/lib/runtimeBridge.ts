@@ -39,6 +39,16 @@ const SECRET_VALUE_MARKERS = ['passphrase=', 'password=', 'secret=', 'seed=', 'm
 const RUNTIME_PROFILE_KEY = 'vaultier.runtime.profile';
 let tauriCommandQueue: Promise<void> = Promise.resolve();
 
+function enqueueTauriOperation<T>(operation: () => Promise<T>): Promise<T> {
+  const result = tauriCommandQueue.then(operation, operation);
+  tauriCommandQueue = result.then(
+    () => undefined,
+    () => undefined,
+  );
+  return result;
+}
+
+
 
 const VAULTIER_ERROR_CODES: ReadonlySet<VaultierErrorCode> = new Set([
   'path_invalid',
@@ -186,7 +196,7 @@ export async function fetchBridgeStatusViaTauri(): Promise<{
 
 export async function discoverDrivesViaTauri(): Promise<{ drives: BridgeDrive[]; issues: DriveProbeIssue[] }> {
   try {
-    const response = await invokeTauri<{ drives: BridgeDrive[] }>('discover_removable_drives');
+    const response = await enqueueTauriOperation(() => invokeTauri<{ drives: BridgeDrive[] }>('discover_removable_drives'));
     return { drives: response.drives, issues: [] };
   } catch {
     return {
@@ -204,7 +214,7 @@ export async function discoverDrivesViaTauri(): Promise<{ drives: BridgeDrive[];
 
 export async function flushViaTauri(targetPath: string): Promise<{ strategy: CrashSafeWriteStep[]; bridgeIssue?: DriveProbeIssue }> {
   try {
-    const response = await invokeTauri<{ strategy: CrashSafeWriteStep[] }>('flush_vault_writes', { targetPath });
+    const response = await enqueueTauriOperation(() => invokeTauri<{ strategy: CrashSafeWriteStep[] }>('flush_vault_writes', { targetPath }));
     return { strategy: response.strategy };
   } catch {
     return {
@@ -219,16 +229,7 @@ export async function flushViaTauri(targetPath: string): Promise<{ strategy: Cra
 }
 
 export async function invokeBackupCommandViaTauri(command: HeadlessCommand): Promise<HeadlessResponse> {
-  return enqueueTauriCommand(async () => invokeBackupCommandViaTauriImmediate(command));
-}
-
-function enqueueTauriCommand<T>(operation: () => Promise<T>): Promise<T> {
-  const result = tauriCommandQueue.then(operation, operation);
-  tauriCommandQueue = result.then(
-    () => undefined,
-    () => undefined,
-  );
-  return result;
+  return enqueueTauriOperation(async () => invokeBackupCommandViaTauriImmediate(command));
 }
 
 async function invokeBackupCommandViaTauriImmediate(command: HeadlessCommand): Promise<HeadlessResponse> {
@@ -253,7 +254,7 @@ async function invokeBackupCommandViaTauriImmediate(command: HeadlessCommand): P
 
 export async function safeEjectViaTauri(targetPath: string): Promise<{ ok: boolean; bridgeIssue?: DriveProbeIssue }> {
   try {
-    const response = await invokeTauri<{ ok: boolean }>('safe_eject_media', { targetPath });
+    const response = await enqueueTauriOperation(() => invokeTauri<{ ok: boolean }>('safe_eject_media', { targetPath }));
     return { ok: response.ok };
   } catch {
     return {

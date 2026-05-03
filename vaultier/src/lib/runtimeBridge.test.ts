@@ -387,6 +387,42 @@ async function main() {
     JSON.stringify(callOrder) === JSON.stringify(['backup_verify:start', 'backup_verify:end', 'backup_verify:start', 'backup_verify:end']),
     `tauri execution queue should serialize runtime command invocation, got ${JSON.stringify(callOrder)}`,
   );
+
+  const utilityQueueOrder: string[] = [];
+  withTauriInvoke(async (name) => {
+    utilityQueueOrder.push(`${name}:start`);
+    await sleep(10);
+    utilityQueueOrder.push(`${name}:end`);
+    if (name === 'discover_removable_drives') {
+      return { drives: [] };
+    }
+    if (name === 'flush_vault_writes') {
+      return { strategy: [] };
+    }
+    if (name === 'safe_eject_media') {
+      return { ok: true };
+    }
+    throw new Error(`unexpected_command:${name}`);
+  });
+
+  await Promise.all([
+    discoverDrivesViaTauri(),
+    flushViaTauri('/media/usb/vault.cvb'),
+    safeEjectViaTauri('/media/usb/vault.cvb'),
+  ]);
+
+  assert(
+    JSON.stringify(utilityQueueOrder) === JSON.stringify([
+      'discover_removable_drives:start',
+      'discover_removable_drives:end',
+      'flush_vault_writes:start',
+      'flush_vault_writes:end',
+      'safe_eject_media:start',
+      'safe_eject_media:end',
+    ]),
+    `tauri execution queue should serialize utility bridge invocation, got ${JSON.stringify(utilityQueueOrder)}`,
+  );
+
 }
 
 main();

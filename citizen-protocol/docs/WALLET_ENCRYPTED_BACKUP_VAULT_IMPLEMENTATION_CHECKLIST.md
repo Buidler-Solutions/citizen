@@ -832,3 +832,9 @@ Use this rubric during UX and maintainer review so “sleek” is measurable, no
   - signed removable-media smoke evidence,
   - final bridge memory/logging audit sign-off.
 - Logged one strict-check **over-checked candidate** for maintainer follow-up (Checkpoint 7 no-critical/high finding line) so checklist confidence stays evidence-driven while continuation work proceeds.
+
+### Delta Update (2026-05-03, execution-queue utility parity continuation)
+
+- Extended Tauri bridge serialization in `vaultier/src/lib/runtimeBridge.ts` so removable-media utility calls (`discover_removable_drives`, `flush_vault_writes`, `safe_eject_media`) now share the same single-flight execution queue already used by backup commands.
+- Added runtime queue coverage in `vaultier/src/lib/runtimeBridge.test.ts` that fires concurrent discovery/flush/safe-eject requests and asserts deterministic one-at-a-time start/end ordering.
+- Checklist blocker markers remain intentionally unchanged (`[ ]`/`[~]`): this continuation closes execution-queue parity hardening gaps but does not yet satisfy in-process wallet-core replacement, packaging/signing evidence, or final bridge memory/logging audit sign-off.
