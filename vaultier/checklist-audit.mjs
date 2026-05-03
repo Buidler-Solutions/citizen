@@ -1,8 +1,10 @@
 import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const emitJson = process.argv.includes('--json');
-const checklistPath = resolve('../citizen-protocol/docs/WALLET_ENCRYPTED_BACKUP_VAULT_IMPLEMENTATION_CHECKLIST.md');
+const scriptDir = dirname(fileURLToPath(import.meta.url));
+const checklistPath = resolve(scriptDir, '../citizen-protocol/docs/WALLET_ENCRYPTED_BACKUP_VAULT_IMPLEMENTATION_CHECKLIST.md');
 const doc = readFileSync(checklistPath, 'utf8');
 
 const sections = [];

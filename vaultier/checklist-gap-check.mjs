@@ -1,10 +1,12 @@
 import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const emitJson = process.argv.includes('--json');
 const strictStaleUnchecked = process.argv.includes('--strict-stale-unchecked');
 const includeFullSummary = process.argv.includes('--full-summary');
-const checklistPath = resolve('../citizen-protocol/docs/WALLET_ENCRYPTED_BACKUP_VAULT_IMPLEMENTATION_CHECKLIST.md');
+const scriptDir = dirname(fileURLToPath(import.meta.url));
+const checklistPath = resolve(scriptDir, '../citizen-protocol/docs/WALLET_ENCRYPTED_BACKUP_VAULT_IMPLEMENTATION_CHECKLIST.md');
 const doc = readFileSync(checklistPath, 'utf8');
 
 const priorityStart = doc.indexOf('## Checkpoint 8.5 — Priority Gate');
