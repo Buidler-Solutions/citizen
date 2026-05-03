@@ -217,6 +217,7 @@ type WalletResponse = {
   result?: unknown;
   error?: string;
 };
+type BackupPosture = { lastVerifiedAt: string | null; reminderIntervalDays: number };
 
 const STORAGE_KEY = 'citizen.browser.wallet.v1';
 const LAST_REQUEST_KEY = 'citizen.browser.wallet.last_request.v1';
@@ -302,6 +303,7 @@ export function App() {
   const [confirmDirectSubmitDestination, setConfirmDirectSubmitDestination] = useState(false);
   const [consentShareSigningPayload, setConsentShareSigningPayload] = useState(false);
   const [directSubmitReceipts, setDirectSubmitReceipts] = useState<DirectSubmitReceipt[]>([]);
+  const [backupPosture, setBackupPosture] = useState<BackupPosture | null>(null);
   const [profile, setProfile] = useState<ProfileDetails>({
     fullName: '',
     email: '',
@@ -461,6 +463,10 @@ export function App() {
       const directSubmitReceiptsResponse = await callWallet('wallet_getDirectSubmitReceipts');
       if (directSubmitReceiptsResponse.ok && Array.isArray(directSubmitReceiptsResponse.result)) {
         setDirectSubmitReceipts(directSubmitReceiptsResponse.result as DirectSubmitReceipt[]);
+      }
+      const backupPostureResponse = await callWallet('wallet_getBackupPosture');
+      if (backupPostureResponse.ok && backupPostureResponse.result) {
+        setBackupPosture(backupPostureResponse.result as BackupPosture);
       }
 
       if (!hasWallet || !isUnlocked) {
@@ -1109,6 +1115,16 @@ export function App() {
     }
     setStatus(permission === 'blocked' ? `Blocked ${origin}.` : `Restored ${origin} to prompt mode.`);
     await refreshState();
+  };
+
+  const handleMarkBackupVerified = async () => {
+    const response = await callWallet('wallet_markBackupVerified');
+    if (!response.ok) {
+      setStatus(response.error ?? 'Unable to update backup verification.');
+      return;
+    }
+    setBackupPosture(response.result as BackupPosture);
+    setStatus('Backup verification timestamp updated.');
   };
 
   const blockedOrigins = useMemo(
@@ -1892,6 +1908,15 @@ export function App() {
                 ) : (
                   <p className="meta-text">No blocked origins.</p>
                 )}
+              </article>
+
+              <article className="request-card">
+                <h2>Encrypted backup vault posture</h2>
+                <p className="meta-text">Checkpoint 5 scaffold: decoy + critical vault workflows are in progress. Use distinct passphrases (16+ chars) per slot.</p>
+                <p className="meta-text">
+                  Last backup verification: {backupPosture?.lastVerifiedAt ? new Date(backupPosture.lastVerifiedAt).toLocaleString() : 'Not recorded'}.
+                </p>
+                <button className="ghost" onClick={() => void handleMarkBackupVerified()}>Mark backup verified now</button>
               </article>
             </>
           ) : null}

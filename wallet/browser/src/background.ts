@@ -127,6 +127,7 @@ const DAPP_ORIGIN_PERMISSIONS_KEY = 'citizen.browser.wallet.dapp_origin_permissi
 const LOCAL_ENCRYPTION_KEY_KEY = 'citizen.browser.wallet.local_encryption_key.v1';
 const DIRECT_SUBMIT_RECEIPTS_KEY = 'citizen.browser.wallet.direct_submit_receipts.v1';
 const DIRECT_SUBMIT_DEFAULT_DESTINATION_KEY = 'citizen.browser.wallet.direct_submit_default_destination.v1';
+const BACKUP_POSTURE_KEY = 'citizen.browser.wallet.backup_posture.v1';
 const DEFAULT_DERIVATION_PATH = "m/44'/930'/0'/0'/0'";
 const SUPPORTED_MNEMONIC_WORD_COUNTS = [12, 24] as const;
 type SupportedMnemonicWordCount = (typeof SUPPORTED_MNEMONIC_WORD_COUNTS)[number];
@@ -227,6 +228,33 @@ type StoredEncryptionReaderKey = {
   pkcs8Base64: string;
   createdAt: string;
 };
+
+type BackupPosture = {
+  lastVerifiedAt: string | null;
+  reminderIntervalDays: number;
+};
+
+async function getBackupPosture(): Promise<BackupPosture> {
+  const stored = await chrome.storage.local.get(BACKUP_POSTURE_KEY);
+  const posture = stored[BACKUP_POSTURE_KEY] as Partial<BackupPosture> | undefined;
+  return {
+    lastVerifiedAt: typeof posture?.lastVerifiedAt === 'string' ? posture.lastVerifiedAt : null,
+    reminderIntervalDays:
+      typeof posture?.reminderIntervalDays === 'number' && posture.reminderIntervalDays > 0
+        ? posture.reminderIntervalDays
+        : 30,
+  };
+}
+
+async function markBackupVerifiedNow(): Promise<BackupPosture> {
+  const current = await getBackupPosture();
+  const next: BackupPosture = {
+    ...current,
+    lastVerifiedAt: new Date().toISOString(),
+  };
+  await chrome.storage.local.set({ [BACKUP_POSTURE_KEY]: next });
+  return next;
+}
 
 function isNetworkId(value: unknown): value is NetworkId {
   return typeof value === 'string' && value in NETWORKS;
@@ -1947,6 +1975,20 @@ async function handleWalletRequest(
       return walletError('ERR_UNAUTHORIZED', 'Unauthorized wallet method.');
     }
     return { ok: true, result: await getDirectSubmitReceipts() };
+  }
+
+  if (request.method === 'wallet_getBackupPosture') {
+    if (!isUiRequest) {
+      return walletError('ERR_UNAUTHORIZED', 'Unauthorized wallet method.');
+    }
+    return { ok: true, result: await getBackupPosture() };
+  }
+
+  if (request.method === 'wallet_markBackupVerified') {
+    if (!isUiRequest) {
+      return walletError('ERR_UNAUTHORIZED', 'Unauthorized wallet method.');
+    }
+    return { ok: true, result: await markBackupVerifiedNow() };
   }
 
   if (request.method === 'wallet_directSubmitLatestSignedArtifact') {
