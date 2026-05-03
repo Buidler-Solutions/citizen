@@ -1,5 +1,7 @@
 #[cfg(feature = "desktop-runtime")]
 mod backup_bridge;
+#[cfg(feature = "desktop-runtime")]
+mod backup_core_bridge;
 
 #[cfg(feature = "desktop-runtime")]
 use backup_bridge::{

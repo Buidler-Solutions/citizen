@@ -1,4 +1,6 @@
 #[cfg(feature = "desktop-runtime")]
+use crate::backup_core_bridge::{BackupCommandExecutor, BackupCommandRequest, BackupCommandResponse};
+#[cfg(feature = "desktop-runtime")]
 use serde::{Deserialize, Serialize};
 #[cfg(feature = "desktop-runtime")]
 use std::fs::{self, File};
@@ -13,23 +15,6 @@ const CONTRACT_VERSION: &str = "citizen.wallet.backup.desktop.v1alpha1";
 const MIN_FREE_SPACE_BYTES: u64 = 64 * 1024 * 1024;
 #[cfg(feature = "desktop-runtime")]
 const CLI_CONTRACT_VERSION: &str = "citizen.wallet.backup.cli.v1";
-
-#[cfg(feature = "desktop-runtime")]
-#[derive(Debug, Deserialize)]
-struct BackupCommandRequest {
-    command: String,
-    #[serde(default)]
-    payload: serde_json::Value,
-}
-
-#[cfg(feature = "desktop-runtime")]
-#[derive(Debug, Serialize)]
-pub(crate) struct BackupCommandResponse {
-    contract_version: &'static str,
-    status: &'static str,
-    error_id: Option<String>,
-    details: serde_json::Value,
-}
 
 #[cfg(feature = "desktop-runtime")]
 #[derive(Debug, Serialize)]
@@ -51,6 +36,17 @@ pub(crate) struct TargetPathPayload {
 }
 
 #[cfg(feature = "desktop-runtime")]
+
+#[cfg(feature = "desktop-runtime")]
+struct ShellFallbackExecutor;
+
+#[cfg(feature = "desktop-runtime")]
+impl BackupCommandExecutor for ShellFallbackExecutor {
+    fn execute(&self, request: &BackupCommandRequest) -> BackupCommandResponse {
+        execute_backup_command_internal(request)
+    }
+}
+
 fn workspace_root() -> Result<PathBuf, String> {
     let cwd = std::env::current_dir().map_err(|err| format!("failed to resolve cwd: {err}"))?;
     cwd.ancestors()
@@ -242,7 +238,7 @@ fn scrub_sensitive_text(raw: &str, sensitive_values: &[String]) -> String {
 }
 
 #[cfg(feature = "desktop-runtime")]
-fn execute_backup_command(request: BackupCommandRequest) -> BackupCommandResponse {
+fn execute_backup_command_internal(request: &BackupCommandRequest) -> BackupCommandResponse {
     let cli_args = match command_to_cli_args(&request.command) {
         Some(args) => args,
         None => {
@@ -422,6 +418,12 @@ fn execute_backup_command(request: BackupCommandRequest) -> BackupCommandRespons
             }),
         }
     }
+}
+
+
+#[cfg(feature = "desktop-runtime")]
+fn execute_backup_command(request: BackupCommandRequest) -> BackupCommandResponse {
+    ShellFallbackExecutor.execute(&request)
 }
 
 #[cfg(all(test, feature = "desktop-runtime"))]

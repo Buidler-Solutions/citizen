@@ -598,7 +598,7 @@ To continue implementation without drifting from completed checklist work, use t
 Use this backlog to convert the portable app milestone tracker into small implementation PRs that can land continuously while preserving the existing CLI contract as source-of-truth.
 
 1. **PR-F1: Wallet core bridge crate + DTO lock-in**
-   - [ ] Add a desktop-facing Rust bridge module (or crate) that wraps backup operations with typed DTOs matching CLI JSON fields.
+   - [~] Add a desktop-facing Rust bridge module (or crate) that wraps backup operations with typed DTOs matching CLI JSON fields. (Added `wallet/desktop/src-tauri/src/backup_core_bridge.rs` with shared typed request/response DTOs and executor trait boundary; runtime path still uses shell-fallback executor until in-process wallet-core wiring lands.)
    - [x] Add schema tests that assert desktop DTO responses remain field-compatible with `wallet backup ... --json` for `init`, `verify`, and `restore` (Vaultier headless contract gate remains active, and `wallet/desktop/src-tauri/src/main.rs` now includes deterministic Rust bridge command-mapping + response-contract serialization tests for required backup commands and `contract_version` envelope fields).
    - [x] Add redaction tests proving no passphrase/secret fields are serializable in bridge response payloads. (Vaultier headless adapter redaction scans remain enforced, and desktop Rust bridge tests now assert secret-like keys are flagged by deterministic `contains_sensitive_keys` scanning before response payload acceptance.)
 
