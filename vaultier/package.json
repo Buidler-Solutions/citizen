@@ -24,7 +24,8 @@
     "check:priority-gap:markdown:full": "node checklist-gap-check.mjs --full-summary --full-open-items --markdown",
     "check:priority-gap:md": "node checklist-gap-check.mjs --full-summary --markdown",
     "check-priority-gap-markdown": "node checklist-gap-check.mjs --full-summary --markdown",
-    "check:priority-gap:report": "node checklist-gap-check.mjs --full-summary --full-open-items --markdown --markdown-file=../citizen-protocol/docs/evidence/wallet-backup-vault/latest-checklist-gap-report.md"
+    "check:priority-gap:report": "node checklist-gap-check.mjs --full-summary --full-open-items --markdown --markdown-file=../citizen-protocol/docs/evidence/wallet-backup-vault/latest-checklist-gap-report.md",
+    "check:priority-gap:reconciliation": "node checklist-gap-check.mjs --strict-stale-unchecked --full-summary --reconciliation"
   },
   "dependencies": {
     "react": "^18.3.1",
