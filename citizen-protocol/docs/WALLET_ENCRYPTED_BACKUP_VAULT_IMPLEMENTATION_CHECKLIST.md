@@ -790,3 +790,17 @@ Use this rubric during UX and maintainer review so “sleek” is measurable, no
 
 - Extended Tauri removable-media preflight gating to include `backup_add_slot` mutation commands (not only init/export/verify/restore), reducing write-on-unchecked-media risk in desktop runtime flows.
 - Added an in-process execution-mode scaffold in the Tauri bridge: when `CITIZEN_WALLET_DESKTOP_EXECUTION_MODE=in-process`, desktop now exercises the typed DTO execution path while explicitly annotating deterministic `execution_mode` fallback metadata (`shell_fallback`, requested mode, and note) instead of failing closed with `in_process_unavailable`; this keeps contract-parity testing unblocked while wallet-core in-process wiring remains open.
+
+### Delta Update (2026-05-03, portable-track strict gap pass continuation)
+
+- Re-ran `pnpm check:priority-gap:strict` from `vaultier/` before continuing desktop/Tauri implementation work in the **Portable Application Track (Working + Sleek)**.
+- Confirmed Checkpoint 8.5 remains complete (`pending=0`, `partial=0`, `complete=21`) and strict stale-marker detection still reports no implemented-but-unchecked checklist markers.
+- Captured refreshed open-gap counts to keep execution sequencing aligned with current blockers:
+  - Portable Application Track: `pending=7`, `partial=10`, `complete=19`.
+  - Implementation Continuation Plan (2026-05-01): `pending=26`, `partial=10`, `complete=47`.
+- Preserved blocker-class desktop items as open (`[ ]`/`[~]`) pending implementation evidence for:
+  - in-process wallet-core bridge replacement for shell-backed execution,
+  - signed/reproducible cross-platform packaging artifacts,
+  - signed cross-platform removable-media smoke evidence,
+  - final bridge memory/logging audit sign-off.
+- Recorded strict-check advisory output noting one possible over-checked marker candidate in Checkpoint 7; left checkbox state unchanged in this pass pending maintainer review so this checklist does not silently downgrade or reclassify previously accepted sign-off evidence.
