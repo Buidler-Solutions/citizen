@@ -145,6 +145,47 @@ fn validate_local_target_path(target: &str) -> Result<(), String> {
 }
 
 #[cfg(feature = "desktop-runtime")]
+fn command_requires_removable_preflight(command: &str) -> bool {
+    matches!(
+        command,
+        "backup_init" | "backup_export_credentials" | "backup_verify" | "backup_restore"
+    )
+}
+
+#[cfg(feature = "desktop-runtime")]
+fn command_target_path(request: &BackupCommandRequest, args: &[String]) -> Option<PathBuf> {
+    extract_flag_value(args, &["--vault-path", "--vault"])
+        .or_else(|| {
+            request
+                .payload
+                .get("targetPath")
+                .or_else(|| request.payload.get("target_path"))
+                .and_then(|v| v.as_str())
+                .map(str::to_owned)
+        })
+        .map(PathBuf::from)
+}
+
+#[cfg(feature = "desktop-runtime")]
+fn preflight_backup_command_target(command: &str, target: &Path) -> Result<(), &'static str> {
+    if !command_requires_removable_preflight(command) {
+        return Ok(());
+    }
+    if is_remote_target_path(&target.to_string_lossy()) {
+        return Err("path_invalid");
+    }
+    let path_for_checks = if target.exists() {
+        target.to_path_buf()
+    } else {
+        target
+            .parent()
+            .map(Path::to_path_buf)
+            .unwrap_or_else(|| target.to_path_buf())
+    };
+    preflight_target_path(&path_for_checks)
+}
+
+#[cfg(feature = "desktop-runtime")]
 fn parse_cli_json(stdout: &str) -> Result<serde_json::Value, String> {
     serde_json::from_str(stdout)
         .map_err(|err| format!("wallet CLI did not emit valid JSON output: {err}"))
@@ -303,6 +344,20 @@ fn execute_backup_command_internal(request: &BackupCommandRequest) -> BackupComm
                 "message": err,
             }),
         };
+    }
+    if let Some(target_path) = command_target_path(request, &dynamic_args) {
+        if let Err(error_id) = preflight_backup_command_target(&request.command, &target_path) {
+            return BackupCommandResponse {
+                contract_version: CONTRACT_VERSION,
+                status: "error",
+                error_id: Some(error_id.to_owned()),
+                details: serde_json::json!({
+                    "command": request.command,
+                    "message": "backup target path failed removable-media preflight checks",
+                    "target_path": target_path,
+                }),
+            };
+        }
     }
 
     let mut command = Command::new("cargo");
@@ -741,6 +796,21 @@ mod tests {
     fn path_shape_compatibility_rejects_empty_or_nul_paths() {
         assert!(!is_path_shape_compatible(Path::new("")));
         assert!(!is_path_shape_compatible(Path::new("vault\0backup")));
+    }
+
+    #[test]
+    fn backup_init_requires_removable_media_preflight() {
+        assert!(super::command_requires_removable_preflight("backup_init"));
+        assert!(!super::command_requires_removable_preflight("backup_add_slot"));
+    }
+
+    #[test]
+    fn preflight_backup_command_target_rejects_remote_url_targets() {
+        let result = super::preflight_backup_command_target(
+            "backup_verify",
+            Path::new("https://example.com/vault.json"),
+        );
+        assert_eq!(result, Err("path_invalid"));
     }
 
 }
