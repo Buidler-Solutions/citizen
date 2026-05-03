@@ -10,6 +10,7 @@ import {
   type ApprovalUiRolloutStage,
 } from './rollout';
 import { canonicalJson, sha256DigestHex } from './canonical';
+import { evaluatePassphraseStrength, validateDistinctPassphrases } from './backupPassphrasePolicy';
 
 type WalletState = {
   account: string;
@@ -1133,6 +1134,11 @@ export function App() {
   };
 
   const handleCreateBackupVault = async () => {
+    const policyError = validateDistinctPassphrases(backupDecoyPassphrase, backupCriticalPassphrase);
+    if (policyError) {
+      setStatus(policyError);
+      return;
+    }
     const response = await callWallet('wallet_createBackupVault', [backupDecoyPassphrase, backupCriticalPassphrase]);
     setStatus(response.ok ? 'Backup vault initialized with decoy + critical slots.' : response.error ?? 'Unable to initialize backup vault.');
   };
@@ -1159,6 +1165,16 @@ export function App() {
     setStatus(response.ok ? 'Encrypted backup restored and wallet vault refreshed.' : response.error ?? 'Unable to restore encrypted backup.');
     if (response.ok) await refreshState();
   };
+
+
+  const decoyPassphraseStrength = useMemo(
+    () => evaluatePassphraseStrength(backupDecoyPassphrase),
+    [backupDecoyPassphrase],
+  );
+  const criticalPassphraseStrength = useMemo(
+    () => evaluatePassphraseStrength(backupCriticalPassphrase),
+    [backupCriticalPassphrase],
+  );
 
   const blockedOrigins = useMemo(
     () => originPermissions.filter((entry) => entry.permission === 'blocked'),
@@ -1946,6 +1962,7 @@ export function App() {
               <article className="request-card">
                 <h2>Encrypted backup vault posture</h2>
                 <p className="meta-text">Use distinct passphrases (16+ chars recommended) for decoy and critical slots. Exports remain encrypted end-to-end and are never emitted as plaintext secrets.</p>
+                <p className="meta-text">Decoy strength: {decoyPassphraseStrength}. Critical strength: {criticalPassphraseStrength}. Prefer long passphrases with upper/lowercase letters, digits, and symbols.</p>
                 <p className="meta-text">Recovery warning: if a critical passphrase is lost, encrypted critical-slot exports cannot be recovered by Citizen services.</p>
                 <p className="meta-text">
                   Last backup verification: {backupPosture?.lastVerifiedAt ? new Date(backupPosture.lastVerifiedAt).toLocaleString() : 'Not recorded'}.
