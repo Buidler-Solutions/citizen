@@ -152,7 +152,7 @@ fn validate_local_target_path(target: &str) -> Result<(), String> {
 fn command_requires_removable_preflight(command: &str) -> bool {
     matches!(
         command,
-        "backup_init" | "backup_export_credentials" | "backup_verify" | "backup_restore"
+        "backup_init" | "backup_add_slot" | "backup_export_credentials" | "backup_verify" | "backup_restore"
     )
 }
 
@@ -511,13 +511,19 @@ fn execute_backup_command(request: BackupCommandRequest) -> BackupCommandRespons
 mod tests {
 
     use super::{
-        cli_error_id_from_stdout, cli_error_id_from_value, command_to_cli_args,
+        cli_error_id_from_stdout, cli_error_id_from_value, command_requires_removable_preflight, command_to_cli_args,
         contains_sensitive_keys, is_path_shape_compatible, is_remote_target_path,
         looks_removable_for_os, parse_cli_json, parse_macos_mount_lines, parse_windows_drive_lines,
         scrub_sensitive_text, sensitive_arg_values, validate_backup_target_arg,
         BackupCommandResponse, CONTRACT_VERSION,
     };
     use std::path::Path;
+
+
+    #[test]
+    fn removable_preflight_includes_add_slot_mutations() {
+        assert!(command_requires_removable_preflight("backup_add_slot"));
+    }
 
     #[test]
     fn cli_command_mapping_covers_required_backup_commands() {
@@ -834,9 +840,9 @@ mod tests {
     }
 
     #[test]
-    fn backup_init_requires_removable_media_preflight() {
+    fn backup_commands_requiring_removable_media_preflight_are_gated() {
         assert!(super::command_requires_removable_preflight("backup_init"));
-        assert!(!super::command_requires_removable_preflight("backup_add_slot"));
+        assert!(super::command_requires_removable_preflight("backup_add_slot"));
     }
 
     #[test]
