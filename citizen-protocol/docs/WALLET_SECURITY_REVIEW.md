@@ -8,6 +8,7 @@ Date: 2026-02-11
 - Added policy control primitives for high-impact actions (`ActionPolicy`, multisig approval checks).
 - Documented deterministic 3-of-5 multisig builder-credit grant mechanics, including approver allowlisting, key binding, and proof validation requirements.
 - Added explicit threat checklist and recommended controls for CLI and React contexts.
+- Added encrypted wallet backup vault workflows for decoy/critical recovery slots with deterministic verify/restore contract outputs (see `WALLET_BACKUP_VAULT_FORMAT.md`, `WALLET_BACKUP_DISASTER_RECOVERY_RUNBOOK.md`, and `WALLET_ENCRYPTED_BACKUP_VAULT_THREAT_MODEL.md`).
 
 ## Threat model summary
 
@@ -21,6 +22,16 @@ Date: 2026-02-11
    - Mitigation: per-approver signed deterministic payloads, strict approver-to-key matching, and minimum unique proof threshold (`required_grant_approvals`).
 5. **Hardware key substitution attacks**
    - Mitigation: provider identity metadata + explicit allowlist of trusted key providers.
+6. **Backup media theft/tampering**
+   - Mitigation: encrypted decoy/critical slot separation, signed-manifest verification during verify/restore, and deterministic tamper-failure errors.
+
+## Backup vault developer experience additions
+
+- CLI quick-start flows for `wallet backup init`, `wallet backup export-credentials`, `wallet backup verify`, and `wallet backup restore` are now captured in `WALLET_GENERATION_GUIDE.md`.
+- Extension quick-start recovery flow and runtime constraints are documented in:
+  - `WALLET_GENERATION_GUIDE.md`
+  - `wallet/browser/docs/WALLET_EXTENSION_BACKUP_SECURITY_BOUNDARIES.md`
+- Versioned vault schema + migration strategy is published in `WALLET_BACKUP_VAULT_FORMAT.md` and is the baseline contract for CLI/desktop integration.
 
 ## Remaining follow-up
 

@@ -106,3 +106,63 @@ cargo run -p citizen-wallet --bin wallet -- public-key \
 ```
 
 This prints only `public_key_hex` and does not decrypt/export the secret key.
+
+## 5) Backup vault quick start (CLI)
+
+After key generation, use encrypted backup vault flows for removable-media custody.
+
+```bash
+cd citizen-protocol
+export CITIZEN_WALLET_PASSWORD='change-me'
+cargo run -p citizen-wallet --bin wallet -- backup init \
+  --vault-path /media/$USER/CITIZEN_USB/citizen-backup.vault \
+  --decoy-passphrase 'decoy-passphrase-change-me' \
+  --critical-passphrase 'critical-passphrase-change-me' \
+  --json
+```
+
+```bash
+cd citizen-protocol
+cargo run -p citizen-wallet --bin wallet -- backup export-credentials \
+  --wallet-path /tmp/citizen-wallet-test.json \
+  --vault-path /media/$USER/CITIZEN_USB/citizen-backup.vault \
+  --slot critical \
+  --passphrase 'critical-passphrase-change-me' \
+  --include identity-keys \
+  --include account-keys \
+  --include recovery-metadata \
+  --json
+```
+
+```bash
+cd citizen-protocol
+cargo run -p citizen-wallet --bin wallet -- backup verify \
+  --vault-path /media/$USER/CITIZEN_USB/citizen-backup.vault \
+  --slot critical \
+  --passphrase 'critical-passphrase-change-me' \
+  --json
+```
+
+```bash
+cd citizen-protocol
+cargo run -p citizen-wallet --bin wallet -- backup restore \
+  --vault-path /media/$USER/CITIZEN_USB/citizen-backup.vault \
+  --slot critical \
+  --passphrase 'critical-passphrase-change-me' \
+  --wallet-path /tmp/citizen-wallet-restored.json \
+  --json
+```
+
+For deterministic JSON output examples and schema/version migration behavior, see `WALLET_BACKUP_VAULT_FORMAT.md`. For operational recovery drills and conflict handling, see `WALLET_BACKUP_DISASTER_RECOVERY_RUNBOOK.md`.
+
+## 6) Extension recovery quick start
+
+For browser extension operators:
+
+1. Open **Security → Backup Vault**.
+2. Create decoy + critical slots with distinct passphrases.
+3. Export encrypted backup artifacts (background-only encryption path).
+4. Run **Verify** immediately after export.
+5. On recovery, choose deterministic conflict mode (`replace existing IDs` or `keep existing IDs`) before restore.
+
+Security boundaries and browser storage/runtime constraints are documented in `wallet/browser/docs/WALLET_EXTENSION_BACKUP_SECURITY_BOUNDARIES.md`.
