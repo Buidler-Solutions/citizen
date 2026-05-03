@@ -624,7 +624,7 @@ Use this backlog to convert the portable app milestone tracker into small implem
 **Exit criteria**
 - [ ] PR-F1 through PR-F5 merged with green cross-platform smoke checks.
 - [x] Portable app roadmap status can advance M0→M2 from Planned to In Progress/Implemented with linked evidence PRs. (Updated milestone tracker now reflects M1/M2 as In Progress, aligned to implemented Vaultier/Tauri evidence already tracked in this checklist.)
-- [ ] Desktop docs explicitly reference deterministic error contract and recovery runbook procedures.
+- [x] Desktop docs explicitly reference deterministic error contract and recovery runbook procedures. (`wallet/desktop/README.md` now includes a dedicated deterministic error contract + recovery runbook section that anchors desktop behavior to wallet CLI contract IDs, the vault format contract note, disaster recovery runbook ordering, and threat-model removable-media constraints.)
 
 
 ### Delta Update (2026-05-02, Tauri smoke gate continuation)
