@@ -735,3 +735,10 @@ Use this rubric during UX and maintainer review so “sleek” is measurable, no
   - signed cross-platform removable-media smoke evidence,
   - final memory/logging bridge audit sign-off.
 - Preserved existing `[ ]` / `[~]` states for these blockers intentionally so the checklist only advances when implementation evidence lands.
+
+
+### Delta Update (2026-05-03, desktop smoke gate hardening continuation)
+
+- Re-ran `pnpm test:headless-contract:strict` from `vaultier/` to enforce full-checklist reconciliation before additional desktop changes; Checkpoint 8.5 remains clear and strict stale-marker detection still reports no implemented-but-unchecked items.
+- Hardened `.github/workflows/vaultier-desktop-smoke.yml` to also execute `cargo test --lib` in `wallet/desktop/src-tauri`, so desktop-path PRs now gate on Rust bridge/parser unit coverage in addition to WB-mode/headless contract checks.
+- This keeps Tauri continuation aligned with the immediate coding queue by tightening platform-tagged smoke validation around removable-media adapter/parser behavior without prematurely marking signed-artifact or in-process bridge blockers as complete.
