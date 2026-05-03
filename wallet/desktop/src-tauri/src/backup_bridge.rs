@@ -649,6 +649,12 @@ mod tests {
         ));
     }
 
+    #[test]
+    fn path_shape_compatibility_rejects_empty_or_nul_paths() {
+        assert!(!is_path_shape_compatible(Path::new("")));
+        assert!(!is_path_shape_compatible(Path::new("vault\0backup")));
+    }
+
 }
 
 #[cfg(feature = "desktop-runtime")]
@@ -683,6 +689,9 @@ fn preflight_target_path(target: &Path) -> Result<(), &'static str> {
     if !target.exists() {
         return Err("path_invalid");
     }
+    if !is_path_shape_compatible(target) {
+        return Err("path_invalid");
+    }
     if !looks_removable(target) {
         return Err("media_unavailable");
     }
@@ -698,6 +707,25 @@ fn preflight_target_path(target: &Path) -> Result<(), &'static str> {
         }
     }
     Ok(())
+}
+
+#[cfg(feature = "desktop-runtime")]
+fn is_path_shape_compatible(target: &Path) -> bool {
+    let value = target.to_string_lossy();
+    if value.trim().is_empty() || value.contains('\0') {
+        return false;
+    }
+    if cfg!(target_os = "windows") {
+        let invalid = ['<', '>', ':', '"', '|', '?', '*'];
+        if value
+            .chars()
+            .enumerate()
+            .any(|(idx, c)| invalid.contains(&c) && !(idx == 1 && c == ':'))
+        {
+            return false;
+        }
+    }
+    true
 }
 
 #[cfg(feature = "desktop-runtime")]
