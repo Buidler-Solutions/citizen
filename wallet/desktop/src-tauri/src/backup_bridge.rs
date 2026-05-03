@@ -113,11 +113,16 @@ fn extract_flag_value(args: &[String], flags: &[&str]) -> Option<String> {
 }
 
 #[cfg(feature = "desktop-runtime")]
+fn is_remote_target_path(path: &str) -> bool {
+    path.contains("://")
+}
+
+#[cfg(feature = "desktop-runtime")]
 fn validate_backup_target_arg(args: &[String]) -> Result<(), String> {
     let Some(target) = extract_flag_value(args, &["--vault-path", "--vault"]) else {
         return Ok(());
     };
-    if target.contains("://") {
+    if is_remote_target_path(&target) {
         return Err("remote URL targets are not supported for desktop backup commands".to_owned());
     }
     if target.trim().is_empty() {
@@ -396,8 +401,8 @@ mod tests {
 
     use super::{
         cli_error_id_from_stdout, cli_error_id_from_value, command_to_cli_args,
-        contains_sensitive_keys, looks_removable_for_os, parse_cli_json, parse_macos_mount_lines,
-        parse_windows_drive_lines, scrub_sensitive_text, sensitive_arg_values,
+        contains_sensitive_keys, is_remote_target_path, looks_removable_for_os, parse_cli_json,
+        parse_macos_mount_lines, parse_windows_drive_lines, scrub_sensitive_text, sensitive_arg_values,
         validate_backup_target_arg, BackupCommandResponse, CONTRACT_VERSION,
     };
     use std::path::Path;
@@ -646,6 +651,18 @@ mod tests {
     }
 
     #[test]
+    fn remote_target_path_detector_flags_url_like_paths() {
+        assert!(is_remote_target_path("s3://bucket/vault.json"));
+        assert!(!is_remote_target_path("/media/operator/vault.json"));
+    }
+
+    #[test]
+    fn preflight_target_path_rejects_remote_url_shape() {
+        let result = super::preflight_target_path(Path::new("s3://bucket/vault.json"));
+        assert_eq!(result, Err("path_invalid"));
+    }
+
+    #[test]
     fn removable_path_detection_supports_linux_path_shapes() {
         assert!(looks_removable_for_os(Path::new("/media/operator/vault"), "linux"));
         assert!(looks_removable_for_os(Path::new("/mnt/usb/vault"), "linux"));
@@ -707,6 +724,9 @@ fn looks_removable(path: &Path) -> bool {
 
 #[cfg(feature = "desktop-runtime")]
 fn preflight_target_path(target: &Path) -> Result<(), &'static str> {
+    if is_remote_target_path(&target.to_string_lossy()) {
+        return Err("path_invalid");
+    }
     if !target.exists() {
         return Err("path_invalid");
     }
