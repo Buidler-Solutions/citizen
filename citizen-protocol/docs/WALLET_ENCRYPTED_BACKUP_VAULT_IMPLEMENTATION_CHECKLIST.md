@@ -376,6 +376,12 @@ To translate the CLI-first vault implementation into a polished portable app exp
 - [x] Checkpoint 9 continuation now has a fully ordered queue (`R9-D` -> `R9-E` -> `R9-F`) with prerequisite gating documented; this keeps checkpoint-9 execution unambiguous while packaging/signing + bridge-audit blockers are still open.
 - [x] R9-F preparation artifacts are now landed so checkpoint-9 closure can execute immediately once R9-D/R9-E evidence is attached.
 
+7. **R9-G — Pre-stage closure report/checklist templates (documentation-only, non-blocking prep)**
+   - [x] Add a release checklist template for R9-D sign-off capture so owner approvals and signed artifact evidence can be recorded without reopening structure decisions. (Added `citizen-protocol/docs/WALLET_DESKTOP_RELEASE_CHECKLIST_TEMPLATE.md`.)
+   - [x] Add a post-rollout validation template for R9-E so alpha drill packet links + telemetry threshold summaries have a deterministic reporting skeleton before execution. (Added `citizen-protocol/docs/evidence/wallet-backup-vault/WALLET_DESKTOP_POST_ROLLOUT_VALIDATION_TEMPLATE.md`.)
+
+- [x] R9-G pre-staging artifacts are now landed; R9-D/R9-E remain evidence-blocked but no longer blocked on report/checklist document scaffolding.
+
 **Exit criteria**
 - [ ] Release checklist signed off.
 - [ ] Post-rollout validation report completed.
