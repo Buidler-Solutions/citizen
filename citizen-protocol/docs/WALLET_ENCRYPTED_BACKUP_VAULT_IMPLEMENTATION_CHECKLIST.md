@@ -102,15 +102,15 @@ To keep implementation sequencing unambiguous, treat **Checkpoint 8.5 — Priori
 ## Checkpoint 2 — Cryptography and Vault Format
 
 - [x] Select password-based KDF parameters (Argon2id baseline) with environment-aware defaults.
-- [ ] Define AEAD scheme (e.g., XChaCha20-Poly1305 or AES-256-GCM) and nonce/IV policy.
+- [x] Define AEAD scheme (e.g., XChaCha20-Poly1305 or AES-256-GCM) and nonce/IV policy. (Documented baseline is ChaCha20-Poly1305 with strict 12-byte nonce validation and deterministic decrypt failure semantics in `WALLET_BACKUP_CRYPTO_POLICY.md`, with wallet tests enforcing nonce-length/tamper rejection.)
 - [ ] Implement per-vault master key wrapping and per-object envelope encryption.
 - [ ] Implement memory-hard unlock path and secure zeroization where feasible.
-- [ ] Define vault file format:
-  - [ ] global magic/version
-  - [ ] slot table supporting `decoy`, `critical`, and future roles
-  - [ ] authenticated metadata
-  - [ ] rollback/anti-tamper counters
-- [ ] Define corruption detection and deterministic error codes.
+- [~] Define vault file format:
+  - [x] global magic/version
+  - [x] slot table supporting `decoy`, `critical`, and future roles
+  - [x] authenticated metadata
+  - [x] rollback/anti-tamper counters
+- [x] Define corruption detection and deterministic error codes.
 
 **Exit criteria**
 - [ ] Crypto design reviewed against current repo wallet/off-chain encryption patterns.
