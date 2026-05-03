@@ -353,6 +353,19 @@ To translate the CLI-first vault implementation into a polished portable app exp
 
 - [x] Checkpoint 9 execution queue continuation items R9-A through R9-C are now fully specified; remaining Checkpoint 9 closure work is release-checklist sign-off and post-rollout validation evidence after packaging/signing and bridge-audit gates complete.
 
+### Checkpoint 9 Closure Queue (2026-05-03 checkpoint-9 continuation)
+
+4. **R9-D — Release checklist sign-off packet (blocked on packaging/audit evidence)**
+   - [ ] Collect signed packaging/reproducibility artifacts for Linux/macOS/Windows desktop distributions and link immutable artifact digests.
+   - [ ] Attach final bridge memory/logging audit evidence showing no plaintext secret exposure across runtime bridge logs, crash artifacts, or diagnostics exports.
+   - [ ] Record explicit maintainer approvals (wallet, desktop/runtime, security) on the release checklist with date-stamped sign-off.
+5. **R9-E — Post-rollout validation report (alpha -> beta promotion gate)**
+   - [ ] Execute one full internal alpha drill cycle using the R9-B cadence and attach completed packet evidence for each target OS.
+   - [ ] Summarize local-only telemetry counters from the R9-C spec (success/failure/verification confidence) and document threshold pass/fail outcomes.
+   - [ ] Publish a dated validation summary in `citizen-protocol/docs/evidence/wallet-backup-vault/` and cross-link it here before enabling beta opt-in.
+
+> Checkpoint-9 enforcement note: R9-D and R9-E remain blocked until TV-3 packaging/signing evidence and the desktop bridge security audit are both complete; do not mark Checkpoint 9 exit criteria complete before those prerequisites are attached.
+
 **Exit criteria**
 - [ ] Release checklist signed off.
 - [ ] Post-rollout validation report completed.
