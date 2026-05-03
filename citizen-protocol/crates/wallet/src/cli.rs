@@ -3619,6 +3619,79 @@ mod tests {
         );
     }
 
+    #[test]
+    fn backup_wipe_slot_requires_correct_passphrase_and_preserves_role_metadata() {
+        let base = unique_test_path("backup-wipe-slot-passphrase-and-metadata");
+        let keystore_path = base.join("wallet.json");
+        let vault_path = base.join("vault.json");
+        fs::create_dir_all(&base).expect("create test directory");
+
+        let mut keystore = Keystore {
+            version: 1,
+            keys: vec![],
+        };
+        keystore.add_key(KeyRecord {
+            key_id: Uuid::new_v4(),
+            label: Some("wipe-slot".to_string()),
+            public_key_hex: "56".repeat(32),
+            secret_key_hex: Some("78".repeat(32)),
+            encrypted_secret_key: None,
+            created_at: Utc::now().timestamp(),
+        });
+        keystore.save(&keystore_path).expect("save keystore");
+
+        backup_init(BackupInitArgs {
+            vault_path: vault_path.clone(),
+            portable_label: Some("usb-wipe-slot".to_string()),
+            decoy_password: Some("decoy-pass".to_string()),
+            critical_password: Some("critical-pass".to_string()),
+            kdf_profile: BackupKdfProfile::Balanced,
+            json: true,
+            assume_removable_media_risk: true,
+        })
+        .expect("init vault");
+
+        backup_export_credentials(BackupExportArgs {
+            path: keystore_path,
+            vault_path: vault_path.clone(),
+            role: BackupSlotRole::Decoy,
+            password: Some("decoy-pass".to_string()),
+            scopes: vec![BackupExportScope::Keys],
+            assume_removable_media_risk: true,
+        })
+        .expect("export decoy credentials");
+
+        let wrong_password = backup_wipe_slot(BackupWipeSlotArgs {
+            vault_path: vault_path.clone(),
+            role: BackupSlotRole::Decoy,
+            current_password: Some("critical-pass".to_string()),
+        })
+        .expect_err("wrong passphrase must fail wipe");
+        assert!(
+            wrong_password.to_string().contains("decrypt_failed"),
+            "wrong passphrase should return decrypt_failed"
+        );
+
+        backup_wipe_slot(BackupWipeSlotArgs {
+            vault_path: vault_path.clone(),
+            role: BackupSlotRole::Decoy,
+            current_password: Some("decoy-pass".to_string()),
+        })
+        .expect("wipe decoy slot");
+
+        let vault = load_backup_vault(&vault_path).expect("load wiped vault");
+        let wiped_slot = vault
+            .slots
+            .iter()
+            .find(|slot| slot.role == BackupSlotRole::Decoy)
+            .expect("decoy slot exists");
+        assert_eq!(wiped_slot.role, BackupSlotRole::Decoy, "slot role must persist");
+        assert!(
+            wiped_slot.scopes.is_empty(),
+            "wiped slot should clear backup scopes"
+        );
+    }
+
     proptest! {
         #[test]
         fn backup_verify_rejects_randomized_metadata_mutations(
