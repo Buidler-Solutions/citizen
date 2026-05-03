@@ -37,6 +37,7 @@ const hasTauriRuntime = () => typeof window !== 'undefined' && '__TAURI__' in wi
 const SECRET_KEY_MARKERS = ['passphrase', 'password', 'secret', 'seed', 'mnemonic', 'privatekey', 'private_key'];
 const SECRET_VALUE_MARKERS = ['passphrase=', 'password=', 'secret=', 'seed=', 'mnemonic=', 'private-key=', 'private_key='];
 const RUNTIME_PROFILE_KEY = 'vaultier.runtime.profile';
+let tauriCommandQueue: Promise<void> = Promise.resolve();
 
 
 const VAULTIER_ERROR_CODES: ReadonlySet<VaultierErrorCode> = new Set([
@@ -218,6 +219,19 @@ export async function flushViaTauri(targetPath: string): Promise<{ strategy: Cra
 }
 
 export async function invokeBackupCommandViaTauri(command: HeadlessCommand): Promise<HeadlessResponse> {
+  return enqueueTauriCommand(async () => invokeBackupCommandViaTauriImmediate(command));
+}
+
+function enqueueTauriCommand<T>(operation: () => Promise<T>): Promise<T> {
+  const result = tauriCommandQueue.then(operation, operation);
+  tauriCommandQueue = result.then(
+    () => undefined,
+    () => undefined,
+  );
+  return result;
+}
+
+async function invokeBackupCommandViaTauriImmediate(command: HeadlessCommand): Promise<HeadlessResponse> {
   const { command: commandName, ...payload } = command;
   const sanitizedPayload = sanitizePayload(payload);
 

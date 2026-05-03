@@ -62,6 +62,10 @@ function withTauriInvoke(invoke?: InvokeFn): void {
   (globalThis as unknown as { window?: unknown }).window = invoke ? ({ __TAURI__: { core: { invoke } } } as unknown) : ({} as unknown);
 }
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 async function main() {
   const sanitized = sanitizeTauriPayloadForLogs({ passphrase: 'x', nested: { backupPassword: 'y', notes: 'safe' }, args: ['--slot-password=abc123'] }) as Record<string, unknown>;
   assert(sanitized.passphrase === '[REDACTED]', 'top-level secret field should be redacted');
@@ -359,6 +363,30 @@ async function main() {
       assert(!message.includes('should-never-leak'), `redaction failures must not expose raw secret values for ${entry.command}`);
     }
   }
+
+  const callOrder: string[] = [];
+  withTauriInvoke(async (name) => {
+    callOrder.push(`${name}:start`);
+    await sleep(15);
+    callOrder.push(`${name}:end`);
+    return {
+      schemaVersion: 'v1alpha1',
+      contractVersion: '2026-05-01',
+      ok: true,
+      command: name as HeadlessResponse['command'],
+      result: { queued: true },
+    } satisfies HeadlessResponse;
+  });
+
+  await Promise.all([
+    invokeBackupCommandViaTauri({ command: 'backup_verify', targetPath: '/media/usb/vault-a.cvb', expectedVaultVersion: '1', requireSignedManifest: true }),
+    invokeBackupCommandViaTauri({ command: 'backup_verify', targetPath: '/media/usb/vault-b.cvb', expectedVaultVersion: '1', requireSignedManifest: true }),
+  ]);
+
+  assert(
+    JSON.stringify(callOrder) === JSON.stringify(['backup_verify:start', 'backup_verify:end', 'backup_verify:start', 'backup_verify:end']),
+    `tauri execution queue should serialize runtime command invocation, got ${JSON.stringify(callOrder)}`,
+  );
 }
 
 main();
