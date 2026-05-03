@@ -524,6 +524,8 @@ struct BackupWipeSlotArgs {
     vault_path: PathBuf,
     #[arg(long)]
     role: BackupSlotRole,
+    #[arg(long)]
+    current_password: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, ValueEnum, PartialEq, Eq)]
@@ -2258,17 +2260,23 @@ fn backup_rotate_passphrase(args: BackupRotatePassphraseArgs) -> anyhow::Result<
 
 fn backup_wipe_slot(args: BackupWipeSlotArgs) -> anyhow::Result<()> {
     let mut vault = load_backup_vault(&args.vault_path)?;
+    let current_password =
+        load_backup_password(args.current_password, "CITIZEN_BACKUP_SLOT_PASSWORD")?;
     let slot = vault
         .slots
         .iter_mut()
         .find(|slot| slot.role == args.role)
         .ok_or_else(|| backup_error_anyhow(BackupErrorCode::SlotNotFound, "slot not found"))?;
+    decrypt_backup_envelope(&slot.encrypted_payload, &current_password)
+        .map_err(|_| backup_error_anyhow(BackupErrorCode::DecryptFailed, "decrypt failed"))?;
+    let wiped_payload = json!({});
+    let wiped_payload_bytes = serde_json::to_vec(&wiped_payload)?;
     slot.scopes = vec![];
-    slot.encrypted_payload = encrypt_backup_envelope(&json!({}), "wiped-slot-placeholder")?;
+    slot.encrypted_payload = encrypt_backup_envelope(&wiped_payload, &current_password)?;
     slot.exported_at = Utc::now().timestamp();
-    slot.payload_sha256 = hash_hex(&serde_json::to_vec(&json!({}))?);
+    slot.payload_sha256 = hash_hex(&wiped_payload_bytes);
     slot.tamper_counter = slot.tamper_counter.saturating_add(1);
-    slot.signed_manifest = Some(build_signed_manifest(&serde_json::to_vec(&json!({}))?));
+    slot.signed_manifest = Some(build_signed_manifest(&wiped_payload_bytes));
     vault.rollback_counter = vault.rollback_counter.saturating_add(1);
     save_backup_vault(&args.vault_path, &vault)?;
     println!("Wiped {:?} slot payload material", args.role);
