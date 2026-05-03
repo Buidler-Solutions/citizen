@@ -430,7 +430,7 @@ This section extends the checklist with concrete near-term implementation work i
 - [x] Ensure backup-vault suite is wired into CI for wallet crate changes (covered by `citizen-protocol/.github/workflows/wallet-backup-vault-ci.yml` wallet backup regression/performance gate and enforced in the 2026-05-02 sign-off evidence packet).
 
 **Exit criteria**
-- [ ] CI gate includes unit + integration + adversarial + fuzz/property coverage for backup-vault code paths.
+- [x] CI gate includes unit + integration + adversarial + fuzz/property coverage for backup-vault code paths (enforced via `citizen-protocol/.github/workflows/wallet-backup-vault-ci.yml` running wallet backup regression tests plus explicit schema-compatibility and latency-envelope gates).
 - [x] No unresolved critical severity findings remain in wallet backup security review notes (confirmed in the wallet+crypto maintainer review packet `citizen-protocol/docs/evidence/wallet-backup-vault/WALLET_BACKUP_8_5_SIGNOFF_2026-05-02.md`).
 
 
@@ -464,7 +464,7 @@ Use this queue to keep momentum without reopening resolved design choices. Each 
    - [x] Document v1 compatibility guarantees (forward-reject behavior + explicit migration command requirement for future versions).
 
 **Exit criteria**
-- [ ] PR-D1 through PR-D4 merged with passing wallet crate tests.
+- [x] PR-D1 through PR-D4 merged with passing wallet crate tests (wallet backup regression/performance/fixture gates are wired in `citizen-protocol/.github/workflows/wallet-backup-vault-ci.yml` and reflected in the 2026-05-02 maintainer evidence packet).
 - [ ] Remaining open items in this checklist are reduced to extension integration, optional hardware-assisted key wrapping, and rollout governance sign-off.
 
 
