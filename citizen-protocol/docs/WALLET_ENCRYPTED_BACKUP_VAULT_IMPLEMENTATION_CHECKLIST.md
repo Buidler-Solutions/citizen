@@ -660,6 +660,13 @@ Use this rubric during UX and maintainer review so “sleek” is measurable, no
 - Added `pnpm check:priority-gap` in `vaultier/package.json` so Vaultier continuation can deterministically fail fast when priority items remain open.
 - This supports the “always check the gap before continuing Vaultier coding” operator workflow without changing security sign-off semantics.
 
+
+### Delta Update (2026-05-03, full-checklist audit workflow hardening)
+
+- Added a markdown-report mode to `vaultier/checklist-gap-check.mjs` so each Tauri continuation pass can emit a human-reviewable full-checklist gap report (priority gate status, section-by-section open counts, and stale-unchecked candidate scan) without manual spreadsheeting.
+- Added `pnpm run check:priority-gap:markdown` in `vaultier/package.json` (plus compatibility aliases `check:priority-gap:md` and `check-priority-gap-markdown`) for deterministic local/CI checklist reconciliation before continuing desktop implementation slices.
+- Re-ran strict priority-gap checks after this hardening and confirmed: Checkpoint 8.5 remains clear (`pending=0`, `partial=0`) and stale unchecked markers are currently not detected, so remaining open items stay intentionally blocked on implementation evidence (in-process bridge, signed packaging/smoke, final memory/logging audit).
+
 ### Format Stability Note (v1)
 
 - Active vault format contract is `citizen.wallet.backup.v1`, with deterministic forward-reject behavior for unknown schema versions.

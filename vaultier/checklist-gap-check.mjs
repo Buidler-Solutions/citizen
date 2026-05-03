@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 const emitJson = process.argv.includes('--json');
 const strictStaleUnchecked = process.argv.includes('--strict-stale-unchecked');
 const includeFullSummary = process.argv.includes('--full-summary');
+const emitMarkdown = process.argv.includes('--markdown');
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const checklistPath = resolve(scriptDir, '../citizen-protocol/docs/WALLET_ENCRYPTED_BACKUP_VAULT_IMPLEMENTATION_CHECKLIST.md');
 const doc = readFileSync(checklistPath, 'utf8');
@@ -127,6 +128,44 @@ const summary = {
   staleUncheckedCandidates: staleUnchecked,
   fullSectionSummaries,
 };
+
+
+
+const markdownLines = [
+  '# Wallet backup checklist gap report',
+  '',
+  `- Generated: ${new Date().toISOString()}`,
+  `- Priority gate status: **${summary.status}**`,
+  `- Checkpoint 8.5 counts: pending=${summary.counts.pending}, partial=${summary.counts.partial}, complete=${summary.counts.complete}`,
+  '',
+  '## Priority gate open items',
+];
+
+if (summary.openItems.length === 0) {
+  markdownLines.push('- None.');
+} else {
+  for (const item of summary.openItems) {
+    markdownLines.push(`- ${item.checklistBadge} ${item.text}`);
+  }
+}
+
+markdownLines.push('', '## Full checklist section summary');
+for (const section of fullSectionSummaries) {
+  markdownLines.push(`- **${section.section}**: pending=${section.counts.pending}, partial=${section.counts.partial}, complete=${section.counts.complete}`);
+}
+
+markdownLines.push('', '## Potential stale unchecked markers');
+if (staleUnchecked.length === 0) {
+  markdownLines.push('- None detected.');
+} else {
+  for (const item of staleUnchecked) {
+    markdownLines.push(`- ${item.checklistBadge} (${item.section}) ${item.text}`);
+  }
+}
+
+if (emitMarkdown) {
+  console.log(markdownLines.join('\n'));
+}
 
 if (emitJson) {
   console.log(JSON.stringify(summary, null, 2));

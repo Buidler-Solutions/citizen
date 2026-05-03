@@ -19,7 +19,10 @@
     "check:checklist-audit:json": "node checklist-audit.mjs --json",
     "check:reminders": "node reminder-policy-check.mjs",
     "check:priority-gap:full": "node checklist-gap-check.mjs --full-summary",
-    "test:headless-contract:strict": "pnpm check:priority-gap:strict && node headless-contract-check.mjs && node runtime-parity-check.mjs && node wb-mode-fixture-check.mjs && node operation-copy-check.mjs && pnpm check:reminders"
+    "test:headless-contract:strict": "pnpm check:priority-gap:strict && node headless-contract-check.mjs && node runtime-parity-check.mjs && node wb-mode-fixture-check.mjs && node operation-copy-check.mjs && pnpm check:reminders",
+    "check:priority-gap:markdown": "node checklist-gap-check.mjs --full-summary --markdown",
+    "check:priority-gap:md": "node checklist-gap-check.mjs --full-summary --markdown",
+    "check-priority-gap-markdown": "node checklist-gap-check.mjs --full-summary --markdown"
   },
   "dependencies": {
     "react": "^18.3.1",
