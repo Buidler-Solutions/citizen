@@ -46,4 +46,4 @@ jobs:
 
       - name: Run desktop Rust bridge unit tests (adapter/parser parity)
         working-directory: wallet/desktop/src-tauri
-        run: cargo test --lib
+        run: cargo test
