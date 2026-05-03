@@ -121,18 +121,18 @@ To keep implementation sequencing unambiguous, treat **Checkpoint 8.5 — Priori
 ## Checkpoint 3 — Multi-Vault / Decoy Capability
 
 - [x] Support creation of 2+ independent encrypted vault slots in one container or linked containers. (Wallet CLI supports decoy+critical initialization and explicit archive-slot expansion via `wallet backup add-slot`; regression coverage now asserts 3-slot flows in a single vault container.)
-- [~] Implement explicit role metadata (`decoy`, `critical`, optional `archive`). (`wallet backup` role enum now includes `archive` in addition to existing `decoy`/`critical` slot metadata wiring.)
+- [x] Implement explicit role metadata (`decoy`, `critical`, optional `archive`). (`wallet backup` role enum now includes `archive` in addition to existing `decoy`/`critical` slot metadata wiring, and operator runbook command flows now include archive-aware rotation/wipe lifecycle handling.)
 - [x] Ensure decoy and critical slots are cryptographically unlinkable from ciphertext patterns as far as practical. (Wallet backup envelope encryption now wraps slot payloads inside `citizen.wallet.backup.cover.v1` blinded payloads with per-export random cover nonce and randomized cover padding to reduce deterministic role/payload-size fingerprinting across decoy/critical slots while preserving deterministic decrypt-failure behavior.)
 - [x] Implement access policy:
   - [x] decoy passphrase unlocks only decoy slot
   - [x] critical passphrase unlocks critical slot(s)
   (Regression test coverage now enforces deterministic `decrypt_failed` outcomes for cross-role passphrase confusion and successful same-role restore paths after decoy passphrase rotation.)
 - [x] Add optional duress-safe UX guidance (without false guarantees). (Operator-facing bounded deniability/duress guidance is now documented in `citizen-protocol/docs/WALLET_BACKUP_DISASTER_RECOVERY_RUNBOOK.md` with explicit residual forensic risk language.)
-- [~] Implement slot-level wipe, rotation, and passphrase update. (CLI primitives now exist via `wallet backup rotate-passphrase` and `wallet backup wipe-slot`; wipe requires successful role-passphrase unlock before mutation and re-encrypts wiped payload material with the authenticated slot passphrase instead of using a static placeholder secret, with regression coverage in `backup_wipe_slot_requires_correct_passphrase_and_preserves_role_metadata`. Follow-up UX/runbook integration remains.)
+- [x] Implement slot-level wipe, rotation, and passphrase update. (CLI primitives now exist via `wallet backup rotate-passphrase` and `wallet backup wipe-slot`; wipe requires successful role-passphrase unlock before mutation and re-encrypts wiped payload material with the authenticated slot passphrase instead of using a static placeholder secret, with regression coverage in `backup_wipe_slot_requires_correct_passphrase_and_preserves_role_metadata`; operator runbook lifecycle procedures are now documented.)
 
 **Exit criteria**
 - [x] Demonstrated creation/unlock/rotation for decoy + critical flows in integration tests. (See wallet CLI regression test `backup_multi_slot_decoy_critical_rotation_flow_isolated`.)
-- [ ] Security review note explicitly states deniability boundaries and residual forensic risk.
+- [x] Security review note explicitly states deniability boundaries and residual forensic risk. (See `citizen-protocol/docs/evidence/wallet-backup-vault/WALLET_BACKUP_CHECKPOINT3_SECURITY_NOTE_2026-05-03.md`.)
 
 ---
 
