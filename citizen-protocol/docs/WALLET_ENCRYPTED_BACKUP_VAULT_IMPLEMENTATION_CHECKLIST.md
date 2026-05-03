@@ -740,7 +740,7 @@ Use this rubric during UX and maintainer review so “sleek” is measurable, no
 ### Delta Update (2026-05-03, desktop smoke gate hardening continuation)
 
 - Re-ran `pnpm test:headless-contract:strict` from `vaultier/` to enforce full-checklist reconciliation before additional desktop changes; Checkpoint 8.5 remains clear and strict stale-marker detection still reports no implemented-but-unchecked items.
-- Hardened `.github/workflows/vaultier-desktop-smoke.yml` to also execute `cargo test --lib` in `wallet/desktop/src-tauri`, so desktop-path PRs now gate on Rust bridge/parser unit coverage in addition to WB-mode/headless contract checks.
+- Hardened `.github/workflows/vaultier-desktop-smoke.yml` to also execute `cargo test` in `wallet/desktop/src-tauri` (binary crate; no library target), so desktop-path PRs now gate on Rust bridge/parser unit coverage in addition to WB-mode/headless contract checks.
 - This keeps Tauri continuation aligned with the immediate coding queue by tightening platform-tagged smoke validation around removable-media adapter/parser behavior without prematurely marking signed-artifact or in-process bridge blockers as complete.
 
 ### Delta Update (2026-05-03, strict gap-check rerun for Tauri continuation)

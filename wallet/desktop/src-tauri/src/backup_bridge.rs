@@ -37,6 +37,7 @@ struct RemovableDriveRecord {
     filesystem: Option<String>,
     writable: bool,
     removable: bool,
+    removable_classification: &'static str,
     platform: String,
 }
 
@@ -733,6 +734,7 @@ fn discover_linux_removable_drives() -> Vec<RemovableDriveRecord> {
                         .map(str::to_owned),
                     writable: !read_only,
                     removable: true,
+                    removable_classification: "likely_removable",
                     platform: std::env::consts::OS.to_owned(),
                 });
             }
@@ -775,6 +777,7 @@ fn discover_macos_removable_drives() -> Vec<RemovableDriveRecord> {
                 .map(|m| !m.permissions().readonly())
                 .unwrap_or(false),
             removable: true,
+            removable_classification: "likely_removable",
             platform: std::env::consts::OS.to_owned(),
             mount_path,
         })
@@ -816,6 +819,7 @@ fn discover_windows_removable_drives() -> Vec<RemovableDriveRecord> {
                 .map(|m| !m.permissions().readonly())
                 .unwrap_or(false),
             removable: true,
+            removable_classification: "likely_removable",
             platform: std::env::consts::OS.to_owned(),
             mount_path,
         })
@@ -880,6 +884,7 @@ pub fn discover_removable_drives() -> serde_json::Value {
                     .map(|m| !m.permissions().readonly())
                     .unwrap_or(false),
                 removable: true,
+                removable_classification: "likely_removable",
                 platform: std::env::consts::OS.to_owned(),
             })
             .collect::<Vec<_>>();
