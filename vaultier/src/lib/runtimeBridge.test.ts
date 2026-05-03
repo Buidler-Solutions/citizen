@@ -239,6 +239,37 @@ async function main() {
   const ejectParity = await safeEjectViaTauri('/media/usb/vault.cvb');
   assert(ejectParity.bridgeIssue === undefined, 'safe-eject parity should not return bridgeIssue when tauri bridge responds');
   assert(ejectParity.ok === true, 'safe-eject parity should preserve runtime ok status');
+  assertKeys(ejectParity as unknown as Record<string, unknown>, ['ok'], 'safe_eject_media parity');
+
+  withTauriInvoke(async (name) => {
+    if (name === 'discover_removable_drives') {
+      return {
+        drives: [
+          {
+            id: 'usb-2',
+            label: 'Citizen Backup',
+            mountPath: '/Volumes/CitizenBackup',
+            filesystem: 'exfat',
+            estimatedFreeGb: 128,
+            writable: true,
+            platform: 'macos',
+          },
+        ],
+        issues: [],
+      };
+    }
+    throw new Error(`unexpected_command:${name}`);
+  });
+
+  const discoveryParity = await discoverDrivesViaTauri();
+  assertKeys(discoveryParity as unknown as Record<string, unknown>, ['drives', 'issues'], 'discover_removable_drives parity');
+  assert(discoveryParity.issues.length === 0, 'discover parity should preserve issue array');
+  assert(discoveryParity.drives.length === 1, 'discover parity should preserve drive array');
+  assertKeys(
+    discoveryParity.drives[0] as unknown as Record<string, unknown>,
+    ['estimatedFreeGb', 'filesystem', 'id', 'label', 'mountPath', 'platform', 'writable'],
+    'discover_removable_drives drive shape parity',
+  );
 
 
   withTauriInvoke(async () => {

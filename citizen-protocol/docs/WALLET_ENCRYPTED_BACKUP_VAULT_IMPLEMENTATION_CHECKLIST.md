@@ -758,6 +758,12 @@ Use this rubric during UX and maintainer review so “sleek” is measurable, no
   - in-process wallet-core bridge replacement for shell-backed execution,
   - signed/reproducible cross-platform packaging artifacts,
   - signed removable-media smoke evidence on release-grade builds,
+
+### Delta Update (2026-05-03, execution-queue parity hardening continuation)
+
+- Added utility-surface runtime parity assertions in `vaultier/src/lib/runtimeBridge.test.ts` for `discover_removable_drives`, `flush_vault_writes`, and `safe_eject_media` response-shape compatibility so WB-mode/runtime continuation catches utility contract drift earlier.
+- New assertions now pin deterministic top-level key shape for discovery/flush/safe-eject payloads and drive-record key compatibility, complementing existing backup command parity snapshots.
+- Checklist status markers remain unchanged for blocker-class desktop items (`[ ]`/`[~]`) because this slice hardens test coverage only; it does not yet deliver the in-process wallet-core bridge, signed packaging artifacts, or final memory/logging audit evidence.
   - final memory/logging bridge audit sign-off.
 
 ### Delta Update (2026-05-03, in-process bridge execution-mode scaffold)
