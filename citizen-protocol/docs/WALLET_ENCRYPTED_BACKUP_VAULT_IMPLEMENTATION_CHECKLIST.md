@@ -237,6 +237,7 @@ To keep implementation sequencing unambiguous, treat **Checkpoint 8.5 — Priori
 
 - [x] Assemble a maintainer sign-off evidence packet with reproducible command logs (packet + sign-off record captured in `citizen-protocol/docs/evidence/wallet-backup-vault/WALLET_BACKUP_8_5_SIGNOFF_2026-05-02.md`; includes wallet regression/performance evidence and priority-gap outputs).
 - [x] Execute wallet+crypto maintainer review and record production-security sign-off outcome (recorded in `citizen-protocol/docs/evidence/wallet-backup-vault/WALLET_BACKUP_8_5_SIGNOFF_2026-05-02.md`).
+- [x] Revalidate Checkpoint 8.5 before continuing downstream work and capture fresh command evidence (`citizen-protocol/docs/evidence/wallet-backup-vault/WALLET_BACKUP_8_5_REVALIDATION_2026-05-03.md` records gap-check + performance-envelope rerun results).
 
 **Exit criteria**
 - [x] `wallet backup` command suite has no open critical/high security findings (validated in 2026-05-02 sign-off record).
