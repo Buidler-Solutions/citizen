@@ -746,6 +746,11 @@ Use this rubric during UX and maintainer review so “sleek” is measurable, no
 - Hardened `.github/workflows/vaultier-desktop-smoke.yml` to also execute `cargo test` in `wallet/desktop/src-tauri` (binary crate; no library target), so desktop-path PRs now gate on Rust bridge/parser unit coverage in addition to WB-mode/headless contract checks.
 - This keeps Tauri continuation aligned with the immediate coding queue by tightening platform-tagged smoke validation around removable-media adapter/parser behavior without prematurely marking signed-artifact or in-process bridge blockers as complete.
 
+### Delta Update (2026-05-03, removable-media parity smoke extension)
+
+- Extended `vaultier/src/lib/runtimeBridge.test.ts` removable-drive parity coverage with an explicit Windows bridge fixture (`mountPath: E:\`, `platform: windows`) so desktop smoke checks now assert drive-letter path preservation in addition to existing Linux/macOS parity checks.
+- Re-ran `pnpm test:headless-contract:strict` after this change; Checkpoint 8.5 remained clear (`pending=0`, `partial=0`) and stale-marker detection still reported no implemented-but-unchecked checklist items.
+
 ### Delta Update (2026-05-03, strict gap-check rerun for Tauri continuation)
 
 - Re-ran `pnpm check:priority-gap:strict` from `vaultier/` before continuing desktop implementation slices and confirmed Checkpoint 8.5 remains complete (`pending=0`, `partial=0`, `complete=20`).
