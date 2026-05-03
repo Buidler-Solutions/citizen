@@ -254,6 +254,7 @@ To keep implementation sequencing unambiguous, treat **Checkpoint 8.5 — Priori
 
 - [x] Desktop app implementation exists in-repo: `wallet/desktop` provides a runnable Tauri shell and `vaultier/` provides the React UX + typed runtime bridge contract consumed by the shell.
 - [~] Current runtime bridge still uses cautious CLI shell execution (`citizen-wallet wallet backup ... --json`) as a temporary implementation bridge; in-process wallet-core bindings remain open.
+- [x] Desktop runtime now exposes a typed bridge-status command (`backup_bridge_status`) that reports bridge/CLI contract versions, execution mode (`in_process` vs `shell_fallback`), and the tracked production blockers so Vaultier can surface portable-track readiness state directly in-app.
 - [ ] Production desktop readiness remains blocked on cross-platform packaging/signing, OS-native removable-media adapters, and final bridge memory/logging audit sign-off.
 
 > Implementation caution: treat the desktop app as implemented and runnable for operator rehearsal, but not yet production-ready until the remaining checklist gates above are complete and evidenced.
