@@ -709,3 +709,10 @@ Use this rubric during UX and maintainer review so “sleek” is measurable, no
 
 - Added OS-native removable-drive discovery adapters in the Tauri desktop bridge for macOS (`diskutil`) and Windows (PowerShell/CIM `DriveType=2`) while keeping Linux `lsblk` discovery in place.
 - Kept checklist status as in-progress (`[~]`) because signed cross-platform smoke evidence and packaging/signing closure are still pending blocker items for production readiness.
+
+### Delta Update (2026-05-03, full-checklist reconciliation pass)
+
+- Re-ran `pnpm check:priority-gap:strict` from `vaultier/` to reconcile the entire checklist before continuing Tauri desktop coding; Checkpoint 8.5 remains clear (`pending=0`, `partial=0`).
+- Captured the latest full-section open-gap inventory from the strict checker (including Portable Application Track, Checkpoints 0–9, and continuation slices) to keep implementation sequencing grounded in current blockers.
+- Confirmed stale-marker heuristics report **no implemented-but-unchecked checklist items** at this time, so remaining unchecked items continue to represent real open work (in-process wallet-core bridge, signed packaging/smoke evidence, and final bridge memory/logging audit).
+- Preserved existing `[ ]` and `[~]` states intentionally where sign-off or cross-platform evidence is still required; no premature completion markers were added in this pass.
