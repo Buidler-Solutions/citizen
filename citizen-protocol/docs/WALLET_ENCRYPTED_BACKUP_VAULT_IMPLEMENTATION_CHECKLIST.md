@@ -777,3 +777,5 @@ Use this rubric during UX and maintainer review so “sleek” is measurable, no
   - **potential over-checked** candidates (`[x]` lines that still read like pending/open work).
 - Added `pnpm run check:priority-gap:reconciliation` so maintainers can run strict full-summary + reconciliation checks in one command before updating checklist markers.
 - Re-ran the reconciliation pass and confirmed current checklist drift signal remains clear (`stale-unchecked=0`, `potential-overchecked=0`), so remaining open desktop blockers continue to represent real implementation gaps rather than checkbox-state drift.
+
+- Extended Tauri removable-media preflight gating to include `backup_add_slot` mutation commands (not only init/export/verify/restore), reducing write-on-unchecked-media risk in desktop runtime flows.
