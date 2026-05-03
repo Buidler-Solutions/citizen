@@ -912,3 +912,14 @@ Use this rubric during UX and maintainer review so “sleek” is measurable, no
   - local-only telemetry threshold summary from the R9-C spec.
 - Confirmed checkpoint markers remain unchanged for blocked closure items (`[ ]` on R9-D/R9-E and rollout exit criteria) because this slice is sequencing/logistics hardening only.
 - Checkpoint-9 implementation can now proceed as soon as TV-3 packaging/signing and bridge-audit evidence is produced, without reopening structure or approval routing decisions.
+
+### Delta Update (2026-05-03, checkpoint-9 closure execution queue handoff prep)
+
+- Continued `#continue-tauri-vaultier-desktop-version-execution-queue` with a checkpoint-9 handoff-prep slice focused on immediate execution readiness (no status inflation).
+- Added an explicit **R9-I handoff packet preflight** step to operationalize the existing R9-D/R9-E templates into a single execution checklist once TV-3 blockers clear:
+  - [ ] create `WALLET_DESKTOP_RELEASE_CHECKLIST_YYYY-MM-DD.md` from the R9-D template and pre-fill immutable artifact placeholders (digest/signing identity/build timestamp/audit URI),
+  - [ ] create `WALLET_DESKTOP_POST_ROLLOUT_VALIDATION_YYYY-MM-DD.md` from the R9-E template and pre-link OS drill packet placeholders,
+  - [ ] attach dated owner acknowledgement stubs (wallet, desktop/runtime, security) before any beta flag-review meeting is scheduled,
+  - [ ] run the pinned command baseline (`pnpm --dir vaultier test:headless-contract` and `cargo test -p citizen-wallet wallet_backup`) and include log URIs in both preflight docs.
+- Kept checkpoint markers unchanged for blocked closure work (`R9-D`, `R9-E`, rollout exit criteria remain `[ ]`) because this slice only removes handoff ambiguity and does not satisfy packaging/signing or bridge-audit prerequisites.
+- Checkpoint-9 now has an execution-ready closure queue of **R9-I preflight -> R9-D sign-off -> R9-E validation -> R9-F decision memo**, still hard-gated by TV-3 evidence.
