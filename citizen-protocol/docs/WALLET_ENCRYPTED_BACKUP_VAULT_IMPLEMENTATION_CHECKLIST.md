@@ -342,11 +342,11 @@ To translate the CLI-first vault implementation into a polished portable app exp
 ### Checkpoint 9 Execution Queue (2026-05-03 continuation)
 
 1. **R9-A — Internal alpha flag matrix + owner map**
-   - [ ] Enumerate all desktop/runtime rollout toggles (WB-mode default, runtime adapter mode, removable-media command gating) with default values and owner approvals.
-   - [ ] Attach a release-note template that states unsupported production claims until signed packaging + bridge audit gates are complete.
+   - [x] Enumerate all desktop/runtime rollout toggles (WB-mode default, runtime adapter mode, removable-media command gating) with default values and owner approvals. (Tracked in `citizen-protocol/docs/WALLET_DESKTOP_ALPHA_FLAG_MATRIX.md` with named owner approvals and default-state rationale.)
+   - [x] Attach a release-note template that states unsupported production claims until signed packaging + bridge audit gates are complete. (Template added in `citizen-protocol/docs/WALLET_DESKTOP_ALPHA_RELEASE_NOTE_TEMPLATE.md` with mandatory unsupported-claims language.)
 2. **R9-B — Maintainer alpha drill schedule and evidence packet template**
-   - [ ] Define a repeatable internal alpha drill cadence (create/add-slot/export/verify/restore/flush/eject) across Linux/macOS/Windows rehearsal environments.
-   - [ ] Add a deterministic evidence packet skeleton under `citizen-protocol/docs/evidence/wallet-backup-vault/` for alpha pass/fail logging before beta promotion decisions.
+   - [x] Define a repeatable internal alpha drill cadence (create/add-slot/export/verify/restore/flush/eject) across Linux/macOS/Windows rehearsal environments. (Cadence + execution rubric captured in `citizen-protocol/docs/WALLET_DESKTOP_ALPHA_DRILL_SCHEDULE.md`.)
+   - [x] Add a deterministic evidence packet skeleton under `citizen-protocol/docs/evidence/wallet-backup-vault/` for alpha pass/fail logging before beta promotion decisions. (Added `citizen-protocol/docs/evidence/wallet-backup-vault/WALLET_BACKUP_ALPHA_DRILL_PACKET_TEMPLATE.md`.)
 3. **R9-C — Privacy-preserving telemetry + incident hooks (pre-beta)**
    - [ ] Specify local-only success/failure counters and confidence markers that exclude secret-bearing payload fields.
    - [ ] Define rollback/incident triggers for desktop bridge regressions (contract drift, removable-media failures, redaction/audit failures) with named owner handoff.
