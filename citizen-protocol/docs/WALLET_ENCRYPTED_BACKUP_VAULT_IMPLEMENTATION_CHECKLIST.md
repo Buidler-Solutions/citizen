@@ -218,7 +218,7 @@ To keep implementation sequencing unambiguous, treat **Checkpoint 8.5 — Priori
 > Maintenance reminder: whenever any task in this checklist is implemented, update this file in the same change set so status/exit criteria remain current.
 
 - [x] Finalize vault format/versioning contract and deterministic error taxonomy for all `wallet backup` commands (Vaultier headless adapter and wallet CLI now emit explicit contract-version fields alongside deterministic error codes for verify/restore automation paths).
-- [ ] Complete cryptography closure items:
+- [x] Complete cryptography closure items (all required sub-items completed and evidenced in the linked crypto policy + test-vector artifacts):
   - [x] finalized AEAD + nonce/IV policy documentation (consolidated policy now captured in `citizen-protocol/docs/WALLET_BACKUP_CRYPTO_POLICY.md`, aligned with deterministic ChaCha20-Poly1305 nonce-length validation and tamper-failure coverage),
   - [x] key-derivation parameter profile hardening guidance (maintainer/operator guidance now documented in `citizen-protocol/docs/WALLET_BACKUP_CRYPTO_POLICY.md`, with `balanced` vs `critical-hardened` Argon2id profile expectations aligned to CLI/Vaultier JSON contract output),
   - [x] committed test vectors for encrypt/decrypt/tamper failure paths (wallet crate now includes a deterministic Argon2id + ChaCha20-Poly1305 backup payload vector assertion with decrypt success + tamper-failure coverage).
