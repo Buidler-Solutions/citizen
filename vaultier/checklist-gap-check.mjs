@@ -7,6 +7,7 @@ const strictStaleUnchecked = process.argv.includes('--strict-stale-unchecked');
 const includeFullSummary = process.argv.includes('--full-summary');
 const emitMarkdown = process.argv.includes('--markdown');
 const includeOpenItemDetails = process.argv.includes('--full-open-items');
+const includeReconciliation = process.argv.includes('--reconciliation');
 const markdownFileArg = process.argv.find((arg) => arg.startsWith('--markdown-file='));
 const markdownOutputPath = markdownFileArg ? markdownFileArg.split('=')[1] : null;
 const scriptDir = dirname(fileURLToPath(import.meta.url));
@@ -47,6 +48,7 @@ const completionHints = /(implemented|now includes|now enforces|validated|captur
 const remainingWorkHints = /(pending|remains pending|still pending|remaining|follow-up|follow up|open|yet|not\s+yet|still requires|still open|before marking complete|until .* complete)/i;
 const signoffGatedHints = /(for both CLI and extension|working and sleek|<3 minute|first-time backup flow under 3 minutes|all user-facing commands and JSON schema examples validated)/i;
 const staleUnchecked = [];
+const doneButPossiblyOverclaimed = [];
 let sectionTitle = 'ROOT';
 
 for (const rawLine of doc.split('\n')) {
@@ -61,7 +63,16 @@ for (const rawLine of doc.split('\n')) {
 
   const status = match[1];
   const text = match[2];
-  if (status === 'x') continue;
+  if (status === 'x') {
+    if (remainingWorkHints.test(text) && !completionHints.test(text)) {
+      doneButPossiblyOverclaimed.push({
+        section: sectionTitle,
+        checklistBadge: '[x]',
+        text,
+      });
+    }
+    continue;
+  }
   if (signoffGatedHints.test(text)) continue;
   if (completionHints.test(text) && !remainingWorkHints.test(text)) {
     staleUnchecked.push({
@@ -129,6 +140,7 @@ const summary = {
     text: item.text,
   })),
   staleUncheckedCandidates: staleUnchecked,
+  doneButPossiblyOverclaimed,
   fullSectionSummaries,
 };
 
@@ -166,6 +178,15 @@ if (staleUnchecked.length === 0) {
   }
 }
 
+
+markdownLines.push('', '## Potential over-checked markers');
+if (doneButPossiblyOverclaimed.length === 0) {
+  markdownLines.push('- None detected.');
+} else {
+  for (const item of doneButPossiblyOverclaimed) {
+    markdownLines.push(`- ${item.checklistBadge} (${item.section}) ${item.text}`);
+  }
+}
 if (emitMarkdown) {
   if (includeOpenItemDetails) {
     markdownLines.push('', '## Full checklist open items');
@@ -231,6 +252,21 @@ if (emitJson) {
     });
   } else {
     console.log('checklist-gap-check: no likely stale unchecked checklist markers detected.');
+  }
+
+  if (doneButPossiblyOverclaimed.length > 0) {
+    console.log(`checklist-gap-check: possible over-checked markers=${doneButPossiblyOverclaimed.length} (review for completion drift):`);
+    doneButPossiblyOverclaimed.forEach((item, index) => {
+      console.log(`  ${index + 1}. ${item.checklistBadge} (${item.section}) ${item.text}`);
+    });
+  } else {
+    console.log('checklist-gap-check: no likely over-checked checklist markers detected.');
+  }
+
+  if (includeReconciliation) {
+    console.log('checklist-gap-check: reconciliation snapshot:');
+    console.log(`  stale-unchecked=${staleUnchecked.length}`);
+    console.log(`  potential-overchecked=${doneButPossiblyOverclaimed.length}`);
   }
 }
 

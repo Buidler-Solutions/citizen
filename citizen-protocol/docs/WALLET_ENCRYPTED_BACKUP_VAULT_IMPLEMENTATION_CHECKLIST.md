@@ -769,3 +769,11 @@ Use this rubric during UX and maintainer review so “sleek” is measurable, no
 - Added `pnpm run check:priority-gap:report` in `vaultier/package.json` to generate a canonical full-checklist report at `citizen-protocol/docs/evidence/wallet-backup-vault/latest-checklist-gap-report.md`.
 - Re-ran the new report workflow and confirmed Checkpoint 8.5 remains complete (`pending=0`, `partial=0`) and strict stale-marker detection still reports no implemented-but-unchecked markers.
 - Captured the current open-gap inventory in the generated evidence report to drive next desktop/Tauri coding slices (in-process wallet-core bridge, signed packaging/smoke evidence, memory/logging audit closure).
+
+### Delta Update (2026-05-03, reconciliation gap scanner enhancement)
+
+- Extended `vaultier/checklist-gap-check.mjs` with a reconciliation mode that reports both directions of checklist drift before desktop/Tauri continuation:
+  - **stale unchecked** candidates (`[ ]`/`[~]` lines that read implemented but are not checked),
+  - **potential over-checked** candidates (`[x]` lines that still read like pending/open work).
+- Added `pnpm run check:priority-gap:reconciliation` so maintainers can run strict full-summary + reconciliation checks in one command before updating checklist markers.
+- Re-ran the reconciliation pass and confirmed current checklist drift signal remains clear (`stale-unchecked=0`, `potential-overchecked=0`), so remaining open desktop blockers continue to represent real implementation gaps rather than checkbox-state drift.
