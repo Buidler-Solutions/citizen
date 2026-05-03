@@ -5,7 +5,7 @@ use clap::{Args, Parser, Subcommand, ValueEnum};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
-use rand::RngCore;
+use rand::{Rng, RngCore};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs::{self, File};
 use std::io::Write;
@@ -570,6 +570,8 @@ struct BackupVaultSlot {
 const BACKUP_VAULT_MAGIC: &str = "CITIZEN_BKVLT";
 const BACKUP_VAULT_SCHEMA: &str = "citizen.wallet.backup.v1";
 const BACKUP_VAULT_VERSION: u32 = 1;
+const BACKUP_COVER_PADDING_BASE_BYTES: usize = 1024;
+const BACKUP_COVER_PADDING_JITTER_BYTES: usize = 256;
 
 fn default_backup_vault_magic() -> String { BACKUP_VAULT_MAGIC.to_string() }
 fn default_backup_vault_version() -> u32 { BACKUP_VAULT_VERSION }
@@ -2515,10 +2517,11 @@ fn encrypt_backup_envelope_with_kdf_params(
         parallelism,
         output_length,
     )?;
+    let blinded_payload = build_blinded_backup_payload(payload)?;
     let object_envelope = encrypt_payload(
         &json!({
             "master_key_hex": object_master_key_hex,
-            "payload": payload
+            "payload": blinded_payload
         }),
         &object_master_key_hex,
     )?;
@@ -2527,6 +2530,21 @@ fn encrypt_backup_envelope_with_kdf_params(
         wrapped_master_key,
         object_envelope,
     })
+}
+
+fn build_blinded_backup_payload(payload: &Value) -> anyhow::Result<Value> {
+    let mut cover_nonce = [0u8; 16];
+    rand::rng().fill_bytes(&mut cover_nonce);
+    let jitter = rand::rng().random_range(0..=BACKUP_COVER_PADDING_JITTER_BYTES);
+    let cover_padding_len = BACKUP_COVER_PADDING_BASE_BYTES + jitter;
+    let mut cover_padding = vec![0u8; cover_padding_len];
+    rand::rng().fill_bytes(&mut cover_padding);
+    Ok(json!({
+        "schema": "citizen.wallet.backup.cover.v1",
+        "payload": payload,
+        "cover_nonce_hex": hex::encode(cover_nonce),
+        "cover_padding_hex": hex::encode(cover_padding),
+    }))
 }
 
 fn decrypt_backup_envelope(envelope: &BackupEncryptedEnvelope, password: &str) -> anyhow::Result<Value> {
@@ -2542,12 +2560,34 @@ fn decrypt_backup_envelope(envelope: &BackupEncryptedEnvelope, password: &str) -
         backup_error_anyhow(BackupErrorCode::DecryptFailed, "backup slot unlock failed")
     })?;
     drop(wrapped_value);
-    let payload = object_value
+    let payload_container = object_value
         .get_mut("payload")
         .map(std::mem::take)
         .ok_or_else(|| backup_error_anyhow(BackupErrorCode::InvalidPayload, "object payload is missing"))?;
+    let payload = extract_blinded_backup_payload(payload_container)?;
     drop(object_value);
     Ok(payload)
+}
+
+fn extract_blinded_backup_payload(payload_container: Value) -> anyhow::Result<Value> {
+    if payload_container.get("payload").is_some() {
+        let schema = payload_container
+            .get("schema")
+            .and_then(Value::as_str)
+            .ok_or_else(|| backup_error_anyhow(BackupErrorCode::InvalidPayload, "backup payload schema is missing"))?;
+        if schema != "citizen.wallet.backup.cover.v1" {
+            return Err(backup_error_anyhow(
+                BackupErrorCode::InvalidPayload,
+                "backup payload schema is not supported",
+            ));
+        }
+        payload_container
+            .get("payload")
+            .cloned()
+            .ok_or_else(|| backup_error_anyhow(BackupErrorCode::InvalidPayload, "backup payload body missing"))
+    } else {
+        Ok(payload_container)
+    }
 }
 
 fn build_signed_manifest(payload: &[u8]) -> BackupSignedManifest {

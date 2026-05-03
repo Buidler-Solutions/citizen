@@ -18,7 +18,7 @@ Format + compatibility reference: `WALLET_BACKUP_VAULT_FORMAT.md` (v1 schema con
 ## 2) Required inputs
 
 - Vault container path (`--vault-path`).
-- Slot role (`decoy` or `critical`).
+- Slot role (`decoy`, `critical`, or `archive` when enabled).
 - Slot passphrase (interactive prompt or `WALLET_BACKUP_PASSPHRASE`).
 - Target wallet output path for restore.
 
@@ -33,7 +33,7 @@ Format + compatibility reference: `WALLET_BACKUP_VAULT_FORMAT.md` (v1 schema con
      ```bash
      cargo run -p citizen-wallet -- wallet backup verify \
        --vault-path <vault.json> \
-       --role <decoy|critical> \
+       --role <decoy|critical|archive> \
        --json
      ```
    - Require `status: ok` and no deterministic error code before restore.
@@ -43,7 +43,7 @@ Format + compatibility reference: `WALLET_BACKUP_VAULT_FORMAT.md` (v1 schema con
      ```bash
      cargo run -p citizen-wallet -- wallet backup restore \
        --vault-path <vault.json> \
-       --role <decoy|critical> \
+       --role <decoy|critical|archive> \
        --out <wallet-restored.json> \
        --json
      ```
@@ -91,3 +91,11 @@ Capture the following artifacts for each drill or production recovery:
 - `verify` JSON output after restore.
 - Key rotation completion record (ticket/change id + timestamp).
 - Media custody notes (device id, operator, handoff timestamp).
+
+## 7) Duress-safe and deniability guidance (bounded, no false guarantees)
+
+- Decoy and critical slots are separate encrypted envelopes, but plausible deniability is limited by operator behavior and forensic context.
+- Under coercion/duress workflows, only present decoy material and avoid statements implying cryptographic proof that no additional slots exist.
+- Keep decoy content realistic and periodically updated so restore drills do not create obviously stale decoy artifacts.
+- Do not reuse decoy and critical passphrases; passphrase reuse weakens separation and makes coercion handling unsafe.
+- Residual forensic risk remains (device metadata, host logs, shell history, removable-media access traces). Treat decoy mode as risk reduction, not guaranteed deniability.
