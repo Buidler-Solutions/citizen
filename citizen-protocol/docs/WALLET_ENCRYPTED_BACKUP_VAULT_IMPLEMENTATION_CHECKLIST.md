@@ -295,7 +295,7 @@ To translate the CLI-first vault implementation into a polished portable app exp
    - [x] Gate merges on WB-mode contract checks for `init`, `add-slot`, `export-credentials`, `verify`, and `restore` (added `vaultier-desktop-contract-gate.yml` GitHub Actions workflow scoped to `vaultier/**` + `wallet/desktop/**`, running `pnpm test:headless-contract`; headless contract check now asserts all five command branches and deterministic performance/log markers).
 
 2. **TV-2: Tauri bridge parity path**
-   - [ ] Keep Tauri bridge responses field-compatible with the CLI v1 contract while replacing shell fallback incrementally.
+   - [~] Keep Tauri bridge responses field-compatible with the CLI v1 contract while replacing shell fallback incrementally. (Current bridge normalizes wrapped Tauri responses into the CLI v1-style `HeadlessResponse` envelope and parity tests pin command/result key/value snapshots for `backup_init`/`backup_add_slot`/`backup_export_credentials`/`backup_verify`/`backup_restore`/`backup_diagnostics`; remaining work is replacing shell-backed command execution with in-process wallet-core bindings.)
    - [~] Add per-command parity snapshots to detect contract drift between WB-mode simulation and runtime adapter outputs. (Added version-pinned response shape fixture `vaultier/fixtures/command-result-shape.v1.json`; `vaultier/runtime-parity-check.mjs` now validates command coverage plus pinned top-level/result-value fixture expectations, and `vaultier/src/lib/runtimeBridge.test.ts` asserts per-command runtime top-level key parity, pinned top-level values, pinned result payload values for `init`/`add-slot`/`export-credentials`/`verify`/`restore`/`diagnostics`, and wrapped runtime error-code parity (`error_id` -> CLI `error.code`, e.g. `decrypt_failed`); full runtime payload parity against a production in-process bridge remains pending runtime hardening.)
    - [~] Extend redaction checks so secret-like fields are rejected identically in WB-mode and runtime modes. (Runtime parity gate now asserts both `runtimeBridge` and WB-mode simulator keep deterministic redaction rejection markers, and runtime bridge tests now enforce command-by-command redaction-failure parity for `init`/`add-slot`/`export-credentials`/`verify`/`restore`/`diagnostics`; full runtime adapter evidence against the in-process bridge remains pending final hardening.)
 
@@ -518,6 +518,16 @@ This slice starts the desktop productization track without blocking on extension
 ### Delta Update (2026-05-02, Tauri continuation gap reconciliation)
 
 - Re-audited this checklist against the current `wallet/desktop` + `vaultier/` implementation and prior 8.5 evidence artifacts to catch items that were implemented but left unchecked.
+- Reconciled status markers for the Tauri bridge parity path so implemented CLI v1 field-compatibility coverage is tracked as in-progress rather than unchecked; runtime parity tests now explicitly pin response envelope/result fixture expectations across all backup commands.
+- Confirmed remaining blocker-class desktop gaps are still open and should stay unchecked until evidence is attached:
+  - signed/reproducible cross-platform desktop packaging artifacts,
+  - in-process wallet-core bridge (replacement for CLI shell execution),
+  - full memory/logging boundary audit sign-off,
+  - cross-platform smoke evidence on signed builds.
+- Continue execution priority for desktop track:
+  1. replace shell bridge path with in-process wallet-core bindings while preserving the current `citizen.wallet.backup.cli.v1` contract shape,
+  2. attach Linux/macOS/Windows signed smoke evidence for create/add-slot/export/verify/restore/eject flows,
+  3. close bridge memory/logging audit with evidence links in this checklist.
 
 ### Delta Update (2026-05-03, Tauri checklist gap audit)
 
