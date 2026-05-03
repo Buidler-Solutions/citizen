@@ -717,6 +717,14 @@ Use this rubric during UX and maintainer review so “sleek” is measurable, no
 - Confirmed stale-marker heuristics report **no implemented-but-unchecked checklist items** at this time, so remaining unchecked items continue to represent real open work (in-process wallet-core bridge, signed packaging/smoke evidence, and final bridge memory/logging audit).
 - Preserved existing `[ ]` and `[~]` states intentionally where sign-off or cross-platform evidence is still required; no premature completion markers were added in this pass.
 
+
+### Delta Update (2026-05-03, strict full-checklist pass for Tauri continuation)
+
+- Re-ran `pnpm check:priority-gap:strict` from `vaultier/` before continuing desktop coding; Checkpoint 8.5 remains complete (`pending=0`, `partial=0`).
+- Captured the current section-by-section open-gap inventory from strict mode to keep implementation sequencing aligned to real blockers across Checkpoints 0–9 and Portable Application Track.
+- Confirmed strict stale-marker detection reports no implemented-but-unchecked checklist items at this time.
+- Preserved blocker-class desktop items as open (`[ ]`/`[~]`) pending implementation evidence for in-process wallet-core bridge replacement, signed/reproducible packaging artifacts, signed cross-platform removable-media smoke runs, and final bridge memory/logging audit sign-off.
+
 ### Delta Update (2026-05-03, strict checklist gap verification before Tauri continuation)
 
 - Re-ran `pnpm check:priority-gap:strict` from `vaultier/` before continuing desktop coding to enforce the full-checklist reconciliation workflow.
