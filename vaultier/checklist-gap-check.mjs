@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -7,6 +7,8 @@ const strictStaleUnchecked = process.argv.includes('--strict-stale-unchecked');
 const includeFullSummary = process.argv.includes('--full-summary');
 const emitMarkdown = process.argv.includes('--markdown');
 const includeOpenItemDetails = process.argv.includes('--full-open-items');
+const markdownFileArg = process.argv.find((arg) => arg.startsWith('--markdown-file='));
+const markdownOutputPath = markdownFileArg ? markdownFileArg.split('=')[1] : null;
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const checklistPath = resolve(scriptDir, '../citizen-protocol/docs/WALLET_ENCRYPTED_BACKUP_VAULT_IMPLEMENTATION_CHECKLIST.md');
 const doc = readFileSync(checklistPath, 'utf8');
@@ -175,7 +177,14 @@ if (emitMarkdown) {
       }
     }
   }
-  console.log(markdownLines.join('\n'));
+  const markdownOutput = markdownLines.join('\n');
+  if (markdownOutputPath) {
+    const outputPath = resolve(process.cwd(), markdownOutputPath);
+    writeFileSync(outputPath, `${markdownOutput}\n`, 'utf8');
+    console.log(`checklist-gap-check: wrote markdown report to ${outputPath}`);
+  } else {
+    console.log(markdownOutput);
+  }
 }
 
 if (emitJson) {
