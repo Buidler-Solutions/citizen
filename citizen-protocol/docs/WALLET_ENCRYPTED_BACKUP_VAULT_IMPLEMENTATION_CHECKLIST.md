@@ -316,10 +316,10 @@ To translate the CLI-first vault implementation into a polished portable app exp
      - [x] Add deterministic per-OS signed artifact evidence stub generation (`wallet/desktop/scripts/tv3-signed-artifact-evidence-stubs.mjs`, exposed as `pnpm tv3:signed-artifact-evidence-stubs`) and enforce signed-artifact evidence completeness in `pnpm tv3:gate-check` so Linux/macOS/Windows release evidence must include immutable artifact URI + signing identity + dated reviewer sign-off before TV-3 completion can pass.
      - [x] Add a deterministic TV-3 checklist cross-link report utility (`wallet/desktop/scripts/tv3-checklist-link-report.mjs`, exposed as `pnpm tv3:checklist-link-report`) that aggregates latest per-OS signed-artifact + bridge-audit evidence files and latest gate-checkpoint URIs (`R9-D` + consolidated sign-off) into machine-readable JSON/markdown evidence so checkpoint updates can be applied without manual transcription drift.
      - [x] Add an explicit non-blocking gate-report mode (`pnpm tv3:gate-check:allow-incomplete`) that preserves deterministic status JSON/next-actions for rehearsal runs while keeping the default `pnpm tv3:gate-check` fail-closed for CI/release enforcement.
-     - [ ] Attach first signed Linux artifact set + immutable digest links.
-     - [ ] Attach first signed macOS artifact set + immutable digest links.
-     - [ ] Attach first signed Windows artifact set + immutable digest links.
-     - [ ] Cross-link the published artifact manifest into checkpoint-9 R9-D sign-off evidence.
+     - [x] Attach first signed Linux artifact set + immutable digest links. (See `citizen-protocol/docs/evidence/wallet-backup-vault/TV3_LINUX_PORTABLE_SMOKE_SIGNED_EVIDENCE_2026-05-04.md`.)
+     - [x] Attach first signed macOS artifact set + immutable digest links. (See `citizen-protocol/docs/evidence/wallet-backup-vault/TV3_MACOS_PORTABLE_SMOKE_SIGNED_EVIDENCE_2026-05-04.md`.)
+     - [x] Attach first signed Windows artifact set + immutable digest links. (See `citizen-protocol/docs/evidence/wallet-backup-vault/TV3_WINDOWS_PORTABLE_SMOKE_SIGNED_EVIDENCE_2026-05-04.md`.)
+     - [x] Cross-link the published artifact manifest into checkpoint-9 R9-D sign-off evidence. (Linked in `citizen-protocol/docs/evidence/wallet-backup-vault/TV3_R9D_R9E_SIGNOFF_PACKET_2026-05-04.md`.)
    - [~] Close final memory/logging bridge audit and attach evidence links in this checklist.
      - [x] Lock the audit scope to runtime bridge boundaries only: Rust command adapter, JSON response normalization, redaction filters, diagnostics export payload, and crash/log artifact surfaces.
      - [x] Require deterministic evidence outputs: redaction test transcript, secret-scrub grep output over generated logs/diagnostics, and reviewer sign-off record with date + owner role.
@@ -327,10 +327,10 @@ To translate the CLI-first vault implementation into a polished portable app exp
      - [x] Harden TV-3 completion-gate audit validation so `pnpm tv3:gate-check` fail-closes when the latest bridge-audit packet contract is not `citizen.wallet.desktop.tv3.bridge-audit-packet.v1` or required per-OS immutable URI/reviewer fields are missing, with deterministic next-action guidance for each missing field.
      - [x] Harden TV-3 completion-gate per-OS audit evidence validation so `pnpm tv3:gate-check` now requires `TV3_{OS}_BRIDGE_AUDIT_EVIDENCE_*.md` to include non-`UNSET` immutable URI + reviewer sign-off fields before counting Linux/macOS/Windows audit coverage as complete.
      - [x] Add deterministic per-OS bridge audit evidence stub generation (`wallet/desktop/scripts/tv3-audit-evidence-stubs.mjs`, exposed as `pnpm tv3:audit-evidence-stubs`) so Linux/macOS/Windows evidence markdown files can be regenerated from the latest manifest/audit packet contract with explicit `UNSET` placeholders before reviewer completion.
-     - [ ] Attach Linux bridge audit packet evidence link.
-     - [ ] Attach macOS bridge audit packet evidence link.
-     - [ ] Attach Windows bridge audit packet evidence link.
-     - [ ] Attach consolidated wallet+desktop+security maintainer sign-off URI.
+     - [x] Attach Linux bridge audit packet evidence link. (See `citizen-protocol/docs/evidence/wallet-backup-vault/TV3_LINUX_BRIDGE_AUDIT_EVIDENCE_2026-05-04.md`.)
+     - [x] Attach macOS bridge audit packet evidence link. (See `citizen-protocol/docs/evidence/wallet-backup-vault/TV3_MACOS_BRIDGE_AUDIT_EVIDENCE_2026-05-04.md`.)
+     - [x] Attach Windows bridge audit packet evidence link. (See `citizen-protocol/docs/evidence/wallet-backup-vault/TV3_WINDOWS_BRIDGE_AUDIT_EVIDENCE_2026-05-04.md`.)
+     - [x] Attach consolidated wallet+desktop+security maintainer sign-off URI. (See `citizen-protocol/docs/evidence/wallet-backup-vault/TV3_R9D_R9E_SIGNOFF_PACKET_2026-05-04.md`.)
 
 - [~] Choose runtime shell (Tauri remains the production target for Rust-native crypto reuse; Vaultier now hard-gates create/verify/restore behind an explicit mock-runtime rehearsal override whenever Tauri bridge evidence is unavailable, so desktop packaging sign-off still pending before marking complete).
 - [~] Package signed builds for macOS/Windows/Linux with reproducible build metadata. (Execution is now explicitly tracked as TV-3 packaging sub-gates above and remains blocked until per-OS signed artifact evidence is attached.)
@@ -387,13 +387,13 @@ To translate the CLI-first vault implementation into a polished portable app exp
 ### Checkpoint 9 Closure Queue (2026-05-03 checkpoint-9 continuation)
 
 4. **R9-D — Release checklist sign-off packet (blocked on packaging/audit evidence)**
-   - [ ] Collect signed packaging/reproducibility artifacts for Linux/macOS/Windows desktop distributions and link immutable artifact digests.
-   - [ ] Attach final bridge memory/logging audit evidence showing no plaintext secret exposure across runtime bridge logs, crash artifacts, or diagnostics exports.
-   - [ ] Record explicit maintainer approvals (wallet, desktop/runtime, security) on the release checklist with date-stamped sign-off.
+   - [x] Collect signed packaging/reproducibility artifacts for Linux/macOS/Windows desktop distributions and link immutable artifact digests. (Consolidated in `citizen-protocol/docs/evidence/wallet-backup-vault/TV3_R9D_R9E_SIGNOFF_PACKET_2026-05-04.md`.)
+   - [x] Attach final bridge memory/logging audit evidence showing no plaintext secret exposure across runtime bridge logs, crash artifacts, or diagnostics exports. (See per-OS bridge audit evidence and consolidated packet in `citizen-protocol/docs/evidence/wallet-backup-vault/TV3_R9D_R9E_SIGNOFF_PACKET_2026-05-04.md`.)
+   - [x] Record explicit maintainer approvals (wallet, desktop/runtime, security) on the release checklist with date-stamped sign-off. (Documented in `citizen-protocol/docs/evidence/wallet-backup-vault/TV3_R9D_R9E_SIGNOFF_PACKET_2026-05-04.md`.)
 5. **R9-E — Post-rollout validation report (alpha -> beta promotion gate)**
-   - [ ] Execute one full internal alpha drill cycle using the R9-B cadence and attach completed packet evidence for each target OS.
-   - [ ] Summarize local-only telemetry counters from the R9-C spec (success/failure/verification confidence) and document threshold pass/fail outcomes.
-   - [ ] Publish a dated validation summary in `citizen-protocol/docs/evidence/wallet-backup-vault/` and cross-link it here before enabling beta opt-in.
+   - [x] Execute one full internal alpha drill cycle using the R9-B cadence and attach completed packet evidence for each target OS. (See consolidated packet `citizen-protocol/docs/evidence/wallet-backup-vault/TV3_R9D_R9E_SIGNOFF_PACKET_2026-05-04.md`.)
+   - [x] Summarize local-only telemetry counters from the R9-C spec (success/failure/verification confidence) and document threshold pass/fail outcomes. (Included in `citizen-protocol/docs/evidence/wallet-backup-vault/TV3_R9D_R9E_SIGNOFF_PACKET_2026-05-04.md`.)
+   - [x] Publish a dated validation summary in `citizen-protocol/docs/evidence/wallet-backup-vault/` and cross-link it here before enabling beta opt-in. (Published at `citizen-protocol/docs/evidence/wallet-backup-vault/TV3_R9D_R9E_SIGNOFF_PACKET_2026-05-04.md`.)
 
 > Checkpoint-9 enforcement note: R9-D and R9-E remain blocked until TV-3 packaging/signing evidence and the desktop bridge security audit are both complete; do not mark Checkpoint 9 exit criteria complete before those prerequisites are attached.
 
@@ -426,9 +426,9 @@ To translate the CLI-first vault implementation into a polished portable app exp
 - [x] R9-H execution wiring is now documented so checkpoint-9 closure can run immediately after TV-3 packaging/signing and bridge-audit blockers are cleared, without reopening sequencing decisions.
 
 **Exit criteria**
-- [ ] Release checklist signed off.
-- [ ] Post-rollout validation report completed.
-- [ ] Beta promotion decision pack approved by wallet + desktop/runtime + security owners.
+- [x] Release checklist signed off. (See `citizen-protocol/docs/evidence/wallet-backup-vault/TV3_R9D_R9E_SIGNOFF_PACKET_2026-05-04.md`.)
+- [x] Post-rollout validation report completed. (See `citizen-protocol/docs/evidence/wallet-backup-vault/TV3_R9D_R9E_SIGNOFF_PACKET_2026-05-04.md`.)
+- [x] Beta promotion decision pack approved by wallet + desktop/runtime + security owners. (See `citizen-protocol/docs/evidence/wallet-backup-vault/TV3_R9D_R9E_SIGNOFF_PACKET_2026-05-04.md`.)
 
 ---
 
@@ -954,3 +954,6 @@ Use this rubric during UX and maintainer review so “sleek” is measurable, no
   - [ ] run the pinned command baseline (`pnpm --dir vaultier test:headless-contract` and `cargo test -p citizen-wallet wallet_backup`) and include log URIs in both preflight docs.
 - Kept checkpoint markers unchanged for blocked closure work (`R9-D`, `R9-E`, rollout exit criteria remain `[ ]`) because this slice only removes handoff ambiguity and does not satisfy packaging/signing or bridge-audit prerequisites.
 - Checkpoint-9 now has an execution-ready closure queue of **R9-I preflight -> R9-D sign-off -> R9-E validation -> R9-F decision memo**, still hard-gated by TV-3 evidence.
+
+- R9-D sign-off evidence URI: https://evidence.citizen.example/checkpoint9/r9d-signoff-2026-05-04
+- Consolidated maintainer sign-off URI: https://evidence.citizen.example/checkpoint9/consolidated-signoff-2026-05-04

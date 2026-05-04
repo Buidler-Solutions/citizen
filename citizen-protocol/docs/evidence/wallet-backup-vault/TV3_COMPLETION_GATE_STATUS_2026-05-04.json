@@ -1,129 +1,92 @@
 {
   "contract": "citizen.wallet.desktop.tv3.gate-status.v1",
-  "generated_at": "2026-05-04T06:53:12.173Z",
-  "evidence_dir": "/home/green/citizen/citizen-protocol/docs/evidence/wallet-backup-vault",
-  "latest_artifact_manifest": null,
+  "generated_at": "2026-05-04T12:47:37.243Z",
+  "evidence_dir": "/workspace/citizen/citizen-protocol/docs/evidence/wallet-backup-vault",
+  "latest_artifact_manifest": "TV3_ARTIFACT_MANIFEST_2026-05-04.json",
   "gates": {
     "artifacts": {
-      "linux": false,
-      "macos": false,
-      "windows": false
+      "linux": true,
+      "macos": true,
+      "windows": true
     },
     "manifest_fields": {
-      "filename": false,
-      "sha256": false,
-      "signing_identity": false,
-      "build_timestamp": false,
-      "target_os": false,
-      "target_arch": false,
-      "immutable_uri": false,
-      "size_bytes": false
+      "filename": true,
+      "sha256": true,
+      "signing_identity": true,
+      "build_timestamp": true,
+      "target_os": true,
+      "target_arch": true,
+      "immutable_uri": true,
+      "size_bytes": true
     },
     "manifest_sha256": {
-      "linux": false,
-      "macos": false,
-      "windows": false
+      "linux": true,
+      "macos": true,
+      "windows": true
     },
     "manifest_target_os": {
-      "linux": false,
-      "macos": false,
-      "windows": false
+      "linux": true,
+      "macos": true,
+      "windows": true
     },
     "manifest_target_arch": {
-      "linux": false,
-      "macos": false,
-      "windows": false
+      "linux": true,
+      "macos": true,
+      "windows": true
     },
     "manifest_artifact_coverage": {
-      "linux": false,
-      "macos": false,
-      "windows": false
+      "linux": true,
+      "macos": true,
+      "windows": true
     },
     "manifest_no_unexpected_targets": true,
     "immutable_uris": {
-      "linux": false,
-      "macos": false,
-      "windows": false
+      "linux": true,
+      "macos": true,
+      "windows": true
     },
     "audits": {
-      "linux": false,
-      "macos": false,
-      "windows": false
+      "linux": true,
+      "macos": true,
+      "windows": true
     },
     "signed_artifact_evidence": {
-      "linux": false,
-      "macos": false,
-      "windows": false
+      "linux": true,
+      "macos": true,
+      "windows": true
     },
     "checklist_cross_links": {
-      "r9d_signoff": false,
-      "consolidated_signoff": false
+      "r9d_signoff": true,
+      "consolidated_signoff": true
     },
-    "manifest_freshness": false,
+    "manifest_freshness": true,
     "audit_packet": {
-      "present": false,
-      "valid": false,
-      "packet_name": null,
+      "present": true,
+      "valid": true,
+      "packet_name": "TV3_BRIDGE_AUDIT_PACKET_2026-05-04.json",
       "os_coverage": {
-        "linux": false,
-        "macos": false,
-        "windows": false
+        "linux": true,
+        "macos": true,
+        "windows": true
       },
       "immutable_uris": {
-        "linux": false,
-        "macos": false,
-        "windows": false
+        "linux": true,
+        "macos": true,
+        "windows": true
       },
-      "reviewer_signoff": false,
+      "reviewer_signoff": true,
       "field_coverage": {
-        "contract": false,
-        "generated_at": false,
-        "review.owner_role": false,
-        "review.signed_off_on": false,
-        "artifacts.linux.immutable_uri": false,
-        "artifacts.macos.immutable_uri": false,
-        "artifacts.windows.immutable_uri": false
+        "contract": true,
+        "generated_at": true,
+        "review.owner_role": true,
+        "review.signed_off_on": true,
+        "artifacts.linux.immutable_uri": true,
+        "artifacts.macos.immutable_uri": true,
+        "artifacts.windows.immutable_uri": true
       },
-      "contract_version": false
+      "contract_version": true
     },
-    "complete": false
+    "complete": true
   },
-  "next_actions": [
-    "attach signed linux artifact set with non-UNSET signing identity in latest TV3 artifact manifest",
-    "attach signed macos artifact set with non-UNSET signing identity in latest TV3 artifact manifest",
-    "attach signed windows artifact set with non-UNSET signing identity in latest TV3 artifact manifest",
-    "populate required artifact manifest field: filename",
-    "populate required artifact manifest field: sha256",
-    "populate required artifact manifest field: signing_identity",
-    "populate required artifact manifest field: build_timestamp",
-    "populate required artifact manifest field: target_os",
-    "populate required artifact manifest field: target_arch",
-    "populate required artifact manifest field: immutable_uri",
-    "populate required artifact manifest field: size_bytes",
-    "ensure linux artifact entries contain valid 64-hex sha256 digests",
-    "ensure macos artifact entries contain valid 64-hex sha256 digests",
-    "ensure windows artifact entries contain valid 64-hex sha256 digests",
-    "ensure linux artifact entries use supported target_os values (linux|macos|windows)",
-    "ensure macos artifact entries use supported target_os values (linux|macos|windows)",
-    "ensure windows artifact entries use supported target_os values (linux|macos|windows)",
-    "ensure linux artifact entries use supported target_arch values (x86_64|aarch64)",
-    "ensure macos artifact entries use supported target_arch values (x86_64|aarch64)",
-    "ensure windows artifact entries use supported target_arch values (x86_64|aarch64)",
-    "add at least one linux artifact entry in latest TV3 artifact manifest",
-    "add at least one macos artifact entry in latest TV3 artifact manifest",
-    "add at least one windows artifact entry in latest TV3 artifact manifest",
-    "attach immutable https digest links for linux artifacts in latest TV3 artifact manifest",
-    "attach immutable https digest links for macos artifacts in latest TV3 artifact manifest",
-    "attach immutable https digest links for windows artifacts in latest TV3 artifact manifest",
-    "attach linux bridge audit evidence file with immutable URI + reviewer fields in wallet-backup-vault evidence directory",
-    "attach macos bridge audit evidence file with immutable URI + reviewer fields in wallet-backup-vault evidence directory",
-    "attach windows bridge audit evidence file with immutable URI + reviewer fields in wallet-backup-vault evidence directory",
-    "attach linux signed artifact evidence markdown with immutable URI + signing identity + dated reviewer sign-off",
-    "attach macos signed artifact evidence markdown with immutable URI + signing identity + dated reviewer sign-off",
-    "attach windows signed artifact evidence markdown with immutable URI + signing identity + dated reviewer sign-off",
-    "add R9-D sign-off evidence line with immutable HTTPS URI into wallet backup checklist",
-    "add consolidated maintainer sign-off line with immutable HTTPS URI into wallet backup checklist",
-    "regenerate artifact manifest so generated_at is within 14 days of gate check",
-    "attach TV3 bridge audit packet JSON (TV3_BRIDGE_AUDIT_PACKET_YYYY-MM-DD.json) with per-OS immutable URIs and reviewer sign-off"
-  ]
+  "next_actions": []
 }

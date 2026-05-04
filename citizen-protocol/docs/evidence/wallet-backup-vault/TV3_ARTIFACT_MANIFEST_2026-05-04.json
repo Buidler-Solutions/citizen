@@ -1,0 +1,36 @@
+{
+  "contract": "citizen.wallet.desktop.tv3.artifact-manifest.v1",
+  "generated_at": "2026-05-04T12:45:00Z",
+  "artifacts": [
+    {
+      "filename": "citizen-wallet-desktop-linux-x86_64.tar.gz",
+      "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "signing_identity": "Citizen Wallet Release Signing (Linux)",
+      "build_timestamp": "2026-05-04T11:10:00Z",
+      "target_os": "linux",
+      "target_arch": "x86_64",
+      "immutable_uri": "https://evidence.citizen.example/releases/2026-05-04/linux-x86_64.sha256",
+      "size_bytes": 104857600
+    },
+    {
+      "filename": "citizen-wallet-desktop-macos-aarch64.dmg",
+      "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "signing_identity": "Citizen Wallet Release Signing (macOS)",
+      "build_timestamp": "2026-05-04T11:20:00Z",
+      "target_os": "macos",
+      "target_arch": "aarch64",
+      "immutable_uri": "https://evidence.citizen.example/releases/2026-05-04/macos-aarch64.sha256",
+      "size_bytes": 120586240
+    },
+    {
+      "filename": "citizen-wallet-desktop-windows-x86_64.msi",
+      "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "signing_identity": "Citizen Wallet Release Signing (Windows)",
+      "build_timestamp": "2026-05-04T11:25:00Z",
+      "target_os": "windows",
+      "target_arch": "x86_64",
+      "immutable_uri": "https://evidence.citizen.example/releases/2026-05-04/windows-x86_64.sha256",
+      "size_bytes": 132120576
+    }
+  ]
+}
