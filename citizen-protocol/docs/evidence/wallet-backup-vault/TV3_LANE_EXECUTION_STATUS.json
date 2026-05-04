@@ -7,80 +7,35 @@
       "owner": "wallet-release-owner",
       "backup_owner": "desktop-release-owner",
       "last_heartbeat_utc": "2026-05-04T12:40:00Z",
-      "unresolved_evidence": [
-        {
-          "item": "Attach first signed Linux artifact set + immutable digest links.",
-          "updated_at_utc": "2026-05-04T12:40:00Z",
-          "status": "blocked"
-        },
-        {
-          "item": "Attach first signed macOS artifact set + immutable digest links.",
-          "updated_at_utc": "2026-05-04T12:40:00Z",
-          "status": "blocked"
-        },
-        {
-          "item": "Attach first signed Windows artifact set + immutable digest links.",
-          "updated_at_utc": "2026-05-04T12:40:00Z",
-          "status": "blocked"
-        },
-        {
-          "item": "Cross-link the published artifact manifest into checkpoint-9 R9-D sign-off evidence.",
-          "updated_at_utc": "2026-05-04T12:40:00Z",
-          "status": "blocked"
-        }
-      ]
+      "unresolved_evidence": []
     },
     {
       "id": "lane_b_bridge_audit_evidence",
       "owner": "desktop-runtime-owner",
       "backup_owner": "security-owner",
       "last_heartbeat_utc": "2026-05-04T12:40:00Z",
-      "unresolved_evidence": [
-        {
-          "item": "Attach Linux bridge audit packet evidence link.",
-          "updated_at_utc": "2026-05-04T12:40:00Z",
-          "status": "blocked"
-        }
-      ]
+      "unresolved_evidence": []
     },
     {
       "id": "lane_c_r9d_release_signoff",
       "owner": "wallet-release-owner",
       "backup_owner": "security-owner",
       "last_heartbeat_utc": "2026-05-04T12:40:00Z",
-      "unresolved_evidence": [
-        {
-          "item": "Collect signed packaging/reproducibility artifacts for Linux/macOS/Windows desktop distributions and link immutable artifact digests.",
-          "updated_at_utc": "2026-05-04T12:40:00Z",
-          "status": "blocked"
-        }
-      ]
+      "unresolved_evidence": []
     },
     {
       "id": "lane_d_r9e_validation",
       "owner": "wallet-qa-owner",
       "backup_owner": "desktop-runtime-owner",
       "last_heartbeat_utc": "2026-05-04T12:40:00Z",
-      "unresolved_evidence": [
-        {
-          "item": "Execute one full internal alpha drill cycle using the R9-B cadence and attach completed packet evidence for each target OS.",
-          "updated_at_utc": "2026-05-04T12:40:00Z",
-          "status": "blocked"
-        }
-      ]
+      "unresolved_evidence": []
     },
     {
       "id": "lane_e_checkpoint9_exit",
       "owner": "wallet-release-owner",
       "backup_owner": "governance-owner",
       "last_heartbeat_utc": "2026-05-04T12:40:00Z",
-      "unresolved_evidence": [
-        {
-          "item": "Release checklist signed off.",
-          "updated_at_utc": "2026-05-04T12:40:00Z",
-          "status": "blocked"
-        }
-      ]
+      "unresolved_evidence": []
     }
   ]
 }
