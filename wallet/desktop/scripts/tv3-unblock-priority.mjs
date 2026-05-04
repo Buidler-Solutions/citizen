@@ -118,6 +118,13 @@ function parseIsoDate(value) {
 const executionStatus = parseLaneExecutionStatus();
 const now = new Date();
 
+const firstBlocked = laneStatus.find((lane) => lane.status === 'blocked') ?? null;
+const blockedCount = laneStatus.filter((x) => x.status === 'blocked').length;
+const status = firstBlocked ? 'blocked' : 'ready_for_checkpoint9_closeout';
+
+const laneOrder = new Map(lanes.map((lane, index) => [lane.id, index]));
+const firstBlockedIndex = firstBlocked ? laneOrder.get(firstBlocked.id) : -1;
+
 const laneGovernance = laneStatus.map((lane) => {
   const laneExec = executionStatus.lanes[lane.id] ?? null;
   const blockers = [];
@@ -135,10 +142,15 @@ const laneGovernance = laneStatus.map((lane) => {
 
   const heartbeatDate = parseIsoDate(lastHeartbeatUtc);
   const heartbeatAgeHours = heartbeatDate ? (now.getTime() - heartbeatDate.getTime()) / (1000 * 60 * 60) : null;
-  if (!heartbeatDate) {
-    blockers.push('last_heartbeat_utc missing or invalid');
-  } else if (heartbeatAgeHours > 24) {
-    blockers.push(`last heartbeat older than 24h (${heartbeatAgeHours.toFixed(1)}h)`);
+  const laneIndex = laneOrder.get(lane.id);
+  const isActiveLane = firstBlockedIndex >= 0 ? laneIndex === firstBlockedIndex : false;
+
+  if (isActiveLane) {
+    if (!heartbeatDate) {
+      blockers.push('active lane last_heartbeat_utc missing or invalid');
+    } else if (heartbeatAgeHours > 24) {
+      blockers.push(`active lane heartbeat older than 24h (${heartbeatAgeHours.toFixed(1)}h)`);
+    }
   }
 
   unresolvedEvidence.forEach((item, idx) => {
@@ -149,6 +161,10 @@ const laneGovernance = laneStatus.map((lane) => {
     }
   });
 
+  if (isActiveLane && lane.status === 'blocked' && unresolvedEvidence.length === 0) {
+    blockers.push('active blocked lane must list unresolved_evidence entries');
+  }
+
   return {
     id: lane.id,
     owner,
@@ -158,10 +174,6 @@ const laneGovernance = laneStatus.map((lane) => {
     blockers,
   };
 });
-
-const firstBlocked = laneStatus.find((lane) => lane.status === 'blocked') ?? null;
-const blockedCount = laneStatus.filter((x) => x.status === 'blocked').length;
-const status = firstBlocked ? 'blocked' : 'ready_for_checkpoint9_closeout';
 
 const report = {
   schema: 'citizen.wallet.desktop.tv3.unblock-priority.v1',
