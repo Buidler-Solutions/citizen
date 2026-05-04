@@ -7,6 +7,7 @@
 - Linux bridge audit packet: `citizen-protocol/docs/evidence/wallet-backup-vault/TV3_LINUX_BRIDGE_AUDIT_EVIDENCE_2026-05-04.md`
 - macOS bridge audit packet: `citizen-protocol/docs/evidence/wallet-backup-vault/TV3_MACOS_BRIDGE_AUDIT_EVIDENCE_2026-05-04.md`
 - Windows bridge audit packet: `citizen-protocol/docs/evidence/wallet-backup-vault/TV3_WINDOWS_BRIDGE_AUDIT_EVIDENCE_2026-05-04.md`
+- UX sign-off evidence: `citizen-protocol/docs/evidence/wallet-backup-vault/TV3_UX_SLEEK_SIGNOFF_2026-05-04.md`
 
 ## Maintainer approvals (dated)
 - Wallet owner approval: 2026-05-04
