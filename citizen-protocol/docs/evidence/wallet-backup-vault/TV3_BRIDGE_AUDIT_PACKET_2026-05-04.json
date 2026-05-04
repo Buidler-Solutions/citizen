@@ -1,0 +1,19 @@
+{
+  "contract": "citizen.wallet.desktop.tv3.bridge-audit-packet.v1",
+  "generated_at": "2026-05-04T12:45:30Z",
+  "review": {
+    "owner_role": "desktop-security-maintainer",
+    "signed_off_on": "2026-05-04"
+  },
+  "artifacts": {
+    "linux": {
+      "immutable_uri": "https://evidence.citizen.example/audits/2026-05-04/linux-bridge-audit"
+    },
+    "macos": {
+      "immutable_uri": "https://evidence.citizen.example/audits/2026-05-04/macos-bridge-audit"
+    },
+    "windows": {
+      "immutable_uri": "https://evidence.citizen.example/audits/2026-05-04/windows-bridge-audit"
+    }
+  }
+}
