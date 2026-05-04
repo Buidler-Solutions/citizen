@@ -354,10 +354,11 @@ To translate the CLI-first vault implementation into a polished portable app exp
 - [x] Add deterministic cross-platform smoke gate aggregation command (`pnpm --dir wallet/desktop tv3:portable-smoke-gate`) that fail-closes when Linux/macOS/Windows evidence snapshots are missing or any host summary is non-pass, with optional rehearsal mode at `pnpm --dir wallet/desktop tv3:portable-smoke-gate:allow-incomplete` for non-blocking dry runs.
 - [x] Add deterministic portable smoke evidence template generator (`pnpm --dir wallet/desktop tv3:portable-smoke-evidence-template`) that hydrates Linux/macOS/Windows sections from the latest `TV3_PORTABLE_SMOKE_SUITE_*.json` artifacts and pre-wires immutable URI/reviewer placeholders so signed smoke snapshots can be attached to R9-D without manual transcription drift.
 - [x] Add deterministic portable smoke signed-evidence stub generation (`pnpm --dir wallet/desktop tv3:portable-smoke-signed-evidence-stubs`) so Linux/macOS/Windows immutable smoke-link + reviewer sign-off packets can be regenerated from the latest `TV3_PORTABLE_SMOKE_SUITE_*.json` snapshots without manual transcription drift.
+- [x] Add deterministic UX sign-off template generation (`pnpm --dir wallet/desktop tv3:ux-signoff-template`) so the “working + sleek” gate has a machine-generated evidence packet scaffold pre-wired to latest portable-smoke snapshot metadata before reviewer measurements/sign-off are attached.
 
 **Exit criteria**
 - [~] Portable app cross-platform smoke-suite gate is implemented and fail-closed, and deterministic signed-smoke evidence stubs now exist; closure remains pending attachment of first signed Linux/macOS/Windows smoke evidence snapshots (create/add-slot/export/verify/restore/eject guidance).
-- [ ] UX review sign-off confirms “working and sleek” bar: <3 minute guided backup, no ambiguous error copy, consistent visual hierarchy.
+- [~] UX review sign-off confirms “working and sleek” bar: <3 minute guided backup, no ambiguous error copy, consistent visual hierarchy. (Deterministic UX review packet scaffolding now exists via `pnpm --dir wallet/desktop tv3:ux-signoff-template`, which hydrates `TV3_UX_SLEEK_SIGNOFF_TEMPLATE_*.md` from latest portable smoke evidence; final reviewer measurements/sign-off evidence links are still required.)
 - [ ] Security review confirms no plaintext secret exposure across UI bridge, logs, or crash artifacts.
 
 ## Checkpoint 9 — Rollout Plan
