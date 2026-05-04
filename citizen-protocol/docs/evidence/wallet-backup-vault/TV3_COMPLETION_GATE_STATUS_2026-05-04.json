@@ -1,6 +1,6 @@
 {
   "contract": "citizen.wallet.desktop.tv3.gate-status.v1",
-  "generated_at": "2026-05-04T06:25:49.157Z",
+  "generated_at": "2026-05-04T06:30:04.826Z",
   "evidence_dir": "/home/green/citizen/citizen-protocol/docs/evidence/wallet-backup-vault",
   "latest_artifact_manifest": null,
   "gates": {
