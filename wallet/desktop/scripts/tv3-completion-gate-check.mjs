@@ -3,12 +3,17 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 
 const repoRoot = path.resolve(path.dirname(new URL(import.meta.url).pathname), '../../..');
-const evidenceDir = process.argv[2]
-  ? path.resolve(process.argv[2])
+const cliArgs = process.argv.slice(2);
+const flagArgs = new Set(cliArgs.filter((arg) => arg.startsWith('--')));
+const positionalArgs = cliArgs.filter((arg) => !arg.startsWith('--'));
+
+const evidenceDir = positionalArgs[0]
+  ? path.resolve(positionalArgs[0])
   : path.join(repoRoot, 'citizen-protocol/docs/evidence/wallet-backup-vault');
-const outputPath = process.argv[3]
-  ? path.resolve(process.argv[3])
+const outputPath = positionalArgs[1]
+  ? path.resolve(positionalArgs[1])
   : path.join(evidenceDir, `TV3_COMPLETION_GATE_STATUS_${new Date().toISOString().slice(0, 10)}.json`);
+const allowIncomplete = flagArgs.has('--allow-incomplete') || process.env.TV3_ALLOW_INCOMPLETE === '1';
 
 const requiredArtifacts = {
   linux: /linux/i,
@@ -98,6 +103,36 @@ function extractMarkdownField(raw, label) {
   const rx = new RegExp(`-\\s+${label}:\\s+(.+)$`, 'im');
   const m = raw.match(rx);
   return m ? m[1].trim() : '';
+}
+
+
+async function validatePerOsSignedArtifactEvidence(dir) {
+  const files = await fs.readdir(dir);
+  const status = { linux: false, macos: false, windows: false };
+
+  for (const os of Object.keys(status)) {
+    const name = files
+      .filter((entry) => new RegExp(`^TV3_${os.toUpperCase()}_SIGNED_ARTIFACT_EVIDENCE_.*\.md$`, 'i').test(entry))
+      .sort()
+      .at(-1);
+
+    if (!name) continue;
+
+    const raw = await fs.readFile(path.join(dir, name), 'utf8');
+    const immutable = extractMarkdownField(raw, 'Artifact immutable URI');
+    const signingIdentity = extractMarkdownField(raw, 'Signing identity');
+    const signedOffOn = extractMarkdownField(raw, 'Signed off on');
+
+    status[os] =
+      /^https:\/\//i.test(immutable) &&
+      immutable !== 'UNSET' &&
+      signingIdentity.length > 0 &&
+      signingIdentity !== 'UNSET' &&
+      /^\d{4}-\d{2}-\d{2}$/.test(signedOffOn) &&
+      signedOffOn !== 'UNSET';
+  }
+
+  return status;
 }
 
 async function validatePerOsAuditEvidence(dir) {
@@ -230,6 +265,7 @@ async function validatePerOsAuditEvidence(dir) {
   );
 
   const perOsAuditEvidenceStatus = await validatePerOsAuditEvidence(evidenceDir);
+  const perOsSignedArtifactEvidenceStatus = await validatePerOsSignedArtifactEvidence(evidenceDir);
 
   const auditStatus = Object.fromEntries(
     Object.keys(requiredAudits).map((os) => [os, Boolean(auditFilePresence[os] && perOsAuditEvidenceStatus[os])])
@@ -317,6 +353,7 @@ async function validatePerOsAuditEvidence(dir) {
       manifest_no_unexpected_targets: manifestUnexpectedTargets.length === 0,
       immutable_uris: immutableUriStatus,
       audits: auditStatus,
+      signed_artifact_evidence: perOsSignedArtifactEvidenceStatus,
       checklist_cross_links: checklistCrossLinkStatus,
       manifest_freshness: manifestFreshness,
       audit_packet: auditPacketStatus,
@@ -330,6 +367,7 @@ async function validatePerOsAuditEvidence(dir) {
         manifestUnexpectedTargets.length === 0 &&
         Object.values(immutableUriStatus).every(Boolean) &&
         Object.values(auditStatus).every(Boolean) &&
+        Object.values(perOsSignedArtifactEvidenceStatus).every(Boolean) &&
         Object.values(checklistCrossLinkStatus).every(Boolean) &&
         manifestFreshness &&
         auditPacketStatus.valid,
@@ -362,6 +400,9 @@ async function validatePerOsAuditEvidence(dir) {
       ...Object.entries(auditStatus)
         .filter(([, ok]) => !ok)
         .map(([os]) => `attach ${os} bridge audit evidence file with immutable URI + reviewer fields in wallet-backup-vault evidence directory`),
+      ...Object.entries(perOsSignedArtifactEvidenceStatus)
+        .filter(([, ok]) => !ok)
+        .map(([os]) => `attach ${os} signed artifact evidence markdown with immutable URI + signing identity + dated reviewer sign-off`),
       ...Object.entries(checklistCrossLinkStatus)
         .filter(([, ok]) => !ok)
         .map(([item]) =>
@@ -393,6 +434,10 @@ async function validatePerOsAuditEvidence(dir) {
   console.log(`tv3-completion-gate-check: wrote ${outputPath}`);
 
   if (!summary.gates.complete) {
-    process.exitCode = 2;
+    if (allowIncomplete) {
+      console.log('tv3-completion-gate-check: incomplete gates allowed via --allow-incomplete/TV3_ALLOW_INCOMPLETE=1');
+    } else {
+      process.exitCode = 2;
+    }
   }
 })();

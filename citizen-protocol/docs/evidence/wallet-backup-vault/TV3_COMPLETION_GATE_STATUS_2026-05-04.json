@@ -1,7 +1,7 @@
 {
   "contract": "citizen.wallet.desktop.tv3.gate-status.v1",
-  "generated_at": "2026-05-04T06:30:04.826Z",
-  "evidence_dir": "/home/green/citizen/citizen-protocol/docs/evidence/wallet-backup-vault",
+  "generated_at": "2026-05-04T06:47:16.185Z",
+  "evidence_dir": "/workspace/citizen/citizen-protocol/docs/evidence/wallet-backup-vault",
   "latest_artifact_manifest": null,
   "gates": {
     "artifacts": {
@@ -34,12 +34,23 @@
       "macos": false,
       "windows": false
     },
+    "manifest_artifact_coverage": {
+      "linux": false,
+      "macos": false,
+      "windows": false
+    },
+    "manifest_no_unexpected_targets": true,
     "immutable_uris": {
       "linux": false,
       "macos": false,
       "windows": false
     },
     "audits": {
+      "linux": false,
+      "macos": false,
+      "windows": false
+    },
+    "signed_artifact_evidence": {
       "linux": false,
       "macos": false,
       "windows": false
@@ -98,12 +109,18 @@
     "ensure linux artifact entries use supported target_arch values (x86_64|aarch64)",
     "ensure macos artifact entries use supported target_arch values (x86_64|aarch64)",
     "ensure windows artifact entries use supported target_arch values (x86_64|aarch64)",
+    "add at least one linux artifact entry in latest TV3 artifact manifest",
+    "add at least one macos artifact entry in latest TV3 artifact manifest",
+    "add at least one windows artifact entry in latest TV3 artifact manifest",
     "attach immutable https digest links for linux artifacts in latest TV3 artifact manifest",
     "attach immutable https digest links for macos artifacts in latest TV3 artifact manifest",
     "attach immutable https digest links for windows artifacts in latest TV3 artifact manifest",
     "attach linux bridge audit evidence file with immutable URI + reviewer fields in wallet-backup-vault evidence directory",
     "attach macos bridge audit evidence file with immutable URI + reviewer fields in wallet-backup-vault evidence directory",
     "attach windows bridge audit evidence file with immutable URI + reviewer fields in wallet-backup-vault evidence directory",
+    "attach linux signed artifact evidence markdown with immutable URI + signing identity + dated reviewer sign-off",
+    "attach macos signed artifact evidence markdown with immutable URI + signing identity + dated reviewer sign-off",
+    "attach windows signed artifact evidence markdown with immutable URI + signing identity + dated reviewer sign-off",
     "add R9-D sign-off evidence line with immutable HTTPS URI into wallet backup checklist",
     "add consolidated maintainer sign-off line with immutable HTTPS URI into wallet backup checklist",
     "regenerate artifact manifest so generated_at is within 14 days of gate check",
