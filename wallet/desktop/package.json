@@ -17,7 +17,8 @@
     "tv3:gate-check:allow-incomplete": "node scripts/tv3-completion-gate-check.mjs --allow-incomplete",
     "tv3:audit-evidence-stubs": "node scripts/tv3-audit-evidence-stubs.mjs",
     "tv3:release-evidence-template": "node scripts/tv3-release-evidence-template.mjs",
-    "tv3:signed-artifact-evidence-stubs": "node scripts/tv3-signed-artifact-evidence-stubs.mjs"
+    "tv3:signed-artifact-evidence-stubs": "node scripts/tv3-signed-artifact-evidence-stubs.mjs",
+    "tv3:checklist-link-report": "node scripts/tv3-checklist-link-report.mjs"
   },
   "dependencies": {
     "react": "^18.3.1",
