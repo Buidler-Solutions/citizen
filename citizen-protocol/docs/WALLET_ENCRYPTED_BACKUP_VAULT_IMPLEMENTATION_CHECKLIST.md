@@ -310,6 +310,7 @@ To translate the CLI-first vault implementation into a polished portable app exp
      - [x] Add a deterministic TV-3 completion-gate status utility (`wallet/desktop/scripts/tv3-completion-gate-check.mjs`, exposed as `pnpm tv3:gate-check`) that inspects the latest artifact manifest + per-OS audit evidence presence and emits a machine-readable pass/fail status JSON with explicit next actions; gate evaluation now also enforces required manifest fields, non-`UNSET` signing identity metadata, and valid 64-hex SHA-256 digests per target OS.
      - [x] Extend TV-3 completion-gate evaluation to enforce checklist cross-link closure prerequisites for checkpoint-9 handoff (`R9-D` sign-off URI and consolidated maintainer sign-off URI) so release evidence cannot be marked complete without immutable checklist wiring.
      - [x] Extend TV-3 artifact contract/gates to require immutable HTTPS digest links per OS artifact (`immutable_uri`) so release evidence can be cross-linked directly into R9-D without manual path rewriting.
+     - [x] Harden TV-3 completion-gate target validation so `pnpm tv3:gate-check` now fail-closes when per-OS artifact entries use unsupported `target_os`/`target_arch` values or omit deterministic `size_bytes` evidence required for reproducible cross-platform packaging attestations.
      - [ ] Attach first signed Linux artifact set + immutable digest links.
      - [ ] Attach first signed macOS artifact set + immutable digest links.
      - [ ] Attach first signed Windows artifact set + immutable digest links.
