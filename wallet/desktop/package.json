@@ -25,7 +25,8 @@
     "tv3:portable-smoke-gate:allow-incomplete": "node scripts/tv3-portable-smoke-gate.mjs --allow-incomplete",
     "tv3:portable-smoke-evidence-template": "node scripts/tv3-portable-smoke-evidence-template.mjs",
     "tv3:portable-smoke-signed-evidence-stubs": "node scripts/tv3-portable-smoke-signed-evidence-stubs.mjs",
-    "tv3:ux-signoff-template": "node scripts/tv3-ux-signoff-template.mjs"
+    "tv3:ux-signoff-template": "node scripts/tv3-ux-signoff-template.mjs",
+    "tv3:bridge-secret-scan": "node scripts/tv3-bridge-secret-scan.mjs"
   },
   "dependencies": {
     "react": "^18.3.1",

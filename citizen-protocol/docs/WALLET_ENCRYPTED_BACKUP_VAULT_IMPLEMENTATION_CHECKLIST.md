@@ -359,7 +359,7 @@ To translate the CLI-first vault implementation into a polished portable app exp
 **Exit criteria**
 - [~] Portable app cross-platform smoke-suite gate is implemented and fail-closed, and deterministic signed-smoke evidence stubs now exist; closure remains pending attachment of first signed Linux/macOS/Windows smoke evidence snapshots (create/add-slot/export/verify/restore/eject guidance).
 - [~] UX review sign-off confirms “working and sleek” bar: <3 minute guided backup, no ambiguous error copy, consistent visual hierarchy. (Deterministic UX review packet scaffolding now exists via `pnpm --dir wallet/desktop tv3:ux-signoff-template`, which hydrates `TV3_UX_SLEEK_SIGNOFF_TEMPLATE_*.md` from latest portable smoke evidence; final reviewer measurements/sign-off evidence links are still required.)
-- [ ] Security review confirms no plaintext secret exposure across UI bridge, logs, or crash artifacts.
+- [~] Security review confirms no plaintext secret exposure across UI bridge, logs, or crash artifacts. (Deterministic secret-scan command `pnpm --dir wallet/desktop tv3:bridge-secret-scan` now emits machine-readable `citizen.wallet.desktop.tv3.secret-scan.v1` findings/status output across desktop/runtime evidence surfaces; final maintainer security sign-off evidence link remains required to close.)
 
 ## Checkpoint 9 — Rollout Plan
 
