@@ -45,6 +45,21 @@ Never start downstream rollout evidence tasks until the current blocker lane is 
 - **Daily evidence heartbeat**: each active lane must publish one status artifact (link, command output, or blocker note).
 - **Fail-closed gating**: if required evidence fields are `UNSET`, lane remains blocked.
 
+
+## Lane Ownership + Heartbeat Artifact Contract
+
+Track anti-stall ownership/SLA state in:
+
+- `citizen-protocol/docs/evidence/wallet-backup-vault/TV3_LANE_EXECUTION_STATUS.json`
+
+Minimum required fields per lane:
+
+- `owner` and `backup_owner` must not be `UNSET`.
+- `last_heartbeat_utc` must be an ISO-8601 UTC timestamp and updated at least every 24 hours while lane is active.
+- Every entry in `unresolved_evidence[]` must include `updated_at_utc` within 48 hours while unresolved.
+
+`pnpm --dir wallet/desktop tv3:unblock-priority:strict` now fail-closes when the status artifact is missing/invalid or these anti-stall fields violate policy.
+
 ## Command-Driven Daily Closure Loop
 
 From repository root:

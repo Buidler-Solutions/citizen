@@ -7,6 +7,10 @@ const checklistPath = path.join(
   repoRoot,
   'citizen-protocol/docs/WALLET_ENCRYPTED_BACKUP_VAULT_IMPLEMENTATION_CHECKLIST.md',
 );
+const laneStatusPath = path.join(
+  repoRoot,
+  'citizen-protocol/docs/evidence/wallet-backup-vault/TV3_LANE_EXECUTION_STATUS.json',
+);
 
 const strict = process.argv.includes('--strict');
 const allowIncomplete = process.argv.includes('--allow-incomplete');
@@ -77,6 +81,80 @@ const laneStatus = lanes.map((lane) => {
   };
 });
 
+function parseLaneExecutionStatus() {
+  if (!fs.existsSync(laneStatusPath)) {
+    return {
+      schema: null,
+      lanes: {},
+      warnings: [`missing lane execution status file: ${path.relative(repoRoot, laneStatusPath)}`],
+    };
+  }
+
+  try {
+    const parsed = JSON.parse(fs.readFileSync(laneStatusPath, 'utf8'));
+    const laneMap = Object.fromEntries((parsed.lanes ?? []).map((lane) => [lane.id, lane]));
+    return {
+      schema: parsed.schema ?? null,
+      lanes: laneMap,
+      warnings: [],
+    };
+  } catch (error) {
+    return {
+      schema: null,
+      lanes: {},
+      warnings: [`failed to parse lane execution status file: ${error.message}`],
+    };
+  }
+}
+
+function parseIsoDate(value) {
+  if (!value) {
+    return null;
+  }
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+const executionStatus = parseLaneExecutionStatus();
+const now = new Date();
+
+const laneGovernance = laneStatus.map((lane) => {
+  const laneExec = executionStatus.lanes[lane.id] ?? null;
+  const blockers = [];
+  const owner = laneExec?.owner ?? 'UNSET';
+  const backupOwner = laneExec?.backup_owner ?? 'UNSET';
+  const lastHeartbeatUtc = laneExec?.last_heartbeat_utc ?? 'UNSET';
+  const unresolvedEvidence = Array.isArray(laneExec?.unresolved_evidence) ? laneExec.unresolved_evidence : [];
+
+  if (owner === 'UNSET') blockers.push('owner is UNSET');
+  if (backupOwner === 'UNSET') blockers.push('backup_owner is UNSET');
+
+  const heartbeatDate = parseIsoDate(lastHeartbeatUtc);
+  const heartbeatAgeHours = heartbeatDate ? (now.getTime() - heartbeatDate.getTime()) / (1000 * 60 * 60) : null;
+  if (!heartbeatDate) {
+    blockers.push('last_heartbeat_utc missing or invalid');
+  } else if (heartbeatAgeHours > 24) {
+    blockers.push(`last heartbeat older than 24h (${heartbeatAgeHours.toFixed(1)}h)`);
+  }
+
+  unresolvedEvidence.forEach((item, idx) => {
+    const updated = parseIsoDate(item?.updated_at_utc);
+    const ageHours = updated ? (now.getTime() - updated.getTime()) / (1000 * 60 * 60) : null;
+    if (!updated || ageHours > 48) {
+      blockers.push(`unresolved evidence item ${idx + 1} violates 48h SLA`);
+    }
+  });
+
+  return {
+    id: lane.id,
+    owner,
+    backup_owner: backupOwner,
+    last_heartbeat_utc: lastHeartbeatUtc,
+    unresolved_evidence_count: unresolvedEvidence.length,
+    blockers,
+  };
+});
+
 const firstBlocked = laneStatus.find((lane) => lane.status === 'blocked') ?? null;
 const blockedCount = laneStatus.filter((x) => x.status === 'blocked').length;
 const status = firstBlocked ? 'blocked' : 'ready_for_checkpoint9_closeout';
@@ -104,6 +182,11 @@ const report = {
     status: laneStatusValue,
     unresolved,
   })),
+  anti_stall: {
+    status_file: path.relative(repoRoot, laneStatusPath),
+    warnings: executionStatus.warnings,
+    lane_assignments: laneGovernance,
+  },
 };
 
 console.log(JSON.stringify(report, null, 2));
@@ -112,4 +195,5 @@ if (allowIncomplete || !strict) {
   process.exit(0);
 }
 
-process.exit(firstBlocked ? 2 : 0);
+const hasGovernanceBlockers = laneGovernance.some((lane) => lane.blockers.length > 0);
+process.exit(firstBlocked || hasGovernanceBlockers || executionStatus.warnings.length > 0 ? 2 : 0);
