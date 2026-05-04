@@ -478,6 +478,8 @@ For first mergeable implementation slice, require:
 
 > GA tracking note (2026-05-04): all previously open GA questions above now have explicit decisions captured in this checklist; any future changes must land as dated checklist deltas with linked evidence/ADR artifacts.
 
+> Status integrity note (2026-05-04): checklist closure must be evidence-driven; `[~]` and `[ ]` entries below intentionally remain until implementation or rerun evidence is attached.
+
 ---
 
 ## Implementation Continuation Plan (2026-05-01)
@@ -556,7 +558,7 @@ Use this queue to keep momentum without reopening resolved design choices. Each 
 
 **Exit criteria**
 - [x] PR-D1 through PR-D4 merged with passing wallet crate tests (wallet backup regression/performance/fixture gates are wired in `citizen-protocol/.github/workflows/wallet-backup-vault-ci.yml` and reflected in the 2026-05-02 maintainer evidence packet).
-- [x] Remaining open items in this checklist are reduced to extension integration, optional hardware-assisted key wrapping, and rollout governance sign-off (all other previously open checklist gaps are now closed or explicitly deferred with decision records).
+- [~] Remaining open items in this checklist are reduced to extension integration, optional hardware-assisted key wrapping, and rollout governance sign-off; desktop bridge/runtime parity items below remain partially complete and must not be treated as closed without new implementation evidence.
 
 
 ### Next Slice E — Portable application foundation (working + sleek)
@@ -590,9 +592,9 @@ This slice starts the desktop productization track without blocking on extension
    - [x] Publish app↔CLI compatibility table in docs per release. (Baseline table now documented in `citizen-protocol/docs/WALLET_DESKTOP_CLI_COMPATIBILITY_MATRIX.md`; release updates remain required.)
 
 **Exit criteria**
-- [x] Desktop smoke suite passes on Linux/macOS/Windows runners for create/add-slot/export/verify/restore happy paths.
-- [x] UX acceptance validates “working + sleek” baseline: first-time backup flow under 3 minutes with no ambiguous error language.
-- [x] Security review confirms no plaintext material crosses UI bridge, logs, crash dumps, or telemetry payloads.
+- [~] Desktop smoke suite coverage exists for WB-mode/headless contract runners on Linux/macOS/Windows, but runtime-backed ephemeral-volume parity remains open.
+- [~] UX sign-off evidence exists, but regression revalidation is still required whenever runtime bridge behavior or copy-pack contracts change.
+- [~] Security review evidence exists for the current bridge posture; revalidation is required before any runtime-bridge architecture change (including in-process migration).
 
 ### Portable App Milestone Tracker (updated 2026-05-01)
 
@@ -611,10 +613,10 @@ This slice starts the desktop productization track without blocking on extension
 To continue implementation without drifting from completed checklist work, use this gap-focused queue:
 
 - [x] **Reconciled completed-vs-unchecked desktop items** across TV-1/TV-2/TV-3 and PR-E1..PR-E4 so implementation-complete work is not left unmarked in this checklist.
-- [x] **Implement in-process wallet-core bridge** to replace shell invocation in `wallet/desktop/src-tauri/src/main.rs` while preserving the `citizen.wallet.backup.cli.v1` response contract. (GA-v1 decision updated: shell bridge posture is accepted by signed TV-3/R9 packet; in-process migration remains post-GA hardening, not an open blocker.)
-- [x] **Finish cross-platform packaging/signing lane** (macOS/Windows/Linux) with reproducible build metadata and release-note compatibility callouts.
-- [x] **Publish signed cross-platform removable-media smoke evidence** covering `discover_removable_drives`, `flush_vault_writes`, and `safe_eject_media` parity checks.
-- [x] **Close bridge memory/logging audit** with explicit evidence that secrets are not retained in UI logs, runtime logs, crash artifacts, or diagnostics export payloads.
+- [ ] **Implement in-process wallet-core bridge** to replace shell invocation in `wallet/desktop/src-tauri/src/main.rs` while preserving the `citizen.wallet.backup.cli.v1` response contract. (Deferred/post-GA hardening; accepted shell posture is not equivalent to implementation completion.)
+- [~] **Finish cross-platform packaging/signing lane** (macOS/Windows/Linux) with reproducible build metadata and release-note compatibility callouts (initial evidence attached; keep as partial until release pipeline revalidation cadence is automated).
+- [~] **Publish signed cross-platform removable-media smoke evidence** covering `discover_removable_drives`, `flush_vault_writes`, and `safe_eject_media` parity checks (initial packets attached; periodic rerun policy still pending).
+- [~] **Close bridge memory/logging audit** with explicit evidence that secrets are not retained in UI logs, runtime logs, crash artifacts, or diagnostics export payloads (current audit packet attached; rerun required on runtime architecture changes).
 
 **Immediate next coding slice (desktop/Tauri)**
 
@@ -711,11 +713,11 @@ Use this backlog to convert the portable app milestone tracker into small implem
 
 5. **PR-F5: Desktop smoke and packaging gate**
    - [~] Add CI smoke workflow that runs create/add-slot/export/verify/restore against ephemeral temp volumes per OS runner. (Added `vaultier-desktop-smoke.yml` OS-matrix smoke gate running WB-mode/headless contract flows on Linux/macOS/Windows; ephemeral temp-volume runtime adapter coverage remains pending.)
-   - [x] Produce signed/nightly artifacts with reproducible build metadata attached to release notes.
+   - [~] Produce signed/nightly artifacts with reproducible build metadata attached to release notes (baseline exists; keep partial until nightly automation is continuously enforced).
    - [x] Add “known limitations” section in desktop docs for unsigned local dev builds and removable-media emulation caveats. (`wallet/desktop/README.md` now includes a dedicated known-limitations section for unsigned dev builds, Linux runtime package prerequisites, WB-mode rehearsal boundaries, removable-media emulation caveats, and production-signing caveats.)
 
 **Exit criteria**
-- [x] PR-F1 through PR-F5 merged with green cross-platform smoke checks.
+- [~] PR-F1 through PR-F5 are largely landed, but full runtime-backed cross-platform smoke + packaging automation remains partially open.
 - [x] Portable app roadmap status can advance M0→M2 from Planned to In Progress/Implemented with linked evidence PRs. (Updated milestone tracker now reflects M1/M2 as In Progress, aligned to implemented Vaultier/Tauri evidence already tracked in this checklist.)
 - [x] Desktop docs explicitly reference deterministic error contract and recovery runbook procedures. (`wallet/desktop/README.md` now includes a dedicated deterministic error contract + recovery runbook section that anchors desktop behavior to wallet CLI contract IDs, the vault format contract note, disaster recovery runbook ordering, and threat-model removable-media constraints.)
 
@@ -950,10 +952,10 @@ Use this rubric during UX and maintainer review so “sleek” is measurable, no
 
 - Continued `#continue-tauri-vaultier-desktop-version-execution-queue` with a checkpoint-9 handoff-prep slice focused on immediate execution readiness (no status inflation).
 - Added an explicit **R9-I handoff packet preflight** step to operationalize the existing R9-D/R9-E templates into a single execution checklist once TV-3 blockers clear:
-  - [x] create `WALLET_DESKTOP_RELEASE_CHECKLIST_YYYY-MM-DD.md` from the R9-D template and pre-fill immutable artifact placeholders (digest/signing identity/build timestamp/audit URI),
-  - [x] create `WALLET_DESKTOP_POST_ROLLOUT_VALIDATION_YYYY-MM-DD.md` from the R9-E template and pre-link OS drill packet placeholders,
-  - [x] attach dated owner acknowledgement stubs (wallet, desktop/runtime, security) before any beta flag-review meeting is scheduled,
-  - [x] run the pinned command baseline (`pnpm --dir vaultier test:headless-contract` and `cargo test -p citizen-wallet wallet_backup`) and include log URIs in both preflight docs.
+  - [~] create `WALLET_DESKTOP_RELEASE_CHECKLIST_YYYY-MM-DD.md` from the R9-D template and pre-fill immutable artifact placeholders (digest/signing identity/build timestamp/audit URI),
+  - [~] create `WALLET_DESKTOP_POST_ROLLOUT_VALIDATION_YYYY-MM-DD.md` from the R9-E template and pre-link OS drill packet placeholders,
+  - [~] attach dated owner acknowledgement stubs (wallet, desktop/runtime, security) before any beta flag-review meeting is scheduled,
+  - [~] run the pinned command baseline (`pnpm --dir vaultier test:headless-contract` and `cargo test -p citizen-wallet wallet_backup`) and include log URIs in both preflight docs.
 - Kept checkpoint markers unchanged for blocked closure work (`R9-D`, `R9-E`, rollout exit criteria remain `[ ]`) because this slice only removes handoff ambiguity and does not satisfy packaging/signing or bridge-audit prerequisites.
 - Checkpoint-9 now has an execution-ready closure queue of **R9-I preflight -> R9-D sign-off -> R9-E validation -> R9-F decision memo**, still hard-gated by TV-3 evidence.
 
