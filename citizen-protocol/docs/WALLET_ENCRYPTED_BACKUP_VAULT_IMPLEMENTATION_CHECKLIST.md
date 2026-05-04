@@ -318,6 +318,7 @@ To translate the CLI-first vault implementation into a polished portable app exp
      - [x] Lock the audit scope to runtime bridge boundaries only: Rust command adapter, JSON response normalization, redaction filters, diagnostics export payload, and crash/log artifact surfaces.
      - [x] Require deterministic evidence outputs: redaction test transcript, secret-scrub grep output over generated logs/diagnostics, and reviewer sign-off record with date + owner role.
      - [x] Add a deterministic bridge-audit packet template generator (`wallet/desktop/scripts/tv3-audit-packet-template.mjs`, exposed as `pnpm tv3:audit-packet-template`) so per-OS immutable URIs + reviewer sign-off fields land in the required `citizen.wallet.desktop.tv3.bridge-audit-packet.v1` contract before TV-3 gate evaluation.
+     - [x] Harden TV-3 completion-gate audit validation so `pnpm tv3:gate-check` fail-closes when the latest bridge-audit packet contract is not `citizen.wallet.desktop.tv3.bridge-audit-packet.v1` or required per-OS immutable URI/reviewer fields are missing, with deterministic next-action guidance for each missing field.
      - [ ] Attach Linux bridge audit packet evidence link.
      - [ ] Attach macOS bridge audit packet evidence link.
      - [ ] Attach Windows bridge audit packet evidence link.
