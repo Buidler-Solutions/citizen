@@ -26,7 +26,10 @@
     "tv3:portable-smoke-evidence-template": "node scripts/tv3-portable-smoke-evidence-template.mjs",
     "tv3:portable-smoke-signed-evidence-stubs": "node scripts/tv3-portable-smoke-signed-evidence-stubs.mjs",
     "tv3:ux-signoff-template": "node scripts/tv3-ux-signoff-template.mjs",
-    "tv3:bridge-secret-scan": "node scripts/tv3-bridge-secret-scan.mjs"
+    "tv3:bridge-secret-scan": "node scripts/tv3-bridge-secret-scan.mjs",
+    "tv3:portable-track-gap-report": "node scripts/tv3-portable-track-gap-report.mjs",
+    "tv3:portable-track-gap-report:strict": "node scripts/tv3-portable-track-gap-report.mjs --strict",
+    "tv3:portable-track-gap-report:allow-incomplete": "node scripts/tv3-portable-track-gap-report.mjs --allow-incomplete"
   },
   "dependencies": {
     "react": "^18.3.1",
