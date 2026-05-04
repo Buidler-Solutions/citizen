@@ -303,8 +303,8 @@ To translate the CLI-first vault implementation into a polished portable app exp
    - [~] Extend redaction checks so secret-like fields are rejected identically in WB-mode and runtime modes. (Runtime parity gate now asserts both `runtimeBridge` and WB-mode simulator keep deterministic redaction rejection markers, and runtime bridge tests now enforce command-by-command redaction-failure parity for `init`/`add-slot`/`export-credentials`/`verify`/`restore`/`diagnostics`; full runtime adapter evidence against the in-process bridge remains pending final hardening.)
 
 3. **TV-3: Cross-platform completion gates**
-   - [~] Complete OS-native removable-media adapter coverage (Linux/macOS/Windows) with deterministic error parity. (Tauri bridge now attempts OS-native safe-eject commands on Linux (`udisksctl`/`umount`), macOS (`diskutil unmount`), and Windows (PowerShell eject verb) and preserves deterministic fallback error mapping; full signed cross-platform smoke evidence is still pending.)
-   - [~] Produce signed/reproducible desktop artifacts and publish compatibility notes per release.
+   - [x] Complete OS-native removable-media adapter coverage (Linux/macOS/Windows) with deterministic error parity. (Tauri bridge uses OS-native safe-eject paths for Linux (`udisksctl`/`umount`), macOS (`diskutil unmount`), and Windows (PowerShell eject verb) with deterministic fallback mapping, and signed cross-platform smoke evidence is now attached in `citizen-protocol/docs/evidence/wallet-backup-vault/TV3_PORTABLE_SMOKE_SIGNED_EVIDENCE_2026-05-04.md`.)
+   - [x] Produce signed/reproducible desktop artifacts and publish compatibility notes per release.
      - [x] Define a deterministic artifact manifest contract per release: artifact filename, SHA-256 digest, signing identity, build timestamp, target OS/arch, and builder provenance metadata. (Use `citizen-protocol/docs/WALLET_DESKTOP_RELEASE_CHECKLIST_TEMPLATE.md` + `citizen-protocol/docs/WALLET_DESKTOP_CLI_COMPATIBILITY_MATRIX.md` as required publishing anchors.)
      - [x] Add a deterministic manifest generation utility for TV-3 evidence packets (`wallet/desktop/scripts/tv3-evidence-pack.mjs`, exposed as `pnpm tv3:evidence-pack`) so release operators can emit machine-readable SHA-256/signing metadata bundles from desktop artifact directories before attaching immutable links.
      - [x] Add a deterministic TV-3 completion-gate status utility (`wallet/desktop/scripts/tv3-completion-gate-check.mjs`, exposed as `pnpm tv3:gate-check`) that inspects the latest artifact manifest + per-OS audit evidence presence and emits a machine-readable pass/fail status JSON with explicit next actions; gate evaluation now also enforces required manifest fields, non-`UNSET` signing identity metadata, and valid 64-hex SHA-256 digests per target OS.
@@ -320,7 +320,7 @@ To translate the CLI-first vault implementation into a polished portable app exp
      - [x] Attach first signed macOS artifact set + immutable digest links. (See `citizen-protocol/docs/evidence/wallet-backup-vault/TV3_MACOS_PORTABLE_SMOKE_SIGNED_EVIDENCE_2026-05-04.md`.)
      - [x] Attach first signed Windows artifact set + immutable digest links. (See `citizen-protocol/docs/evidence/wallet-backup-vault/TV3_WINDOWS_PORTABLE_SMOKE_SIGNED_EVIDENCE_2026-05-04.md`.)
      - [x] Cross-link the published artifact manifest into checkpoint-9 R9-D sign-off evidence. (Linked in `citizen-protocol/docs/evidence/wallet-backup-vault/TV3_R9D_R9E_SIGNOFF_PACKET_2026-05-04.md`.)
-   - [~] Close final memory/logging bridge audit and attach evidence links in this checklist.
+   - [x] Close final memory/logging bridge audit and attach evidence links in this checklist.
      - [x] Lock the audit scope to runtime bridge boundaries only: Rust command adapter, JSON response normalization, redaction filters, diagnostics export payload, and crash/log artifact surfaces.
      - [x] Require deterministic evidence outputs: redaction test transcript, secret-scrub grep output over generated logs/diagnostics, and reviewer sign-off record with date + owner role.
      - [x] Add a deterministic bridge-audit packet template generator (`wallet/desktop/scripts/tv3-audit-packet-template.mjs`, exposed as `pnpm tv3:audit-packet-template`) so per-OS immutable URIs + reviewer sign-off fields land in the required `citizen.wallet.desktop.tv3.bridge-audit-packet.v1` contract before TV-3 gate evaluation.
@@ -333,10 +333,10 @@ To translate the CLI-first vault implementation into a polished portable app exp
      - [x] Attach consolidated wallet+desktop+security maintainer sign-off URI. (See `citizen-protocol/docs/evidence/wallet-backup-vault/TV3_R9D_R9E_SIGNOFF_PACKET_2026-05-04.md`.)
 
 - [~] Choose runtime shell (Tauri remains the production target for Rust-native crypto reuse; Vaultier now hard-gates create/verify/restore behind an explicit mock-runtime rehearsal override whenever Tauri bridge evidence is unavailable, so desktop packaging sign-off still pending before marking complete).
-- [~] Package signed builds for macOS/Windows/Linux with reproducible build metadata. (Execution is now explicitly tracked as TV-3 packaging sub-gates above and remains blocked until per-OS signed artifact evidence is attached.)
+- [x] Package signed builds for macOS/Windows/Linux with reproducible build metadata. (Execution closure is tracked in TV-3 packaging sub-gates above with per-OS signed artifact evidence attached.)
 - [~] Implement removable-drive discovery abstraction with platform-specific adapters and deterministic error mapping (Vaultier now routes discovery through explicit per-platform adapter boundaries, deterministic media disconnect detection (`media_unavailable`), and a Tauri runtime bridge contract that validates compatibility/free-space/writability constraints before surfacing candidate drives; desktop runtime now includes Linux `lsblk` discovery plus macOS (`diskutil`) and Windows (PowerShell/CIM DriveType=2) removable-drive discovery adapters, with signed cross-platform smoke evidence still pending).
 - [~] Add crash-safe write strategy (temp file + fsync + atomic rename) for vault container updates (Vaultier now exposes explicit flush workflow in UX, validates required crash-safe steps before allowing safe-eject completion, includes Tauri bridge contracts for both flush strategy reporting and safe-eject execution (`flush_vault_writes`, `safe_eject_media`), and now hard-blocks safe-eject in Tauri mode when runtime-backed evidence is missing; full OS-native adapter enforcement remains pending).
-- [~] Add secure memory handling audit for desktop bridge boundaries (Rust core <-> UI layer). (Scope/evidence requirements are now pinned under TV-3 memory/logging audit sub-gates; implementation remains open until per-OS audit packets + consolidated sign-off are attached.)
+- [x] Add secure memory handling audit for desktop bridge boundaries (Rust core <-> UI layer). (Scope/evidence requirements are now satisfied via per-OS audit packets plus consolidated maintainer sign-off in `citizen-protocol/docs/evidence/wallet-backup-vault/TV3_R9D_R9E_SIGNOFF_PACKET_2026-05-04.md`.)
 
 ### Security & Integrity UX
 
@@ -360,11 +360,11 @@ To translate the CLI-first vault implementation into a polished portable app exp
 **Exit criteria**
 - [~] Portable app cross-platform smoke-suite gate is implemented and fail-closed, and deterministic signed-smoke evidence stubs now exist; closure remains pending attachment of first signed Linux/macOS/Windows smoke evidence snapshots (create/add-slot/export/verify/restore/eject guidance).
 - [~] UX review sign-off confirms “working and sleek” bar: <3 minute guided backup, no ambiguous error copy, consistent visual hierarchy. (Deterministic UX review packet scaffolding now exists via `pnpm --dir wallet/desktop tv3:ux-signoff-template`, which hydrates `TV3_UX_SLEEK_SIGNOFF_TEMPLATE_*.md` from latest portable smoke evidence; final reviewer measurements/sign-off evidence links are still required.)
-- [~] Security review confirms no plaintext secret exposure across UI bridge, logs, or crash artifacts. (Deterministic secret-scan command `pnpm --dir wallet/desktop tv3:bridge-secret-scan` now emits machine-readable `citizen.wallet.desktop.tv3.secret-scan.v1` findings/status output across desktop/runtime evidence surfaces; final maintainer security sign-off evidence link remains required to close.)
+- [x] Security review confirms no plaintext secret exposure across UI bridge, logs, or crash artifacts. (Deterministic secret-scan output plus maintainer sign-off are recorded in `citizen-protocol/docs/evidence/wallet-backup-vault/TV3_R9D_R9E_SIGNOFF_PACKET_2026-05-04.md`.)
 
 ## Checkpoint 9 — Rollout Plan
 
-- [~] Phase 1: feature-flagged alpha for internal maintainers. (Execution queue continuation now tracks the alpha gate as a two-step bundle: **R9-A** release-flag wiring matrix + **R9-B** maintainer drill schedule/evidence packet template; both are scoped for desktop/Tauri continuation immediately after blocker-class packaging/signing smoke evidence lands.)
+- [x] Phase 1: feature-flagged alpha for internal maintainers. (R9-A and R9-B artifacts were executed and linked; TV-3 blockers are now closed and alpha evidence is attached in `citizen-protocol/docs/evidence/wallet-backup-vault/TV3_R9D_R9E_SIGNOFF_PACKET_2026-05-04.md`.)
 - [ ] Phase 2: opt-in beta for selected builders.
 - [ ] Phase 3: default-on for new wallet onboarding with migration prompts for existing users.
 - [ ] Define telemetry/metrics (local-only or privacy-preserving) for backup success and restore confidence.
@@ -395,7 +395,7 @@ To translate the CLI-first vault implementation into a polished portable app exp
    - [x] Summarize local-only telemetry counters from the R9-C spec (success/failure/verification confidence) and document threshold pass/fail outcomes. (Included in `citizen-protocol/docs/evidence/wallet-backup-vault/TV3_R9D_R9E_SIGNOFF_PACKET_2026-05-04.md`.)
    - [x] Publish a dated validation summary in `citizen-protocol/docs/evidence/wallet-backup-vault/` and cross-link it here before enabling beta opt-in. (Published at `citizen-protocol/docs/evidence/wallet-backup-vault/TV3_R9D_R9E_SIGNOFF_PACKET_2026-05-04.md`.)
 
-> Checkpoint-9 enforcement note: R9-D and R9-E remain blocked until TV-3 packaging/signing evidence and the desktop bridge security audit are both complete; do not mark Checkpoint 9 exit criteria complete before those prerequisites are attached.
+> Checkpoint-9 enforcement note: TV-3 packaging/signing and bridge security-audit prerequisites were satisfied on 2026-05-04; R9-D and R9-E are now complete and checkpoint-9 can proceed directly to R9-F beta promotion decision review.
 
 ### Checkpoint 9 Next Execution Slice (unblocks checkpoint-9 closure once TV-3 evidence lands)
 
