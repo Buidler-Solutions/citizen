@@ -56,6 +56,7 @@ Minimum required fields per lane:
 
 - `owner` and `backup_owner` must not be `UNSET`.
 - `last_heartbeat_utc` must be an ISO-8601 UTC timestamp and updated at least every 24 hours while lane is active.
+- `heartbeat_artifact` must be present for the active lane with `type` (`link` | `command_output` | `blocker_note`), non-`UNSET` `reference`, and `updated_at_utc` within 24 hours.
 - Every entry in `unresolved_evidence[]` must include `updated_at_utc` within 48 hours while unresolved.
 
 `pnpm --dir wallet/desktop tv3:unblock-priority:strict` now fail-closes when the status artifact is missing/invalid or these anti-stall fields violate policy.
