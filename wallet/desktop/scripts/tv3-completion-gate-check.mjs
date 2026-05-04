@@ -32,6 +32,16 @@ const requiredAudits = {
   windows: /windows.*audit|audit.*windows|win.*audit/i,
 };
 
+const requiredChecklistCrossLinks = {
+  r9d_signoff: /R9-D.*(sign-?off|evidence).*https?:\/\//i,
+  consolidated_signoff: /consolidated.*sign-?off.*https?:\/\//i,
+};
+
+const checklistPath = path.join(
+  repoRoot,
+  'citizen-protocol/docs/WALLET_ENCRYPTED_BACKUP_VAULT_IMPLEMENTATION_CHECKLIST.md'
+);
+
 async function readManifests(dir) {
   const files = await fs.readdir(dir);
   const manifestNames = files.filter((name) => /TV3_ARTIFACT_MANIFEST_.*\.json$/i.test(name)).sort();
@@ -47,6 +57,7 @@ async function readManifests(dir) {
 
 (async () => {
   const files = await fs.readdir(evidenceDir);
+  const checklistRaw = await fs.readFile(checklistPath, 'utf8');
   const manifests = await readManifests(evidenceDir);
   const latestManifest = manifests.at(-1);
 
@@ -101,6 +112,10 @@ async function readManifests(dir) {
     })
   );
 
+  const checklistCrossLinkStatus = Object.fromEntries(
+    Object.entries(requiredChecklistCrossLinks).map(([key, rx]) => [key, rx.test(checklistRaw)])
+  );
+
   const summary = {
     contract: 'citizen.wallet.desktop.tv3.gate-status.v1',
     generated_at: new Date().toISOString(),
@@ -112,12 +127,14 @@ async function readManifests(dir) {
       manifest_sha256: manifestDigestStatus,
       immutable_uris: immutableUriStatus,
       audits: auditStatus,
+      checklist_cross_links: checklistCrossLinkStatus,
       complete:
         Object.values(artifactStatus).every(Boolean) &&
         Object.values(manifestFieldStatus).every(Boolean) &&
         Object.values(manifestDigestStatus).every(Boolean) &&
         Object.values(immutableUriStatus).every(Boolean) &&
-        Object.values(auditStatus).every(Boolean),
+        Object.values(auditStatus).every(Boolean) &&
+        Object.values(checklistCrossLinkStatus).every(Boolean),
     },
     next_actions: [
       ...Object.entries(artifactStatus)
@@ -135,6 +152,13 @@ async function readManifests(dir) {
       ...Object.entries(auditStatus)
         .filter(([, ok]) => !ok)
         .map(([os]) => `attach ${os} bridge audit evidence file in wallet-backup-vault evidence directory`),
+      ...Object.entries(checklistCrossLinkStatus)
+        .filter(([, ok]) => !ok)
+        .map(([item]) =>
+          item === 'r9d_signoff'
+            ? 'add R9-D sign-off evidence line with immutable HTTPS URI into wallet backup checklist'
+            : 'add consolidated maintainer sign-off line with immutable HTTPS URI into wallet backup checklist'
+        ),
     ],
   };
 
