@@ -93,6 +93,43 @@ function validateAuditEvidence(files) {
   return { present: true, latest };
 }
 
+
+function extractMarkdownField(raw, label) {
+  const rx = new RegExp(`-\\s+${label}:\\s+(.+)$`, 'im');
+  const m = raw.match(rx);
+  return m ? m[1].trim() : '';
+}
+
+async function validatePerOsAuditEvidence(dir) {
+  const files = await fs.readdir(dir);
+  const status = { linux: false, macos: false, windows: false };
+
+  for (const os of Object.keys(status)) {
+    const name = files
+      .filter((entry) => new RegExp(`^TV3_${os.toUpperCase()}_BRIDGE_AUDIT_EVIDENCE_.*\\.md$`, 'i').test(entry))
+      .sort()
+      .at(-1);
+
+    if (!name) {
+      continue;
+    }
+
+    const raw = await fs.readFile(path.join(dir, name), 'utf8');
+    const immutable = extractMarkdownField(raw, 'Bridge audit immutable URI');
+    const ownerRole = extractMarkdownField(raw, 'Owner role');
+    const signedOffOn = extractMarkdownField(raw, 'Signed off on');
+
+    status[os] =
+      /^https:\/\//i.test(immutable) &&
+      immutable !== 'UNSET' &&
+      ownerRole.length > 0 &&
+      ownerRole !== 'UNSET' &&
+      /^\\d{4}-\\d{2}-\\d{2}$/.test(signedOffOn) &&
+      signedOffOn !== 'UNSET';
+  }
+
+  return status;
+}
 (async () => {
   const files = await fs.readdir(evidenceDir);
   const checklistRaw = await fs.readFile(checklistPath, 'utf8');
@@ -169,11 +206,17 @@ function validateAuditEvidence(files) {
     })
   );
 
-  const auditStatus = Object.fromEntries(
+  const auditFilePresence = Object.fromEntries(
     Object.entries(requiredAudits).map(([os, rx]) => {
       const found = files.some((name) => rx.test(name));
       return [os, Boolean(found)];
     })
+  );
+
+  const perOsAuditEvidenceStatus = await validatePerOsAuditEvidence(evidenceDir);
+
+  const auditStatus = Object.fromEntries(
+    Object.keys(requiredAudits).map((os) => [os, Boolean(auditFilePresence[os] && perOsAuditEvidenceStatus[os])])
   );
 
   const checklistCrossLinkStatus = Object.fromEntries(
@@ -292,7 +335,7 @@ function validateAuditEvidence(files) {
         .map(([os]) => `attach immutable https digest links for ${os} artifacts in latest TV3 artifact manifest`),
       ...Object.entries(auditStatus)
         .filter(([, ok]) => !ok)
-        .map(([os]) => `attach ${os} bridge audit evidence file in wallet-backup-vault evidence directory`),
+        .map(([os]) => `attach ${os} bridge audit evidence file with immutable URI + reviewer fields in wallet-backup-vault evidence directory`),
       ...Object.entries(checklistCrossLinkStatus)
         .filter(([, ok]) => !ok)
         .map(([item]) =>

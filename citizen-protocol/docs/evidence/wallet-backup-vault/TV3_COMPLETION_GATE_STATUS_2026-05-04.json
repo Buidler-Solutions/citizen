@@ -1,6 +1,6 @@
 {
   "contract": "citizen.wallet.desktop.tv3.gate-status.v1",
-  "generated_at": "2026-05-04T06:14:15.389Z",
+  "generated_at": "2026-05-04T06:22:09.563Z",
   "evidence_dir": "/workspace/citizen/citizen-protocol/docs/evidence/wallet-backup-vault",
   "latest_artifact_manifest": null,
   "gates": {
@@ -40,9 +40,9 @@
       "windows": false
     },
     "audits": {
-      "linux": true,
-      "macos": true,
-      "windows": true
+      "linux": false,
+      "macos": false,
+      "windows": false
     },
     "checklist_cross_links": {
       "r9d_signoff": false,
@@ -101,6 +101,9 @@
     "attach immutable https digest links for linux artifacts in latest TV3 artifact manifest",
     "attach immutable https digest links for macos artifacts in latest TV3 artifact manifest",
     "attach immutable https digest links for windows artifacts in latest TV3 artifact manifest",
+    "attach linux bridge audit evidence file with immutable URI + reviewer fields in wallet-backup-vault evidence directory",
+    "attach macos bridge audit evidence file with immutable URI + reviewer fields in wallet-backup-vault evidence directory",
+    "attach windows bridge audit evidence file with immutable URI + reviewer fields in wallet-backup-vault evidence directory",
     "add R9-D sign-off evidence line with immutable HTTPS URI into wallet backup checklist",
     "add consolidated maintainer sign-off line with immutable HTTPS URI into wallet backup checklist",
     "regenerate artifact manifest so generated_at is within 14 days of gate check",
