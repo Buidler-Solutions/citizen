@@ -194,6 +194,22 @@ async function validatePerOsAuditEvidence(dir) {
   );
 
 
+  const manifestArtifactCoverage = Object.fromEntries(
+    Object.keys(requiredArtifacts).map((os) => {
+      const osArtifacts = (latestManifest?.parsed?.artifacts ?? []).filter(
+        (artifact) => String(artifact.target_os ?? '').toLowerCase() === os
+      );
+      return [os, osArtifacts.length > 0];
+    })
+  );
+
+  const manifestUnexpectedTargets = (latestManifest?.parsed?.artifacts ?? []).filter((artifact) => {
+    const os = String(artifact.target_os ?? '').toLowerCase();
+    const arch = String(artifact.target_arch ?? '').toLowerCase();
+    return !allowedTargetOs.has(os) || !allowedTargetArch.has(arch);
+  });
+
+
   const immutableUriStatus = Object.fromEntries(
     Object.keys(requiredArtifacts).map((os) => {
       const osArtifacts = (latestManifest?.parsed?.artifacts ?? []).filter(
@@ -297,6 +313,8 @@ async function validatePerOsAuditEvidence(dir) {
       manifest_sha256: manifestDigestStatus,
       manifest_target_os: manifestTargetOsStatus,
       manifest_target_arch: manifestTargetArchStatus,
+      manifest_artifact_coverage: manifestArtifactCoverage,
+      manifest_no_unexpected_targets: manifestUnexpectedTargets.length === 0,
       immutable_uris: immutableUriStatus,
       audits: auditStatus,
       checklist_cross_links: checklistCrossLinkStatus,
@@ -308,6 +326,8 @@ async function validatePerOsAuditEvidence(dir) {
         Object.values(manifestDigestStatus).every(Boolean) &&
         Object.values(manifestTargetOsStatus).every(Boolean) &&
         Object.values(manifestTargetArchStatus).every(Boolean) &&
+        Object.values(manifestArtifactCoverage).every(Boolean) &&
+        manifestUnexpectedTargets.length === 0 &&
         Object.values(immutableUriStatus).every(Boolean) &&
         Object.values(auditStatus).every(Boolean) &&
         Object.values(checklistCrossLinkStatus).every(Boolean) &&
@@ -330,6 +350,12 @@ async function validatePerOsAuditEvidence(dir) {
       ...Object.entries(manifestTargetArchStatus)
         .filter(([, ok]) => !ok)
         .map(([os]) => `ensure ${os} artifact entries use supported target_arch values (x86_64|aarch64)`),
+      ...Object.entries(manifestArtifactCoverage)
+        .filter(([, ok]) => !ok)
+        .map(([os]) => `add at least one ${os} artifact entry in latest TV3 artifact manifest`),
+      ...(manifestUnexpectedTargets.length > 0
+        ? ['remove manifest entries with unsupported target_os/target_arch combinations']
+        : []),
       ...Object.entries(immutableUriStatus)
         .filter(([, ok]) => !ok)
         .map(([os]) => `attach immutable https digest links for ${os} artifacts in latest TV3 artifact manifest`),
