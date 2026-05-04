@@ -124,6 +124,8 @@ const status = firstBlocked ? 'blocked' : 'ready_for_checkpoint9_closeout';
 
 const laneOrder = new Map(lanes.map((lane, index) => [lane.id, index]));
 const firstBlockedIndex = firstBlocked ? laneOrder.get(firstBlocked.id) : -1;
+const activeLaneExecution = firstBlocked ? executionStatus.lanes[firstBlocked.id] ?? null : null;
+const activeLaneHeartbeatDate = parseIsoDate(activeLaneExecution?.last_heartbeat_utc);
 
 const laneGovernance = laneStatus.map((lane) => {
   const laneExec = executionStatus.lanes[lane.id] ?? null;
@@ -181,6 +183,16 @@ const laneGovernance = laneStatus.map((lane) => {
 
   if (isActiveLane && lane.status === 'blocked' && unresolvedEvidence.length === 0) {
     blockers.push('active blocked lane must list unresolved_evidence entries');
+  }
+
+  if (firstBlockedIndex >= 0 && laneIndex > firstBlockedIndex) {
+    if (unresolvedEvidence.length > 0) {
+      blockers.push('downstream lane cannot carry unresolved_evidence while an earlier lane is blocked');
+    }
+
+    if (activeLaneHeartbeatDate && heartbeatDate && heartbeatDate.getTime() > activeLaneHeartbeatDate.getTime() + 5 * 60 * 1000) {
+      blockers.push('downstream lane heartbeat is newer than active blocked lane heartbeat (parallel bypass violation)');
+    }
   }
 
   return {
