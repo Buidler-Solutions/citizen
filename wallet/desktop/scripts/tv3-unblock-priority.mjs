@@ -126,6 +126,10 @@ const laneGovernance = laneStatus.map((lane) => {
   const lastHeartbeatUtc = laneExec?.last_heartbeat_utc ?? 'UNSET';
   const unresolvedEvidence = Array.isArray(laneExec?.unresolved_evidence) ? laneExec.unresolved_evidence : [];
 
+  if (lane.status === 'complete' && unresolvedEvidence.length > 0) {
+    blockers.push('unresolved_evidence must be empty when lane checklist is complete');
+  }
+
   if (owner === 'UNSET') blockers.push('owner is UNSET');
   if (backupOwner === 'UNSET') blockers.push('backup_owner is UNSET');
 

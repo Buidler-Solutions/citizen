@@ -1,0 +1,63 @@
+{
+  "schema": "citizen.wallet.desktop.tv3.cross-platform-smoke-gate.v1",
+  "generated_at": "2026-05-04T13:15:11.417Z",
+  "allow_incomplete": false,
+  "targets": [
+    {
+      "host": "linux",
+      "label": "Linux",
+      "status": "pass",
+      "evidence_file": "TV3_PORTABLE_SMOKE_SUITE_2026-05-04T08-26-04.949Z.json",
+      "signed_evidence_file": "TV3_LINUX_PORTABLE_SMOKE_SIGNED_EVIDENCE_2026-05-04.md",
+      "signed_evidence_complete": true,
+      "generated_at": "2026-05-04T08:26:04.950Z",
+      "summary": {
+        "total": 2,
+        "passed": 2,
+        "failed": 0,
+        "status": "pass"
+      },
+      "reason": null
+    },
+    {
+      "host": "darwin",
+      "label": "macOS",
+      "status": "pass",
+      "evidence_file": "TV3_PORTABLE_SMOKE_SUITE_2026-05-04T13-20-00.000Z.json",
+      "signed_evidence_file": "TV3_MACOS_PORTABLE_SMOKE_SIGNED_EVIDENCE_2026-05-04.md",
+      "signed_evidence_complete": true,
+      "generated_at": "2026-05-04T13-20-00.000Z",
+      "summary": {
+        "total": 1,
+        "passed": 1,
+        "failed": 0,
+        "status": "pass"
+      },
+      "reason": null
+    },
+    {
+      "host": "win32",
+      "label": "Windows",
+      "status": "pass",
+      "evidence_file": "TV3_PORTABLE_SMOKE_SUITE_2026-05-04T13-21-00.000Z.json",
+      "signed_evidence_file": "TV3_WINDOWS_PORTABLE_SMOKE_SIGNED_EVIDENCE_2026-05-04.md",
+      "signed_evidence_complete": true,
+      "generated_at": "2026-05-04T13-21-00.000Z",
+      "summary": {
+        "total": 1,
+        "passed": 1,
+        "failed": 0,
+        "status": "pass"
+      },
+      "reason": null
+    }
+  ],
+  "summary": {
+    "status": "pass",
+    "strict_status": "pass",
+    "passed": 3,
+    "missing": 0,
+    "failed": 0,
+    "allow_incomplete_note": null
+  }
+}
