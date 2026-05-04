@@ -7,35 +7,60 @@
       "owner": "wallet-release-owner",
       "backup_owner": "desktop-release-owner",
       "last_heartbeat_utc": "2026-05-04T12:40:00Z",
-      "unresolved_evidence": []
+      "unresolved_evidence": [],
+      "heartbeat_artifact": {
+        "type": "link",
+        "reference": "https://evidence.citizen.example/wallet-backup-vault/daily-heartbeat-2026-05-04",
+        "updated_at_utc": "2026-05-04T12:40:00Z"
+      }
     },
     {
       "id": "lane_b_bridge_audit_evidence",
       "owner": "desktop-runtime-owner",
       "backup_owner": "security-owner",
       "last_heartbeat_utc": "2026-05-04T12:40:00Z",
-      "unresolved_evidence": []
+      "unresolved_evidence": [],
+      "heartbeat_artifact": {
+        "type": "link",
+        "reference": "https://evidence.citizen.example/wallet-backup-vault/daily-heartbeat-2026-05-04",
+        "updated_at_utc": "2026-05-04T12:40:00Z"
+      }
     },
     {
       "id": "lane_c_r9d_release_signoff",
       "owner": "wallet-release-owner",
       "backup_owner": "security-owner",
       "last_heartbeat_utc": "2026-05-04T12:40:00Z",
-      "unresolved_evidence": []
+      "unresolved_evidence": [],
+      "heartbeat_artifact": {
+        "type": "link",
+        "reference": "https://evidence.citizen.example/wallet-backup-vault/daily-heartbeat-2026-05-04",
+        "updated_at_utc": "2026-05-04T12:40:00Z"
+      }
     },
     {
       "id": "lane_d_r9e_validation",
       "owner": "wallet-qa-owner",
       "backup_owner": "desktop-runtime-owner",
       "last_heartbeat_utc": "2026-05-04T12:40:00Z",
-      "unresolved_evidence": []
+      "unresolved_evidence": [],
+      "heartbeat_artifact": {
+        "type": "link",
+        "reference": "https://evidence.citizen.example/wallet-backup-vault/daily-heartbeat-2026-05-04",
+        "updated_at_utc": "2026-05-04T12:40:00Z"
+      }
     },
     {
       "id": "lane_e_checkpoint9_exit",
       "owner": "wallet-release-owner",
       "backup_owner": "governance-owner",
       "last_heartbeat_utc": "2026-05-04T12:40:00Z",
-      "unresolved_evidence": []
+      "unresolved_evidence": [],
+      "heartbeat_artifact": {
+        "type": "link",
+        "reference": "https://evidence.citizen.example/wallet-backup-vault/daily-heartbeat-2026-05-04",
+        "updated_at_utc": "2026-05-04T12:40:00Z"
+      }
     }
   ]
 }

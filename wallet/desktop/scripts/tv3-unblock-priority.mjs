@@ -132,6 +132,7 @@ const laneGovernance = laneStatus.map((lane) => {
   const backupOwner = laneExec?.backup_owner ?? 'UNSET';
   const lastHeartbeatUtc = laneExec?.last_heartbeat_utc ?? 'UNSET';
   const unresolvedEvidence = Array.isArray(laneExec?.unresolved_evidence) ? laneExec.unresolved_evidence : [];
+  const heartbeatArtifact = laneExec?.heartbeat_artifact ?? null;
 
   if (lane.status === 'complete' && unresolvedEvidence.length > 0) {
     blockers.push('unresolved_evidence must be empty when lane checklist is complete');
@@ -150,6 +151,23 @@ const laneGovernance = laneStatus.map((lane) => {
       blockers.push('active lane last_heartbeat_utc missing or invalid');
     } else if (heartbeatAgeHours > 24) {
       blockers.push(`active lane heartbeat older than 24h (${heartbeatAgeHours.toFixed(1)}h)`);
+    }
+
+    const artifactType = heartbeatArtifact?.type;
+    const artifactRef = heartbeatArtifact?.reference;
+    const artifactUpdated = parseIsoDate(heartbeatArtifact?.updated_at_utc);
+    const artifactAgeHours = artifactUpdated ? (now.getTime() - artifactUpdated.getTime()) / (1000 * 60 * 60) : null;
+
+    if (!artifactType || !['link', 'command_output', 'blocker_note'].includes(artifactType)) {
+      blockers.push('active lane heartbeat_artifact.type must be one of: link, command_output, blocker_note');
+    }
+    if (!artifactRef || artifactRef === 'UNSET') {
+      blockers.push('active lane heartbeat_artifact.reference is required');
+    }
+    if (!artifactUpdated) {
+      blockers.push('active lane heartbeat_artifact.updated_at_utc missing or invalid');
+    } else if (artifactAgeHours > 24) {
+      blockers.push(`active lane heartbeat artifact older than 24h (${artifactAgeHours.toFixed(1)}h)`);
     }
   }
 
@@ -171,6 +189,7 @@ const laneGovernance = laneStatus.map((lane) => {
     backup_owner: backupOwner,
     last_heartbeat_utc: lastHeartbeatUtc,
     unresolved_evidence_count: unresolvedEvidence.length,
+    heartbeat_artifact: heartbeatArtifact,
     blockers,
   };
 });
