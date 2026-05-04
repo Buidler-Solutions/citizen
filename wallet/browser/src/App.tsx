@@ -1964,6 +1964,8 @@ export function App() {
                 <p className="meta-text">Use distinct passphrases (16+ chars recommended) for decoy and critical slots. Exports remain encrypted end-to-end and are never emitted as plaintext secrets.</p>
                 <p className="meta-text">Decoy strength: {decoyPassphraseStrength}. Critical strength: {criticalPassphraseStrength}. Prefer long passphrases with upper/lowercase letters, digits, and symbols.</p>
                 <p className="meta-text">Recovery warning: if a critical passphrase is lost, encrypted critical-slot exports cannot be recovered by Citizen services.</p>
+                <p className="meta-text">USB handling guidance: after exporting a payload to removable media, fully flush writes and use your OS safe-eject flow before unplugging to avoid silent backup corruption.</p>
+                <p className="meta-text">Cross-machine recovery guidance: keep duplicate encrypted copies on separate removable media and re-run backup verification checks on a regular schedule.</p>
                 <p className="meta-text">
                   Last backup verification: {backupPosture?.lastVerifiedAt ? new Date(backupPosture.lastVerifiedAt).toLocaleString() : 'Not recorded'}.
                 </p>
