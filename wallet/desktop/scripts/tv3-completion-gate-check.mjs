@@ -124,7 +124,7 @@ async function validatePerOsAuditEvidence(dir) {
       immutable !== 'UNSET' &&
       ownerRole.length > 0 &&
       ownerRole !== 'UNSET' &&
-      /^\\d{4}-\\d{2}-\\d{2}$/.test(signedOffOn) &&
+      /^\d{4}-\d{2}-\d{2}$/.test(signedOffOn) &&
       signedOffOn !== 'UNSET';
   }
 
