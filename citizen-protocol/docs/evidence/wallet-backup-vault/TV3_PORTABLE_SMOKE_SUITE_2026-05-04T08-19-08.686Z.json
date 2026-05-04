@@ -1,0 +1,44 @@
+{
+  "schema": "citizen.wallet.desktop.tv3.portable-smoke-suite.v1",
+  "generated_at": "2026-05-04T08:19:08.687Z",
+  "host": "linux",
+  "allow_failures": false,
+  "checks": [
+    {
+      "id": "wb_mode_contract_gate",
+      "command": "pnpm test:headless-contract",
+      "note": "Exercises init/add-slot/export/verify/restore contract coverage and eject guidance copy checks.",
+      "status": "pass",
+      "exit_code": 0,
+      "started_at": "2026-05-04T08:19:08.688Z",
+      "ended_at": "2026-05-04T08:19:12.694Z",
+      "stdout": "\n> vaultier@0.1.0 test:headless-contract /workspace/citizen/vaultier\n> pnpm check:priority-gap && node headless-contract-check.mjs && node runtime-parity-check.mjs && node wb-mode-fixture-check.mjs && node operation-copy-check.mjs && pnpm check:reminders\n\n\n> vaultier@0.1.0 check:priority-gap /workspace/citizen/vaultier\n> node checklist-gap-check.mjs\n\nchecklist-gap-check: checkpoint-8.5 pending=0 partial=0 complete=21\nchecklist-gap-check: priority gate complete; non-blocking tracks may proceed.\nchecklist-gap-check: stale unchecked candidates=1 (review before continuing Tauri work):\n  1. [ ] (Portable Application Track (Working + Sleek)) Cross-link the published artifact manifest into checkpoint-9 R9-D sign-off evidence.\nchecklist-gap-check: possible over-checked markers=2 (review for completion drift):\n  1. [x] (Checkpoint 7 — Testing Matrix and Quality Gates) No critical/high findings open from pre-merge security review (wallet+crypto maintainer sign-off confirms no open critical/high findings for `wallet backup` in `citizen-protocol/docs/evidence/wallet-backup-vault/WALLET_BACKUP_8_5_SIGNOFF_2026-05-02.md`).\n  2. [x] (Checkpoint 9 — Rollout Plan) Checkpoint 9 execution queue continuation items R9-A through R9-C are now fully specified; remaining Checkpoint 9 closure work is release-checklist sign-off and post-rollout validation evidence after packaging/signing and bridge-audit gates complete.\nheadless-contract-check: contract markers validated\nruntime-parity-check: wb-mode snapshots, tauri bridge coverage, and redaction parity validated\nwb-mode-fixture-check: deterministic journey fixtures validated\noperation-copy-check: operation states and warning copy markers validated\n\n> vaultier@0.1.0 check:reminders /workspace/citizen/vaultier\n> node reminder-policy-check.mjs\n\nreminder-policy-check: UTC cadence + due-state checks passed\n",
+      "stderr": "",
+      "signal": null,
+      "error_message": null,
+      "attempts": 1,
+      "recovered": false
+    },
+    {
+      "id": "wallet_backup_regressions",
+      "command": "cargo test --manifest-path /workspace/citizen/citizen-protocol/Cargo.toml -p citizen-wallet wallet_backup",
+      "note": "Covers wallet backup command-path regressions used by desktop runtime bridge parity checks.",
+      "status": "pass",
+      "exit_code": 0,
+      "started_at": "2026-05-04T08:19:12.695Z",
+      "ended_at": "2026-05-04T08:19:13.371Z",
+      "stdout": "\nrunning 0 tests\n\ntest result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 72 filtered out; finished in 0.00s\n\n\nrunning 0 tests\n\ntest result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\n\n",
+      "stderr": "    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.47s\n     Running unittests src/lib.rs (citizen-protocol/target/debug/deps/citizen_wallet-e63e482bc2a16cea)\n     Running unittests src/bin/wallet.rs (citizen-protocol/target/debug/deps/wallet-6b6465d016c1f5a0)\n",
+      "signal": null,
+      "error_message": null,
+      "attempts": 1,
+      "recovered": false
+    }
+  ],
+  "summary": {
+    "total": 2,
+    "passed": 2,
+    "failed": 0,
+    "status": "pass"
+  }
+}
