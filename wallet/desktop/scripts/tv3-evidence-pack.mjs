@@ -64,6 +64,9 @@ const archFromName = (name) => {
         target_os: osFromName(artifact.name),
         target_arch: archFromName(artifact.name),
         signing_identity: process.env.TV3_SIGNING_IDENTITY ?? 'UNSET',
+        immutable_uri: process.env.TV3_IMMUTABLE_URI_BASE
+          ? `${process.env.TV3_IMMUTABLE_URI_BASE.replace(/\/$/, '')}/${artifact.name}`
+          : 'UNSET',
       }))
     ),
   };

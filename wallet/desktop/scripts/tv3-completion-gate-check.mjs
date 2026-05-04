@@ -23,6 +23,7 @@ const requiredManifestFields = [
   'build_timestamp',
   'target_os',
   'target_arch',
+  'immutable_uri',
 ];
 
 const requiredAudits = {
@@ -80,6 +81,19 @@ async function readManifests(dir) {
     })
   );
 
+
+  const immutableUriStatus = Object.fromEntries(
+    Object.keys(requiredArtifacts).map((os) => {
+      const osArtifacts = (latestManifest?.parsed?.artifacts ?? []).filter(
+        (artifact) => String(artifact.target_os ?? '').toLowerCase() === os
+      );
+      const allImmutableUris = osArtifacts.every((artifact) =>
+        /^https:\/\//i.test(String(artifact.immutable_uri ?? ''))
+      );
+      return [os, osArtifacts.length > 0 && allImmutableUris];
+    })
+  );
+
   const auditStatus = Object.fromEntries(
     Object.entries(requiredAudits).map(([os, rx]) => {
       const found = files.some((name) => rx.test(name));
@@ -96,11 +110,13 @@ async function readManifests(dir) {
       artifacts: artifactStatus,
       manifest_fields: manifestFieldStatus,
       manifest_sha256: manifestDigestStatus,
+      immutable_uris: immutableUriStatus,
       audits: auditStatus,
       complete:
         Object.values(artifactStatus).every(Boolean) &&
         Object.values(manifestFieldStatus).every(Boolean) &&
         Object.values(manifestDigestStatus).every(Boolean) &&
+        Object.values(immutableUriStatus).every(Boolean) &&
         Object.values(auditStatus).every(Boolean),
     },
     next_actions: [
@@ -113,6 +129,9 @@ async function readManifests(dir) {
       ...Object.entries(manifestDigestStatus)
         .filter(([, ok]) => !ok)
         .map(([os]) => `ensure ${os} artifact entries contain valid 64-hex sha256 digests`),
+      ...Object.entries(immutableUriStatus)
+        .filter(([, ok]) => !ok)
+        .map(([os]) => `attach immutable https digest links for ${os} artifacts in latest TV3 artifact manifest`),
       ...Object.entries(auditStatus)
         .filter(([, ok]) => !ok)
         .map(([os]) => `attach ${os} bridge audit evidence file in wallet-backup-vault evidence directory`),
