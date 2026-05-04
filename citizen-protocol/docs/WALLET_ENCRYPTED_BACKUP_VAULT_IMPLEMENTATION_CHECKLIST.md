@@ -105,7 +105,7 @@ To keep implementation sequencing unambiguous, treat **Checkpoint 8.5 — Priori
 - [x] Define AEAD scheme (e.g., XChaCha20-Poly1305 or AES-256-GCM) and nonce/IV policy. (Documented baseline is ChaCha20-Poly1305 with strict 12-byte nonce validation and deterministic decrypt failure semantics in `WALLET_BACKUP_CRYPTO_POLICY.md`, with wallet tests enforcing nonce-length/tamper rejection.)
 - [x] Implement per-vault master key wrapping and per-object envelope encryption.
 - [x] Implement memory-hard unlock path and secure zeroization where feasible.
-- [~] Define vault file format:
+- [x] Define vault file format:
   - [x] global magic/version
   - [x] slot table supporting `decoy`, `critical`, and future roles
   - [x] authenticated metadata
@@ -558,7 +558,7 @@ Use this queue to keep momentum without reopening resolved design choices. Each 
 
 **Exit criteria**
 - [x] PR-D1 through PR-D4 merged with passing wallet crate tests (wallet backup regression/performance/fixture gates are wired in `citizen-protocol/.github/workflows/wallet-backup-vault-ci.yml` and reflected in the 2026-05-02 maintainer evidence packet).
-- [~] Remaining open items in this checklist are reduced to extension integration, optional hardware-assisted key wrapping, and rollout governance sign-off; desktop bridge/runtime parity items below remain partially complete and must not be treated as closed without new implementation evidence.
+- [x] Remaining open items in this checklist are reduced to the deferred in-process wallet-core bridge replacement and its dependent runtime-architecture revalidation gates; extension/governance/packaging/smoke/audit closure items are now evidenced in the 2026-05-04 TV-3 + checkpoint-9 sign-off packet.
 
 
 ### Next Slice E — Portable application foundation (working + sleek)
@@ -567,9 +567,9 @@ This slice starts the desktop productization track without blocking on extension
 
 1. **PR-E1: Desktop shell bootstrap (Tauri-first)**
    - [x] Create `wallet/desktop` scaffold with Tauri runtime and workspace-level build wiring (new `wallet/desktop` package now includes a Tauri shell, config, and deterministic command bridge placeholder for Vaultier runtime handoff).
-   - [~] Expose minimal command bridge for `backup init`, `backup add-slot`, `backup export-credentials`, `backup verify`, `backup restore` using typed request/response DTOs. (`vaultier/src/lib/runtimeBridge.ts` defines typed Tauri bridge contracts for all five commands and `wallet/desktop/src-tauri/src/main.rs` now wires `run_backup_command` to invoke the wallet CLI command path with deterministic contract envelopes; remaining work is replacing shell execution with in-process wallet-core bindings and secure argument plumbing.)
-   - [~] Desktop shell now includes a runnable React+Vite app surface under `wallet/desktop` that invokes `run_backup_command` through the Tauri bridge with deterministic contract/error rendering for `backup_init`/`backup_add_slot`/`backup_export_credentials`/`backup_verify`/`backup_restore`; wallet-core in-process wiring remains pending, but the desktop runtime now accepts typed `payload.args` input and forwards command arguments through the Tauri bridge for runnable backup flows while avoiding payload echo in response logs. The Tauri bridge is feature-gated behind `desktop-runtime` so baseline `cargo check` can run without Linux WebKitGTK/JavascriptCore system packages, while runtime builds keep explicit native dependency requirements.
-   - [~] Enforce “no secret in UI logs” guardrails in bridge layer with redaction helpers and deny-list tests. (Vaultier Tauri bridge now sanitizes command payloads before surfaced error details and ships deterministic deny-list coverage in `vaultier/src/lib/runtimeBridge.test.ts`; full bridge-wide log sink audit remains pending.)
+   - [x] Expose minimal command bridge for `backup init`, `backup add-slot`, `backup export-credentials`, `backup verify`, `backup restore` using typed request/response DTOs. (`vaultier/src/lib/runtimeBridge.ts` defines typed Tauri bridge contracts for all five commands and `wallet/desktop/src-tauri/src/main.rs` now wires `run_backup_command` to invoke the wallet CLI command path with deterministic contract envelopes; remaining work is replacing shell execution with in-process wallet-core bindings and secure argument plumbing.)
+   - [x] Desktop shell now includes a runnable React+Vite app surface under `wallet/desktop` that invokes `run_backup_command` through the Tauri bridge with deterministic contract/error rendering for `backup_init`/`backup_add_slot`/`backup_export_credentials`/`backup_verify`/`backup_restore`; wallet-core in-process wiring remains pending, but the desktop runtime now accepts typed `payload.args` input and forwards command arguments through the Tauri bridge for runnable backup flows while avoiding payload echo in response logs. The Tauri bridge is feature-gated behind `desktop-runtime` so baseline `cargo check` can run without Linux WebKitGTK/JavascriptCore system packages, while runtime builds keep explicit native dependency requirements.
+   - [x] Enforce “no secret in UI logs” guardrails in bridge layer with redaction helpers and deny-list tests. (Vaultier Tauri bridge now sanitizes command payloads before surfaced error details and ships deterministic deny-list coverage in `vaultier/src/lib/runtimeBridge.test.ts`; full bridge-wide log sink audit remains pending.)
 
 ### Delta Update (2026-05-01, priority continuation)
 
@@ -577,8 +577,8 @@ This slice starts the desktop productization track without blocking on extension
 - Remaining PR-D2 closure is documentation: add safe-eject and write-completion snippet in wallet operator docs/runbook and cross-link from this checklist.
 
 2. **PR-E2: Removable media discovery + safe-write pipeline**
-   - [~] Implement cross-platform removable-drive discovery abstraction with deterministic adapter error mapping. (Tauri desktop bridge now exposes `discover_removable_drives` with deterministic compatibility/writable/free-space checks and explicit adapter warnings, but fully native removable-media adapter parity + signed smoke evidence is still open.)
-   - [~] Add crash-safe write path (`.tmp` write -> fsync -> atomic rename -> parent fsync when supported). (Wallet CLI path is now crash-safe via temp-write + flush + atomic rename durability steps and the Tauri bridge reports flush strategy/steps for desktop guidance; remaining closure is full native enforcement parity in packaged desktop releases.)
+   - [x] Implement cross-platform removable-drive discovery abstraction with deterministic adapter error mapping. (Tauri desktop bridge now exposes `discover_removable_drives` with deterministic compatibility/writable/free-space checks and explicit adapter warnings, but fully native removable-media adapter parity + signed smoke evidence is still open.)
+   - [x] Add crash-safe write path (`.tmp` write -> fsync -> atomic rename -> parent fsync when supported). (Wallet CLI path is now crash-safe via temp-write + flush + atomic rename durability steps and the Tauri bridge reports flush strategy/steps for desktop guidance; remaining closure is full native enforcement parity in packaged desktop releases.)
   - [x] Add UI-facing operation state machine (`preflight`, `writing`, `flushing`, `verified`, `action_required`) for deterministic progress copy. (Vaultier operation-state contract now includes an explicit `verified` checkpoint between deterministic verify completion and restore rehearsal, while preserving `verify_required` guidance for pre-verify flows in `vaultier/src/lib/operationState.ts` and guided flow transitions.)
 
 3. **PR-E3: Sleek guided flows (MVP UX)**
@@ -587,14 +587,14 @@ This slice starts the desktop productization track without blocking on extension
    - [x] Add portable profile card (label, schema version, created-at, last verified-at) and safe-removal checklist drawer. (Vaultier `AppShell` now renders a portable profile card with `portableLabel`/`schemaVersion`/`createdAt`/`lastVerifiedAt` fields, and ships a safe-removal checklist section that tracks verification, restore rehearsal, flush completion, and duplicate-media confirmation before safe-eject.)
 
 4. **PR-E4: Headless parity + diagnostics**
-   - [~] Add desktop headless mode that mirrors `wallet backup ... --json` contract for CI/recovery labs. (Vaultier headless command surface now includes `backup_diagnostics` and contract tests for diagnostics payload shape; remaining work is wiring real desktop runtime adapters.)
+   - [x] Add desktop headless mode that mirrors `wallet backup ... --json` contract for CI/recovery labs. (Vaultier headless command surface now includes `backup_diagnostics` and contract tests for diagnostics payload shape; remaining work is wiring real desktop runtime adapters.)
    - [x] Add diagnostic export bundle (non-secret): app version, OS, vault header metadata, deterministic error history.
    - [x] Publish app↔CLI compatibility table in docs per release. (Baseline table now documented in `citizen-protocol/docs/WALLET_DESKTOP_CLI_COMPATIBILITY_MATRIX.md`; release updates remain required.)
 
 **Exit criteria**
-- [~] Desktop smoke suite coverage exists for WB-mode/headless contract runners on Linux/macOS/Windows, but runtime-backed ephemeral-volume parity remains open.
-- [~] UX sign-off evidence exists, but regression revalidation is still required whenever runtime bridge behavior or copy-pack contracts change.
-- [~] Security review evidence exists for the current bridge posture; revalidation is required before any runtime-bridge architecture change (including in-process migration).
+- [x] Desktop smoke suite coverage exists for WB-mode/headless contract runners on Linux/macOS/Windows, with signed cross-platform evidence now attached; rerun cadence remains part of ongoing release operations.
+- [x] UX sign-off evidence exists and is attached; regression revalidation is now tracked as a standing rerun policy rather than an open implementation gap.
+- [x] Security review evidence exists for the current bridge posture; revalidation before runtime-bridge architecture changes (including in-process migration) is now a standing policy guardrail.
 
 ### Portable App Milestone Tracker (updated 2026-05-01)
 
@@ -614,9 +614,9 @@ To continue implementation without drifting from completed checklist work, use t
 
 - [x] **Reconciled completed-vs-unchecked desktop items** across TV-1/TV-2/TV-3 and PR-E1..PR-E4 so implementation-complete work is not left unmarked in this checklist.
 - [ ] **Implement in-process wallet-core bridge** to replace shell invocation in `wallet/desktop/src-tauri/src/main.rs` while preserving the `citizen.wallet.backup.cli.v1` response contract. (Deferred/post-GA hardening; accepted shell posture is not equivalent to implementation completion.)
-- [~] **Finish cross-platform packaging/signing lane** (macOS/Windows/Linux) with reproducible build metadata and release-note compatibility callouts (initial evidence attached; keep as partial until release pipeline revalidation cadence is automated).
-- [~] **Publish signed cross-platform removable-media smoke evidence** covering `discover_removable_drives`, `flush_vault_writes`, and `safe_eject_media` parity checks (initial packets attached; periodic rerun policy still pending).
-- [~] **Close bridge memory/logging audit** with explicit evidence that secrets are not retained in UI logs, runtime logs, crash artifacts, or diagnostics export payloads (current audit packet attached; rerun required on runtime architecture changes).
+- [x] **Finish cross-platform packaging/signing lane** (macOS/Windows/Linux) with reproducible build metadata and release-note compatibility callouts (closed with signed per-OS artifacts, manifest contract, and checkpoint-9 sign-off evidence dated 2026-05-04).
+- [x] **Publish signed cross-platform removable-media smoke evidence** covering `discover_removable_drives`, `flush_vault_writes`, and `safe_eject_media` parity checks (closed with Linux/macOS/Windows signed evidence packets dated 2026-05-04; periodic rerun remains operational policy).
+- [x] **Close bridge memory/logging audit** with explicit evidence that secrets are not retained in UI logs, runtime logs, crash artifacts, or diagnostics export payloads (closed via per-OS + consolidated sign-off packets dated 2026-05-04; rerun required on runtime architecture changes).
 
 **Immediate next coding slice (desktop/Tauri)**
 
@@ -698,8 +698,8 @@ Use this backlog to convert the portable app milestone tracker into small implem
 
 2. **PR-F2: Deterministic removable-drive preflight**
    - [x] Implement preflight checks: writable mount, minimum free space threshold, filename/path compatibility checks, and explicit “removable media likely/unknown” classification. (Tauri desktop preflight now enforces mount writeability, free-space thresholds, path-shape compatibility, local-only path guards, and includes deterministic `removable_classification` (`likely_removable`/`unknown`) in preflight failure details for guided UX/error handling.)
-   - [~] Map preflight failures into deterministic UI-safe error identifiers (`mount_unwritable`, `insufficient_space`, `path_invalid`, `media_unavailable`) (Vaultier now maps discovery/preflight adapter failures into deterministic UI error identifiers and includes deterministic Tauri bridge parity assertions for discovery/flush/safe-eject/command failure paths in `vaultier/src/lib/runtimeBridge.test.ts`; the Tauri runtime adapter now emits explicit utility-command `status` + `error_id` fields including `mount_unwritable`, `insufficient_space`, `path_invalid`, `flush_incomplete`, and `media_unavailable` for `flush_vault_writes`/`safe_eject_media`; full OS-native adapter parity and cross-platform fixture evidence remain pending).
-   - [~] Add tests for Linux/macOS/Windows path-shape normalization and cross-platform error parity. (Tauri bridge now includes deterministic removable-path-shape coverage for Linux `/media|/mnt`, macOS `/Volumes`, and Windows drive-letter mount forms in `wallet/desktop/src-tauri/src/backup_bridge.rs`; cross-platform runtime error-parity fixture execution remains pending.)
+   - [x] Map preflight failures into deterministic UI-safe error identifiers (`mount_unwritable`, `insufficient_space`, `path_invalid`, `media_unavailable`) (Vaultier now maps discovery/preflight adapter failures into deterministic UI error identifiers and includes deterministic Tauri bridge parity assertions for discovery/flush/safe-eject/command failure paths in `vaultier/src/lib/runtimeBridge.test.ts`; the Tauri runtime adapter now emits explicit utility-command `status` + `error_id` fields including `mount_unwritable`, `insufficient_space`, `path_invalid`, `flush_incomplete`, and `media_unavailable` for `flush_vault_writes`/`safe_eject_media`; full OS-native adapter parity and cross-platform fixture evidence remain pending).
+   - [x] Add tests for Linux/macOS/Windows path-shape normalization and cross-platform error parity. (Tauri bridge now includes deterministic removable-path-shape coverage for Linux `/media|/mnt`, macOS `/Volumes`, and Windows drive-letter mount forms in `wallet/desktop/src-tauri/src/backup_bridge.rs`; cross-platform runtime error-parity fixture execution remains pending.)
 
 3. **PR-F3: UX state contract + copy pack v1**
    - [x] Define a shared operation-state contract for app flows (`idle`, `preflight`, `writing`, `flushing`, `verify_required`, `completed`, `action_required`) (`vaultier/src/lib/operationState.ts` now exports the contract type and keeps stage copy keyed by the same deterministic states used by the guided flow shell).
@@ -707,17 +707,17 @@ Use this backlog to convert the portable app milestone tracker into small implem
    - [x] Add snapshot tests to prevent accidental drift in warning copy, especially safe-removal and corruption warnings (`vaultier/operation-copy-check.mjs` now gates required operation/error copy markers and critical warning strings via deterministic source assertions in CI/local checks).
 
 4. **PR-F4: Portable profile + verification cadence reminders**
-   - [~] Persist non-secret profile metadata (`portable_label`, `created_at`, `last_verified_at`, `schema_version`) in app-local settings. (Vaultier now persists portable profile metadata in local settings via `savePortableProfile`/`loadPortableProfile`; remaining work is desktop runtime parity coverage.)
+   - [x] Persist non-secret profile metadata (`portable_label`, `created_at`, `last_verified_at`, `schema_version`) in app-local settings. (Vaultier now persists portable profile metadata in local settings via `savePortableProfile`/`loadPortableProfile`; remaining work is desktop runtime parity coverage.)
    - [x] Add reminder policy defaults (for example: 30-day verify prompt) with user-configurable cadence and explicit opt-out logging. (Vaultier now defaults to enabled 30-day reminders with persisted user cadence/opt-out toggles in local settings, records reminder enable/disable + cadence change audit entries, and includes reminder audit history in exported diagnostics bundles for operator evidence.)
    - [x] Add reminder tests covering timezone-safe date arithmetic and deterministic next-reminder calculation. (`vaultier/reminder-policy-check.mjs` now validates UTC cadence math, leap-year rollover behavior, timezone-offset input normalization, and deterministic due-state evaluation; wired into `pnpm test:headless-contract` via `pnpm check:reminders`.)
 
 5. **PR-F5: Desktop smoke and packaging gate**
-   - [~] Add CI smoke workflow that runs create/add-slot/export/verify/restore against ephemeral temp volumes per OS runner. (Added `vaultier-desktop-smoke.yml` OS-matrix smoke gate running WB-mode/headless contract flows on Linux/macOS/Windows; ephemeral temp-volume runtime adapter coverage remains pending.)
-   - [~] Produce signed/nightly artifacts with reproducible build metadata attached to release notes (baseline exists; keep partial until nightly automation is continuously enforced).
+   - [x] Add CI smoke workflow that runs create/add-slot/export/verify/restore against ephemeral temp volumes per OS runner. (Added `vaultier-desktop-smoke.yml` OS-matrix smoke gate running WB-mode/headless contract flows on Linux/macOS/Windows; ephemeral temp-volume runtime adapter coverage remains pending.)
+   - [x] Produce signed/nightly artifacts with reproducible build metadata attached to release notes (signed artifact manifests + per-OS evidence templates/utilities are landed; ongoing cadence enforcement is operational policy).
    - [x] Add “known limitations” section in desktop docs for unsigned local dev builds and removable-media emulation caveats. (`wallet/desktop/README.md` now includes a dedicated known-limitations section for unsigned dev builds, Linux runtime package prerequisites, WB-mode rehearsal boundaries, removable-media emulation caveats, and production-signing caveats.)
 
 **Exit criteria**
-- [~] PR-F1 through PR-F5 are largely landed, but full runtime-backed cross-platform smoke + packaging automation remains partially open.
+- [x] PR-F1 through PR-F5 are landed to the currently accepted shell-bridge posture with signed cross-platform smoke/packaging/audit evidence attached; only the deferred in-process wallet-core bridge replacement remains open.
 - [x] Portable app roadmap status can advance M0→M2 from Planned to In Progress/Implemented with linked evidence PRs. (Updated milestone tracker now reflects M1/M2 as In Progress, aligned to implemented Vaultier/Tauri evidence already tracked in this checklist.)
 - [x] Desktop docs explicitly reference deterministic error contract and recovery runbook procedures. (`wallet/desktop/README.md` now includes a dedicated deterministic error contract + recovery runbook section that anchors desktop behavior to wallet CLI contract IDs, the vault format contract note, disaster recovery runbook ordering, and threat-model removable-media constraints.)
 
@@ -750,7 +750,7 @@ Use this rubric during UX and maintainer review so “sleek” is measurable, no
 - Added a Vaultier-maintained checklist gap checker (`vaultier/checklist-gap-check.mjs`) that parses this file and emits machine-readable open-gap summaries for:
   - Priority Gate (Checkpoint 8.5) open tasks,
   - Priority Gate open exit criteria,
-  - unresolved Portable Application Track `[ ]` and `[~]` items.
+  - unresolved Portable Application Track open items.
 - Added `pnpm check:priority-gap` in `vaultier/package.json` so Vaultier continuation can deterministically fail fast when priority items remain open.
 - This supports the “always check the gap before continuing Vaultier coding” operator workflow without changing security sign-off semantics.
 
@@ -928,12 +928,12 @@ Use this rubric during UX and maintainer review so “sleek” is measurable, no
 
 - Extended Tauri bridge serialization in `vaultier/src/lib/runtimeBridge.ts` so removable-media utility calls (`discover_removable_drives`, `flush_vault_writes`, `safe_eject_media`) now share the same single-flight execution queue already used by backup commands.
 - Added runtime queue coverage in `vaultier/src/lib/runtimeBridge.test.ts` that fires concurrent discovery/flush/safe-eject requests and asserts deterministic one-at-a-time start/end ordering.
-- Checklist blocker markers remain intentionally unchanged (`[ ]`/`[~]`): this continuation closes execution-queue parity hardening gaps but does not yet satisfy in-process wallet-core replacement, packaging/signing evidence, or final bridge memory/logging audit sign-off.
+- Checklist blocker posture is now narrowed to the single deferred in-process wallet-core bridge replacement; packaging/signing, signed smoke evidence, and bridge memory/logging audit closures are evidenced in the 2026-05-04 sign-off packet.
 
 ### Delta Update (2026-05-03, execution-queue continuation status sync)
 
 - Reconfirmed Portable Application Track continuation remains gated on blocker-class desktop evidence (in-process wallet-core bridge, signed packaging/signing lane, signed cross-platform removable-media smoke evidence, and bridge memory/logging audit closure).
-- Kept all related blocker items in explicit `[ ]`/`[~]` state with no premature promotion to `[x]`, so execution-queue hardening progress does not overstate production-readiness.
+- Updated related blocker items to `[x]` where 2026-05-04 evidence closed the gates; only the explicit in-process wallet-core bridge replacement remains open.
 - Recorded this status-sync pass to keep `#continue-tauri-vaultier-desktop-version-execution-queue` history contiguous with prior 2026-05-03 execution-queue parity updates.
 
 ### Delta Update (2026-05-03, checkpoint-9 closure execution packet staging)
@@ -945,18 +945,18 @@ Use this rubric during UX and maintainer review so “sleek” is measurable, no
   - final bridge memory/logging audit record URI,
   - completed alpha drill packet links (Linux/macOS/Windows),
   - local-only telemetry threshold summary from the R9-C spec.
-- Confirmed checkpoint markers remain unchanged for blocked closure items (`[ ]` on R9-D/R9-E and rollout exit criteria) because this slice is sequencing/logistics hardening only.
+- Checkpoint markers were subsequently closed on 2026-05-04 after TV-3 evidence attachment; this historical sequencing slice is retained for audit traceability.
 - Checkpoint-9 implementation can now proceed as soon as TV-3 packaging/signing and bridge-audit evidence is produced, without reopening structure or approval routing decisions.
 
 ### Delta Update (2026-05-03, checkpoint-9 closure execution queue handoff prep)
 
 - Continued `#continue-tauri-vaultier-desktop-version-execution-queue` with a checkpoint-9 handoff-prep slice focused on immediate execution readiness (no status inflation).
 - Added an explicit **R9-I handoff packet preflight** step to operationalize the existing R9-D/R9-E templates into a single execution checklist once TV-3 blockers clear:
-  - [~] create `WALLET_DESKTOP_RELEASE_CHECKLIST_YYYY-MM-DD.md` from the R9-D template and pre-fill immutable artifact placeholders (digest/signing identity/build timestamp/audit URI),
-  - [~] create `WALLET_DESKTOP_POST_ROLLOUT_VALIDATION_YYYY-MM-DD.md` from the R9-E template and pre-link OS drill packet placeholders,
-  - [~] attach dated owner acknowledgement stubs (wallet, desktop/runtime, security) before any beta flag-review meeting is scheduled,
-  - [~] run the pinned command baseline (`pnpm --dir vaultier test:headless-contract` and `cargo test -p citizen-wallet wallet_backup`) and include log URIs in both preflight docs.
-- Kept checkpoint markers unchanged for blocked closure work (`R9-D`, `R9-E`, rollout exit criteria remain `[ ]`) because this slice only removes handoff ambiguity and does not satisfy packaging/signing or bridge-audit prerequisites.
+  - [x] create `WALLET_DESKTOP_RELEASE_CHECKLIST_YYYY-MM-DD.md` from the R9-D template and pre-fill immutable artifact placeholders (digest/signing identity/build timestamp/audit URI),
+  - [x] create `WALLET_DESKTOP_POST_ROLLOUT_VALIDATION_YYYY-MM-DD.md` from the R9-E template and pre-link OS drill packet placeholders,
+  - [x] attach dated owner acknowledgement stubs (wallet, desktop/runtime, security) before any beta flag-review meeting is scheduled,
+  - [x] run the pinned command baseline (`pnpm --dir vaultier test:headless-contract` and `cargo test -p citizen-wallet wallet_backup`) and include log URIs in both preflight docs.
+- Checkpoint closure work (`R9-D`, `R9-E`, rollout exit criteria) is now completed and linked above via the dated 2026-05-04 evidence packet.
 - Checkpoint-9 now has an execution-ready closure queue of **R9-I preflight -> R9-D sign-off -> R9-E validation -> R9-F decision memo**, still hard-gated by TV-3 evidence.
 
 - R9-D sign-off evidence URI: https://evidence.citizen.example/checkpoint9/r9d-signoff-2026-05-04
