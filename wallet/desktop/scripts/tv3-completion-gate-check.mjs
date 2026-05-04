@@ -37,6 +37,8 @@ const requiredChecklistCrossLinks = {
   consolidated_signoff: /consolidated.*sign-?off.*https?:\/\//i,
 };
 
+const maxManifestAgeDays = Number.parseInt(process.env.TV3_MAX_MANIFEST_AGE_DAYS ?? '14', 10);
+
 const checklistPath = path.join(
   repoRoot,
   'citizen-protocol/docs/WALLET_ENCRYPTED_BACKUP_VAULT_IMPLEMENTATION_CHECKLIST.md'
@@ -55,11 +57,34 @@ async function readManifests(dir) {
   return manifests;
 }
 
+function daysBetween(a, b) {
+  return Math.abs(a.getTime() - b.getTime()) / (1000 * 60 * 60 * 24);
+}
+
+function validateAuditEvidence(files) {
+  const packets = files.filter((name) => /^TV3_BRIDGE_AUDIT_PACKET_.*\.json$/i.test(name)).sort();
+  if (!packets.length) {
+    return {
+      present: false,
+      valid: false,
+      packet: null,
+      packet_name: null,
+      os_coverage: { linux: false, macos: false, windows: false },
+      immutable_uris: { linux: false, macos: false, windows: false },
+      reviewer_signoff: false,
+    };
+  }
+
+  const latest = packets.at(-1);
+  return { present: true, latest };
+}
+
 (async () => {
   const files = await fs.readdir(evidenceDir);
   const checklistRaw = await fs.readFile(checklistPath, 'utf8');
   const manifests = await readManifests(evidenceDir);
   const latestManifest = manifests.at(-1);
+  const auditPacketProbe = validateAuditEvidence(files);
 
   const artifactStatus = Object.fromEntries(
     Object.entries(requiredArtifacts).map(([os, rx]) => {
@@ -116,6 +141,51 @@ async function readManifests(dir) {
     Object.entries(requiredChecklistCrossLinks).map(([key, rx]) => [key, rx.test(checklistRaw)])
   );
 
+  const manifestFreshness = (() => {
+    const generatedAt = latestManifest?.parsed?.generated_at;
+    if (!generatedAt) return false;
+    const parsed = new Date(generatedAt);
+    if (Number.isNaN(parsed.getTime())) return false;
+    return daysBetween(new Date(), parsed) <= maxManifestAgeDays;
+  })();
+
+  let auditPacketStatus = {
+    present: false,
+    valid: false,
+    packet_name: null,
+    os_coverage: { linux: false, macos: false, windows: false },
+    immutable_uris: { linux: false, macos: false, windows: false },
+    reviewer_signoff: false,
+  };
+
+  if (auditPacketProbe.present) {
+    const auditRaw = await fs.readFile(path.join(evidenceDir, auditPacketProbe.latest), 'utf8');
+    const audit = JSON.parse(auditRaw);
+    const osCoverage = {
+      linux: Boolean(audit?.artifacts?.linux),
+      macos: Boolean(audit?.artifacts?.macos),
+      windows: Boolean(audit?.artifacts?.windows),
+    };
+    const immutableUris = Object.fromEntries(
+      Object.keys(osCoverage).map((os) => [os, /^https:\/\//i.test(String(audit?.artifacts?.[os]?.immutable_uri ?? ''))])
+    );
+    const reviewerSignoff =
+      String(audit?.review?.owner_role ?? '').trim().length > 0 &&
+      /^\d{4}-\d{2}-\d{2}$/.test(String(audit?.review?.signed_off_on ?? ''));
+
+    auditPacketStatus = {
+      present: true,
+      valid:
+        Object.values(osCoverage).every(Boolean) &&
+        Object.values(immutableUris).every(Boolean) &&
+        reviewerSignoff,
+      packet_name: auditPacketProbe.latest,
+      os_coverage: osCoverage,
+      immutable_uris: immutableUris,
+      reviewer_signoff: reviewerSignoff,
+    };
+  }
+
   const summary = {
     contract: 'citizen.wallet.desktop.tv3.gate-status.v1',
     generated_at: new Date().toISOString(),
@@ -128,13 +198,17 @@ async function readManifests(dir) {
       immutable_uris: immutableUriStatus,
       audits: auditStatus,
       checklist_cross_links: checklistCrossLinkStatus,
+      manifest_freshness: manifestFreshness,
+      audit_packet: auditPacketStatus,
       complete:
         Object.values(artifactStatus).every(Boolean) &&
         Object.values(manifestFieldStatus).every(Boolean) &&
         Object.values(manifestDigestStatus).every(Boolean) &&
         Object.values(immutableUriStatus).every(Boolean) &&
         Object.values(auditStatus).every(Boolean) &&
-        Object.values(checklistCrossLinkStatus).every(Boolean),
+        Object.values(checklistCrossLinkStatus).every(Boolean) &&
+        manifestFreshness &&
+        auditPacketStatus.valid,
     },
     next_actions: [
       ...Object.entries(artifactStatus)
@@ -159,6 +233,15 @@ async function readManifests(dir) {
             ? 'add R9-D sign-off evidence line with immutable HTTPS URI into wallet backup checklist'
             : 'add consolidated maintainer sign-off line with immutable HTTPS URI into wallet backup checklist'
         ),
+      ...(!manifestFreshness
+        ? [`regenerate artifact manifest so generated_at is within ${maxManifestAgeDays} days of gate check`]
+        : []),
+      ...(!auditPacketStatus.present
+        ? ['attach TV3 bridge audit packet JSON (TV3_BRIDGE_AUDIT_PACKET_YYYY-MM-DD.json) with per-OS immutable URIs and reviewer sign-off']
+        : []),
+      ...(auditPacketStatus.present && !auditPacketStatus.valid
+        ? ['update latest TV3 bridge audit packet to include linux/macos/windows immutable HTTPS URIs and dated reviewer sign-off metadata']
+        : []),
     ],
   };
 
