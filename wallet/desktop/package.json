@@ -14,8 +14,10 @@
     "tv3:evidence-pack": "node scripts/tv3-evidence-pack.mjs",
     "tv3:audit-packet-template": "node scripts/tv3-audit-packet-template.mjs",
     "tv3:gate-check": "node scripts/tv3-completion-gate-check.mjs",
+    "tv3:gate-check:allow-incomplete": "node scripts/tv3-completion-gate-check.mjs --allow-incomplete",
     "tv3:audit-evidence-stubs": "node scripts/tv3-audit-evidence-stubs.mjs",
-    "tv3:release-evidence-template": "node scripts/tv3-release-evidence-template.mjs"
+    "tv3:release-evidence-template": "node scripts/tv3-release-evidence-template.mjs",
+    "tv3:signed-artifact-evidence-stubs": "node scripts/tv3-signed-artifact-evidence-stubs.mjs"
   },
   "dependencies": {
     "react": "^18.3.1",
