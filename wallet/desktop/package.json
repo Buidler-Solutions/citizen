@@ -29,7 +29,10 @@
     "tv3:bridge-secret-scan": "node scripts/tv3-bridge-secret-scan.mjs",
     "tv3:portable-track-gap-report": "node scripts/tv3-portable-track-gap-report.mjs",
     "tv3:portable-track-gap-report:strict": "node scripts/tv3-portable-track-gap-report.mjs --strict",
-    "tv3:portable-track-gap-report:allow-incomplete": "node scripts/tv3-portable-track-gap-report.mjs --allow-incomplete"
+    "tv3:portable-track-gap-report:allow-incomplete": "node scripts/tv3-portable-track-gap-report.mjs --allow-incomplete",
+    "tv3:unblock-priority": "node scripts/tv3-unblock-priority.mjs",
+    "tv3:unblock-priority:strict": "node scripts/tv3-unblock-priority.mjs --strict",
+    "tv3:unblock-priority:allow-incomplete": "node scripts/tv3-unblock-priority.mjs --allow-incomplete"
   },
   "dependencies": {
     "react": "^18.3.1",
