@@ -350,6 +350,7 @@ To translate the CLI-first vault implementation into a polished portable app exp
 - [x] Export diagnostic bundle (non-secret) containing version, platform, vault header metadata, and recent operation logs.
 - [x] Add scriptable headless mode parity for CI/recovery labs using the same command contract as `wallet backup ... --json`.
 - [x] Publish app-to-CLI compatibility matrix per release (vault format version, schema version, migration notes). (Published baseline matrix in `citizen-protocol/docs/WALLET_DESKTOP_CLI_COMPATIBILITY_MATRIX.md`; keep updated each release.)
+- [x] Add deterministic portable smoke-suite command for rehearsal evidence capture (`pnpm --dir wallet/desktop tv3:portable-smoke-suite`) that records WB-mode contract + wallet backup regression outcomes as machine-readable JSON evidence artifacts under `citizen-protocol/docs/evidence/wallet-backup-vault/`; the runner now uses explicit Cargo manifest-path execution and prints per-check failure diagnostics, executes WB-mode commands from the `vaultier/` workspace (avoids parent-directory package-manager lock drift), retries the WB-mode gate once after deterministic `pnpm install --frozen-lockfile` dependency recovery when needed, and supports optional non-blocking rehearsal mode at `pnpm --dir wallet/desktop tv3:portable-smoke-suite:allow-failures`.
 
 **Exit criteria**
 - [ ] Portable app passes cross-platform smoke suite (create/add-slot/export/verify/restore/eject guidance).
