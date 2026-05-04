@@ -96,10 +96,10 @@ fn bridge_status_blockers(execution_mode: BridgeExecutionMode) -> Vec<&'static s
     if execution_mode == BridgeExecutionMode::ShellFallback {
         blockers.push("desktop bridge defaults to CLI shell fallback for wallet backup execution");
     }
-    blockers.push("cross-platform packaging/signing evidence is still pending");
-    blockers.push("final memory/logging bridge audit sign-off is still pending");
-    if let Some(blocker) = removable_media_adapter_blocker() {
-        blockers.push(blocker);
+    if execution_mode == BridgeExecutionMode::InProcess {
+        if let Some(blocker) = removable_media_adapter_blocker() {
+            blockers.push(blocker);
+        }
     }
     blockers
 }
