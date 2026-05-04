@@ -16,6 +16,15 @@ const requiredArtifacts = {
   windows: /(win|windows)/i,
 };
 
+const requiredManifestFields = [
+  'filename',
+  'sha256',
+  'signing_identity',
+  'build_timestamp',
+  'target_os',
+  'target_arch',
+];
+
 const requiredAudits = {
   linux: /linux.*audit|audit.*linux/i,
   macos: /(mac|darwin|osx).*(audit)|audit.*(mac|darwin|osx)/i,
@@ -42,8 +51,32 @@ async function readManifests(dir) {
 
   const artifactStatus = Object.fromEntries(
     Object.entries(requiredArtifacts).map(([os, rx]) => {
-      const found = latestManifest?.parsed?.artifacts?.some((artifact) => rx.test(String(artifact.filename ?? '')));
+      const found = latestManifest?.parsed?.artifacts?.some((artifact) => {
+        const filename = String(artifact.filename ?? '');
+        const signingIdentity = String(artifact.signing_identity ?? '');
+        return rx.test(filename) && signingIdentity && signingIdentity !== 'UNSET';
+      });
       return [os, Boolean(found)];
+    })
+  );
+
+  const manifestFieldStatus = Object.fromEntries(
+    requiredManifestFields.map((field) => {
+      const present = latestManifest?.parsed?.artifacts?.every((artifact) => {
+        const value = artifact?.[field];
+        return value !== undefined && value !== null && String(value).trim() !== '';
+      });
+      return [field, Boolean(present)];
+    })
+  );
+
+  const manifestDigestStatus = Object.fromEntries(
+    Object.keys(requiredArtifacts).map((os) => {
+      const osArtifacts = (latestManifest?.parsed?.artifacts ?? []).filter(
+        (artifact) => String(artifact.target_os ?? '').toLowerCase() === os
+      );
+      const allSha256 = osArtifacts.every((artifact) => /^[a-f0-9]{64}$/i.test(String(artifact.sha256 ?? '')));
+      return [os, osArtifacts.length > 0 && allSha256];
     })
   );
 
@@ -61,15 +94,25 @@ async function readManifests(dir) {
     latest_artifact_manifest: latestManifest ? latestManifest.name : null,
     gates: {
       artifacts: artifactStatus,
+      manifest_fields: manifestFieldStatus,
+      manifest_sha256: manifestDigestStatus,
       audits: auditStatus,
       complete:
         Object.values(artifactStatus).every(Boolean) &&
+        Object.values(manifestFieldStatus).every(Boolean) &&
+        Object.values(manifestDigestStatus).every(Boolean) &&
         Object.values(auditStatus).every(Boolean),
     },
     next_actions: [
       ...Object.entries(artifactStatus)
         .filter(([, ok]) => !ok)
-        .map(([os]) => `attach signed ${os} artifact set in latest TV3 artifact manifest`),
+        .map(([os]) => `attach signed ${os} artifact set with non-UNSET signing identity in latest TV3 artifact manifest`),
+      ...Object.entries(manifestFieldStatus)
+        .filter(([, ok]) => !ok)
+        .map(([field]) => `populate required artifact manifest field: ${field}`),
+      ...Object.entries(manifestDigestStatus)
+        .filter(([, ok]) => !ok)
+        .map(([os]) => `ensure ${os} artifact entries contain valid 64-hex sha256 digests`),
       ...Object.entries(auditStatus)
         .filter(([, ok]) => !ok)
         .map(([os]) => `attach ${os} bridge audit evidence file in wallet-backup-vault evidence directory`),
