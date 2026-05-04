@@ -1,0 +1,27 @@
+{
+  "contract": "citizen.wallet.desktop.tv3.gate-status.v1",
+  "generated_at": "2026-05-04T00:43:36.959Z",
+  "evidence_dir": "/workspace/citizen/citizen-protocol/docs/evidence/wallet-backup-vault",
+  "latest_artifact_manifest": null,
+  "gates": {
+    "artifacts": {
+      "linux": false,
+      "macos": false,
+      "windows": false
+    },
+    "audits": {
+      "linux": false,
+      "macos": false,
+      "windows": false
+    },
+    "complete": false
+  },
+  "next_actions": [
+    "attach signed linux artifact set in latest TV3 artifact manifest",
+    "attach signed macos artifact set in latest TV3 artifact manifest",
+    "attach signed windows artifact set in latest TV3 artifact manifest",
+    "attach linux bridge audit evidence file in wallet-backup-vault evidence directory",
+    "attach macos bridge audit evidence file in wallet-backup-vault evidence directory",
+    "attach windows bridge audit evidence file in wallet-backup-vault evidence directory"
+  ]
+}
