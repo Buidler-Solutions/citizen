@@ -24,7 +24,11 @@ const requiredManifestFields = [
   'target_os',
   'target_arch',
   'immutable_uri',
+  'size_bytes',
 ];
+
+const allowedTargetOs = new Set(['linux', 'macos', 'windows']);
+const allowedTargetArch = new Set(['x86_64', 'aarch64']);
 
 const requiredAuditPacketFields = [
   'contract',
@@ -128,6 +132,30 @@ function validateAuditEvidence(files) {
     })
   );
 
+  const manifestTargetOsStatus = Object.fromEntries(
+    Object.keys(requiredArtifacts).map((os) => {
+      const osArtifacts = (latestManifest?.parsed?.artifacts ?? []).filter(
+        (artifact) => String(artifact.target_os ?? '').toLowerCase() === os
+      );
+      const validOsValues = osArtifacts.every((artifact) =>
+        allowedTargetOs.has(String(artifact.target_os ?? '').toLowerCase())
+      );
+      return [os, osArtifacts.length > 0 && validOsValues];
+    })
+  );
+
+  const manifestTargetArchStatus = Object.fromEntries(
+    Object.keys(requiredArtifacts).map((os) => {
+      const osArtifacts = (latestManifest?.parsed?.artifacts ?? []).filter(
+        (artifact) => String(artifact.target_os ?? '').toLowerCase() === os
+      );
+      const validArchValues = osArtifacts.every((artifact) =>
+        allowedTargetArch.has(String(artifact.target_arch ?? '').toLowerCase())
+      );
+      return [os, osArtifacts.length > 0 && validArchValues];
+    })
+  );
+
 
   const immutableUriStatus = Object.fromEntries(
     Object.keys(requiredArtifacts).map((os) => {
@@ -224,6 +252,8 @@ function validateAuditEvidence(files) {
       artifacts: artifactStatus,
       manifest_fields: manifestFieldStatus,
       manifest_sha256: manifestDigestStatus,
+      manifest_target_os: manifestTargetOsStatus,
+      manifest_target_arch: manifestTargetArchStatus,
       immutable_uris: immutableUriStatus,
       audits: auditStatus,
       checklist_cross_links: checklistCrossLinkStatus,
@@ -233,6 +263,8 @@ function validateAuditEvidence(files) {
         Object.values(artifactStatus).every(Boolean) &&
         Object.values(manifestFieldStatus).every(Boolean) &&
         Object.values(manifestDigestStatus).every(Boolean) &&
+        Object.values(manifestTargetOsStatus).every(Boolean) &&
+        Object.values(manifestTargetArchStatus).every(Boolean) &&
         Object.values(immutableUriStatus).every(Boolean) &&
         Object.values(auditStatus).every(Boolean) &&
         Object.values(checklistCrossLinkStatus).every(Boolean) &&
@@ -249,6 +281,12 @@ function validateAuditEvidence(files) {
       ...Object.entries(manifestDigestStatus)
         .filter(([, ok]) => !ok)
         .map(([os]) => `ensure ${os} artifact entries contain valid 64-hex sha256 digests`),
+      ...Object.entries(manifestTargetOsStatus)
+        .filter(([, ok]) => !ok)
+        .map(([os]) => `ensure ${os} artifact entries use supported target_os values (linux|macos|windows)`),
+      ...Object.entries(manifestTargetArchStatus)
+        .filter(([, ok]) => !ok)
+        .map(([os]) => `ensure ${os} artifact entries use supported target_arch values (x86_64|aarch64)`),
       ...Object.entries(immutableUriStatus)
         .filter(([, ok]) => !ok)
         .map(([os]) => `attach immutable https digest links for ${os} artifacts in latest TV3 artifact manifest`),
