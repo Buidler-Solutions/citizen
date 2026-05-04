@@ -10,7 +10,8 @@
     "doctor:linux:fix": "bash ./scripts/doctor-linux-runtime.sh --fix",
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build",
-    "test:tauri": "cargo test -p citizen-wallet-desktop --manifest-path src-tauri/Cargo.toml"
+    "test:tauri": "cargo test -p citizen-wallet-desktop --manifest-path src-tauri/Cargo.toml",
+    "tv3:evidence-pack": "node scripts/tv3-evidence-pack.mjs"
   },
   "dependencies": {
     "react": "^18.3.1",
