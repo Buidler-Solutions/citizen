@@ -26,6 +26,16 @@ const requiredManifestFields = [
   'immutable_uri',
 ];
 
+const requiredAuditPacketFields = [
+  'contract',
+  'generated_at',
+  'review.owner_role',
+  'review.signed_off_on',
+  'artifacts.linux.immutable_uri',
+  'artifacts.macos.immutable_uri',
+  'artifacts.windows.immutable_uri',
+];
+
 const requiredAudits = {
   linux: /linux.*audit|audit.*linux/i,
   macos: /(mac|darwin|osx).*(audit)|audit.*(mac|darwin|osx)/i,
@@ -90,8 +100,9 @@ function validateAuditEvidence(files) {
     Object.entries(requiredArtifacts).map(([os, rx]) => {
       const found = latestManifest?.parsed?.artifacts?.some((artifact) => {
         const filename = String(artifact.filename ?? '');
+        const targetOs = String(artifact.target_os ?? '').toLowerCase();
         const signingIdentity = String(artifact.signing_identity ?? '');
-        return rx.test(filename) && signingIdentity && signingIdentity !== 'UNSET';
+        return targetOs === os && rx.test(filename) && signingIdentity && signingIdentity !== 'UNSET';
       });
       return [os, Boolean(found)];
     })
@@ -156,6 +167,8 @@ function validateAuditEvidence(files) {
     os_coverage: { linux: false, macos: false, windows: false },
     immutable_uris: { linux: false, macos: false, windows: false },
     reviewer_signoff: false,
+    field_coverage: Object.fromEntries(requiredAuditPacketFields.map((field) => [field, false])),
+    contract_version: false,
   };
 
   if (auditPacketProbe.present) {
@@ -173,16 +186,32 @@ function validateAuditEvidence(files) {
       String(audit?.review?.owner_role ?? '').trim().length > 0 &&
       /^\d{4}-\d{2}-\d{2}$/.test(String(audit?.review?.signed_off_on ?? ''));
 
+    const auditPacketFieldCoverage = {
+      contract: String(audit?.contract ?? '').trim().length > 0,
+      generated_at: /^\d{4}-\d{2}-\d{2}T/.test(String(audit?.generated_at ?? '')),
+      'review.owner_role': String(audit?.review?.owner_role ?? '').trim().length > 0,
+      'review.signed_off_on': /^\d{4}-\d{2}-\d{2}$/.test(String(audit?.review?.signed_off_on ?? '')),
+      'artifacts.linux.immutable_uri': /^https:\/\//i.test(String(audit?.artifacts?.linux?.immutable_uri ?? '')),
+      'artifacts.macos.immutable_uri': /^https:\/\//i.test(String(audit?.artifacts?.macos?.immutable_uri ?? '')),
+      'artifacts.windows.immutable_uri': /^https:\/\//i.test(String(audit?.artifacts?.windows?.immutable_uri ?? '')),
+    };
+
+    const contractVersion = String(audit?.contract ?? '') === 'citizen.wallet.desktop.tv3.bridge-audit-packet.v1';
+
     auditPacketStatus = {
       present: true,
       valid:
         Object.values(osCoverage).every(Boolean) &&
         Object.values(immutableUris).every(Boolean) &&
-        reviewerSignoff,
+        reviewerSignoff &&
+        contractVersion &&
+        Object.values(auditPacketFieldCoverage).every(Boolean),
       packet_name: auditPacketProbe.latest,
       os_coverage: osCoverage,
       immutable_uris: immutableUris,
       reviewer_signoff: reviewerSignoff,
+      field_coverage: auditPacketFieldCoverage,
+      contract_version: contractVersion,
     };
   }
 
@@ -238,6 +267,14 @@ function validateAuditEvidence(files) {
         : []),
       ...(!auditPacketStatus.present
         ? ['attach TV3 bridge audit packet JSON (TV3_BRIDGE_AUDIT_PACKET_YYYY-MM-DD.json) with per-OS immutable URIs and reviewer sign-off']
+        : []),
+      ...(auditPacketStatus.present && !auditPacketStatus.contract_version
+        ? ['set TV3 bridge audit packet contract to citizen.wallet.desktop.tv3.bridge-audit-packet.v1']
+        : []),
+      ...(auditPacketStatus.present
+        ? Object.entries(auditPacketStatus.field_coverage)
+            .filter(([, ok]) => !ok)
+            .map(([field]) => `populate required TV3 bridge audit packet field: ${field}`)
         : []),
       ...(auditPacketStatus.present && !auditPacketStatus.valid
         ? ['update latest TV3 bridge audit packet to include linux/macos/windows immutable HTTPS URIs and dated reviewer sign-off metadata']
