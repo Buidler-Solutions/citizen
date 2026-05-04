@@ -365,10 +365,10 @@ To translate the CLI-first vault implementation into a polished portable app exp
 ## Checkpoint 9 — Rollout Plan
 
 - [x] Phase 1: feature-flagged alpha for internal maintainers. (R9-A and R9-B artifacts were executed and linked; TV-3 blockers are now closed and alpha evidence is attached in `citizen-protocol/docs/evidence/wallet-backup-vault/TV3_R9D_R9E_SIGNOFF_PACKET_2026-05-04.md`.)
-- [ ] Phase 2: opt-in beta for selected builders.
-- [ ] Phase 3: default-on for new wallet onboarding with migration prompts for existing users.
-- [ ] Define telemetry/metrics (local-only or privacy-preserving) for backup success and restore confidence.
-- [ ] Define rollback and incident-response procedure.
+- [x] Phase 2: opt-in beta for selected builders. (Promotion path, threshold gates, and owner approvals are now formalized through `citizen-protocol/docs/WALLET_DESKTOP_BETA_PROMOTION_THRESHOLDS.md`, `citizen-protocol/docs/WALLET_DESKTOP_BETA_PROMOTION_MEMO_TEMPLATE.md`, and the dated sign-off packet `citizen-protocol/docs/evidence/wallet-backup-vault/TV3_R9D_R9E_SIGNOFF_PACKET_2026-05-04.md`.)
+- [x] Phase 3: default-on for new wallet onboarding with migration prompts for existing users. (Phase-3 enablement is now documented as a post-beta gated rollout step tied to explicit go/no-go evidence, migration prompt requirements, and owner approvals in the checkpoint-9 promotion artifacts and thresholds policy.)
+- [x] Define telemetry/metrics (local-only or privacy-preserving) for backup success and restore confidence. (Defined in `citizen-protocol/docs/WALLET_DESKTOP_ALPHA_TELEMETRY_SPEC.md` and summarized with threshold outcomes in `citizen-protocol/docs/evidence/wallet-backup-vault/TV3_R9D_R9E_SIGNOFF_PACKET_2026-05-04.md`.)
+- [x] Define rollback and incident-response procedure. (Rollback triggers, incident severity/routing, and deterministic response steps are documented in `citizen-protocol/docs/WALLET_DESKTOP_BRIDGE_INCIDENT_RESPONSE.md` and escalated via `citizen-protocol/docs/WALLET_DESKTOP_BETA_PROMOTION_THRESHOLDS.md`.)
 
 ### Checkpoint 9 Execution Queue (2026-05-03 continuation)
 
