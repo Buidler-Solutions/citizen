@@ -351,9 +351,10 @@ To translate the CLI-first vault implementation into a polished portable app exp
 - [x] Add scriptable headless mode parity for CI/recovery labs using the same command contract as `wallet backup ... --json`.
 - [x] Publish app-to-CLI compatibility matrix per release (vault format version, schema version, migration notes). (Published baseline matrix in `citizen-protocol/docs/WALLET_DESKTOP_CLI_COMPATIBILITY_MATRIX.md`; keep updated each release.)
 - [x] Add deterministic portable smoke-suite command for rehearsal evidence capture (`pnpm --dir wallet/desktop tv3:portable-smoke-suite`) that records WB-mode contract + wallet backup regression outcomes as machine-readable JSON evidence artifacts under `citizen-protocol/docs/evidence/wallet-backup-vault/`; the runner now uses explicit Cargo manifest-path execution and prints per-check failure diagnostics, executes WB-mode commands from the `vaultier/` workspace (avoids parent-directory package-manager lock drift), retries the WB-mode gate once after deterministic `pnpm install --frozen-lockfile` dependency recovery when needed, and supports optional non-blocking rehearsal mode at `pnpm --dir wallet/desktop tv3:portable-smoke-suite:allow-failures`.
+- [x] Add deterministic cross-platform smoke gate aggregation command (`pnpm --dir wallet/desktop tv3:portable-smoke-gate`) that fail-closes when Linux/macOS/Windows evidence snapshots are missing or any host summary is non-pass, with optional rehearsal mode at `pnpm --dir wallet/desktop tv3:portable-smoke-gate:allow-incomplete` for non-blocking dry runs.
 
 **Exit criteria**
-- [ ] Portable app passes cross-platform smoke suite (create/add-slot/export/verify/restore/eject guidance).
+- [~] Portable app cross-platform smoke-suite gate is implemented and fail-closed, pending attachment of first signed Linux/macOS/Windows smoke evidence snapshots (create/add-slot/export/verify/restore/eject guidance).
 - [ ] UX review sign-off confirms “working and sleek” bar: <3 minute guided backup, no ambiguous error copy, consistent visual hierarchy.
 - [ ] Security review confirms no plaintext secret exposure across UI bridge, logs, or crash artifacts.
 

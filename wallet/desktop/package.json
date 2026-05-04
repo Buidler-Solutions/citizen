@@ -20,7 +20,9 @@
     "tv3:signed-artifact-evidence-stubs": "node scripts/tv3-signed-artifact-evidence-stubs.mjs",
     "tv3:checklist-link-report": "node scripts/tv3-checklist-link-report.mjs",
     "tv3:portable-smoke-suite": "node scripts/tv3-portable-smoke-suite.mjs",
-    "tv3:portable-smoke-suite:allow-failures": "node scripts/tv3-portable-smoke-suite.mjs --allow-failures"
+    "tv3:portable-smoke-suite:allow-failures": "node scripts/tv3-portable-smoke-suite.mjs --allow-failures",
+    "tv3:portable-smoke-gate": "node scripts/tv3-portable-smoke-gate.mjs",
+    "tv3:portable-smoke-gate:allow-incomplete": "node scripts/tv3-portable-smoke-gate.mjs --allow-incomplete"
   },
   "dependencies": {
     "react": "^18.3.1",
