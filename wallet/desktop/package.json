@@ -22,7 +22,8 @@
     "tv3:portable-smoke-suite": "node scripts/tv3-portable-smoke-suite.mjs",
     "tv3:portable-smoke-suite:allow-failures": "node scripts/tv3-portable-smoke-suite.mjs --allow-failures",
     "tv3:portable-smoke-gate": "node scripts/tv3-portable-smoke-gate.mjs",
-    "tv3:portable-smoke-gate:allow-incomplete": "node scripts/tv3-portable-smoke-gate.mjs --allow-incomplete"
+    "tv3:portable-smoke-gate:allow-incomplete": "node scripts/tv3-portable-smoke-gate.mjs --allow-incomplete",
+    "tv3:portable-smoke-evidence-template": "node scripts/tv3-portable-smoke-evidence-template.mjs"
   },
   "dependencies": {
     "react": "^18.3.1",
