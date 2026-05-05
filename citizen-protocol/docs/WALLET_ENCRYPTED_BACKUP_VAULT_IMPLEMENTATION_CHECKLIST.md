@@ -470,13 +470,30 @@ For first mergeable implementation slice, require:
 
 ## Open Questions (Track Before GA)
 
-- [x] **Container strategy decision (GA-v1):** keep the current single container with explicit role metadata (`decoy`/`critical`/`archive`) and deterministic slot policy enforcement; do **not** claim hidden-volume semantics for GA-v1. Hidden-volume/deniable-container behavior remains a post-GA research track only.
-- [x] **Hardware-backed key assistance decision (GA-v1):** optional hardware wrapping remains deferred; GA-v1 ships passphrase/KDF-based custody with explicit runbook language that no TPM/Secure Enclave/WebAuthn escrow assumptions are required.
-- [x] **Remote backup adapter decision (GA-v1):** local filesystem/removable-media scope remains the only accepted default path; remote/object-store adapters remain explicitly out-of-scope until separate trust-boundary ADR + security sign-off are accepted.
-- [x] **Enterprise policy hooks decision (GA-v1):** enforcement remains operator/runbook and governance-document driven (verification cadence, evidence packets, escrow prohibition posture) rather than introducing new protocol-side mandatory hooks in this release.
-- [x] **Cryptographic agility decision (GA-v1):** preserve the versioned vault schema + deterministic error taxonomy + migration-policy path as the agility baseline; algorithm swaps require a versioned format bump and compatibility fixtures before promotion.
+The following GA-v1 questions are now **decision-closed** and converted into ongoing tracking constraints so follow-up work stays implementation-aligned and evidence-driven.
 
-> GA tracking note (2026-05-04): all previously open GA questions above now have explicit decisions captured in this checklist; any future changes must land as dated checklist deltas with linked evidence/ADR artifacts.
+- [x] **Single-container slot semantics vs separate encrypted containers**
+  - **GA-v1 decision:** keep the single vault container with explicit role metadata (`decoy`/`critical`/`archive`) and deterministic slot-policy enforcement.
+  - **Explicit non-claim:** hidden-volume/deniable-container semantics are not claimed for GA-v1.
+  - **Post-GA track:** deniable-container research requires a dedicated ADR + forensic-risk validation before any promotion.
+- [x] **Hardware-backed key assistance (TPM/Secure Enclave/WebAuthn wrapping)**
+  - **GA-v1 decision:** deferred; passphrase + Argon2id custody remains the only required baseline.
+  - **Operator posture:** runbooks must continue to state no hardware escrow assumptions are required for backup/restore correctness.
+  - **Post-GA track:** optional hardware wrapping can be proposed only with a portability matrix and explicit failure-mode fallback behavior.
+- [x] **Remote backup adapter requirements and trust boundaries**
+  - **GA-v1 decision:** local filesystem/removable-media only.
+  - **Explicit boundary:** remote/object-store adapters remain out of scope until trust boundaries are formalized in a separate ADR.
+  - **Promotion gate:** remote adapter work requires security sign-off that covers metadata leakage, key custody boundaries, and rollback/tamper semantics.
+- [x] **Enterprise policy hooks (mandatory periodic verify, escrow prohibitions, audit evidence)**
+  - **GA-v1 decision:** enforcement remains operator/runbook + governance-document driven; no new protocol-side mandatory hooks in this release.
+  - **Current mechanism:** verification cadence, evidence packet expectations, and escrow-prohibition posture remain documentation and process controls.
+  - **Post-GA track:** enterprise hook automation must preserve deterministic CLI contracts and avoid weakening user-custody defaults.
+- [x] **Long-term cryptographic agility strategy**
+  - **GA-v1 decision:** agility baseline is the versioned vault schema + deterministic error taxonomy + migration policy.
+  - **Compatibility rule:** algorithm swaps require a versioned format bump with fixture-based compatibility tests before promotion.
+  - **Change-control gate:** crypto primitive changes require linked policy-doc updates and maintainer review evidence in checklist deltas.
+
+> GA tracking note (2026-05-05): all previously open GA questions above have explicit GA-v1 decisions and follow-up gates; future changes must land as dated checklist deltas with linked evidence/ADR artifacts.
 
 > Status integrity note (2026-05-04): checklist closure must be evidence-driven; `[~]` and `[ ]` entries below intentionally remain until implementation or rerun evidence is attached.
 
