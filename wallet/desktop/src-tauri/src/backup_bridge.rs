@@ -93,9 +93,6 @@ fn removable_media_adapter_blocker() -> Option<&'static str> {
 #[cfg(feature = "desktop-runtime")]
 fn bridge_status_blockers(execution_mode: BridgeExecutionMode) -> Vec<&'static str> {
     let mut blockers = Vec::new();
-    if execution_mode == BridgeExecutionMode::ShellFallback {
-        blockers.push("desktop bridge defaults to CLI shell fallback for wallet backup execution");
-    }
     if execution_mode == BridgeExecutionMode::InProcess {
         if let Some(blocker) = removable_media_adapter_blocker() {
             blockers.push(blocker);
@@ -114,9 +111,11 @@ pub(crate) struct TargetPathPayload {
 #[cfg(feature = "desktop-runtime")]
 
 #[cfg(feature = "desktop-runtime")]
+#[allow(dead_code)]
 struct ShellFallbackExecutor;
 
 #[cfg(feature = "desktop-runtime")]
+#[allow(dead_code)]
 enum CommandResolutionMode {
     AllowCargoFallback,
     BinaryOnly,
@@ -188,15 +187,10 @@ fn execute_backup_command_in_process(request: &BackupCommandRequest) -> BackupCo
 
 #[cfg(feature = "desktop-runtime")]
 fn configured_execution_mode() -> BridgeExecutionMode {
-    match std::env::var("CITIZEN_WALLET_DESKTOP_EXECUTION_MODE")
-        .ok()
-        .as_deref()
-    {
-        Some("shell-fallback") | Some("shell_fallback") => BridgeExecutionMode::ShellFallback,
-        _ => BridgeExecutionMode::InProcess,
-    }
+    BridgeExecutionMode::InProcess
 }
 
+#[allow(dead_code)]
 fn workspace_root() -> Result<PathBuf, String> {
     let cwd = std::env::current_dir().map_err(|err| format!("failed to resolve cwd: {err}"))?;
     cwd.ancestors()
@@ -307,6 +301,7 @@ fn command_requires_removable_preflight(command: &str) -> bool {
 }
 
 #[cfg(feature = "desktop-runtime")]
+#[allow(dead_code)]
 fn command_target_path(request: &BackupCommandRequest, args: &[String]) -> Option<PathBuf> {
     extract_flag_value(args, &["--vault-path", "--vault"])
         .or_else(|| {
@@ -435,6 +430,7 @@ fn scrub_sensitive_text(raw: &str, sensitive_values: &[String]) -> String {
 #[cfg(feature = "desktop-runtime")]
 
 #[cfg(feature = "desktop-runtime")]
+#[allow(dead_code)]
 fn resolve_wallet_cli_command(root: &Path, mode: CommandResolutionMode) -> Result<Command, String> {
     let mut candidates: Vec<PathBuf> = Vec::new();
     if let Ok(explicit) = std::env::var("CITIZEN_WALLET_BIN") {
@@ -466,6 +462,7 @@ fn resolve_wallet_cli_command(root: &Path, mode: CommandResolutionMode) -> Resul
             .to_owned(),
     )
 }
+#[allow(dead_code)]
 fn execute_backup_command_internal(
     request: &BackupCommandRequest,
     mode: CommandResolutionMode,
@@ -677,14 +674,9 @@ fn execute_backup_command_internal(
 
 #[cfg(feature = "desktop-runtime")]
 fn execute_backup_command(request: BackupCommandRequest) -> BackupCommandResponse {
-    match configured_execution_mode() {
-        BridgeExecutionMode::InProcess => InProcessExecutor.execute(&request),
-        BridgeExecutionMode::ShellFallback => {
-            let mut response = ShellFallbackExecutor.execute(&request);
-            response.details["execution_mode"] = serde_json::json!("shell_fallback");
-            response
-        }
-    }
+    let mut response = InProcessExecutor.execute(&request);
+    response.details["execution_mode"] = serde_json::json!("in_process");
+    response
 }
 
 #[cfg(all(test, feature = "desktop-runtime"))]
@@ -1064,6 +1056,7 @@ fn looks_removable(path: &Path) -> bool {
 }
 
 #[cfg(feature = "desktop-runtime")]
+#[allow(dead_code)]
 fn removable_classification(path: &Path) -> &'static str {
     if looks_removable(path) {
         "likely_removable"
@@ -1556,7 +1549,6 @@ pub fn backup_bridge_status() -> BackupBridgeStatus {
     let configured_mode = configured_execution_mode();
     let execution_mode = match configured_mode {
         BridgeExecutionMode::InProcess => "in_process",
-        BridgeExecutionMode::ShellFallback => "shell_fallback",
     };
     let blockers = bridge_status_blockers(configured_mode);
     BackupBridgeStatus {
@@ -1576,43 +1568,20 @@ mod tests {
     };
 
     #[test]
-    fn legacy_in_process_mode_spelling_is_supported() {
-        std::env::set_var("CITIZEN_WALLET_DESKTOP_EXECUTION_MODE", "in_process");
-        assert_eq!(
-            configured_execution_mode(),
-            BridgeExecutionMode::InProcess
-        );
+    fn configured_execution_mode_is_pinned_to_in_process() {
+        std::env::set_var("CITIZEN_WALLET_DESKTOP_EXECUTION_MODE", "shell-fallback");
+        assert_eq!(configured_execution_mode(), BridgeExecutionMode::InProcess);
         std::env::remove_var("CITIZEN_WALLET_DESKTOP_EXECUTION_MODE");
     }
 
     #[test]
-    fn defaults_to_shell_fallback_execution_mode() {
-        std::env::remove_var("CITIZEN_WALLET_DESKTOP_EXECUTION_MODE");
-        assert_eq!(
-            configured_execution_mode(),
-            BridgeExecutionMode::ShellFallback
-        );
-    }
-
-    #[test]
-    fn in_process_mode_returns_deterministic_unavailable_error_until_wired() {
-        std::env::set_var("CITIZEN_WALLET_DESKTOP_EXECUTION_MODE", "in-process");
+    fn backup_verify_runs_on_in_process_executor_path() {
         let response = run_named_backup_command("backup_verify", serde_json::json!({}));
-        assert_eq!(response.status, "error");
-        assert_eq!(response.error_id.as_deref(), Some("wallet_binary_unavailable"));
-        std::env::remove_var("CITIZEN_WALLET_DESKTOP_EXECUTION_MODE");
+        assert_eq!(response.details["execution_mode"], "in_process");
     }
 
     #[test]
-    fn shell_fallback_mode_surfaces_shell_blocker() {
-        let blockers = bridge_status_blockers(BridgeExecutionMode::ShellFallback);
-        assert!(blockers
-            .iter()
-            .any(|entry| entry.contains("shell fallback")));
-    }
-
-    #[test]
-    fn in_process_mode_omits_shell_blocker() {
+    fn in_process_mode_omits_shell_blocker_wording() {
         let blockers = bridge_status_blockers(BridgeExecutionMode::InProcess);
         assert!(!blockers
             .iter()
