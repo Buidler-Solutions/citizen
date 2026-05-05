@@ -135,7 +135,54 @@ struct InProcessExecutor;
 #[cfg(feature = "desktop-runtime")]
 impl BackupCommandExecutor for InProcessExecutor {
     fn execute(&self, request: &BackupCommandRequest) -> BackupCommandResponse {
-        execute_backup_command_internal(request, CommandResolutionMode::BinaryOnly)
+        execute_backup_command_in_process(request)
+    }
+}
+
+#[cfg(feature = "desktop-runtime")]
+fn execute_backup_command_in_process(request: &BackupCommandRequest) -> BackupCommandResponse {
+    let dynamic_args = match payload_args(&request.payload) {
+        Ok(args) => args,
+        Err(err) => {
+            return BackupCommandResponse {
+                contract_version: CONTRACT_VERSION,
+                status: "error",
+                error_id: Some("invalid_payload".to_owned()),
+                details: serde_json::json!({"message": err, "command": request.command}),
+            }
+        }
+    };
+
+    let response = citizen_wallet::cli::run_backup_command_in_process(
+        citizen_wallet::cli::DesktopBackupCommandRequest {
+            command: request.command.clone(),
+            args: dynamic_args,
+        },
+    );
+
+    match response {
+        Ok(wallet_cli) => BackupCommandResponse {
+            contract_version: CONTRACT_VERSION,
+            status: "ok",
+            error_id: None,
+            details: serde_json::json!({
+                "command": request.command,
+                "wallet_cli_contract_version": wallet_cli.get("contract_version").and_then(|v| v.as_str()),
+                "wallet_cli_status": wallet_cli.get("status").and_then(|v| v.as_str()),
+                "wallet_cli": wallet_cli,
+                "execution_mode": "in_process"
+            }),
+        },
+        Err(err) => BackupCommandResponse {
+            contract_version: CONTRACT_VERSION,
+            status: "error",
+            error_id: Some("wallet_core_error".to_owned()),
+            details: serde_json::json!({
+                "command": request.command,
+                "message": err.to_string(),
+                "execution_mode": "in_process"
+            }),
+        },
     }
 }
 
@@ -145,8 +192,8 @@ fn configured_execution_mode() -> BridgeExecutionMode {
         .ok()
         .as_deref()
     {
-        Some("in-process") | Some("in_process") => BridgeExecutionMode::InProcess,
-        _ => BridgeExecutionMode::ShellFallback,
+        Some("shell-fallback") | Some("shell_fallback") => BridgeExecutionMode::ShellFallback,
+        _ => BridgeExecutionMode::InProcess,
     }
 }
 
