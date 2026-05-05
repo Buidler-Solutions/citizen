@@ -4110,3 +4110,96 @@ mod tests {
         assert_eq!(restore["status"].as_str(), Some("restored"));
     }
 }
+
+
+#[derive(Debug, Clone)]
+pub struct DesktopBackupCommandRequest {
+    pub command: String,
+    pub args: Vec<String>,
+}
+
+pub fn run_backup_command_in_process(request: DesktopBackupCommandRequest) -> anyhow::Result<Value> {
+    match request.command.as_str() {
+        "backup_init" => run_backup_init_in_process(&request.args),
+        "backup_add_slot" => run_backup_add_slot_in_process(&request.args),
+        "backup_export_credentials" => run_backup_export_credentials_in_process(&request.args),
+        "backup_verify" => run_backup_verify_in_process(&request.args),
+        "backup_restore" => run_backup_restore_in_process(&request.args),
+        _ => Err(anyhow::anyhow!("unsupported backup command for in-process runtime")),
+    }
+}
+
+fn find_flag(args: &[String], flag: &str) -> Option<String> {
+    let mut i = 0usize;
+    while i < args.len() {
+        if args[i] == flag && i + 1 < args.len() {
+            return Some(args[i+1].clone());
+        }
+        if let Some((k,v)) = args[i].split_once('=') {
+            if k == flag { return Some(v.to_owned()); }
+        }
+        i += 1;
+    }
+    None
+}
+
+fn parse_role(value: &str) -> anyhow::Result<BackupSlotRole> {
+    match value {
+        "decoy" => Ok(BackupSlotRole::Decoy),
+        "critical" => Ok(BackupSlotRole::Critical),
+        "archive" => Ok(BackupSlotRole::Archive),
+        _ => Err(anyhow::anyhow!("invalid role")),
+    }
+}
+
+fn run_backup_init_in_process(args: &[String]) -> anyhow::Result<Value> {
+    let vault_path = PathBuf::from(find_flag(args, "--vault-path").or_else(|| find_flag(args, "--vault")).ok_or_else(|| anyhow::anyhow!("missing --vault-path"))?);
+    let decoy_password = find_flag(args, "--decoy-password");
+    let critical_password = find_flag(args, "--critical-password");
+    let kdf_profile = match find_flag(args, "--kdf-profile").as_deref() {
+        Some("critical-hardened") => BackupKdfProfile::CriticalHardened,
+        _ => BackupKdfProfile::Balanced,
+    };
+    let cmd = BackupInitArgs { vault_path, portable_label: find_flag(args, "--portable-label"), decoy_password, critical_password, kdf_profile, json: true, assume_removable_media_risk: true };
+    backup_init(cmd)?;
+    let vault = load_backup_vault(&PathBuf::from(find_flag(args, "--vault-path").or_else(|| find_flag(args, "--vault")).unwrap()))?;
+    Ok(backup_init_json_output(&PathBuf::from(find_flag(args, "--vault-path").or_else(|| find_flag(args, "--vault")).unwrap()), &vault, kdf_profile, if matches!(kdf_profile, BackupKdfProfile::CriticalHardened){65_536}else{19_456}, if matches!(kdf_profile, BackupKdfProfile::CriticalHardened){3}else{2}, 1, 32))
+}
+
+fn run_backup_add_slot_in_process(args: &[String]) -> anyhow::Result<Value> {
+    let vault_path = PathBuf::from(find_flag(args, "--vault-path").or_else(|| find_flag(args, "--vault")).ok_or_else(|| anyhow::anyhow!("missing --vault-path"))?);
+    let role = parse_role(&find_flag(args, "--role").ok_or_else(|| anyhow::anyhow!("missing --role"))?)?;
+    let password = find_flag(args, "--slot-password").or_else(|| find_flag(args, "--password"));
+    backup_add_slot(BackupAddSlotArgs { vault_path: vault_path.clone(), role, password })?;
+    let vault = load_backup_vault(&vault_path)?;
+    Ok(json!({"contract_version": BACKUP_JSON_CONTRACT_VERSION, "status":"ok", "vault_path": vault_path.display().to_string(), "rollback_counter": vault.rollback_counter}))
+}
+
+fn run_backup_export_credentials_in_process(args: &[String]) -> anyhow::Result<Value> {
+    let vault_path = PathBuf::from(find_flag(args, "--vault-path").or_else(|| find_flag(args, "--vault")).ok_or_else(|| anyhow::anyhow!("missing --vault-path"))?);
+    let role = parse_role(&find_flag(args, "--role").ok_or_else(|| anyhow::anyhow!("missing --role"))?)?;
+    let path = PathBuf::from(find_flag(args, "--path").unwrap_or_else(|| "wallet.json".to_owned()));
+    let password = find_flag(args, "--slot-password").or_else(|| find_flag(args, "--password"));
+    backup_export_credentials(BackupExportArgs { path, vault_path: vault_path.clone(), role, password, scopes: vec![BackupExportScope::Keys], assume_removable_media_risk: true })?;
+    Ok(json!({"contract_version": BACKUP_JSON_CONTRACT_VERSION, "status":"ok", "vault_path": vault_path.display().to_string()}))
+}
+
+fn run_backup_verify_in_process(args: &[String]) -> anyhow::Result<Value> {
+    let vault_path = PathBuf::from(find_flag(args, "--vault-path").or_else(|| find_flag(args, "--vault")).ok_or_else(|| anyhow::anyhow!("missing --vault-path"))?);
+    let role = find_flag(args, "--role").map(|r| parse_role(&r)).transpose()?;
+    let password = find_flag(args, "--slot-password").or_else(|| find_flag(args, "--password"));
+    let cmd = BackupVerifyArgs { vault_path: vault_path.clone(), role, password, json: true };
+    backup_verify(cmd)?;
+    let vault = load_backup_vault(&vault_path)?;
+    let slots: Vec<Value> = vault.slots.iter().map(|slot| json!({"role": format!("{:?}", slot.role).to_lowercase(),"scopes":slot.scopes,"exported_at":slot.exported_at})).collect();
+    Ok(backup_verify_json_output(&vault, &slots))
+}
+
+fn run_backup_restore_in_process(args: &[String]) -> anyhow::Result<Value> {
+    let vault_path = PathBuf::from(find_flag(args, "--vault-path").or_else(|| find_flag(args, "--vault")).ok_or_else(|| anyhow::anyhow!("missing --vault-path"))?);
+    let output_path = PathBuf::from(find_flag(args, "--output-path").unwrap_or_else(|| "wallet-restored.json".to_owned()));
+    let role = parse_role(&find_flag(args, "--role").ok_or_else(|| anyhow::anyhow!("missing --role"))?)?;
+    let password = find_flag(args, "--slot-password").or_else(|| find_flag(args, "--password"));
+    backup_restore(BackupRestoreArgs { output_path: output_path.clone(), vault_path, role: role.clone(), password, json: true, assume_removable_media_risk: true })?;
+    Ok(json!({"contract_version": BACKUP_JSON_CONTRACT_VERSION,"status":"restored","output_path":output_path.display().to_string(),"role":format!("{:?}", role).to_lowercase()}))
+}
