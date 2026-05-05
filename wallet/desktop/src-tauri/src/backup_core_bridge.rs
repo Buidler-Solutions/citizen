@@ -27,5 +27,4 @@ pub(crate) trait BackupCommandExecutor {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum BridgeExecutionMode {
     InProcess,
-    ShellFallback,
 }
