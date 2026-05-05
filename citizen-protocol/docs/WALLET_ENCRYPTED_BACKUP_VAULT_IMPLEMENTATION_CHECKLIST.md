@@ -201,6 +201,7 @@ To keep implementation sequencing unambiguous, treat **Checkpoint 8.5 — Priori
 
 - [x] Add implementation guide in `citizen-protocol/docs` for builders/operators.
 - [x] Publish an operator-facing CLI usage runbook with command reference (`WALLET_ENCRYPTED_BACKUP_VAULT_RUNBOOK.md`) for init/add-slot/export/verify/restore/rotation/wipe flows.
+- [x] Publish wallet browser extension encrypted-backup runbook with operator and support workflow guidance (`wallet/browser/docs/WALLET_EXTENSION_ENCRYPTED_BACKUP_RUNBOOK.md`) covering create/export/verify/restore and CLI parity drills.
 - [x] Publish a Tauri desktop operator runbook (`WALLET_DESKTOP_ENCRYPTED_BACKUP_RUNBOOK.md`) mapping desktop actions to canonical CLI-compatible backup commands and removable-media safety steps.
 - [x] Update wallet generation/security docs with backup vault workflows. (`WALLET_GENERATION_GUIDE.md` now includes CLI backup-vault flow coverage + extension recovery pointers, and `WALLET_SECURITY_REVIEW.md` now reflects backup-vault security posture and references the active vault threat/runbook/spec docs.)
 - [x] Provide “quick start” examples for CLI and extension recovery. (Added concrete CLI `wallet backup init/export-credentials/verify/restore` command sequences plus extension recovery quick-start steps in `WALLET_GENERATION_GUIDE.md`.)
