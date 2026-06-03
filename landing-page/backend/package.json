@@ -23,7 +23,7 @@
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
     "typeorm": "^0.3.20",
-    "express": "4.22.1"
+    "express": "4.22.2"
   },
   "devDependencies": {
     "@nestjs/cli": "11.0.21",
