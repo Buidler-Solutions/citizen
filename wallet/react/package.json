@@ -23,10 +23,10 @@
     "@testing-library/user-event": "^14.6.1",
     "@types/react": "^18.3.18",
     "@types/react-dom": "^18.3.5",
-    "@vitejs/plugin-react": "^4.3.4",
+    "@vitejs/plugin-react": "^6.0.2",
     "happy-dom": "^20.8.8",
     "typescript": "~5.7.2",
-    "vite": "^6.4.2",
+    "vite": "^8.0.16",
     "vitest": "^4.1.8",
     "vitest-axe": "^0.1.0"
   },
