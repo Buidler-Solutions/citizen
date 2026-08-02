@@ -1,4 +1,4 @@
-export * from "./types.js";
+export type * from "./types.js";
 export {
   canonicalizeJson,
   OFFCHAIN_ATTACHMENT_ALLOWED_MIME_TYPES,
