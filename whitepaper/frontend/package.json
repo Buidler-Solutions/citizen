@@ -26,10 +26,13 @@
     "typescript": "^5.5.4"
   },
   "overrides": {
+    "brace-expansion": "5.0.8",
     "flatted": "3.4.2",
     "flat-cache": {
       "flatted": "3.4.2"
     },
-    "postcss": "^8.5.18"
+    "minimatch": "^10.2.3",
+    "postcss": "^8.5.18",
+    "sharp": "^0.35.0"
   }
 }
