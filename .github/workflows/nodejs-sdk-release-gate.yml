@@ -140,6 +140,8 @@ jobs:
       - name: Build SDK
         working-directory: sdk/typescript
         run: npm run build
+      - name: Generate QUIC TLS certificates for localnet
+        run: bash citizen-protocol/scripts/generate_localnet_quic_certs.sh
       - name: Run SDK live smoke (local non-Docker node)
         env:
           CITIZEN_NODE_MODE: local
