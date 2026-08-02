@@ -2,15 +2,16 @@
 
 ## Scope
 
-This review compares the requested “200% allowlist active/standby” suggestion against
-what is currently implemented in the repository.
+This review compares the active/standby architecture against what is currently implemented. Under >2/3 BFT quorum, all admitted validators are active by default — standby is opt-in via the `standby_only` config flag. The former 50/50 split (required for 80% quorum) is retired.
 
 ## Verdict
 
 The architecture is **substantially implemented**, including:
 
 - Active/standby validator statuses and metadata.
-- Deterministic active/standby split at boot (`ceil(N/2)` active).
+- All admitted validators are active by default (>2/3 BFT quorum, `active_size = len`).
+- Standby is opt-in via `standby_only` config flag.
+- Quorum computed on the full validator set.
 - Quorum based on active validators only.
 - Epoch-based rotations with promotion limits.
 - Standby-only node runtime mode.
@@ -25,7 +26,7 @@ All items in this suggestion scope are now implemented.
 | --- | --- | --- |
 | Extend validator metadata with Active/Standby/Suspended + performance stats | ✅ Implemented | `ValidatorMetadata` includes `status` and `performance`; `ValidatorStatus` has `Active`, `Standby`, `Suspended`; `ValidatorPerformance` includes `uptime_bps` and `missed_prevotes`. |
 | Extend snapshot with epoch state and pending replacements | ✅ Implemented | `ValidatorSetSnapshot` includes `epoch_state`; `EpochState` tracks `epoch`, `epoch_length_blocks`, `promotion_limit`, `pending_replacements`, `last_seed`. |
-| Split allowlist into active + standby on boot (`ActiveSize = ceil(N/2)`) | ✅ Implemented | Node bootstrap/build logic computes `active_size = len.div_ceil(2)` and marks remainder `Standby`. |
+| Split allowlist into active + standby on boot (`ActiveSize = len`; standby is opt-in) | ✅ Implemented | Under >2/3 BFT quorum, all admitted validators are active by default (`active_size = validators.len()`) with standby as an explicit opt-in. |
 | Quorum computed from active validators only | ✅ Implemented | Consensus quorum uses `quorum_threshold(active_validator_ids.len(), quorum_bps)`. |
 | Skip standby/suspended for proposers and pre-votes | ✅ Implemented | Proposal and pre-vote validation reject non-`Active` validators. |
 | Epoch-boundary deterministic rotation | ✅ Implemented | Rotation runs only when `height % epoch_length_blocks == 0`; standby promotion ordering derived from deterministic BLAKE3-based seed material. |

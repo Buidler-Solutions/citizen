@@ -45,12 +45,13 @@ validator snapshot.
 Validation checklist:
 
 - `[[validators]]` includes only governance-approved peers.
-- Governance manifest allowlist is non-empty and sized for active+standby operation
-  (target: 200% of active consensus seats).
-- Runtime split is deterministic: `ActiveSize = ceil(N/2)`, `StandbySize = N - ActiveSize`.
+- Governance manifest allowlist is non-empty.
+  (target: at least as many active validators as needed for the desired fault tolerance floor).
+- Runtime initializes all admitted validators as active by default (>2/3 BFT
+  quorum does not require a standby split; standby is opt-in via config).
 - Unknown peers are denied at authenticated handshake.
 - `quorum_bps` remains `6667` unless explicitly changed by governance proposal,
-  and is applied to the active set only (`ceil(0.6667 * |V_active|)`).
+  and is applied to the full validator set (`ceil(0.6667 * N)`).
 - Epoch rotation controls are configured and reviewed: `epoch_length_blocks`
   and `promotion_limit`.
 - API write edge controls are configured (`api_auth_required = true`, `api_require_builder_credit_for_all_writes = true`, scoped API keys, rate limits).

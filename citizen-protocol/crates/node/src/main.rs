@@ -487,7 +487,10 @@ impl NodeConfig {
                 },
             },
         );
-        let active_size = validators.len().div_ceil(2);
+        // Under >2/3 BFT quorum, all admitted validators are active by default.
+        // The standby concept was a workaround for 80% quorum being too strict
+        // on large sets and is no longer needed for quorum safety.
+        let active_size = validators.len();
         for (index, metadata) in validators.values_mut().enumerate() {
             metadata.status = if index < active_size {
                 ValidatorStatus::Active
@@ -536,7 +539,7 @@ impl NodeConfig {
             );
         }
 
-        let active_size = admission_context.validator_allowlist.len().div_ceil(2);
+        let active_size = admission_context.validator_allowlist.len();
         let validators = admission_context
             .validator_allowlist
             .iter()

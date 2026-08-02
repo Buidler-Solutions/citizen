@@ -50,14 +50,14 @@ Compared with conventional permissioned deployments where many users only consum
 
 ## Validator Security Posture and Capacity Model
 
-Citizen currently implements an active/standby validator architecture aligned to the “200% allowlist” planning approach:
+Citizen adopts an all-active validator model with optional standby reserves. Under >2/3 BFT quorum, all admitted validators participate in consensus by default — the 50/50 active-standby split used under the former 80% quorum threshold is no longer needed, as BFT inherently tolerates up to floor((n-1)/3) Byzantine faults without reducing the active set.
 
-- governance/admission allowlist sized for active + standby capacity (target: 2x active seats),
-- deterministic split at boot (`ceil(N/2)` active, remainder standby),
-- quorum computed from the active validator set only,
-- epoch-based deterministic rotations and standby promotion controls.
+- governance/admission controls who joins the validator set,
+- all admitted validators are active by default (standby is opt-in via config),
+- quorum computed from the full active set (>2/3),
+- epoch-based rotations and standby promotion for operational failover.
 
-For a policy target of 100 active seats, this maps to an allowlist around 200 total approved validators (100 active + 100 standby), with governance controlling membership.
+With >2/3 BFT quorum, the system tolerates floor((n-1)/3) Byzantine faults naturally. An allowlist of 100 validators tolerates 33 Byzantine faults — no standby split needed for safety. Governance controls admission; standby is opt-in for operational resilience.
 
 **Government value:** resiliency reserve capacity and controlled failover without opening permissionless validator churn.
 
@@ -71,5 +71,5 @@ For a policy target of 100 active seats, this maps to an allowlist around 200 to
 - >2/3 quorum consensus and deterministic finality emphasis.
 - Observer-node runbook with read-only verification profile.
 - 3-of-5 multisig builder-credit implementation guidance.
-- Active/standby validator implementation audit confirming 200%-style allowlist architecture.
+- All-active validator architecture with optional standby reserves for operational failover.
 
