@@ -1,4 +1,4 @@
-import { CreateDateColumn, Entity, PrimaryGeneratedColumn, UpdateDateColumn, Column, Index } from 'typeorm';
+import { CreateDateColumn, DeleteDateColumn, Entity, PrimaryGeneratedColumn, UpdateDateColumn, Column, Index } from 'typeorm';
 
 @Entity({ name: 'auth_users' })
 export class AuthUser {
@@ -14,4 +14,7 @@ export class AuthUser {
 
   @UpdateDateColumn()
   updatedAt!: Date;
+
+  @DeleteDateColumn()
+  deletedAt!: Date | null;
 }

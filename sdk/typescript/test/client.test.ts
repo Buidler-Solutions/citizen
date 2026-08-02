@@ -190,7 +190,7 @@ test("submitTransaction builds signed envelope and posts to runtime", async () =
 
   const client = new CitizenNodeClient({
     baseUrl: "http://127.0.0.1:8080",
-    apiKey: "builder-demo",
+    apiKey: "test-api-key-fixture",
     fetchImpl
   });
 

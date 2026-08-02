@@ -348,7 +348,7 @@ async function main() {
           contractVersion: '2026-05-01',
           ok: true,
           command: entry.command,
-          result: { backupPassword: 'should-never-leak' },
+          result: { backupPassword: 'test-fixture-password' },
         } satisfies HeadlessResponse;
       }
       throw new Error(`unexpected_command:${name}`);
