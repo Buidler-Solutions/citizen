@@ -1,0 +1,15 @@
+[package]
+name = "libp2p-dns"
+version = "0.44.0"
+edition = "2021"
+description = "Stub replacement — DNS resolution disabled in Citizen (uses QUIC with direct addresses)"
+license = "MIT"
+
+[lib]
+path = "src/lib.rs"
+
+[features]
+tokio = []
+async-std = []
+
+[dependencies]
