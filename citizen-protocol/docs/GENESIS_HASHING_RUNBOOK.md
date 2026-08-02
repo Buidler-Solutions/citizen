@@ -323,7 +323,7 @@ Remediation:
 
 For governance-approved resets/forks that change identity tuple:
 
-1. secure governance approval (>=80%) for transition,
+1. secure governance approval (>2/3) for transition,
 2. create new signed manifest with new (`network_id`, `genesis_hash`) pair,
 3. canary validator rollout,
 4. observer rollout,

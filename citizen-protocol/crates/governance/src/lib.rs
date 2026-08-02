@@ -216,7 +216,7 @@ mod tests {
     use std::sync::Arc;
 
     fn engine() -> GovernanceEngine<MemoryStorage> {
-        GovernanceEngine::new(Arc::new(MemoryStorage::new()), 8_000)
+        GovernanceEngine::new(Arc::new(MemoryStorage::new()), 6_667)
     }
 
     fn proposed_ruleset() -> NamespaceRuleset {
@@ -274,7 +274,7 @@ mod tests {
         ValidatorSetSnapshot {
             height: 10,
             validators,
-            quorum_bps: 8_000,
+            quorum_bps: 6_667,
             epoch_state: EpochState {
                 epoch: 0,
                 epoch_length_blocks: 100,

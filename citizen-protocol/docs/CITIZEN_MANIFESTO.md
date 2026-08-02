@@ -6,7 +6,7 @@
 
 1. **Public Truth Over Profit** – Records exist to serve communities, regulators, journalists, and historians. We reject price-driven token dynamics in favor of verifiable civic data.
 2. **Governance Before Incentives** – Validator power is identity anchored, approved by supermajority vote, and accountable through transparent governance. No anonymous validators, ever.
-3. **Deterministic Finality** – Finality occurs in one block with ≥80% validator agreement. Truth is immediate and irreversible.
+3. **Deterministic Finality** – Finality occurs in one block with >2/3 validator agreement. Truth is immediate and irreversible.
 4. **Sybil Resistance by Design** – Admission is curated through public institutions, legal entities, or bonded commitments. Scale without identity inflation.
 5. **Namespaces for Civic Domains** – Land registries, identity anchors, audits, and governance each run inside dedicated namespaces with explicit rules and proofs.
 6. **Open, Inspectable Infrastructure** – Code, simulation harnesses, and governance records are open source, reproducible, and auditable.
@@ -14,7 +14,7 @@
 ## Pillars of the Citizen Network
 
 ### Governance-Driven Evolution
-Citizen evolves through public proposals voted by validators with ≥80% approval. Every change is transparent, time-bounded, and immutable in history.
+Citizen evolves through public proposals voted by validators with >2/3 approval. Every change is transparent, time-bounded, and immutable in history.
 
 ### Validator Stewardship
 Validators are stewards, not miners. They maintain availability, sign honestly, rotate leadership, and uphold civic commitments. Suspension or removal is swift when duty fails.

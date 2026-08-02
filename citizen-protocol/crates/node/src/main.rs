@@ -625,7 +625,7 @@ enum NodeRole {
 }
 
 fn default_quorum() -> u32 {
-    8_000
+    6_667
 }
 
 fn default_block_time() -> u64 {
@@ -988,7 +988,7 @@ mod tests {
     fn admission_snapshot_uses_manifest_allowlist_when_present() {
         let config = NodeConfig {
             validator_id: "validator-alpha".to_string(),
-            quorum_bps: 8_000,
+            quorum_bps: 6_667,
             ..NodeConfig::default()
         };
         let mut allowlist = BTreeMap::new();

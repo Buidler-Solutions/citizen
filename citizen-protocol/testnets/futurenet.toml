@@ -1,7 +1,7 @@
 name = "futurenet"
 description = "Citizen developer-stage futurenet for staging upgrades and governance rehearsals"
 block_time_millis = 1000
-quorum_bps = 8000
+quorum_bps = 6667
 
 [namespaces]
 identity = "identity.citizen"

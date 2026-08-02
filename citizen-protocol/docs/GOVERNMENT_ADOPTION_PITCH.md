@@ -16,7 +16,7 @@ Citizen Protocol is purpose-built for government registries, audit trails, and p
 
 ### 2) Deterministic finality with a strict safety threshold
 
-- Consensus requires an 80% quorum (`ceil(0.8 * active_validators)`).
+- Consensus requires a >2/3 quorum (`ceil(0.6667 * active_validators)`).
 - Finality is deterministic: once committed, records do not rely on probabilistic confirmation windows.
 - If quorum is not met, consensus stalls safely rather than committing questionable state.
 
@@ -63,12 +63,12 @@ For a policy target of 100 active seats, this maps to an allowlist around 200 to
 
 ## Suggested Ministerial One-Minute Pitch
 
-> Citizen Protocol gives government a blockchain designed for public records—not DeFi speculation. It enforces high-assurance 80% quorum finality, identity-anchored validator governance, and namespace-based policy controls for registries, identity, and audits. Crucially, any citizen can run an observer node to verify records directly from the network, instead of trusting only a government website. Its economics are non-speculative: non-transferable builder credits with 3-of-5 multisig issuance controls. The result is a transparent, auditable, and governance-safe national ledger foundation built for institutions and citizens together.
+> Citizen Protocol gives government a blockchain designed for public records—not DeFi speculation. It enforces high-assurance >2/3 quorum finality, identity-anchored validator governance, and namespace-based policy controls for registries, identity, and audits. Crucially, any citizen can run an observer node to verify records directly from the network, instead of trusting only a government website. Its economics are non-speculative: non-transferable builder credits with 3-of-5 multisig issuance controls. The result is a transparent, auditable, and governance-safe national ledger foundation built for institutions and citizens together.
 
 ## Procurement-Ready Proof Points
 
 - Governance-first protocol baseline with non-currency-centric constraints.
-- 80% quorum consensus and deterministic finality emphasis.
+- >2/3 quorum consensus and deterministic finality emphasis.
 - Observer-node runbook with read-only verification profile.
 - 3-of-5 multisig builder-credit implementation guidance.
 - Active/standby validator implementation audit confirming 200%-style allowlist architecture.

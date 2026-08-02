@@ -57,7 +57,7 @@ fn build_snapshot(keys: &HashMap<String, SigningKey>) -> ValidatorSetSnapshot {
     ValidatorSetSnapshot {
         height: 1,
         validators,
-        quorum_bps: 8000,
+        quorum_bps: 6667,
         epoch_state: EpochState {
             epoch: 0,
             epoch_length_blocks: 100,

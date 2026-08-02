@@ -1,6 +1,6 @@
 validator_id = "validator-epsilon"
 block_time_millis = 1000
-quorum_bps = 8000
+quorum_bps = 6667
 signing_key_hex = "ed7174798a0181cdcb7e3003a622caa040e884827912a0424937f233beae9bc7"
 api_port = 8085
 data_dir = "data/epsilon"

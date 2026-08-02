@@ -54,7 +54,7 @@ impl SimulationHarness {
         let consensus_config = ConsensusConfig {
             block_time_millis: 1_000,
             max_entries_per_block: 512,
-            quorum_bps: 8_000,
+            quorum_bps: 6_667,
             epoch_length_blocks: 100,
             promotion_limit: 12,
             heartbeat_interval_millis: 500,
@@ -254,7 +254,7 @@ fn build_validator_set(count: usize) -> (Vec<(String, ValidatorKeypair)>, Valida
     let snapshot = ValidatorSetSnapshot {
         height: 0,
         validators: metadata,
-        quorum_bps: 8_000,
+        quorum_bps: 6_667,
         epoch_state: EpochState {
             epoch: 0,
             epoch_length_blocks: 100,

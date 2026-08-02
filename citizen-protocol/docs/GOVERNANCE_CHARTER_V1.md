@@ -4,7 +4,7 @@ The Citizen Governance Charter defines validator duties, decision procedures, an
 
 ## 1. Validator Roles & Responsibilities
 
-1. Validators are identity-anchored entities (institutions, public-interest organizations, or legally registered entities) approved by ≥80% supermajority.
+1. Validators are identity-anchored entities (institutions, public-interest organizations, or legally registered entities) approved by >2/3 supermajority.
 2. Validators MUST:
    - Maintain ≥99% availability across rolling 30-day windows.
    - Participate honestly in consensus rounds and governance votes.
@@ -27,8 +27,8 @@ The Citizen Governance Charter defines validator duties, decision procedures, an
    - Includes author, payload, evidence references, and voting window (7–21 days typical).
    - Automatically queued and visible to every validator.
 3. Quorum:
-   - Decisions require participation from ≥80% of active validators.
-   - Approval requires ≥80% `YES` votes of the full active set, not merely the quorum participants.
+   - Decisions require participation from >2/3 of active validators.
+   - Approval requires >2/3 `YES` votes of the full active set, not merely the quorum participants.
 4. Votes are signed, immutable, and publicly discoverable.
 5. Failure to reach quorum within the voting window invalidates the proposal; authors may resubmit with amended evidence or rationale.
 
@@ -51,7 +51,7 @@ The Citizen Governance Charter defines validator duties, decision procedures, an
 
 ## 4. Emergency Powers
 
-1. Emergency actions require ≥80% approval and must be time-bounded (max 14 days) with explicit scope.
+1. Emergency actions require >2/3 approval and must be time-bounded (max 14 days) with explicit scope.
 2. Permitted emergency actions:
    - Temporary pause of block production.
    - Temporary quorum adjustment with explicit end height/timestamp.
