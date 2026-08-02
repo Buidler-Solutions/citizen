@@ -48,7 +48,7 @@ citizen-wallet-cli --help
 
 1. Initialize a keystore and create a key:
 ```bash
-export CITIZEN_WALLET_PASSWORD='localnet-password'
+export CITIZEN_WALLET_PASSWORD='${CITIZEN_WALLET_PASSWORD:?set your localnet wallet passphrase}'
 cargo run -p citizen-wallet-cli -- init --path ./tmp/wallet.json
 cargo run -p citizen-wallet-cli -- keygen --path ./tmp/wallet.json --label localnet
 ```

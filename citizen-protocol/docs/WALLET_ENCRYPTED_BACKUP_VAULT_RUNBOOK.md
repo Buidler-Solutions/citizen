@@ -27,7 +27,7 @@ cd citizen-protocol
 2. Make sure a wallet keystore already exists (for example from `wallet keygen`) and set wallet password environment for commands that require unlock.
 
 ```bash
-export CITIZEN_WALLET_PASSWORD='change-me'
+export CITIZEN_WALLET_PASSWORD='${CITIZEN_WALLET_PASSWORD:?set your wallet passphrase}'
 ```
 
 3. Use a removable-media target path for custody workflows:
