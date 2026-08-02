@@ -2,6 +2,13 @@ services:
   postgres:
     image: postgres:16-alpine
     restart: unless-stopped
+    user: "70:70"
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /run
+    security_opt:
+      - no-new-privileges:true
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-citizen_landing}
       POSTGRES_USER: ${POSTGRES_USER:-citizen}

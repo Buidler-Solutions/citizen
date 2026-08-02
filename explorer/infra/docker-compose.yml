@@ -4,6 +4,13 @@ services:
   postgres:
     image: postgres:16
     container_name: citizen-explorer-postgres
+    user: "70:70"
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /run
+    security_opt:
+      - no-new-privileges:true
     ports:
       - '5432:5432'
     environment:
