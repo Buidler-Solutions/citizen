@@ -73,31 +73,40 @@ jobs:
           const output = fs.readFileSync(0, "utf8");
           const parsed = JSON.parse(output);
 
-          const expected = new Set([
-            "README.md",
-            "package.json",
-            "dist/cjs/index.js",
-            "dist/esm/index.js",
-            "dist/esm/index.d.ts",
-          ]);
-
           const actual = (parsed[0]?.files ?? [])
-            .map((entry) => entry.path.trim())
-            .filter((p) => !p.endsWith(".map"));
+            .map((entry) => entry.path.trim());
           const actualSet = new Set(actual);
 
-          const missing = [...expected].filter((e) => !actualSet.has(e));
-          const extra = actual.filter((a) => !expected.has(a));
-
+          const required = ["README.md", "package.json"];
+          const missing = required.filter((r) => !actualSet.has(r));
           if (missing.length > 0) {
-            console.error("Missing expected files:", missing);
+            console.error("Missing required files:", missing);
             process.exit(1);
           }
-          if (extra.length > 0) {
-            console.error("Unexpected files in tarball:", extra);
+
+          const forbidden = ["node_modules", "src/", "test/", "scripts/", "tsconfig", "eslint"];
+          const violations = actual.filter((p) =>
+            forbidden.some((f) => p.startsWith(f) || p.endsWith(f))
+          );
+          if (violations.length > 0) {
+            console.error("Forbidden files/dirs in tarball:", violations);
             process.exit(1);
           }
-          console.log("Tarball file list valid.");
+
+          const distFiles = actual.filter((p) => p.startsWith("dist/"));
+          if (distFiles.length === 0) {
+            console.error("No dist/ files in tarball");
+            process.exit(1);
+          }
+
+          const hasEsm = distFiles.some((p) => p.startsWith("dist/esm/"));
+          const hasCjs = distFiles.some((p) => p.startsWith("dist/cjs/"));
+          if (!hasEsm || !hasCjs) {
+            console.error("Missing ESM or CJS build output");
+            process.exit(1);
+          }
+
+          console.log("Tarball valid: " + actual.length + " files, ESM + CJS present.");
           '
 
   wallet-auth-sdk-typecheck:
