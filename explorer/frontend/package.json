@@ -10,7 +10,7 @@
     "test:unit": "tsc -p tsconfig.test.json && node --test .tmp-tests/tests.*.test.js"
   },
   "dependencies": {
-    "next": "^16.2.6",
+    "next": "^16.2.11",
     "react": "19.1.0",
     "react-dom": "19.1.0"
   },
@@ -21,6 +21,6 @@
     "typescript": "^5.5.4"
   },
   "overrides": {
-    "postcss": "^8.5.10"
+    "postcss": "^8.5.18"
   }
 }
