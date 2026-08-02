@@ -56,7 +56,6 @@ impl SimulationHarness {
             max_entries_per_block: 512,
             quorum_bps: 6_667,
             epoch_length_blocks: 100,
-            promotion_limit: 12,
             heartbeat_interval_millis: 500,
             liveness_missed_prevote_threshold: 3,
         };
@@ -238,11 +237,7 @@ fn build_validator_set(count: usize) -> (Vec<(String, ValidatorKeypair)>, Valida
                 public_key: verifying_key_to_string(keypair.verifying_key()),
                 anchors: vec![format!("simulation-node-{idx}")],
                 joined_at: Utc::now(),
-                status: if idx < count.div_ceil(2) {
-                    ValidatorStatus::Active
-                } else {
-                    ValidatorStatus::Standby
-                },
+                status: ValidatorStatus::Active,
                 performance: ValidatorPerformance {
                     uptime_bps: 10_000,
                     missed_prevotes: 0,
@@ -258,9 +253,7 @@ fn build_validator_set(count: usize) -> (Vec<(String, ValidatorKeypair)>, Valida
         epoch_state: EpochState {
             epoch: 0,
             epoch_length_blocks: 100,
-            promotion_limit: count.div_ceil(8),
             pending_replacements: Vec::new(),
-            scheduled_rotation: None,
             manifest_digest: "simulation-manifest".into(),
             last_seed: "genesis".into(),
         },
