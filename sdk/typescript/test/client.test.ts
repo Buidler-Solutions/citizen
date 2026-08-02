@@ -205,7 +205,7 @@ test("submitTransaction builds signed envelope and posts to runtime", async () =
   assert.equal(result.receipt.receipt_id, "receipt-123");
   assert.equal(capturedRequest.url, "http://127.0.0.1:8080/api/v1/envelopes/submit");
   assert.equal(capturedRequest.init.method, "POST");
-  assert.equal(capturedRequest.init.headers["x-api-key"], "builder-demo");
+  assert.equal(capturedRequest.init.headers["x-api-key"], "test-api-key-fixture");
 
   const body = JSON.parse(capturedRequest.init.body);
   assert.equal(body.payload.namespace, "audit.procurement");
