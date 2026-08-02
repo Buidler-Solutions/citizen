@@ -3,6 +3,13 @@ services:
   postgres:
     image: postgres:16
     restart: unless-stopped
+    user: "70:70"
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /run
+    security_opt:
+      - no-new-privileges:true
     environment:
       POSTGRES_USER: citizen
       POSTGRES_PASSWORD: citizen
