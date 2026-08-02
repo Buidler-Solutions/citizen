@@ -48,12 +48,12 @@ CITIZEN maximizes $$\mathcal{O}$$ subject to constraints:
 
 At block height $$h$$ the governance-approved validator allowlist is $$A_h$$ with $$|A_h| = M_h$$. The runtime consensus set is derived deterministically from that allowlist:
 
-- Active validators: $$V_h \subseteq A_h$$ with $$|V_h| = N_h = \left\lceil \frac{M_h}{2} \right\rceil$$
-- Standby validators: $$S_h = A_h \setminus V_h$$ with $$|S_h| = M_h - N_h$$
-- Quorum threshold: $$Q_h = \left\lceil 0.8N_h \right\rceil$$
-- Byzantine bound on the active set: $$f_h \le \lfloor 0.19N_h \rfloor$$
+- Active validators: $$V_h = A_h$$ with $$|V_h| = N_h = M_h$$ (all admitted validators active by default)
+- Standby validators: $$S_h = \emptyset$$ unless explicitly opted in via config
+- Quorum threshold: $$Q_h = \left\lceil 0.6667 N_h \right\rceil$$
+- Byzantine bound: $$f_h \le \left\lfloor\frac{N_h - 1}{3}\right\rfloor$$
 
-This matches the rollout policy target of a 200% governance allowlist relative to active consensus seats: if the policy target is $$N_h$$ active seats, governance admits approximately $$M_h = 2N_h$$ total validator seats so that roughly half are active and half are standby at any given epoch.
+Under >2/3 BFT quorum, all admitted validators participate directly in consensus without a mandatory standby split. The system tolerates $$f_h = \lfloor (N_h - 1)/3 \rfloor$$ Byzantine faults naturally — governance admission alone controls the validator set composition. Standby mode remains available as an opt-in configuration for validators that wish to observe without voting, typically used during maintenance windows or phased rollouts.
 
 Each active validator $$v_i \in V_h$$ has:
 
