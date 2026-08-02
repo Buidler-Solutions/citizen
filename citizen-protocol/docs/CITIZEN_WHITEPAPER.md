@@ -8,7 +8,7 @@
 
 ## Abstract
 
-CITIZEN is a governance-first decentralized public ledger for verifiable records, civic coordination, and institutional accountability. It is explicitly non-speculative: core protocol security does not depend on a transferable token. Instead, system sustainability is based on identity-anchored validator governance, deterministic Byzantine fault tolerant (BFT) finality at an 80% supermajority threshold, and non-transferable builder credit grants for ecosystem growth.
+CITIZEN is a governance-first decentralized public ledger for verifiable records, civic coordination, and institutional accountability. It is explicitly non-speculative: core protocol security does not depend on a transferable token. Instead, system sustainability is based on identity-anchored validator governance, deterministic Byzantine fault tolerant (BFT) finality at a >2/3 supermajority threshold, and non-transferable builder credit grants for ecosystem growth.
 
 This whitepaper presents a formal system model, consensus proofs, namespace rule semantics, governance mathematics, and a credit-grant mechanism with transparent budget constraints. The result is a protocol that is mathematically analyzable, operationally auditable, and aligned with public-infrastructure use cases.
 
@@ -91,7 +91,7 @@ $$
 
 ---
 
-## 3. Consensus: 80%-BFT Deterministic Finality
+## 3. Consensus: BFT Deterministic Finality (>2/3)
 
 Consensus at height \(h\) proceeds across rounds $$r = 0,1,2,\dots$$:
 
@@ -312,7 +312,7 @@ Operational target is $$T_{final}\approx1$$ second under healthy 50–100 valida
 Security properties:
 
 1. **Deterministic finality:** no probabilistic confirmations.
-2. **Sybil resistance:** identity-anchored validator admission with 80% governance gate.
+2. **Sybil resistance:** identity-anchored validator admission with >2/3 governance gate.
 3. **Governance transparency:** all votes signed, public, and on-chain.
 4. **Data ownership:** commitments and consent proofs on-chain; sensitive data off-chain and user-controlled.
 
@@ -358,4 +358,4 @@ $$
 
 ---
 
-CITIZEN defines a mathematically grounded, governance-first public ledger that prioritizes deterministic truth over speculation. Its 80%-BFT consensus provides strong finality, namespaces provide policy-safe domain composition, and builder credit grants create a transparent non-transferable incentive path for ecosystem growth. Together, these elements form a deployable framework for civic and institutional digital infrastructure.
+CITIZEN defines a mathematically grounded, governance-first public ledger that prioritizes deterministic truth over speculation. Its >2/3-BFT consensus provides strong finality, namespaces provide policy-safe domain composition, and builder credit grants create a transparent non-transferable incentive path for ecosystem growth. Together, these elements form a deployable framework for civic and institutional digital infrastructure.

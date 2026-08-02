@@ -47,7 +47,7 @@ enabled, deterministic keys).
   published governance charter. Operator configs still require a separately
   signed admission manifest JSON artifact for `manifest_path`. A mainnet-like sample operator template is available at `config/miannet/validator-sample.toml`.
 - **Operators:** Governance-approved validator institutions; observers welcome.
-- **Admission:** On-chain governance approval (≥80% quorum) with documented
+- **Admission:** On-chain governance approval (>2/3 quorum) with documented
   identity anchors for each validator.
 - **Notes:** Enforce HSM-backed signing keys, hardened QUIC endpoints, monitoring
   hooks, and compliance with the public governance ruleset.

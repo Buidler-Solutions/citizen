@@ -1,6 +1,6 @@
 validator_id = "validator-delta"
 block_time_millis = 1000
-quorum_bps = 8000
+quorum_bps = 6667
 signing_key_hex = "e48c2d2aadffaff8dd13de89b29a8da42200ccb7461562b5484300fbda6c6a69"
 api_port = 8084
 data_dir = "data/delta"

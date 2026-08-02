@@ -14,7 +14,7 @@ Unplanned emergency responses should start with `NETWORK_ADMISSION_TROUBLESHOOTI
 ## Governance and Signer Requirements
 
 1. Submit governance proposal in `governance.vote` namespace for identity change intent.
-2. Obtain >=80% validator approval before any rollout artifacts are generated.
+2. Obtain >2/3 validator approval before any rollout artifacts are generated.
 3. Prepare next manifest with explicit signer set:
    - at least one `ACTIVE_KEYS` signature from the current trusted key set,
    - required transition signatures per `TRANSITION_KEYS` policy,
@@ -47,7 +47,7 @@ Unplanned emergency responses should start with `NETWORK_ADMISSION_TROUBLESHOOTI
 Abort and roll back when any checkpoint fails:
 - startup preflight fails on >20% canary validators,
 - handshake rejections indicate `manifest_digest` mismatch among intended peers,
-- quorum stability drops below 80% availability during rollout.
+- quorum stability drops below 67% availability during rollout.
 
 Rollback steps:
 1. Pause further rollout.

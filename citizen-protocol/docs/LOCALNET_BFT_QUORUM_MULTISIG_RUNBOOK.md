@@ -1,4 +1,4 @@
-# Localnet Runbook: 80% Validator Consensus + 3-of-5 Builder Credit Grant
+# Localnet Runbook: >2/3 BFT Validator Consensus + 3-of-5 Builder Credit Grant
 
 This runbook gives you an end-to-end **real localnet** flow (no mock ledger writes):
 
@@ -13,8 +13,8 @@ It is designed for repeatable local testing on the current CITIZEN node/runtime.
 
 Yes—this works in localnet today.
 
-- Localnet validator configs run with `quorum_bps = 8000` (80%).
-- With 3 validators, `ceil(0.8 * 3) = 3`, so all 3 validators must participate in commit.
+- Localnet validator configs run with `quorum_bps = 6667` (>2/3).
+- With 3 validators, `ceil(0.6667 * 3) = 3`, so all 3 validators must participate in commit.
 - `builder.credits` enforces multisig grant policy (`required_grant_approvals = 3`, `grant_approvers = 5`) and validates each proof cryptographically.
 
 ---
@@ -66,7 +66,7 @@ Capture the generated `key_id` (call it `$AUTHOR_KEY_ID`).
 
 ---
 
-## 5) Submit a non-dummy ledger entry and verify 80% consensus finality
+## 5) Submit a non-dummy ledger entry and verify >2/3 BFT consensus finality
 
 ### 5.1 Sign a realistic content entry
 
@@ -116,7 +116,7 @@ Check:
 - `receipt.finality.block_height` is present
 - `receipt.finality.commit_proof.participant_ids | length == 3`
 
-That confirms effective 80% quorum on a 3-validator network (all 3 required).
+That confirms effective >2/3 BFT quorum on a 3-validator network (all 3 required).
 
 ---
 

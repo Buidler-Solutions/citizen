@@ -1,6 +1,6 @@
 validator_id = "validator-beta"
 block_time_millis = 1000
-quorum_bps = 8000
+quorum_bps = 6667
 signing_key_hex = "2f2e2d2c2b2a292827262524232221201f1e1d1c1b1a19181716151413121110"
 api_port = 8082
 data_dir = "data/beta"

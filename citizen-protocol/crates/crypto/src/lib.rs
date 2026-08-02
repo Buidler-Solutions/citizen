@@ -263,8 +263,8 @@ mod tests {
 
     #[test]
     fn quorum_calculation_rounds_up() {
-        assert_eq!(quorum_threshold(5, 8000), 4);
-        assert_eq!(quorum_threshold(10, 8000), 8);
+        assert_eq!(quorum_threshold(5, 6667), 4);
+        assert_eq!(quorum_threshold(10, 6667), 7);
     }
 
     #[test]

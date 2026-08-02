@@ -1,6 +1,6 @@
 validator_id = "validator.local"
 block_time_millis = 1000
-quorum_bps = 8000
+quorum_bps = 6667
 api_port = 8080
 network_key_rotation_secs = 3600
 

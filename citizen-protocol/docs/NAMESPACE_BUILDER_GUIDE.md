@@ -43,7 +43,7 @@ A complete namespace implementation has 4 layers:
 
 4. **Governance process:**
    - registration/update proposals,
-   - validator votes (>=80%),
+   - validator votes (>2/3),
    - activation discipline (versioned rollout).
 
 ---

@@ -49,8 +49,8 @@ Validation checklist:
   (target: 200% of active consensus seats).
 - Runtime split is deterministic: `ActiveSize = ceil(N/2)`, `StandbySize = N - ActiveSize`.
 - Unknown peers are denied at authenticated handshake.
-- `quorum_bps` remains `8000` unless explicitly changed by governance proposal,
-  and is applied to the active set only (`ceil(0.8 * |V_active|)`).
+- `quorum_bps` remains `6667` unless explicitly changed by governance proposal,
+  and is applied to the active set only (`ceil(0.6667 * |V_active|)`).
 - Epoch rotation controls are configured and reviewed: `epoch_length_blocks`
   and `promotion_limit`.
 - API write edge controls are configured (`api_auth_required = true`, `api_require_builder_credit_for_all_writes = true`, scoped API keys, rate limits).
