@@ -9,7 +9,8 @@ CREATE TABLE IF NOT EXISTS whitepaper_sections (
   end_frame INTEGER NOT NULL CHECK (end_frame >= start_frame),
   order_index INTEGER NOT NULL UNIQUE,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  deleted_at TIMESTAMPTZ
 );
 
 CREATE TABLE IF NOT EXISTS media_assets (
@@ -18,6 +19,8 @@ CREATE TABLE IF NOT EXISTS media_assets (
   frame_number INTEGER NOT NULL CHECK (frame_number >= 0),
   chapter_id UUID NOT NULL REFERENCES whitepaper_sections(id) ON DELETE CASCADE,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  deleted_at TIMESTAMPTZ,
   UNIQUE(chapter_id, frame_number)
 );
 

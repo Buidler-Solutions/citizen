@@ -1,4 +1,4 @@
-import { Column, CreateDateColumn, Entity, JoinColumn, ManyToOne, PrimaryGeneratedColumn } from 'typeorm';
+import { Column, CreateDateColumn, DeleteDateColumn, Entity, JoinColumn, ManyToOne, PrimaryGeneratedColumn, UpdateDateColumn } from 'typeorm';
 import { OnboardingUser } from '../user/onboarding-user.entity';
 
 @Entity({ name: 'password_resets' })
@@ -27,4 +27,10 @@ export class PasswordReset {
 
   @CreateDateColumn({ name: 'created_at' })
   createdAt!: Date;
+
+  @UpdateDateColumn({ name: 'updated_at' })
+  updatedAt!: Date;
+
+  @DeleteDateColumn({ name: 'deleted_at' })
+  deletedAt!: Date | null;
 }

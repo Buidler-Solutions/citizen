@@ -6729,8 +6729,10 @@ mod tests {
             MinioOffchainObjectStoreConfig {
                 endpoint: "minio.internal:9000".to_string(),
                 bucket: "citizen-offchain".to_string(),
-                access_key: "access-key".to_string(),
-                secret_key: "secret-key".to_string(),
+                access_key: std::env::var("CITIZEN_TEST_MINIO_ACCESS_KEY")
+                    .unwrap_or_else(|_| "test-fixture-access".to_string()),
+                secret_key: std::env::var("CITIZEN_TEST_MINIO_SECRET_KEY")
+                    .unwrap_or_else(|_| "test-fixture-secret".to_string()),
                 use_tls: true,
                 path_style: true,
                 key_prefix: "citizen/offchain/v1".to_string(),
@@ -6863,8 +6865,10 @@ mod tests {
             MinioOffchainObjectStoreConfig {
                 endpoint: "minio.internal:9000".to_string(),
                 bucket: "citizen-offchain".to_string(),
-                access_key: "access-key".to_string(),
-                secret_key: "secret-key".to_string(),
+                access_key: std::env::var("CITIZEN_TEST_MINIO_ACCESS_KEY")
+                    .unwrap_or_else(|_| "test-fixture-access".to_string()),
+                secret_key: std::env::var("CITIZEN_TEST_MINIO_SECRET_KEY")
+                    .unwrap_or_else(|_| "test-fixture-secret".to_string()),
                 use_tls: true,
                 path_style: true,
                 key_prefix: "citizen/offchain/v1".to_string(),
@@ -7020,8 +7024,10 @@ mod tests {
             MinioOffchainObjectStoreConfig {
                 endpoint: "minio.internal:9000".to_string(),
                 bucket: "citizen-offchain".to_string(),
-                access_key: "access-key".to_string(),
-                secret_key: "secret-key".to_string(),
+                access_key: std::env::var("CITIZEN_TEST_MINIO_ACCESS_KEY")
+                    .unwrap_or_else(|_| "test-fixture-access".to_string()),
+                secret_key: std::env::var("CITIZEN_TEST_MINIO_SECRET_KEY")
+                    .unwrap_or_else(|_| "test-fixture-secret".to_string()),
                 use_tls: true,
                 path_style: true,
                 key_prefix: "citizen/offchain/v1".to_string(),

@@ -1,3 +1,17 @@
+# ============================================================
+# Developer Logs & AI Artifacts (NEVER push to remote)
+# ============================================================
+# .dev-logs/ is local-only developer storage. It holds session
+# history, pending tasks, roadmap notes, AI-generated artifacts,
+# and scratch work. Nothing in this folder is pushable to remote.
+.dev-logs/
+
+# Explicit belt-and-suspenders: block stray AI artifact files
+# anywhere in the repo from being committed accidentally.
+**/ai-artifacts/
+**/.ai-cache/
+*.ai-artifact.md
+
 # Temp / E2E
 citizen-protocol/.tmp-wallet-e2e/
 

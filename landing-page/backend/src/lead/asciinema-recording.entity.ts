@@ -1,4 +1,4 @@
-import { CreateDateColumn, Column, Entity, PrimaryGeneratedColumn, UpdateDateColumn } from 'typeorm';
+import { CreateDateColumn, Column, DeleteDateColumn, Entity, PrimaryGeneratedColumn, UpdateDateColumn } from 'typeorm';
 
 @Entity({ name: 'asciinema_recordings' })
 export class AsciinemaRecording {
@@ -22,4 +22,7 @@ export class AsciinemaRecording {
 
   @UpdateDateColumn()
   updatedAt!: Date;
+
+  @DeleteDateColumn()
+  deletedAt!: Date | null;
 }

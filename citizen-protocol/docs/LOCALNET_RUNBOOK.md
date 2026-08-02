@@ -128,11 +128,11 @@ The checker submits through `API_SUBMIT_ENDPOINT` (default `/api/v1/entries/subm
   api_max_write_requests_per_minute = 120
 
   [[api_clients]]
-  api_key = "builder-ingest-key"
+  api_key = "<YOUR_BUILDER_INGEST_API_KEY>"
   scopes = ["entries.submit", "envelopes.submit"]
 
   [[api_clients]]
-  api_key = "ops-envelope-key"
+  api_key = "<YOUR_OPS_ENVELOPE_API_KEY>"
   scopes = ["envelopes.submit"]
   ```
 

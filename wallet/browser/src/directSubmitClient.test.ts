@@ -185,7 +185,7 @@ describe('directSubmitClient', () => {
       allowlistedApiBaseUrls: ['http://127.0.0.1:8081'],
       envelope,
       consentToShareFullPayload: true,
-      apiKey: 'builder-ingest-key',
+      apiKey: 'test-api-key-fixture',
       fetchImpl: fetchMock,
     });
 

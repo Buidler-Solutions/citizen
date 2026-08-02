@@ -1,4 +1,5 @@
 target/
+target-check/
 **/*.rs.bk
 .DS_Store
 node_modules/

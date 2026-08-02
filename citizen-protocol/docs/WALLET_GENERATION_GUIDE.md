@@ -17,7 +17,7 @@ Wallet CLI now supports mnemonic-aware key flows:
 
 ```bash
 cd citizen-protocol
-export CITIZEN_WALLET_PASSWORD='change-me'
+export CITIZEN_WALLET_PASSWORD='${CITIZEN_WALLET_PASSWORD:?set your wallet passphrase}'
 cargo run -p citizen-wallet --bin wallet -- keygen --path /tmp/citizen-wallet-test.json --label test
 ```
 
@@ -34,7 +34,7 @@ Generated key <KEY_ID>
 
 ```bash
 cd citizen-protocol
-export CITIZEN_WALLET_PASSWORD='change-me'
+export CITIZEN_WALLET_PASSWORD='${CITIZEN_WALLET_PASSWORD:?set your wallet passphrase}'
 cargo run -p citizen-wallet --bin wallet -- keygen \
   --path /tmp/citizen-wallet-test.json \
   --label seed-backed \
@@ -50,7 +50,7 @@ The CLI prints the mnemonic phrase once; store it securely offline.
 
 ```bash
 cd citizen-protocol
-export CITIZEN_WALLET_PASSWORD='change-me'
+export CITIZEN_WALLET_PASSWORD='${CITIZEN_WALLET_PASSWORD:?set your wallet passphrase}'
 export CITIZEN_WALLET_MNEMONIC='<YOUR BIP39 PHRASE>'
 cargo run -p citizen-wallet --bin wallet -- import-mnemonic \
   --path /tmp/citizen-wallet-test.json \
@@ -69,7 +69,7 @@ cargo run -p citizen-wallet --bin wallet -- export-key \
   --path /tmp/citizen-wallet-test.json \
   --key-id <KEY_ID> \
   --include-secret \
-  --password 'change-me' \
+  --password "$CITIZEN_WALLET_PASSWORD" \
 | jq -r '"wallet_key=" + .public_key_hex + "\nsecret_key=" + .secret_key_hex'
 ```
 
@@ -88,7 +88,7 @@ cargo run -p citizen-wallet --bin wallet -- export-key \
   --path /tmp/citizen-wallet-test.json \
   --key-id <KEY_ID> \
   --include-secret \
-  --password 'change-me'
+  --password "$CITIZEN_WALLET_PASSWORD"
 ```
 
 Read these two JSON fields:
@@ -113,11 +113,11 @@ After key generation, use encrypted backup vault flows for removable-media custo
 
 ```bash
 cd citizen-protocol
-export CITIZEN_WALLET_PASSWORD='change-me'
+export CITIZEN_WALLET_PASSWORD='${CITIZEN_WALLET_PASSWORD:?set your wallet passphrase}'
 cargo run -p citizen-wallet --bin wallet -- backup init \
   --vault-path /media/$USER/CITIZEN_USB/citizen-backup.vault \
-  --decoy-passphrase 'decoy-passphrase-change-me' \
-  --critical-passphrase 'critical-passphrase-change-me' \
+  --decoy-passphrase "${DECOY_PASSPHRASE:?set decoy passphrase}" \
+  --critical-passphrase "${CRITICAL_PASSPHRASE:?set critical passphrase}" \
   --json
 ```
 
@@ -127,7 +127,7 @@ cargo run -p citizen-wallet --bin wallet -- backup export-credentials \
   --wallet-path /tmp/citizen-wallet-test.json \
   --vault-path /media/$USER/CITIZEN_USB/citizen-backup.vault \
   --slot critical \
-  --passphrase 'critical-passphrase-change-me' \
+  --passphrase "${CRITICAL_PASSPHRASE:?set critical passphrase}" \
   --include identity-keys \
   --include account-keys \
   --include recovery-metadata \
@@ -139,7 +139,7 @@ cd citizen-protocol
 cargo run -p citizen-wallet --bin wallet -- backup verify \
   --vault-path /media/$USER/CITIZEN_USB/citizen-backup.vault \
   --slot critical \
-  --passphrase 'critical-passphrase-change-me' \
+  --passphrase "${CRITICAL_PASSPHRASE:?set critical passphrase}" \
   --json
 ```
 
@@ -148,7 +148,7 @@ cd citizen-protocol
 cargo run -p citizen-wallet --bin wallet -- backup restore \
   --vault-path /media/$USER/CITIZEN_USB/citizen-backup.vault \
   --slot critical \
-  --passphrase 'critical-passphrase-change-me' \
+  --passphrase "${CRITICAL_PASSPHRASE:?set critical passphrase}" \
   --wallet-path /tmp/citizen-wallet-restored.json \
   --json
 ```

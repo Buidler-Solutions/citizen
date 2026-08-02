@@ -1,4 +1,4 @@
-import { Column, CreateDateColumn, Entity, PrimaryGeneratedColumn } from 'typeorm';
+import { Column, CreateDateColumn, DeleteDateColumn, Entity, PrimaryGeneratedColumn, UpdateDateColumn } from 'typeorm';
 
 export type LeadNotificationStatus = 'sent' | 'failed' | 'logged';
 
@@ -39,4 +39,10 @@ export class LeadNotification {
 
   @CreateDateColumn({ name: 'created_at' })
   createdAt!: Date;
+
+  @UpdateDateColumn({ name: 'updated_at' })
+  updatedAt!: Date;
+
+  @DeleteDateColumn({ name: 'deleted_at' })
+  deletedAt!: Date | null;
 }
