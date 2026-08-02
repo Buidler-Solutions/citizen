@@ -17,7 +17,7 @@
     "pg": "^8.16.3",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.2",
-    "typeorm": "^0.3.26"
+    "typeorm": "^0.3.31"
   },
   "devDependencies": {
     "@nestjs/cli": "^11.0.10",
@@ -30,7 +30,7 @@
   },
   "overrides": {
     "ajv": "8.18.0",
-    "multer": "2.1.1",
+    "multer": "^2.2.0",
     "file-type": "21.3.2",
     "path-to-regexp": "8.4.0",
     "uuid": "^14.0.0"
