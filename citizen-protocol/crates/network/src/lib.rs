@@ -719,14 +719,23 @@ impl QuicNetwork {
             (vec![cert_der.clone()], private_key, vec![cert_der])
         };
 
-        let server_config = ServerConfig::with_single_cert(certificate_chain, private_key)
+        let mut transport = quinn::TransportConfig::default();
+        transport.max_idle_timeout(Some(quinn::IdleTimeout::from(
+            quinn::VarInt::from_u32(10_000),
+        )));
+        transport.keep_alive_interval(Some(StdDuration::from_secs(3)));
+        let transport = Arc::new(transport);
+
+        let mut server_config = ServerConfig::with_single_cert(certificate_chain, private_key)
             .map_err(ProtocolError::storage)?;
+        server_config.transport_config(Arc::clone(&transport));
         let endpoint =
             Endpoint::server(server_config, bind_addr).map_err(ProtocolError::storage)?;
         let mut roots = RootCertStore::empty();
         let _ = roots.add_parsable_certificates(root_certs);
-        let client_cfg =
+        let mut client_cfg =
             ClientConfig::with_root_certificates(roots.into()).map_err(ProtocolError::storage)?;
+        client_cfg.transport_config(Arc::clone(&transport));
 
         let (tx, _) = broadcast::channel(1024);
         let network = Self {
@@ -758,16 +767,23 @@ impl QuicNetwork {
         let tx = self.subscribers.clone();
         let admission = self.admission.clone();
         tokio::spawn(async move {
+            const CONNECT_TIMEOUT: StdDuration = StdDuration::from_secs(5);
             while let Some(connecting) = endpoint.accept().await {
-                if let Ok(conn) = connecting.await {
-                    loop {
-                        match conn.accept_bi().await {
-                            Ok((send, recv)) => {
-                                QuicNetwork::spawn_reader(tx.clone(), admission.clone(), recv);
-                                drop(send);
+                match tokio::time::timeout(CONNECT_TIMEOUT, connecting).await {
+                    Ok(Ok(conn)) => {
+                        loop {
+                            match conn.accept_bi().await {
+                                Ok((send, recv)) => {
+                                    QuicNetwork::spawn_reader(tx.clone(), admission.clone(), recv);
+                                    drop(send);
+                                }
+                                Err(_) => break,
                             }
-                            Err(_) => break,
                         }
+                    }
+                    Ok(Err(_)) => {}
+                    Err(_) => {
+                        tracing::warn!("QUIC accept handshake timed out after {:?}", CONNECT_TIMEOUT);
                     }
                 }
             }
@@ -809,6 +825,7 @@ impl QuicNetwork {
     }
 
     async fn connection(&self, target: &ValidatorId) -> Result<(SendStream, RecvStream)> {
+        const CONNECT_TIMEOUT: StdDuration = StdDuration::from_secs(5);
         let peers = self.peers.read().await;
         let Some(addr) = peers.get(target) else {
             return Err(ProtocolError::ConsensusViolation(format!(
@@ -820,10 +837,23 @@ impl QuicNetwork {
         let conn = self
             .endpoint
             .connect_with(self.client_cfg.clone(), addr, "citizen.local")
-            .map_err(ProtocolError::storage)?
-            .await
             .map_err(ProtocolError::storage)?;
-        conn.open_bi().await.map_err(ProtocolError::storage)
+        let conn = tokio::time::timeout(CONNECT_TIMEOUT, conn)
+            .await
+            .map_err(|_| {
+                ProtocolError::timeout(format!(
+                    "QUIC connect to {addr} timed out after {CONNECT_TIMEOUT:?}"
+                ))
+            })?
+            .map_err(ProtocolError::storage)?;
+        tokio::time::timeout(CONNECT_TIMEOUT, conn.open_bi())
+            .await
+            .map_err(|_| {
+                ProtocolError::timeout(format!(
+                    "QUIC stream open to {addr} timed out after {CONNECT_TIMEOUT:?}"
+                ))
+            })?
+            .map_err(ProtocolError::storage)
     }
 }
 
@@ -841,9 +871,23 @@ fn load_private_key(path: &PathBuf) -> Result<PrivateKeyDer<'static>> {
 impl Network for QuicNetwork {
     async fn broadcast(&self, message: ConsensusMessage) -> Result<()> {
         let peers = self.peers.read().await.clone();
-        for (validator, _) in peers.iter() {
-            let _ = self.unicast(validator, message.clone()).await?;
-        }
+        let handles: Vec<_> = peers
+            .iter()
+            .map(|(validator, _)| {
+                let msg = message.clone();
+                let validator = validator.clone();
+                async move {
+                    if let Err(err) = self.unicast(&validator, msg).await {
+                        tracing::warn!(
+                            validator = %validator,
+                            error = %err,
+                            "broadcast unicast failed, continuing"
+                        );
+                    }
+                }
+            })
+            .collect();
+        futures::future::join_all(handles).await;
         Ok(())
     }
 

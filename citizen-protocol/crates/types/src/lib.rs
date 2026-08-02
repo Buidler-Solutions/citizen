@@ -405,6 +405,8 @@ pub enum ProtocolError {
     StorageError(String),
     #[error("crypto error: {0}")]
     CryptoError(String),
+    #[error("network timeout: {0}")]
+    NetworkTimeout(String),
 }
 
 impl ProtocolError {
@@ -414,6 +416,10 @@ impl ProtocolError {
 
     pub fn crypto<E: fmt::Display>(err: E) -> Self {
         ProtocolError::CryptoError(err.to_string())
+    }
+
+    pub fn timeout<E: fmt::Display>(err: E) -> Self {
+        ProtocolError::NetworkTimeout(err.to_string())
     }
 }
 
