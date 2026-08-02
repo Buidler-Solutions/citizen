@@ -133,7 +133,6 @@ pub struct ValidatorMetadata {
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub enum ValidatorStatus {
     Active,
-    Standby,
     Suspended,
 }
 
@@ -193,15 +192,6 @@ pub enum GovernanceAction {
     UpdateNamespace(NamespaceDescriptor),
     Emergency(EmergencyAction),
     UpdateParameter(String, Value),
-    RotateValidators(ValidatorRotation),
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
-pub struct ValidatorRotation {
-    pub epoch: u64,
-    pub seed: String,
-    pub active: Vec<ValidatorId>,
-    pub standby: Vec<ValidatorId>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
@@ -244,18 +234,9 @@ pub struct ValidatorSetSnapshot {
 pub struct EpochState {
     pub epoch: u64,
     pub epoch_length_blocks: u64,
-    pub promotion_limit: usize,
     pub pending_replacements: Vec<PendingReplacement>,
-    pub scheduled_rotation: Option<ScheduledRotation>,
     pub manifest_digest: String,
     pub last_seed: String,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
-pub struct ScheduledRotation {
-    pub decided_at_height: BlockHeight,
-    pub apply_at_height: BlockHeight,
-    pub rotation: ValidatorRotation,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
@@ -271,7 +252,6 @@ pub struct ConsensusConfig {
     pub max_entries_per_block: usize,
     pub quorum_bps: u32,
     pub epoch_length_blocks: u64,
-    pub promotion_limit: usize,
     pub heartbeat_interval_millis: u64,
     pub liveness_missed_prevote_threshold: u64,
 }

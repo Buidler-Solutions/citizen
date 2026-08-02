@@ -61,9 +61,7 @@ fn build_snapshot(keys: &HashMap<String, SigningKey>) -> ValidatorSetSnapshot {
         epoch_state: EpochState {
             epoch: 0,
             epoch_length_blocks: 100,
-            promotion_limit: 10,
             pending_replacements: Vec::new(),
-            scheduled_rotation: None,
             manifest_digest: "manifest-digest".into(),
             last_seed: "genesis".into(),
         },

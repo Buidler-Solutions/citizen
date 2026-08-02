@@ -90,7 +90,7 @@ async fn main() -> anyhow::Result<()> {
         .serve(SocketAddr::from((Ipv4Addr::LOCALHOST, config.api_port)))
         .await;
 
-    let consensus_task = if config.node_role == NodeRole::Validator && !config.standby_only {
+    let consensus_task = if config.node_role == NodeRole::Validator {
         let keypair = config.load_or_generate_keypair()?;
         let verifying_key_hex = verifying_key_to_string(keypair.verifying_key());
         tracing::info!("verifying_key" = %verifying_key_hex, "note" = "share this key for validator admission");
@@ -140,7 +140,6 @@ async fn main() -> anyhow::Result<()> {
                 max_entries_per_block: 1024,
                 quorum_bps: config.quorum_bps,
                 epoch_length_blocks: config.epoch_length_blocks,
-                promotion_limit: config.promotion_limit,
                 heartbeat_interval_millis: config.heartbeat_interval_millis,
                 liveness_missed_prevote_threshold: config.liveness_missed_prevote_threshold,
             },
@@ -155,59 +154,51 @@ async fn main() -> anyhow::Result<()> {
             }
         }))
     } else {
-        if config.node_role == NodeRole::Validator && config.standby_only {
-            tracing::info!(
-                "mode" = "validator-standby",
-                "msg" = "consensus disabled by standby_only configuration"
-            );
-            None
-        } else {
-            let observer_network_task = if !config.peers.is_empty() {
-                let snapshot = config
-                    .build_admission_snapshot(&config.observer_public_key(), &admission_context)?;
-                let rotation = Duration::from_secs(config.network_key_rotation_secs);
-                let admission_identity = config.handshake_identity(&admission_context);
-                let admission = Arc::new(AdmissionControl::from_snapshot(
-                    snapshot,
-                    rotation,
-                    admission_identity,
-                ));
-                let peers = config
-                    .peers
-                    .iter()
-                    .filter_map(|p| {
-                        p.address
-                            .parse()
-                            .ok()
-                            .map(|addr| (p.validator_id.clone(), addr))
-                    })
-                    .collect();
-                let network = Arc::new(NodeNetwork::Quic(QuicNetwork::new(
-                    config.bind_addr.unwrap_or(default_bind()),
-                    peers,
-                    admission,
-                    config.validator_id.clone(),
-                    config.observer_public_key(),
-                    None,
-                    config.quic_tls_config(),
-                )?));
-                Some(tokio::spawn(async move {
-                    match network.subscribe().await {
-                        Ok(mut receiver) => while receiver.recv().await.is_some() {},
-                        Err(err) => {
-                            tracing::error!(?err, "observer failed to subscribe to network");
-                        }
+        let observer_network_task = if !config.peers.is_empty() {
+            let snapshot = config
+                .build_admission_snapshot(&config.observer_public_key(), &admission_context)?;
+            let rotation = Duration::from_secs(config.network_key_rotation_secs);
+            let admission_identity = config.handshake_identity(&admission_context);
+            let admission = Arc::new(AdmissionControl::from_snapshot(
+                snapshot,
+                rotation,
+                admission_identity,
+            ));
+            let peers = config
+                .peers
+                .iter()
+                .filter_map(|p| {
+                    p.address
+                        .parse()
+                        .ok()
+                        .map(|addr| (p.validator_id.clone(), addr))
+                })
+                .collect();
+            let network = Arc::new(NodeNetwork::Quic(QuicNetwork::new(
+                config.bind_addr.unwrap_or(default_bind()),
+                peers,
+                admission,
+                config.validator_id.clone(),
+                config.observer_public_key(),
+                None,
+                config.quic_tls_config(),
+            )?));
+            Some(tokio::spawn(async move {
+                match network.subscribe().await {
+                    Ok(mut receiver) => while receiver.recv().await.is_some() {},
+                    Err(err) => {
+                        tracing::error!(?err, "observer failed to subscribe to network");
                     }
-                }))
-            } else {
-                None
-            };
-            tracing::info!(
-                "mode" = "observer",
-                "msg" = "consensus disabled; read-only API profile active"
-            );
-            observer_network_task
-        }
+                }
+            }))
+        } else {
+            None
+        };
+        tracing::info!(
+            "mode" = "observer",
+            "msg" = "consensus disabled; read-only API profile active"
+        );
+        observer_network_task
     };
 
     tracing::info!("msg" = "node running", "api_port" = config.api_port);
@@ -275,14 +266,10 @@ struct NodeConfig {
     block_time_millis: u64,
     #[serde(default = "default_epoch_length")]
     epoch_length_blocks: u64,
-    #[serde(default = "default_promotion_limit")]
-    promotion_limit: usize,
     #[serde(default = "default_heartbeat_interval")]
     heartbeat_interval_millis: u64,
     #[serde(default = "default_liveness_threshold")]
     liveness_missed_prevote_threshold: u64,
-    #[serde(default)]
-    standby_only: bool,
     #[serde(default)]
     signing_key_hex: Option<String>,
     #[serde(default = "default_api_port")]
@@ -487,16 +474,8 @@ impl NodeConfig {
                 },
             },
         );
-        // Under >2/3 BFT quorum, all admitted validators are active by default.
-        // The standby concept was a workaround for 80% quorum being too strict
-        // on large sets and is no longer needed for quorum safety.
-        let active_size = validators.len();
-        for (index, metadata) in validators.values_mut().enumerate() {
-            metadata.status = if index < active_size {
-                ValidatorStatus::Active
-            } else {
-                ValidatorStatus::Standby
-            };
+        for metadata in validators.values_mut() {
+            metadata.status = ValidatorStatus::Active;
         }
         ValidatorSetSnapshot {
             height: 0,
@@ -505,9 +484,7 @@ impl NodeConfig {
             epoch_state: EpochState {
                 epoch: 0,
                 epoch_length_blocks: self.epoch_length_blocks,
-                promotion_limit: self.promotion_limit,
                 pending_replacements: Vec::new(),
-                scheduled_rotation: None,
                 manifest_digest: "manifest-not-enforced".into(),
                 last_seed: "genesis".into(),
             },
@@ -539,12 +516,10 @@ impl NodeConfig {
             );
         }
 
-        let active_size = admission_context.validator_allowlist.len();
-        let validators = admission_context
+        let validators: BTreeMap<_, _> = admission_context
             .validator_allowlist
             .iter()
-            .enumerate()
-            .map(|(index, (validator_id, public_key))| {
+            .map(|(validator_id, public_key)| {
                 (
                     validator_id.clone(),
                     ValidatorMetadata {
@@ -552,11 +527,7 @@ impl NodeConfig {
                         public_key: public_key.clone(),
                         anchors: vec!["manifest-allowlist".to_string()],
                         joined_at: Utc::now(),
-                        status: if index < active_size {
-                            ValidatorStatus::Active
-                        } else {
-                            ValidatorStatus::Standby
-                        },
+                        status: ValidatorStatus::Active,
                         performance: ValidatorPerformance {
                             uptime_bps: 10_000,
                             missed_prevotes: 0,
@@ -573,9 +544,7 @@ impl NodeConfig {
             epoch_state: EpochState {
                 epoch: 0,
                 epoch_length_blocks: self.epoch_length_blocks,
-                promotion_limit: self.promotion_limit,
                 pending_replacements: Vec::new(),
-                scheduled_rotation: None,
                 manifest_digest: admission_context.manifest_digest.clone(),
                 last_seed: admission_context.manifest_digest.clone(),
             },
@@ -591,10 +560,8 @@ impl Default for NodeConfig {
             quorum_bps: default_quorum(),
             block_time_millis: default_block_time(),
             epoch_length_blocks: default_epoch_length(),
-            promotion_limit: default_promotion_limit(),
             heartbeat_interval_millis: default_heartbeat_interval(),
             liveness_missed_prevote_threshold: default_liveness_threshold(),
-            standby_only: false,
             signing_key_hex: None,
             api_port: default_api_port(),
             api_auth_required: false,
@@ -637,10 +604,6 @@ fn default_block_time() -> u64 {
 
 fn default_epoch_length() -> u64 {
     100
-}
-
-fn default_promotion_limit() -> usize {
-    10
 }
 
 fn default_heartbeat_interval() -> u64 {
