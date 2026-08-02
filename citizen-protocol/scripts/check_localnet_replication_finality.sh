@@ -30,7 +30,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
 WALLET_PATH="${WALLET_PATH:-/tmp/localnet-author-wallet.json}"
-PASSWORD="${PASSWORD:-testpass}"
+PASSWORD="${PASSWORD:?set PASSWORD env var to your localnet wallet passphrase}"
 WALLET_LABEL="${WALLET_LABEL:-localnet-author}"
 AUTO_INIT_WALLET="${AUTO_INIT_WALLET:-true}"
 AUTHOR_KEY_LABEL="${AUTHOR_KEY_LABEL:-}"
