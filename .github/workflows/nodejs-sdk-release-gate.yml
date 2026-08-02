@@ -137,6 +137,9 @@ jobs:
       - name: Install SDK dependencies
         working-directory: sdk/typescript
         run: npm ci
+      - name: Build SDK
+        working-directory: sdk/typescript
+        run: npm run build
       - name: Run SDK live smoke (local non-Docker node)
         env:
           CITIZEN_NODE_MODE: local

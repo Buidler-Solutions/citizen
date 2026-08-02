@@ -1,4 +1,4 @@
-export * from "./types.js";
+export type * from "./types.js";
 export { canonicalizeJson, OFFCHAIN_ATTACHMENT_ALLOWED_MIME_TYPES, sha256DigestHex } from "./utils.js";
 export { createFormCommitmentReceipt, createMultisigCreditGrant, createSponsorshipUsage, validateBuilderCreditsPayload } from "./builders.js";
 export { appendCoSignature, finalizeEnvelope, wrapEnvelopeMulti } from "./multisig.js";
