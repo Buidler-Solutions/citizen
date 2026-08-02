@@ -43,7 +43,7 @@ uuid = { version = "1", features = ["serde", "v4"] }
 anyhow = "1.0"
 hex = "0.4"
 futures = "0.3"
-libp2p = { version = "0.56", features = ["tokio", "tcp", "gossipsub", "noise", "tls", "macros"] }
+libp2p = { version = "0.56", default-features = false, features = ["tokio", "tcp", "gossipsub", "noise", "tls", "macros"] }
 quinn = { version = "0.11", default-features = false, features = ["rustls-ring", "runtime-tokio", "log"] }
 rcgen = "0.14"
 bincode = "1.3"
@@ -52,6 +52,8 @@ rocksdb = { version = "0.21", features = ["static"] }
 [patch.crates-io]
 rocksdb = { path = "vendor/rocksdb" }
 rustls-webpki = { path = "vendor/rustls-webpki" }
+libp2p-dns = { path = "vendor/libp2p-dns-stub" }
+libp2p-mdns = { path = "vendor/libp2p-mdns-stub" }
 
 [workspace.metadata]
 name = "citizen-protocol"
