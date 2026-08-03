@@ -8,7 +8,31 @@ Each module is `#![no_std]` and uses the Citizen host function ABI (`alloc`, `ha
 | Module | Path | Description |
 |--------|------|-------------|
 | `access-control-guard` | `access-control/` | Signature-gated access checker demonstrating `verify_signature`, `store_state`, and `current_block_height` host calls. |
-| `soulbound-token` | `soulbound-token/` | Non-transferable NFT (SBT) demonstrating state persistence, `mint`/`burn`/`owner_of` operations, and rejection of `transfer`. |
+| `soulbound-token` | `soulbound-token/` | Feature-rich non-transferable NFT (SBT) with multi-issuer authority, tiers, schemas, expiry/revocation, and attribute-based access control. |
+
+## Soulbound Token Features
+
+| Feature | How it works |
+|---------|-------------|
+| **Multi-issuer authority** | `configure` operation sets authorized issuer DIDs and a signature threshold. Mints require N-of-M issuer signatures. |
+| **Custom metadata schemas** | Each token has a `schema_type` (e.g., `degree`, `reputation`, `identity`) and free-form JSON `metadata`. |
+| **Hierarchical tiers** | Tokens are assigned `bronze` (0), `silver` (1), or `gold` (2). Per-tier supply is tracked independently. |
+| **Time-locked / revocable** | Optional `expiry_block` makes tokens expire at a future block height. Issuers can `revoke` tokens at any time. |
+| **Attribute-based access control** | `check_access` operation verifies token ownership with tier/schema requirements. Supports direct token lookup or enumeration of a DID's holdings. |
+
+### SBT Operations
+
+| Operation | Parameters | Purpose |
+|-----------|-----------|---------|
+| `configure` | `admin_did`, `admin_sig`, `issuers`, `threshold` | Set authorized issuers and minimum signature count (bootstrap on first call, admin-gated after) |
+| `mint` | `issuer_dids`, `signatures`, `token_id`, `recipient_did`, `tier?`, `schema_type?`, `metadata?`, `expiry_block?` | Mint a new soulbound token (backward-compatible with singular `issuer_did`/`signature_hex`) |
+| `owner_of` | `token_id` | Get owner and full token status (burned, revoked, expired) |
+| `total_supply` | — | Get global and per-tier supply counts |
+| `get_metadata` | `token_id` | Get token metadata, tier, schema, and revocation/expiry status |
+| `burn` | `issuer_did`, `signature_hex`, `token_id` | Permanently destroy a token |
+| `revoke` | `issuer_did`, `signature_hex`, `token_id` | Issuer-revoke a token (keeps record, marks invalid) |
+| `transfer` | (any) | Always rejected — soulbound tokens are non-transferable |
+| `check_access` | `did`, `token_id?`, `required_tier?`, `required_schema?` | Verify a DID holds a qualifying token |
 
 ## Building
 
