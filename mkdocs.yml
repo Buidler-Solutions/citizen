@@ -91,6 +91,8 @@ nav:
       - Backup Vault: wallets/backup.md
   - SDK:
       - TypeScript SDK: sdk/typescript.md
+  - Smart Contracts:
+      - Overview: smart-contracts/index.md
   - Explorer:
       - Overview: explorer/overview.md
   - Node Operators:
