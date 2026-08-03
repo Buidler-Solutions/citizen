@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../core/config/app_config.dart';
 import '../data/models/wallet_models.dart';
 import '../data/services/crypto_service.dart';
 import '../data/services/mnemonic_service.dart';
@@ -66,7 +67,7 @@ class WalletNotifier extends StateNotifier<WalletState> {
     }
   }
 
-  Future<void> generateWallet({int wordCount = 12}) async {
+  Future<StoredWallet> generateWallet({int wordCount = 12}) async {
     state = state.copyWith(status: WalletStateStatus.loading);
     try {
       final mnemonic = MnemonicService.generate(wordCount: wordCount);
@@ -91,8 +92,10 @@ class WalletNotifier extends StateNotifier<WalletState> {
         activeWallet: wallet,
         signer: signer,
       );
+      return wallet;
     } catch (e) {
       state = state.copyWith(status: WalletStateStatus.error, error: e.toString());
+      rethrow;
     }
   }
 
@@ -130,7 +133,7 @@ class WalletNotifier extends StateNotifier<WalletState> {
 
   Future<void> setActiveWallet(String walletId) async {
     final wallet = state.vault.firstWhere((w) => w.id == walletId);
-    await _storage.saveVault(state.vault, activeWalletId: walletId);
+    await (await _storage.prefs).setString(AppConfig.activeWalletIdKey, walletId);
     final signer = await _crypto.getOrCreateProtocolSigner(wallet);
     state = state.copyWith(activeWallet: wallet, signer: signer);
   }
@@ -140,7 +143,18 @@ class WalletNotifier extends StateNotifier<WalletState> {
     final activeId = state.activeWallet?.id == walletId
         ? vault.firstOrNull?.id
         : state.activeWallet?.id;
-    await _storage.saveVault(vault, activeWalletId: activeId);
+    await _storage.deleteWalletSecrets(walletId);
+    await _storage.saveVaultMetadata(
+      vault.map((w) => WalletMetadata(
+        id: w.id,
+        name: w.name,
+        createdAt: w.createdAt,
+        derivationPath: w.derivationPath,
+        hasMnemonic: w.hasMnemonic,
+        mnemonicWordCount: w.mnemonicWordCount,
+      )).toList(),
+      activeWalletId: activeId,
+    );
     final active = vault.isEmpty ? null : vault.firstWhere(
       (w) => w.id == activeId,
       orElse: () => vault.first,
