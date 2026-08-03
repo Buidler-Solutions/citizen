@@ -145,3 +145,13 @@ address = "127.0.0.1:9102"
 [[peers]]
 validator_id = "validator-delta"
 address = "127.0.0.1:9103"
+
+[[namespaces]]
+descriptor.namespace = "onboarding.interest"
+descriptor.version = 1
+descriptor.rules_hash = "sha256:onboarding-localnet-v1"
+descriptor.governed_by = "governance.vote"
+writers = ["onboarding.interest"]
+[[namespaces.validators]]
+name = "require_signature"
+config = {}
