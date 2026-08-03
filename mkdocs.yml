@@ -93,6 +93,7 @@ nav:
       - TypeScript SDK: sdk/typescript.md
   - Smart Contracts:
       - Overview: smart-contracts/index.md
+      - CTZN Token: smart-contracts/ctzn-token.md
   - Explorer:
       - Overview: explorer/overview.md
   - Node Operators:
