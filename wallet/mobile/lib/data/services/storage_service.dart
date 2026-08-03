@@ -139,6 +139,16 @@ class StorageService {
   void markUnlocked() => _isUnlocked = true;
   void markLocked() => _isUnlocked = false;
 
+  // ─── Biometric ────────────────────────────────────────────
+
+  Future<bool> isBiometricEnabled() async {
+    return (await prefs).getBool(AppConfig.biometricEnabledKey) ?? false;
+  }
+
+  Future<void> setBiometricEnabled(bool enabled) async {
+    await (await prefs).setBool(AppConfig.biometricEnabledKey, enabled);
+  }
+
   // ─── Network Selection ────────────────────────────────────
 
   Future<NetworkId> getSelectedNetwork() async {

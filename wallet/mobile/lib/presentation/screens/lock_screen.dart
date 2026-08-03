@@ -15,13 +15,28 @@ class _LockScreenState extends ConsumerState<LockScreen> {
   bool _obscure = true;
 
   @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _tryBiometric());
+  }
+
+  @override
   void dispose() {
     _passwordController.dispose();
     super.dispose();
   }
 
+  Future<void> _tryBiometric() async {
+    final security = ref.read(securityProvider);
+    if (security.biometricEnabled && security.biometricAvailable) {
+      await ref.read(securityProvider.notifier).unlockWithBiometrics();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final security = ref.watch(securityProvider);
+
     return Scaffold(
       body: SafeArea(
         child: Padding(
@@ -45,7 +60,7 @@ class _LockScreenState extends ConsumerState<LockScreen> {
               TextField(
                 controller: _passwordController,
                 obscureText: _obscure,
-                autofocus: true,
+                autofocus: !security.biometricEnabled,
                 decoration: InputDecoration(
                   labelText: 'Password',
                   suffixIcon: IconButton(
@@ -60,6 +75,22 @@ class _LockScreenState extends ConsumerState<LockScreen> {
                 onPressed: _unlock,
                 child: const Text('Unlock'),
               ),
+              if (security.biometricAvailable) ...[
+                const SizedBox(height: 12),
+                TextButton.icon(
+                  icon: const Icon(Icons.fingerprint),
+                  label: const Text('Unlock with biometrics'),
+                  onPressed: () => _tryBiometric(),
+                ),
+              ],
+              if (security.error != null) ...[
+                const SizedBox(height: 16),
+                Text(
+                  security.error!,
+                  style: const TextStyle(color: Colors.redAccent, fontSize: 13),
+                  textAlign: TextAlign.center,
+                ),
+              ],
             ],
           ),
         ),

@@ -10,6 +10,7 @@ abstract final class AppConfig {
   static const String profileKey = '${storagePrefix}.profile.v1';
   static const String backupVaultStateKey = '${storagePrefix}.backup_vault_state.v1';
   static const String backupPostureKey = '${storagePrefix}.backup_posture.v1';
+  static const String biometricEnabledKey = '${storagePrefix}.biometric_enabled.v1';
 
   static const String defaultDerivationPath = "m/44'/930'/0'/0'/0'";
   static const int backupKdfIterations = 210000;

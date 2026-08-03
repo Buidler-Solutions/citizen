@@ -82,6 +82,21 @@ class _SecurityScreenState extends ConsumerState<SecurityScreen> {
                         child: const Text('Set Password'),
                       ),
                     ] else if (security.isUnlocked) ...[
+                      if (security.biometricAvailable) ...[
+                        SwitchListTile(
+                          title: const Text('Biometric Unlock'),
+                          subtitle: const Text('Use fingerprint or face to unlock'),
+                          value: security.biometricEnabled,
+                          onChanged: (v) {
+                            if (v) {
+                              ref.read(securityProvider.notifier).enableBiometrics();
+                            } else {
+                              ref.read(securityProvider.notifier).disableBiometrics();
+                            }
+                          },
+                        ),
+                        const Divider(),
+                      ],
                       FilledButton.tonal(
                         onPressed: () => ref.read(securityProvider.notifier).lock(),
                         child: const Text('Lock Wallet'),
