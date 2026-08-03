@@ -25,6 +25,7 @@ export class LeadController {
 
   @Post()
   create(@Body() payload: CreateLeadDto) {
+    this.leadService['logger']?.log?.(`POST /interest received fullName=${payload.fullName} email=${payload.email} signer=${payload.walletSignerDid}`);
     return this.leadService.create(payload);
   }
 
