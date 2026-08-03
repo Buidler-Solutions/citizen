@@ -19,6 +19,8 @@ dependencies:
   google_fonts: ^6.2.1
   flutter_animate: ^4.5.0
   cupertino_icons: ^1.0.8
+  walletconnect_flutter_v2: ^2.3.0
+  mobile_scanner: ^5.2.3
 
 dev_dependencies:
   flutter_test:
