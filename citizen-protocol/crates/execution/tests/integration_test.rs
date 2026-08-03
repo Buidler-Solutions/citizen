@@ -482,3 +482,273 @@ fn test_host_state_persists() {
 
     assert_eq!(host.load_state("m1", "missing").unwrap(), None);
 }
+
+// ═══════════════════════════════════════════════════════════════
+// Soulbound Token (SBT) Module Integration Tests
+// ═══════════════════════════════════════════════════════════════
+//
+// The SBT module is a non-transferable NFT. Tests verify:
+//   - mint creates ownership + increments supply
+//   - owner_of retrieves the correct owner
+//   - total_supply tracks active tokens
+//   - get_metadata returns stored metadata
+//   - transfer is always rejected
+//   - burn removes the token + decrements supply
+//   - double-mint is rejected
+//   - unauthorized mint (bad signature) is rejected
+//
+// State persists across execute() calls when sharing the same Arc<TestHost>.
+
+#[test]
+fn sbt_mint_and_owner_of() {
+    let engine = make_engine();
+    let wasm = load_fixture("soulbound_token.wasm");
+    let host = Arc::new(TestHost::new(100));
+
+    let mint_params = r#"{"operation":"mint","issuer_did":"did:key:ed25519:issuer1","signature_hex":"abc123","token_id":"token_001","recipient_did":"did:key:ed25519:alice"}"#;
+    let result = engine
+        .execute(&wasm, "sbt-module", mint_params, 1_000_000, host.clone())
+        .expect("mint should succeed");
+    assert!(result.success, "mint execution should not trap");
+    let mint_out = String::from_utf8_lossy(result.return_value.as_ref().unwrap());
+    assert!(
+        mint_out.contains(r#""ok":true"#),
+        "mint should return ok:true, got: {mint_out}"
+    );
+    assert!(mint_out.contains(r#""token_id":"token_001""#));
+    assert!(mint_out.contains(r#""owner":"did:key:ed25519:alice""#));
+    assert!(mint_out.contains(r#""soulbound":true"#));
+    assert!(mint_out.contains(r#""total_supply":1"#));
+
+    // owner_of should see the minted token
+    let owner_params = r#"{"operation":"owner_of","token_id":"token_001"}"#;
+    let result = engine
+        .execute(&wasm, "sbt-module", owner_params, 1_000_000, host)
+        .expect("owner_of should succeed");
+    assert!(result.success);
+    let owner_out = String::from_utf8_lossy(result.return_value.as_ref().unwrap());
+    assert!(
+        owner_out.contains(r#""owner":"did:key:ed25519:alice""#),
+        "owner_of should return alice, got: {owner_out}"
+    );
+}
+
+#[test]
+fn sbt_total_supply_increments() {
+    let engine = make_engine();
+    let wasm = load_fixture("soulbound_token.wasm");
+    let host = Arc::new(TestHost::new(100));
+
+    // Mint token A
+    let params_a = r#"{"operation":"mint","issuer_did":"did:key:ed25519:issuer","signature_hex":"a","token_id":"sbt_a","recipient_did":"did:key:ed25519:bob"}"#;
+    let result = engine
+        .execute(&wasm, "sbt-module", params_a, 1_000_000, host.clone())
+        .expect("mint A");
+    assert!(result.success);
+
+    // Mint token B
+    let params_b = r#"{"operation":"mint","issuer_did":"did:key:ed25519:issuer","signature_hex":"b","token_id":"sbt_b","recipient_did":"did:key:ed25519:carol"}"#;
+    let result = engine
+        .execute(&wasm, "sbt-module", params_b, 1_000_000, host.clone())
+        .expect("mint B");
+    assert!(result.success);
+
+    // Check total_supply
+    let result = engine
+        .execute(&wasm, "sbt-module", r#"{"operation":"total_supply"}"#, 1_000_000, host)
+        .expect("total_supply");
+    assert!(result.success);
+    let supply_out = String::from_utf8_lossy(result.return_value.as_ref().unwrap());
+    assert!(
+        supply_out.contains(r#""total_supply":2"#),
+        "supply should be 2, got: {supply_out}"
+    );
+}
+
+#[test]
+fn sbt_transfer_always_rejected() {
+    let engine = make_engine();
+    let wasm = load_fixture("soulbound_token.wasm");
+    let host = Arc::new(TestHost::new(100));
+
+    // Mint a token first
+    let mint = r#"{"operation":"mint","issuer_did":"did:key:ed25519:issuer","signature_hex":"x","token_id":"sbt_t1","recipient_did":"did:key:ed25519:dave"}"#;
+    engine
+        .execute(&wasm, "sbt-module", mint, 1_000_000, host.clone())
+        .expect("mint");
+
+    // Attempt transfer — must be rejected
+    let transfer = r#"{"operation":"transfer","token_id":"sbt_t1","from_did":"did:key:ed25519:dave","to_did":"did:key:ed25519:eve"}"#;
+    let result = engine
+        .execute(&wasm, "sbt-module", transfer, 1_000_000, host.clone())
+        .expect("transfer should not trap");
+    assert!(result.success, "transfer should not cause a WASM trap");
+    let transfer_out = String::from_utf8_lossy(result.return_value.as_ref().unwrap());
+    assert!(
+        transfer_out.contains(r#""ok":false"#),
+        "transfer should fail, got: {transfer_out}"
+    );
+    assert!(
+        transfer_out.contains("non-transferable"),
+        "should explain rejection, got: {transfer_out}"
+    );
+
+    // Owner should still be dave, not eve
+    let owner = r#"{"operation":"owner_of","token_id":"sbt_t1"}"#;
+    let result = engine
+        .execute(&wasm, "sbt-module", owner, 1_000_000, host)
+        .expect("owner_of");
+    let owner_out = String::from_utf8_lossy(result.return_value.as_ref().unwrap());
+    assert!(
+        owner_out.contains(r#""owner":"did:key:ed25519:dave""#),
+        "owner should still be dave after failed transfer, got: {owner_out}"
+    );
+}
+
+#[test]
+fn sbt_burn_removes_token() {
+    let engine = make_engine();
+    let wasm = load_fixture("soulbound_token.wasm");
+    let host = Arc::new(TestHost::new(100));
+
+    // Mint
+    let mint = r#"{"operation":"mint","issuer_did":"did:key:ed25519:issuer","signature_hex":"m","token_id":"sbt_burn","recipient_did":"did:key:ed25519:frank"}"#;
+    engine
+        .execute(&wasm, "sbt-module", mint, 1_000_000, host.clone())
+        .expect("mint");
+
+    // Verify supply = 1
+    let result = engine
+        .execute(&wasm, "sbt-module", r#"{"operation":"total_supply"}"#, 1_000_000, host.clone())
+        .expect("supply check");
+    let out = String::from_utf8_lossy(result.return_value.as_ref().unwrap());
+    assert!(out.contains(r#""total_supply":1"#), "supply should be 1: {out}");
+
+    // Burn
+    let burn = r#"{"operation":"burn","issuer_did":"did:key:ed25519:issuer","signature_hex":"b","token_id":"sbt_burn"}"#;
+    let result = engine
+        .execute(&wasm, "sbt-module", burn, 1_000_000, host.clone())
+        .expect("burn should not trap");
+    assert!(result.success);
+    let burn_out = String::from_utf8_lossy(result.return_value.as_ref().unwrap());
+    assert!(
+        burn_out.contains(r#""ok":true"#) && burn_out.contains(r#""burned":true"#),
+        "burn should succeed, got: {burn_out}"
+    );
+
+    // Verify supply decremented to 0
+    let result = engine
+        .execute(&wasm, "sbt-module", r#"{"operation":"total_supply"}"#, 1_000_000, host.clone())
+        .expect("supply after burn");
+    let out = String::from_utf8_lossy(result.return_value.as_ref().unwrap());
+    assert!(
+        out.contains(r#""total_supply":0"#),
+        "supply should be 0 after burn, got: {out}"
+    );
+
+    // owner_of should show burned state
+    let result = engine
+        .execute(&wasm, "sbt-module", r#"{"operation":"owner_of","token_id":"sbt_burn"}"#, 1_000_000, host)
+        .expect("owner_of burned");
+    let owner_out = String::from_utf8_lossy(result.return_value.as_ref().unwrap());
+    assert!(
+        owner_out.contains(r#""burned":true"#),
+        "burned token should show burned:true, got: {owner_out}"
+    );
+}
+
+#[test]
+fn sbt_get_metadata() {
+    let engine = make_engine();
+    let wasm = load_fixture("soulbound_token.wasm");
+    let host = Arc::new(TestHost::new(100));
+
+    // Mint with metadata
+    let mint = r#"{"operation":"mint","issuer_did":"did:key:ed25519:gov","signature_hex":"g","token_id":"sbt_meta","recipient_did":"did:key:ed25519:grace","metadata":{"degree":"PhD","field":"Cryptography","year":2026}}"#;
+    engine
+        .execute(&wasm, "sbt-module", mint, 1_000_000, host.clone())
+        .expect("mint with metadata");
+
+    // Retrieve metadata
+    let result = engine
+        .execute(&wasm, "sbt-module", r#"{"operation":"get_metadata","token_id":"sbt_meta"}"#, 1_000_000, host)
+        .expect("get_metadata");
+    assert!(result.success);
+    let meta_out = String::from_utf8_lossy(result.return_value.as_ref().unwrap());
+    assert!(
+        meta_out.contains(r#""token_id":"sbt_meta""#),
+        "should echo token_id, got: {meta_out}"
+    );
+    assert!(
+        meta_out.contains("PhD") && meta_out.contains("Cryptography"),
+        "should contain metadata fields, got: {meta_out}"
+    );
+}
+
+#[test]
+fn sbt_double_mint_rejected() {
+    let engine = make_engine();
+    let wasm = load_fixture("soulbound_token.wasm");
+    let host = Arc::new(TestHost::new(100));
+
+    // First mint succeeds
+    let mint = r#"{"operation":"mint","issuer_did":"did:key:ed25519:issuer","signature_hex":"1","token_id":"sbt_dup","recipient_did":"did:key:ed25519:henry"}"#;
+    let result = engine
+        .execute(&wasm, "sbt-module", mint, 1_000_000, host.clone())
+        .expect("first mint");
+    assert!(result.success);
+    let out = String::from_utf8_lossy(result.return_value.as_ref().unwrap());
+    assert!(out.contains(r#""ok":true"#), "first mint ok: {out}");
+
+    // Second mint of same token_id must fail
+    let mint2 = r#"{"operation":"mint","issuer_did":"did:key:ed25519:issuer","signature_hex":"2","token_id":"sbt_dup","recipient_did":"did:key:ed25519:ivan"}"#;
+    let result = engine
+        .execute(&wasm, "sbt-module", mint2, 1_000_000, host)
+        .expect("second mint should not trap");
+    assert!(result.success, "should not cause WASM trap");
+    let out = String::from_utf8_lossy(result.return_value.as_ref().unwrap());
+    assert!(
+        out.contains(r#""ok":false"#),
+        "double mint should fail, got: {out}"
+    );
+    assert!(
+        out.contains("already minted"),
+        "should explain duplicate, got: {out}"
+    );
+}
+
+#[test]
+fn sbt_unauthorized_mint_rejected() {
+    let engine = make_engine();
+    let wasm = load_fixture("soulbound_token.wasm");
+
+    // Mark the issuer's signature as invalid
+    let host = Arc::new(
+        TestHost::new(100).with_signature("did:key:ed25519:bad_issuer", false),
+    );
+
+    let mint = r#"{"operation":"mint","issuer_did":"did:key:ed25519:bad_issuer","signature_hex":"fakesig","token_id":"sbt_unauth","recipient_did":"did:key:ed25519:judy"}"#;
+    let result = engine
+        .execute(&wasm, "sbt-module", mint, 1_000_000, host.clone())
+        .expect("unauthorized mint should not trap");
+    assert!(result.success, "should not cause WASM trap");
+    let out = String::from_utf8_lossy(result.return_value.as_ref().unwrap());
+    assert!(
+        out.contains(r#""ok":false"#),
+        "unauthorized mint should fail, got: {out}"
+    );
+    assert!(
+        out.contains("signature"),
+        "should mention signature failure, got: {out}"
+    );
+
+    // Token should not exist
+    let result = engine
+        .execute(&wasm, "sbt-module", r#"{"operation":"owner_of","token_id":"sbt_unauth"}"#, 1_000_000, host)
+        .expect("owner_of");
+    let owner_out = String::from_utf8_lossy(result.return_value.as_ref().unwrap());
+    assert!(
+        owner_out.contains(r#""ok":false"#) || owner_out.contains("not found"),
+        "token should not exist, got: {owner_out}"
+    );
+}
