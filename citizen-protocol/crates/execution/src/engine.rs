@@ -1,8 +1,25 @@
 use crate::{ExecutionConfig, ExecutionError, ExecutionResult, WasmHost};
 use std::sync::Arc;
-use wasmtime::{Engine, Linker, Memory, Module, Store};
+use wasmtime::{Engine, Linker, Memory, Module, Store, StoreLimits, StoreLimitsBuilder};
 
 const MODULE_CATEGORY: &str = "env";
+
+/// Host functions that modules are allowed to import.
+/// Any import outside this list or the "env" namespace is rejected.
+const ALLOWED_HOST_FUNCTIONS: &[&str] = &[
+    "host_log",
+    "host_read_namespace_entry",
+    "host_write_namespace_entry",
+    "host_verify_signature",
+    "host_check_governance_approval",
+    "host_verify_signature_batch",
+    "host_current_block_height",
+    "host_store_state",
+    "host_load_state",
+];
+
+/// Maximum length of a single host string read from WASM memory (1 MB).
+const MAX_HOST_STRING_LEN: usize = 1_048_576;
 
 /// The WASM execution engine.
 ///
@@ -10,7 +27,6 @@ const MODULE_CATEGORY: &str = "env";
 /// to the Citizen ledger, and executes modules with deterministic gas metering.
 pub struct ExecutionEngine {
     engine: Engine,
-    #[allow(dead_code)]
     config: ExecutionConfig,
 }
 
@@ -20,6 +36,7 @@ impl ExecutionEngine {
         wasmtime_config.consume_fuel(true);
         wasmtime_config.strategy(wasmtime::Strategy::Cranelift);
         wasmtime_config.cranelift_opt_level(wasmtime::OptLevel::Speed);
+        wasmtime_config.epoch_interruption(true);
 
         let engine = Engine::new(&wasmtime_config)
             .map_err(|e| ExecutionError::CompileError(e.to_string()))?;
@@ -41,8 +58,23 @@ impl ExecutionEngine {
         gas_limit: u64,
         host: Arc<dyn WasmHost>,
     ) -> Result<ExecutionResult, ExecutionError> {
+        if wasm_bytes.len() > self.config.max_bytecode_size {
+            return Err(ExecutionError::SecurityViolation(format!(
+                "module bytecode exceeds size limit: {} bytes (max {})",
+                wasm_bytes.len(),
+                self.config.max_bytecode_size
+            )));
+        }
+
         let module = Module::new(&self.engine, wasm_bytes)
             .map_err(|e| ExecutionError::CompileError(e.to_string()))?;
+
+        Self::validate_module_imports(&module)?;
+
+        let max_memory_bytes = (self.config.max_memory_pages as usize) * 64 * 1024;
+        let limits = StoreLimitsBuilder::new()
+            .memory_size(max_memory_bytes)
+            .build();
 
         let mut store = Store::new(
             &self.engine,
@@ -50,12 +82,17 @@ impl ExecutionEngine {
                 host,
                 logs: Vec::new(),
                 module_id: module_id.to_string(),
+                limits,
             },
         );
+
+        store.limiter(|state| &mut state.limits);
 
         store
             .set_fuel(gas_limit)
             .map_err(|e| ExecutionError::RuntimeError(format!("set_fuel: {e}")))?;
+
+        store.set_epoch_deadline(self.config.execution_epoch_deadline);
 
         let mut linker: Linker<StoreState> = Linker::new(&self.engine);
         self.link_host_functions(&mut linker)?;
@@ -84,37 +121,18 @@ impl ExecutionEngine {
                 )
             })?;
 
-        // Write params into WASM linear memory
         let params_bytes = params_json.as_bytes();
         let params_ptr = alloc
             .call(&mut store, params_bytes.len() as u32)
-            .map_err(|e| {
-                let msg = e.to_string();
-                if msg.contains("fuel") {
-                    ExecutionError::GasLimitExceeded { consumed: gas_limit, limit: gas_limit }
-                } else {
-                    ExecutionError::RuntimeError(format!("alloc failed: {msg}"))
-                }
-            })?;
+            .map_err(|e| Self::classify_runtime_error(&e.to_string(), gas_limit))?;
 
         memory
             .write(&mut store, params_ptr as usize, params_bytes)
             .map_err(|e| ExecutionError::RuntimeError(format!("memory write failed: {e}")))?;
 
-        // Call `handle(param_ptr, param_len) -> packed_result`
         let packed = handle
             .call(&mut store, (params_ptr, params_bytes.len() as u32))
-            .map_err(|e| {
-                let msg = e.to_string();
-                if msg.contains("fuel") {
-                    ExecutionError::GasLimitExceeded {
-                        consumed: 0,
-                        limit: gas_limit,
-                    }
-                } else {
-                    ExecutionError::RuntimeError(msg)
-                }
-            })?;
+            .map_err(|e| Self::classify_runtime_error(&e.to_string(), gas_limit))?;
 
         let gas_consumed = store.get_fuel().map(|remaining| {
             gas_limit.saturating_sub(remaining)
@@ -122,6 +140,12 @@ impl ExecutionEngine {
 
         let result_ptr = (packed >> 32) as u32;
         let result_len = (packed & 0xFFFF_FFFF) as usize;
+
+        if result_len > MAX_HOST_STRING_LEN {
+            return Err(ExecutionError::SecurityViolation(format!(
+                "module returned result exceeding max size: {result_len} bytes (max {MAX_HOST_STRING_LEN})"
+            )));
+        }
 
         let return_value = if result_ptr > 0 && result_len > 0 {
             let mut buf = vec![0u8; result_len];
@@ -144,13 +168,55 @@ impl ExecutionEngine {
         })
     }
 
+    /// Classify a wasmtime error as either gas exhaustion or a generic runtime error.
+    fn classify_runtime_error(msg: &str, gas_limit: u64) -> ExecutionError {
+        if msg.contains("fuel")
+            || msg.contains("all fuel consumed")
+            || msg.contains("out of fuel")
+        {
+            ExecutionError::GasLimitExceeded {
+                consumed: gas_limit,
+                limit: gas_limit,
+            }
+        } else {
+            ExecutionError::RuntimeError(msg.to_string())
+        }
+    }
+
+    /// Validate that a module only imports from the allowed "env" namespace
+    /// and only imports known host functions.
+    fn validate_module_imports(module: &Module) -> Result<(), ExecutionError> {
+        for import in module.imports() {
+            if import.module() != MODULE_CATEGORY {
+                return Err(ExecutionError::SecurityViolation(format!(
+                    "module imports from unauthorized namespace '{}' (only '{}' is allowed)",
+                    import.module(),
+                    MODULE_CATEGORY
+                )));
+            }
+            if !ALLOWED_HOST_FUNCTIONS.contains(&import.name()) {
+                return Err(ExecutionError::SecurityViolation(format!(
+                    "module imports unknown host function '{}'",
+                    import.name()
+                )));
+            }
+        }
+        Ok(())
+    }
+
     fn link_host_functions(&self, linker: &mut Linker<StoreState>) -> Result<(), ExecutionError> {
+        let max_batch_items = self.config.max_batch_items;
+        let max_batch_json_size = self.config.max_batch_json_size;
+
         // host_log(ptr: u32, len: u32)
         linker
             .func_wrap(
                 MODULE_CATEGORY,
                 "host_log",
-                |mut caller: wasmtime::Caller<'_, StoreState>, ptr: u32, len: u32| {
+                move |mut caller: wasmtime::Caller<'_, StoreState>, ptr: u32, len: u32| {
+                    if len as usize > MAX_HOST_STRING_LEN {
+                        return;
+                    }
                     if let Some(mem) = get_memory(&mut caller) {
                         let mut buf = vec![0u8; len as usize];
                         if mem.read(&caller, ptr as usize, &mut buf).is_ok() {
@@ -259,8 +325,12 @@ impl ExecutionEngine {
             .func_wrap(
                 MODULE_CATEGORY,
                 "host_verify_signature_batch",
-                |mut caller: wasmtime::Caller<'_, StoreState>, json_ptr: u32, json_len: u32| -> u32 {
+                move |mut caller: wasmtime::Caller<'_, StoreState>, json_ptr: u32, json_len: u32| -> u32 {
+                    if json_len as usize > max_batch_json_size {
+                        return 0;
+                    }
                     let batch_json = read_wasm_str(&mut caller, json_ptr, json_len);
+                    let _ = max_batch_items;
                     caller
                         .data()
                         .host
@@ -346,6 +416,7 @@ struct StoreState {
     host: Arc<dyn WasmHost>,
     logs: Vec<String>,
     module_id: String,
+    limits: StoreLimits,
 }
 
 // --- Helpers ---
@@ -359,6 +430,12 @@ fn read_wasm_str(
     ptr: u32,
     len: u32,
 ) -> String {
+    if len == 0 {
+        return String::new();
+    }
+    if len as usize > MAX_HOST_STRING_LEN {
+        return String::new();
+    }
     if let Some(mem) = get_memory(caller) {
         let mut buf = vec![0u8; len as usize];
         if mem.read(caller, ptr as usize, &mut buf).is_ok() {
@@ -376,7 +453,7 @@ fn write_host_result(
 ) -> u64 {
     let (status, text) = match result {
         Ok(Some(json)) => (0u64, json),
-        Ok(None) => return 1, // not found — short circuit, no data
+        Ok(None) => return 1,
         Err(e) => (2u64, format!(r#"{{"error":"{}"}}"#, e)),
     };
 
@@ -386,7 +463,7 @@ fn write_host_result(
         let _ = mem.write(caller, out_ptr as usize, &bytes[..written]);
         ((written as u64) << 32) | status
     } else {
-        2 // error: no memory
+        2
     }
 }
 

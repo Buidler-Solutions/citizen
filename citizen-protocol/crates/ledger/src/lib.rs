@@ -1874,15 +1874,18 @@ impl<S: LedgerStorage + 'static> WasmHost for LedgerWasmHost<S> {
         &self,
         proposal_id: &str,
     ) -> std::result::Result<bool, ExecutionError> {
-        let proposals = self
+        // Security: fail closed.  A merely-submitted proposal must never be
+        // treated as approved.  We check for an explicit APPROVED marker
+        // entry in the governance namespace.  If no such entry exists we
+        // return false regardless of whether the proposal is registered.
+        let entries = self
             .storage
-            .governance_proposals()
+            .namespace_entries(&"governance".to_string())
             .map_err(|e| ExecutionError::HostError(e.to_string()))?;
 
-        // Check if the proposal exists and is tracked.
-        // Full vote-counting requires the governance engine;
-        // this host function returns whether the proposal is registered.
-        Ok(proposals.iter().any(|p| p.proposal_id == proposal_id))
+        Ok(entries.iter().any(|e| {
+            e.object_id == proposal_id && e.action == "APPROVED"
+        }))
     }
 
     fn current_block_height(&self) -> std::result::Result<u64, ExecutionError> {
@@ -1895,6 +1898,8 @@ impl<S: LedgerStorage + 'static> WasmHost for LedgerWasmHost<S> {
         &self,
         module_id: &str,
     ) -> std::result::Result<Vec<u8>, ExecutionError> {
+        const MAX_BYTECODE_BYTES: usize = 1_048_576; // 1 MB
+
         let entries = self
             .storage
             .namespace_entries(&"execution.module".to_string())
@@ -1903,12 +1908,27 @@ impl<S: LedgerStorage + 'static> WasmHost for LedgerWasmHost<S> {
         for entry in entries.iter().rev() {
             if entry.object_id == module_id && entry.action == "REGISTER_MODULE" {
                 if let Some(b64) = entry.payload.get("wasm_bytes").and_then(|v| v.as_str()) {
+                    if b64.len() > MAX_BYTECODE_BYTES {
+                        return Err(ExecutionError::SecurityViolation(format!(
+                            "module bytecode exceeds size limit: {} base64 chars (max {})",
+                            b64.len(),
+                            MAX_BYTECODE_BYTES
+                        )));
+                    }
                     use base64::Engine;
-                    return base64::engine::general_purpose::STANDARD
+                    let decoded = base64::engine::general_purpose::STANDARD
                         .decode(b64)
                         .map_err(|e| {
                             ExecutionError::HostError(format!("invalid base64 wasm: {e}"))
-                        });
+                        })?;
+                    if decoded.len() > MAX_BYTECODE_BYTES {
+                        return Err(ExecutionError::SecurityViolation(format!(
+                            "module bytecode exceeds size limit: {} bytes (max {})",
+                            decoded.len(),
+                            MAX_BYTECODE_BYTES
+                        )));
+                    }
+                    return Ok(decoded);
                 }
             }
         }
@@ -1921,7 +1941,12 @@ impl<S: LedgerStorage + 'static> WasmHost for LedgerWasmHost<S> {
         key: &str,
         value: &str,
     ) -> std::result::Result<(), ExecutionError> {
-        // Store module state as a ledger entry in the execution.module namespace
+        // Compute a tamper-evident commitment for the state entry.
+        // This is not a cryptographic signature — it is a SHA-256 hash of the
+        // canonical state payload that the namespace rules can verify.
+        let canonical = format!("STATE_WRITE\n{module_id}\n{key}\n{value}");
+        let commitment = hex::encode(Sha256::digest(canonical.as_bytes()));
+
         let entry = citizen_types::LedgerEntry {
             entry_id: Uuid::new_v4(),
             namespace: "execution.module".into(),
@@ -1930,6 +1955,7 @@ impl<S: LedgerStorage + 'static> WasmHost for LedgerWasmHost<S> {
             payload: serde_json::json!({
                 "state_key": key,
                 "state_value": value,
+                "system_generated": true,
             }),
             privacy_flag: false,
             privacy_mode: citizen_types::PrivacyMode::None,
@@ -1944,8 +1970,8 @@ impl<S: LedgerStorage + 'static> WasmHost for LedgerWasmHost<S> {
             field_reader_acls: BTreeMap::new(),
             key_wrapped_secrets: vec![],
             revocation_events: vec![],
-            author: "system.execution".into(),
-            signature: "system.execution".into(),
+            author: format!("system.execution#{module_id}"),
+            signature: commitment,
             timestamp: chrono::Utc::now().timestamp(),
         };
         self.storage
@@ -1981,10 +2007,29 @@ impl<S: LedgerStorage + 'static> WasmHost for LedgerWasmHost<S> {
         &self,
         batch_json: &str,
     ) -> std::result::Result<u32, ExecutionError> {
+        const MAX_BATCH_JSON: usize = 1_048_576; // 1 MB
+        const MAX_BATCH_ITEMS: usize = 256;
+
+        if batch_json.len() > MAX_BATCH_JSON {
+            return Err(ExecutionError::SecurityViolation(format!(
+                "batch JSON exceeds size limit: {} bytes (max {})",
+                batch_json.len(),
+                MAX_BATCH_JSON
+            )));
+        }
+
         let items: Vec<serde_json::Value> =
             serde_json::from_str(batch_json).map_err(|e| {
                 ExecutionError::HostError(format!("invalid batch JSON: {e}"))
             })?;
+
+        if items.len() > MAX_BATCH_ITEMS {
+            return Err(ExecutionError::SecurityViolation(format!(
+                "batch exceeds item limit: {} items (max {})",
+                items.len(),
+                MAX_BATCH_ITEMS
+            )));
+        }
 
         let mut valid = 0u32;
         for item in &items {
@@ -2053,12 +2098,15 @@ mod tests {
     use super::Ledger;
     use crate::canonical_json;
     use citizen_crypto::{sign_message, verifying_key_to_string, ValidatorKeypair};
+    use citizen_execution::WasmHost;
+    use citizen_storage::{LedgerStorage, MemoryStorage};
     use citizen_types::{
         CommitProof, LedgerEntry, NamespaceDescriptor, NamespaceRule, NamespaceRuleset, PrivacyMode,
     };
     use citizen_wallet::{sign_entry, EntryDraft, WalletKeypair};
     use serde_json::json;
     use std::collections::{BTreeSet, HashMap};
+    use std::sync::Arc;
     use uuid::Uuid;
 
     fn test_entry(namespace: &str) -> LedgerEntry {
@@ -3502,5 +3550,85 @@ mod tests {
         let message = err.to_string();
         assert!(message.contains("code=PRIVACY_PAYLOAD_PII"));
         assert!(message.contains("fields=email,country"));
+    }
+
+    #[test]
+    fn wasm_host_check_governance_fails_closed() {
+        let storage = Arc::new(MemoryStorage::new());
+        let host = super::LedgerWasmHost { storage };
+        let result = WasmHost::check_governance_approval(&host, "prop-123");
+        assert_eq!(result.unwrap(), false);
+    }
+
+    #[test]
+    fn wasm_host_batch_rejects_oversized_json() {
+        let storage = Arc::new(MemoryStorage::new());
+        let host = super::LedgerWasmHost { storage };
+        let big = "a".repeat(2_000_000);
+        let batch = format!(
+            r#"[{{"signer_did":"d","message_hex":"{big}","signature_hex":"s"}}]"#
+        );
+        let result = WasmHost::verify_signature_batch(&host, &batch);
+        assert!(result.is_err(), "should reject oversized batch JSON");
+        let err = result.unwrap_err().to_string();
+        assert!(err.contains("size"), "expected size violation: {err}");
+    }
+
+    #[test]
+    fn wasm_host_batch_rejects_too_many_items() {
+        let storage = Arc::new(MemoryStorage::new());
+        let host = super::LedgerWasmHost { storage };
+        let items: Vec<String> = (0..300)
+            .map(|i| {
+                format!(
+                    r#"{{"signer_did":"d{i}","message_hex":"m","signature_hex":"s"}}"#
+                )
+            })
+            .collect();
+        let batch = format!("[{}]", items.join(","));
+        let result = WasmHost::verify_signature_batch(&host, &batch);
+        assert!(result.is_err(), "should reject too many batch items");
+        let err = result.unwrap_err().to_string();
+        assert!(err.contains("item"), "expected item limit violation: {err}");
+    }
+
+    #[test]
+    fn wasm_host_store_state_uses_hash_commitment() {
+        let storage = Arc::new(MemoryStorage::new());
+        let host = super::LedgerWasmHost {
+            storage: storage.clone(),
+        };
+
+        WasmHost::store_state(&host, "test-module", "counter", "42").unwrap();
+
+        let entries = storage
+            .namespace_entries(&"execution.module".to_string())
+            .unwrap();
+        let entry = entries
+            .iter()
+            .find(|e| e.action == "STATE_WRITE")
+            .expect("should find STATE_WRITE entry");
+
+        assert!(
+            entry.author.contains("test-module"),
+            "author should be module-scoped: {}",
+            entry.author
+        );
+        assert_eq!(
+            entry.signature.len(),
+            64,
+            "signature should be 64-char hex hash, not a hardcoded string"
+        );
+        assert_ne!(
+            entry.signature, "system.execution",
+            "signature must not be the old hardcoded string"
+        );
+        assert_eq!(
+            entry
+                .payload
+                .get("system_generated")
+                .and_then(|v| v.as_bool()),
+            Some(true)
+        );
     }
 }
