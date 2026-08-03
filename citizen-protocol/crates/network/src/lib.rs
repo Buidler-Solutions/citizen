@@ -399,6 +399,15 @@ pub enum ConsensusMessage {
     GovernanceProposal(GovernanceProposal),
     GovernanceVote(GovernanceVote),
     NewEntry(LedgerEntry),
+    SyncRequest {
+        requester: ValidatorId,
+        from_height: u64,
+        to_height: u64,
+    },
+    SyncResponse {
+        requester: ValidatorId,
+        blocks: Vec<Block>,
+    },
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, Default)]
@@ -829,6 +838,8 @@ impl QuicNetwork {
                                         tracing::info!(from = %wire.handshake.validator_id, entry_id = %e.entry_id, namespace = %e.namespace, bytes = data.len(), "quic recv NewEntry");
                                         "NewEntry"
                                     }
+                                    ConsensusMessage::SyncRequest { .. } => "SyncRequest",
+                                    ConsensusMessage::SyncResponse { .. } => "SyncResponse",
                                 };
                                 tracing::trace!(%msg_type, from = %wire.handshake.validator_id, bytes = data.len(), "quic recv");
                                 match admission.check_handshake(&wire.handshake).await {
