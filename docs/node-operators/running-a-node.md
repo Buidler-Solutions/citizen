@@ -35,7 +35,7 @@ bootstrap_peers = ["validator-beta:7000", "validator-gamma:7000"]
 listen_addr = "0.0.0.0:7001"
 
 [consensus]
-quorum_threshold = 0.8
+quorum_bps = 6667
 view_timeout_ms = 5000
 
 [storage]

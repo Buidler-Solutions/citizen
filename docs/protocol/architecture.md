@@ -17,9 +17,10 @@ Citizen uses a modular, two-plane architecture designed for governance-first led
 │  │              Storage (RocksDB)                        │ │
 │  └──────────────────────────────────────────────────────┘ │
 │                                                            │
-│  ┌──────────────────────────────────────────────────────┐ │
-│  │              API Layer (HTTP/REST)                    │ │
-│  └──────────────────────────────────────────────────────┘ │
+│  ┌──────────┐  ┌──────────────────────────────────────┐   │
+│  │ Execution│  │              API Layer (HTTP/REST)    │   │
+│  │ (WASM)   │  └──────────────────────────────────────┘   │
+│  └──────────┘                                              │
 └──────────────────────────────────────────────────────────┘
 ```
 
@@ -34,6 +35,8 @@ Citizen uses a modular, two-plane architecture designed for governance-first led
 | `ledger` | Namespace-aware entry validation and policy enforcement |
 | `governance` | Proposals, voting, quorum, namespace activation |
 | `storage` | RocksDB-backed persistent storage |
+| `execution` | WASM smart contract engine (wasmtime 36, sandboxed) |
+| `module-sdk` | No-alloc Rust SDK for writing WASM modules |
 | `api` | HTTP REST API for builders and wallets |
 | `node` | Node runtime — ties everything together |
 | `simulation` | Multi-validator test harness |

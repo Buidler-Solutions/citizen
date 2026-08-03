@@ -132,7 +132,7 @@ Get consensus status including online validators and current view.
     "total": 5,
     "online": 5
   },
-  "quorum_threshold": 0.8
+  "quorum_threshold": 0.6667
 }
 ```
 

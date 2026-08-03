@@ -10,7 +10,7 @@ Namespaces are the fundamental unit of organization. Each namespace has its own 
 
 ### 2. Deterministic Finality
 
-Citizen uses linear BFT consensus with a >2/3 supermajority (80%) quorum. Finality is deterministic and achieved in approximately 1 second. There are no probabilistic confirmations.
+Citizen uses linear BFT consensus with a >2/3 supermajority (6667 bps) quorum. Finality is deterministic and achieved in approximately 1 second. There are no probabilistic confirmations.
 
 ### 3. User-Owned Data Custody
 

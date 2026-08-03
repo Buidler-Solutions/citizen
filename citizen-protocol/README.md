@@ -9,7 +9,7 @@ citizen-protocol/
 ├── Cargo.toml                # Workspace manifest
 ├── crates/
 │   ├── api/                  # HTTP API service (read-only + control)
-│   ├── consensus/            # ≥80% quorum BFT consensus engine
+│   ├── consensus/            # >2/3 quorum BFT consensus engine
 │   ├── crypto/               # Signature aggregation, hashing utilities
 │   ├── governance/           # Governance proposal + voting logic
 │   ├── ledger/               # Namespace-aware ledger validation
@@ -17,6 +17,8 @@ citizen-protocol/
 │   ├── node/                 # Validator / observer node binary
 │   ├── simulation/           # 50–100 validator stress-test harness + golden reports
 │   ├── storage/              # Persistence traits + RocksDB + in-memory backends
+│   ├── execution/            # WASM smart contract engine (wasmtime 36, sandboxed)
+│   ├── module-sdk/           # No-alloc Rust SDK for writing WASM modules
 │   └── types/                # Shared protocol data structures
 └── docs/
     ├── CITIZEN_MANIFESTO.md  # Positioning + civic mission statement
@@ -148,9 +150,9 @@ cargo test -p citizen-wallet privacy_mode_hybrid_ -- --nocapture
 
    The node exposes a read-only HTTP API on `http://127.0.0.1:8080` (configurable).
 
-4. To stand up a five-validator QUIC localnet that mirrors production settings (3 active + 2 standby by default),
-   use the deterministic configs under `config/localnet/` and the helper
-   launcher:
+4. To stand up a five-validator QUIC localnet that mirrors production settings
+   (all 5 validators active by default), use the deterministic configs under
+   `config/localnet/` and the helper launcher:
 
    ```bash
    scripts/run_localnet.sh
@@ -159,8 +161,8 @@ cargo test -p citizen-wallet privacy_mode_hybrid_ -- --nocapture
    See `docs/LOCALNET_RUNBOOK.md` for details on swapping in your own keys and
    endpoints for a real deployment.
 
-   To verify all five validators are healthy, converged, and correctly split into
-   active-voting vs standby-syncing behavior, run:
+   To verify all five validators are healthy, converged, and replicating
+   blocks, run:
 
    ```bash
    AUTHOR_KEY_ID=<wallet_key_id> scripts/check_localnet_replication_finality.sh
@@ -245,8 +247,10 @@ where the process starts (or use an absolute path).
 
 ### Optional: auto-promote standby runtime helper
 
-If an operator wants runtime role toggling to follow governance rotations, this
-helper can watch governance rotation proposals and automatically:
+Standby is opt-in only. By default all admitted validators are active. If an
+operator explicitly enables `standby_only = true` in their config and wants
+runtime role toggling to follow governance rotations, this helper can watch
+governance rotation proposals and automatically:
 
 1. detect when your `validator_id` appears in the active set,
 2. set `standby_only = false` when active and `standby_only = true` when standby,
@@ -320,9 +324,11 @@ steps), see:
 
    - `docs/ONCHAIN_POLICY_RUNTIME_SYNC_RUNBOOK.md`
 
-   End-to-end localnet execution runbook for real entry submission + 80% consensus finality checks + 3-of-5 multisig builder-credit grant submission is documented in:
+   End-to-end localnet execution runbook for real entry submission + >2/3 BFT
+   consensus finality checks + 3-of-5 multisig builder-credit grant submission
+   is documented in:
 
-   - `docs/LOCALNET_80_QUORUM_MULTISIG_RUNBOOK.md`
+   - `docs/LOCALNET_BFT_QUORUM_MULTISIG_RUNBOOK.md`
 
    Validator rollout readiness gate (keys, admission policy, telemetry, and runbook sign-off) is documented in:
 

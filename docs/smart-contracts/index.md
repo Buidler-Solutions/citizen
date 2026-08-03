@@ -4,23 +4,7 @@ Citizen smart contracts are **deterministic WASM modules** that execute in the w
 
 ---
 
-## Architecture
 
-```
-┌─────────────────────────────────────────────────────────┐
-│                    CITIZEN NODE                          │
-│                                                          │
-│  Ledger  ──► wasm_runtime_policy (validate entry)       │
-│     │                                                    │
-│     └──► ExecutionEngine (wasmtime)                     │
-│              │                                           │
-│              ├── Module compiled from REGISTER_MODULE    │
-│              ├── Host functions bridge to ledger         │
-│              ├── Gas metering (fuel consumption)         │
-│              ├── Persistent storage (per-module K/V)     │
-│              └── Deterministic output + receipts         │
-└─────────────────────────────────────────────────────────┘
-```
 
 ## Lifecycle
 
@@ -49,6 +33,7 @@ All 10 host functions are available to modules. They bridge the WASM sandbox to 
 | `host_store_state` | `(key, value)` | `0` ok / `1` error |
 | `host_load_state` | `(key, out_buf, buf_len)` | `(written << 32) \| status` |
 | `host_write_namespace_entry` | `(ns, payload, out_buf, buf_len)` | `(written << 32) \| status` |
+| `host_call_module` | `(target, params, out_buf, buf_len)` | `(written << 32) \| status` |
 
 !!! tip "Use the SDK"
     You don't need to call these raw. Use `citizen-module-sdk` which wraps everything in clean Rust functions.
@@ -240,9 +225,7 @@ Modules can store data that persists across invocations. Storage is scoped to th
     }
     ```
 
-The state is stored as `STATE_WRITE` entries in the `execution.module` namespace. Each entry contains the `state_key` and `state_value`. On `load_state`, the latest matching entry is returned.
 
-## Gas Metering
 
 Every module execution consumes gas (fuel). The submitter specifies a `deterministic_gas_limit` in the `EXECUTE_MODULE` entry:
 
@@ -451,7 +434,7 @@ Write a module that checks governance approval before executing.
 | `emit Event(...)` | `log("message")` |
 | `block.number` | `current_block_height()` |
 | `onlyOwner` modifier | `check_governance_approval(proposal_id)` |
-| Multisig wallet | `verify_signature_batch(batch_json)` |
+
 
 ### From Soroban to Citizen WASM
 
@@ -463,4 +446,4 @@ Write a module that checks governance approval before executing.
 | `require_auth()` | `verify_signature` |
 | `Address` type | `signer_did` string |
 | `BytesN<32>` | WASM memory pointer + length |
-| `contracttype` / `contractimpl` | Raw `pub extern "C" fn handle` |
+

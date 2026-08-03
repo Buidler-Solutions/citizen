@@ -28,7 +28,8 @@ The protocol mission is to provide verifiable public truth infrastructure (recor
 ├── explorer/            # Explorer backend/frontend + infra
 ├── demo/                # Demo application surface
 ├── dapp/                # dApp surfaces and local-stack pieces
-├── whitepaper/          # Whitepaper web/docs surface (deployed to GitHub Pages)
+├── docs/                 # MkDocs Material documentation site (deployed to GitHub Pages)
+├── whitepaper/          # Whitepaper archive (superseded by docs/)
 ├── landing-page/        # Government adoption landing page (frontend + backend)
 ├── compliance/          # GDPR compliance, data inventory, processing records
 ├── controls/            # Blockchain + GDPR control packs
