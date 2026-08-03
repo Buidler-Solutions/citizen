@@ -94,7 +94,7 @@ citizen-wallet-cli config set network testnet
 
 ## Deterministic Receipt Validation
 
-The CLI validates receipts deterministically — the receipt hash, signatures, and finality proof are independently verifiable without trusting the node:
+The CLI validates receipts deterministically - the receipt hash, signatures, and finality proof are independently verifiable without trusting the node:
 
 ```bash
 citizen-wallet-cli verify-receipt --hash <entry-hash>

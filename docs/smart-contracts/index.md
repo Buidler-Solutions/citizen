@@ -9,13 +9,13 @@ Citizen smart contracts are **deterministic WASM modules** that execute in the w
 ## Lifecycle
 
 ```
-1. REGISTER_MODULE   — Submit WASM bytecode + metadata
+1. REGISTER_MODULE   - Submit WASM bytecode + metadata
          │
-2. ACTIVATE_MODULE   — Governance approval gates activation
+2. ACTIVATE_MODULE   - Governance approval gates activation
          │
-3. EXECUTE_MODULE    — Run the module with parameters
+3. EXECUTE_MODULE    - Run the module with parameters
          │
-4. STATE_WRITE       — Module persists state via host_store_state
+4. STATE_WRITE       - Module persists state via host_store_state
 ```
 
 ## Host Functions
@@ -24,7 +24,7 @@ All 10 host functions are available to modules. They bridge the WASM sandbox to 
 
 | Function | Signature | Returns |
 |----------|-----------|---------|
-| `host_log` | `(ptr, len)` | — |
+| `host_log` | `(ptr, len)` | - |
 | `host_read_namespace_entry` | `(ns, eid, out_buf, buf_len)` | `(written << 32) \| status` |
 | `host_verify_signature` | `(did, msg, sig)` | `1` valid / `0` invalid |
 | `host_verify_signature_batch` | `(json)` | count of valid signatures |
@@ -84,7 +84,7 @@ citizen-module-sdk = { path = "../citizen-protocol/crates/module-sdk" }
 
 use citizen_module_sdk::*;
 
-// Bump allocator — required
+// Bump allocator - required
 static mut BUMP: u32 = 0;
 
 #[no_mangle]
@@ -197,7 +197,7 @@ citizen-wallet-cli submit \
 
 ## Persistent Storage
 
-Modules can store data that persists across invocations. Storage is scoped to the module ID — two different modules cannot read each other's state.
+Modules can store data that persists across invocations. Storage is scoped to the module ID - two different modules cannot read each other's state.
 
 === "Using the SDK"
     ```rust
@@ -239,7 +239,7 @@ Every module execution consumes gas (fuel). The submitter specifies a `determini
 ```
 
 - If the module runs out of fuel before completing, execution fails with `GasLimitExceeded`
-- Gas consumption is **deterministic** — same inputs always consume the same gas
+- Gas consumption is **deterministic** - same inputs always consume the same gas
 - Simple access-control modules typically consume ~200 gas
 - Modules with loops or storage access consume more
 

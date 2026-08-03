@@ -31,16 +31,16 @@ A mnemonic imported on any surface (CLI, browser, mobile, desktop) derives the s
 ## Choosing a Wallet
 
 ### For everyday users
-Use the **mobile wallet** — it provides the most user-friendly experience with QR-based WalletConnect pairing, secure platform key storage, and a 7-tab interface.
+Use the **mobile wallet** - it provides the most user-friendly experience with QR-based WalletConnect pairing, secure platform key storage, and a 7-tab interface.
 
 ### For dApp developers
-Use the **browser extension** — it provides dedicated in-browser signing, dApp login flows, and content-script injection for web dApps.
+Use the **browser extension** - it provides dedicated in-browser signing, dApp login flows, and content-script injection for web dApps.
 
 ### For operators and power users
 Use the **desktop wallet** for backup vault operations, or the **CLI wallet** for scripting and automation.
 
 ### For governance participants
-Use the **React console** — it provides onboarding flows, operation builders, receipt inspection, and governance UX.
+Use the **React console** - it provides onboarding flows, operation builders, receipt inspection, and governance UX.
 
 ## Key Features Across Wallets
 
@@ -51,8 +51,8 @@ Use the **React console** — it provides onboarding flows, operation builders, 
 | Transaction signing | ✅ | ✅ | ✅ | ✅ |
 | Hybrid decryption | ✅ | ✅ | ✅ | ✅ |
 | Direct submit | ✅ | ✅ | ✅ | ✅ |
-| WalletConnect dApp pairing | ✅ | — | — | — |
-| dApp login (challenge/verify) | — | ✅ | — | — |
-| Backup vault operations | — | ✅ | ✅ | ✅ |
-| Namespace signing helpers | — | — | — | ✅ |
+| WalletConnect dApp pairing | ✅ | - | - | - |
+| dApp login (challenge/verify) | - | ✅ | - | - |
+| Backup vault operations | - | ✅ | ✅ | ✅ |
+| Namespace signing helpers | - | - | - | ✅ |
 | Secure platform storage | ✅ (Keychain/Keystore) | ✅ (Extension storage) | ✅ (OS keyring) | ✅ (File-based) |

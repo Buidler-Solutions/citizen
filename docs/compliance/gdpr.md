@@ -53,10 +53,10 @@ The protocol's architecture supports GDPR data subject rights:
 
 The project maintains control packs for multiple frameworks:
 
-- **GDPR** — General Data Protection Regulation
-- **OWASP** — Application security best practices
-- **CIS** — Critical Security Controls
-- **NIST** — Cybersecurity Framework
+- **GDPR** - General Data Protection Regulation
+- **OWASP** - Application security best practices
+- **CIS** - Critical Security Controls
+- **NIST** - Cybersecurity Framework
 
 These are configured in the `.ges/` directory and validated through the CI compliance workflow.
 

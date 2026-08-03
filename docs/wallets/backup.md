@@ -69,7 +69,7 @@ Backups use the `backup-command-envelope.v1` schema:
 
 ## Security Considerations
 
-- The backup password is **never stored** — it exists only in memory during encrypt/decrypt
+- The backup password is **never stored** - it exists only in memory during encrypt/decrypt
 - A wrong password produces an authentication error (AES-GCM tag verification fails)
 - The 210K PBKDF2 iteration count provides strong resistance to brute-force attacks
 - Always store backup files offline and in multiple physical locations

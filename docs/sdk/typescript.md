@@ -85,7 +85,7 @@ const proposal = await client.getProposal('proposal-123');
 
 ## Direct Submit
 
-The SDK supports direct submit — sending pre-signed entries directly to Citizen network endpoints without going through a relay:
+The SDK supports direct submit - sending pre-signed entries directly to Citizen network endpoints without going through a relay:
 
 ```typescript
 const result = await client.directSubmit({

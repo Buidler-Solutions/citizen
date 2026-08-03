@@ -24,10 +24,10 @@ flutter build ios             # Release iOS
 | Tab | Functionality |
 |-----|---------------|
 | **Activity** | Recent signing activity, network status, signer DID display |
-| **Connect** | WalletConnect v2 dApp pairing — scan QR or paste URI, manage sessions |
+| **Connect** | WalletConnect v2 dApp pairing - scan QR or paste URI, manage sessions |
 | **Decrypt** | Hybrid decryption (X25519 ECDH + ChaCha20-Poly1305), credential display |
 | **Compose** | Sign & submit protocol payloads, sign arbitrary messages, direct submit |
-| **Vault** | Multi-wallet management — 12/24 word choice, mandatory backup, key reveal |
+| **Vault** | Multi-wallet management - 12/24 word choice, mandatory backup, key reveal |
 | **Security** | Password setup/unlock/lock, network selection, liveness checks |
 | **Profile** | User profile (name, email, address, profession, KYC status) |
 

@@ -96,12 +96,12 @@ This produces a node identity key pair that is used for peer authentication and 
 
 The node uses RocksDB. Key data:
 
-- `data/` — RocksDB database files
-- `data/IDENTITY` — Node identity
-- `data/CURRENT` — Current storage manifest
+- `data/` - RocksDB database files
+- `data/IDENTITY` - Node identity
+- `data/CURRENT` - Current storage manifest
 
 !!! warning
-    Never delete `data/IDENTITY` — this is your node's cryptographic identity. Losing it requires generating a new identity and re-admission to the network.
+    Never delete `data/IDENTITY` - this is your node's cryptographic identity. Losing it requires generating a new identity and re-admission to the network.
 
 ## Logs
 

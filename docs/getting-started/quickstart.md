@@ -14,13 +14,13 @@ cargo build --release
 The project ships with pre-configured localnet validator configs:
 
 ```bash
-# Terminal 1 — Validator Alpha (leader)
+# Terminal 1 - Validator Alpha (leader)
 ./target/release/citizen-node --config config/localnet/validator-alpha.toml
 
-# Terminal 2 — Validator Beta
+# Terminal 2 - Validator Beta
 ./target/release/citizen-node --config config/localnet/validator-beta.toml
 
-# Terminal 3 — Validator Gamma
+# Terminal 3 - Validator Gamma
 ./target/release/citizen-node --config config/localnet/validator-gamma.toml
 ```
 
@@ -64,7 +64,7 @@ Using the CLI wallet:
 ./target/release/citizen-wallet-cli receipt --hash <entry-hash>
 ```
 
-The receipt confirms deterministic finality — the entry is permanently committed.
+The receipt confirms deterministic finality - the entry is permanently committed.
 
 ## 6. Explore with the Explorer
 

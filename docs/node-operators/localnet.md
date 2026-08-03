@@ -16,7 +16,7 @@ All three modes share the same QUIC TLS certificates (`config/localnet/certs/`) 
 
 ### Solo (1 validator)
 
-Single-node mode for rapid API and SDK development. No consensus quorum needed — the single validator produces blocks immediately.
+Single-node mode for rapid API and SDK development. No consensus quorum needed - the single validator produces blocks immediately.
 
 ```bash
 cd citizen-protocol
