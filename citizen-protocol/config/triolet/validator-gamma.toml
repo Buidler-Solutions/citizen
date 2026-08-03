@@ -1,0 +1,148 @@
+validator_id = "validator-gamma"
+block_time_millis = 1000
+quorum_bps = 6667
+signing_key_hex = "3f3e3d3c3b3a393837363534333231302f2e2d2c2b2a29282726252423222120"
+api_port = 8093
+data_dir = "data/triolet-gamma"
+bind_addr = "127.0.0.1:9212"
+network_key_rotation_secs = 3600
+manifest_enforce = false
+
+[quic_tls]
+ca_cert_path = "config/localnet/certs/ca.der"
+cert_chain_path = "config/localnet/certs/validator-gamma.der"
+private_key_path = "config/localnet/certs/validator-gamma.key.der"
+
+[[namespaces]]
+descriptor.namespace = "identity.citizen"
+descriptor.version = 1
+descriptor.rules_hash = "sha256:identity-localnet-v1"
+descriptor.governed_by = "governance.vote"
+writers = ["registry.identity"]
+[[namespaces.validators]]
+name = "require_signature"
+config = {}
+
+[[namespaces]]
+descriptor.namespace = "registry.land"
+descriptor.version = 1
+descriptor.rules_hash = "sha256:land-localnet-v1"
+descriptor.governed_by = "governance.vote"
+writers = ["registry.land"]
+[[namespaces.validators]]
+name = "require_signature"
+config = {}
+[[namespaces.validators]]
+name = "prevent_double_transfer"
+config.object_id = "object_id"
+
+[[namespaces]]
+descriptor.namespace = "audit.procurement"
+descriptor.version = 1
+descriptor.rules_hash = "sha256:audit-localnet-v1"
+descriptor.governed_by = "governance.vote"
+writers = ["audit.procurement"]
+[[namespaces.validators]]
+name = "require_signature"
+config = {}
+
+[[namespaces]]
+descriptor.namespace = "governance.vote"
+descriptor.version = 1
+descriptor.rules_hash = "sha256:governance-localnet-v1"
+descriptor.governed_by = "governance.vote"
+writers = ["governance.vote"]
+[[namespaces.validators]]
+name = "require_signature"
+config = {}
+
+[[namespaces]]
+descriptor.namespace = "forms.commitment"
+descriptor.version = 1
+descriptor.rules_hash = "sha256:forms-commitment-v1"
+descriptor.governed_by = "governance.vote"
+writers = ["forms.commitment"]
+[[namespaces.validators]]
+name = "require_signature"
+config = {}
+[[namespaces.validators]]
+name = "require_payload_fields"
+config.fields = ["data_hash", "encrypted_form_url"]
+
+[[namespaces]]
+descriptor.namespace = "content.article"
+descriptor.version = 1
+descriptor.rules_hash = "sha256:content-article-localnet-v1"
+descriptor.governed_by = "governance.vote"
+writers = []
+[[namespaces.validators]]
+name = "require_signature"
+config = {}
+[[namespaces.validators]]
+name = "require_payload_fields"
+config.fields = ["title", "content", "signedMessage", "network"]
+
+[[namespaces]]
+descriptor.namespace = "builder.credits"
+descriptor.version = 1
+descriptor.rules_hash = "sha256:builder-credits-localnet-v1"
+descriptor.governed_by = "governance.vote"
+writers = ["builder.credits"]
+[[namespaces.validators]]
+name = "require_signature"
+config = {}
+[[namespaces.validators]]
+name = "builder_credit_policy"
+config.required_grant_approvals = 3
+config.max_daily_spend = 5000
+config.grant_approvers = [
+  { id = "grant:ops-1", public_key = "11eec230e93451631d92331ab14f7cd3beb71d7d0664213c3c245ee34e218bbc" },
+  { id = "grant:ops-2", public_key = "4fba12886de6f3955e1e00122ecfa5f28f6143b4ebfd623426b31db6e3ba759b" },
+  { id = "grant:ops-3", public_key = "05d820297454180f0a29826db77629efaf2866ce6321bdf1e36653fbce5f87fc" },
+  { id = "grant:ops-4", public_key = "871aae4a90265130ec08636783f7c6967201557511093f2ebe5b1ec3b5759500" },
+  { id = "grant:ops-5", public_key = "64b4461734432d8b1651171a2f4385948748665c876a377cd1722ef55389553b" }
+]
+
+[namespaces.validators.config.programmable_multisig]
+enabled = false
+policy_id = "builder-credits-auto-v1"
+actors = ["automation.builder-credit-bot"]
+max_grant_amount = 1000
+
+[[validators]]
+validator_id = "validator-alpha"
+public_key = "712651f450ba05b63898b99ef5f7ba45632e8e2527f7f715cd671ec4024cc51e"
+anchors = ["org:alpha"]
+
+[[validators]]
+validator_id = "validator-beta"
+public_key = "dcb38143815f465d8d8d262812260ade8e721b3fe15da833ad477dd711ebc10f"
+anchors = ["org:beta"]
+
+[[peers]]
+validator_id = "validator-alpha"
+address = "127.0.0.1:9210"
+
+[[peers]]
+validator_id = "validator-beta"
+address = "127.0.0.1:9211"
+
+[[namespaces]]
+descriptor.namespace = "onboarding.interest"
+descriptor.version = 1
+descriptor.rules_hash = "sha256:onboarding-localnet-v1"
+descriptor.governed_by = "governance.vote"
+writers = ["onboarding.interest"]
+[[namespaces.validators]]
+name = "require_signature"
+config = {}
+
+[[namespaces]]
+descriptor.namespace = "consent.receipt"
+descriptor.version = 1
+descriptor.rules_hash = "sha256:consent-localnet-v1"
+descriptor.governed_by = "governance.vote"
+writers = ["consent.receipt"]
+[[namespaces.validators]]
+name = "require_signature"
+config = {}
