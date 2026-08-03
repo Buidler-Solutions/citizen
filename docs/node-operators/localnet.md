@@ -2,7 +2,45 @@
 
 The localnet configuration provides a pre-configured 5-validator network for development and testing.
 
-## Quick Start
+## Lightweight Alternatives
+
+For faster local development without the full 5-node overhead, two lighter configurations are available:
+
+| Mode | Script | Validators | API Ports | QUIC Ports | Use case |
+|------|--------|-----------|-----------|------------|----------|
+| **Solo** | `scripts/run_solo.sh` | 1 | `9081` | `9200` | API/SDK/wallet dev, fastest startup |
+| **Triolet** | `scripts/run_triolet.sh` | 3 | `8091`–`8093` | `9210`–`9212` | Minimum BFT consensus testing (quorum: 3/3) |
+| **Full localnet** | `scripts/run_localnet.sh` | 5 | `8081`–`8085` | `9100`–`9104` | Full fault-tolerance, quorum loss, Byzantine testing |
+
+All three modes share the same QUIC TLS certificates (`config/localnet/certs/`) and use separate data directories to avoid state collisions.
+
+### Solo (1 validator)
+
+Single-node mode for rapid API and SDK development. No consensus quorum needed — the single validator produces blocks immediately.
+
+```bash
+cd citizen-protocol
+scripts/run_solo.sh
+```
+
+Health check: `http://localhost:9081/health`
+
+### Triolet (3 validators)
+
+Minimum viable BFT consensus. With 3 validators at >2/3 quorum, all 3 must vote (tolerating 0 faults). Useful for testing consensus message flow, heartbeats, and block sync without the resource overhead of 5 nodes.
+
+```bash
+cd citizen-protocol
+scripts/run_triolet.sh
+```
+
+Health checks: `http://localhost:809{1,2,3}/health`
+
+## Full Localnet (5 validators)
+
+The standard localnet uses a pre-configured 5-validator network for development and testing.
+
+### Quick Start
 
 ```bash
 cd citizen-protocol

@@ -422,6 +422,26 @@ Write a module that checks governance approval before executing.
 
 ---
 
+## Sample Modules
+
+The Citizen repository ships with two reference WASM modules demonstrating real-world patterns:
+
+| Module | Path | Description |
+|--------|------|-------------|
+| **Access Control Guard** | `modules/access-control/` | Signature-gated access checker demonstrating `verify_signature`, `store_state`, and `current_block_height` |
+| **CTZN Token** | `modules/ctzn-token/` | Soulbound identity token with multi-issuer authority, tiers, schemas, expiry/revocation, and attribute-based access control |
+
+See the [CTZN Token](ctzn-token.md) page for full documentation of the token module's operations, governance gate, and state model.
+
+### Building Sample Modules
+
+```bash
+cd citizen-protocol/modules/<module-name>
+RUSTFLAGS="-C link-arg=--allow-undefined" cargo build --release --target wasm32-unknown-unknown
+```
+
+---
+
 ## Migration Guide
 
 ### From Solidity to Citizen WASM
