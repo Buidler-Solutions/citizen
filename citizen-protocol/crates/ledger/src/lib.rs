@@ -1976,6 +1976,27 @@ impl<S: LedgerStorage + 'static> WasmHost for LedgerWasmHost<S> {
         }
         Ok(None)
     }
+
+    fn verify_signature_batch(
+        &self,
+        batch_json: &str,
+    ) -> std::result::Result<u32, ExecutionError> {
+        let items: Vec<serde_json::Value> =
+            serde_json::from_str(batch_json).map_err(|e| {
+                ExecutionError::HostError(format!("invalid batch JSON: {e}"))
+            })?;
+
+        let mut valid = 0u32;
+        for item in &items {
+            let did = item.get("signer_did").and_then(|v| v.as_str()).unwrap_or("");
+            let msg = item.get("message_hex").and_then(|v| v.as_str()).unwrap_or("");
+            let sig = item.get("signature_hex").and_then(|v| v.as_str()).unwrap_or("");
+            if let Ok(true) = self.verify_signature(did, msg, sig) {
+                valid += 1;
+            }
+        }
+        Ok(valid)
+    }
 }
 
 impl<S: LedgerStorage + 'static> Ledger<S> {

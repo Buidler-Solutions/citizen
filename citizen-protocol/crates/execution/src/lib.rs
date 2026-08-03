@@ -120,6 +120,11 @@ pub trait WasmHost: Send + Sync {
     /// Load a value from the module's persistent state.
     /// Returns None if the key has not been set.
     fn load_state(&self, module_id: &str, key: &str) -> Result<Option<String>, ExecutionError>;
+
+    /// Verify a batch of signatures in a single host call. Takes a JSON array
+    /// of `{"signer_did","message_hex","signature_hex"}` objects and returns the
+    /// count of valid signatures (0..total).
+    fn verify_signature_batch(&self, batch_json: &str) -> Result<u32, ExecutionError>;
 }
 
 /// Registry of deployed WASM modules

@@ -37,6 +37,8 @@ extern "C" {
         msg_ptr: *const u8, msg_len: u32,
         sig_ptr: *const u8, sig_len: u32,
     ) -> u32;
+    #[link_name = "host_verify_signature_batch"]
+    fn _host_verify_signature_batch(json_ptr: *const u8, json_len: u32) -> u32;
     #[link_name = "host_check_governance_approval"]
     fn _host_check_governance_approval(pid_ptr: *const u8, pid_len: u32) -> u32;
     #[link_name = "host_current_block_height"]
@@ -180,4 +182,11 @@ pub fn current_block_height() -> u64 {
 /// Check if a governance proposal has been approved.
 pub fn check_governance_approval(proposal_id: &str) -> bool {
     unsafe { _host_check_governance_approval(proposal_id.as_ptr(), proposal_id.len() as u32) == 1 }
+}
+
+/// Verify a batch of signatures in a single host call.
+/// Takes a JSON array: `[{"signer_did":"...","message_hex":"...","signature_hex":"..."}]`
+/// Returns the count of valid signatures.
+pub fn verify_signature_batch(batch_json: &str) -> u32 {
+    unsafe { _host_verify_signature_batch(batch_json.as_ptr(), batch_json.len() as u32) }
 }

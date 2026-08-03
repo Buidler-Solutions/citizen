@@ -253,6 +253,23 @@ impl ExecutionEngine {
             )
             .map_err(|e| ExecutionError::RuntimeError(e.to_string()))?;
 
+        // host_verify_signature_batch(json_ptr, json_len) -> u32
+        // Returns the count of valid signatures in the batch.
+        linker
+            .func_wrap(
+                MODULE_CATEGORY,
+                "host_verify_signature_batch",
+                |mut caller: wasmtime::Caller<'_, StoreState>, json_ptr: u32, json_len: u32| -> u32 {
+                    let batch_json = read_wasm_str(&mut caller, json_ptr, json_len);
+                    caller
+                        .data()
+                        .host
+                        .verify_signature_batch(&batch_json)
+                        .unwrap_or(0)
+                },
+            )
+            .map_err(|e| ExecutionError::RuntimeError(e.to_string()))?;
+
         // host_current_block_height() -> u64
         linker
             .func_wrap(

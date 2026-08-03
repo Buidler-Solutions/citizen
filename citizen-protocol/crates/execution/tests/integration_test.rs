@@ -110,6 +110,21 @@ impl WasmHost for TestHost {
     ) -> Result<Option<String>, ExecutionError> {
         Ok(None)
     }
+
+    fn verify_signature_batch(&self, batch_json: &str) -> Result<u32, ExecutionError> {
+        let items: Vec<serde_json::Value> =
+            serde_json::from_str(batch_json).map_err(|e| ExecutionError::HostError(e.to_string()))?;
+        let mut valid = 0u32;
+        for item in &items {
+            let did = item.get("signer_did").and_then(|v| v.as_str()).unwrap_or("");
+            let msg = item.get("message_hex").and_then(|v| v.as_str()).unwrap_or("");
+            let sig = item.get("signature_hex").and_then(|v| v.as_str()).unwrap_or("");
+            if self.verify_signature(did, msg, sig).unwrap_or(false) {
+                valid += 1;
+            }
+        }
+        Ok(valid)
+    }
 }
 
 fn make_engine() -> ExecutionEngine {
@@ -313,4 +328,31 @@ fn engine_gas_is_deterministic() {
     let r2 = engine.execute(&wasm, "test-module", params, 500_000, h2).unwrap();
     assert_eq!(r1.gas_consumed, r2.gas_consumed, "gas consumption must be deterministic");
     assert!(r1.gas_consumed > 0, "should consume some gas (consumed {})", r1.gas_consumed);
+}
+
+#[test]
+fn engine_batch_signature_verification() {
+    let host = TestHost::new(0)
+        .with_signature("did:key:ed25519:alice", true)
+        .with_signature("did:key:ed25519:bob", false)
+        .with_signature("did:key:ed25519:carol", true);
+    let batch = r#"[
+        {"signer_did":"did:key:ed25519:alice","message_hex":"aa","signature_hex":"bb"},
+        {"signer_did":"did:key:ed25519:bob","message_hex":"cc","signature_hex":"dd"},
+        {"signer_did":"did:key:ed25519:carol","message_hex":"ee","signature_hex":"ff"}
+    ]"#;
+    assert_eq!(host.verify_signature_batch(batch).unwrap(), 2);
+}
+
+#[test]
+fn engine_batch_all_rejected() {
+    let host = TestHost::new(0).with_signature("did:key:ed25519:a", false);
+    let batch = r#"[{"signer_did":"did:key:ed25519:a","message_hex":"x","signature_hex":"y"}]"#;
+    assert_eq!(host.verify_signature_batch(batch).unwrap(), 0);
+}
+
+#[test]
+fn engine_batch_empty() {
+    let host = TestHost::new(0);
+    assert_eq!(host.verify_signature_batch("[]").unwrap(), 0);
 }
