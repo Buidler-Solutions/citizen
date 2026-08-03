@@ -15,7 +15,7 @@ This repository is no longer just a high-level protocol sketch. The codebase alr
 │   ├── crates/                # Rust protocol/runtime crates
 │   └── docs/                  # Architecture, runbooks, readiness reviews, rollout plans
 ├── sdk/                       # Builder-facing SDKs
-├── wallet/                    # CLI + browser/react wallet surfaces
+├── wallet/                    # CLI + browser/react/mobile/desktop wallet surfaces
 ├── explorer/                  # Explorer backend/frontend
 ├── demo/                      # Demo application
 ├── dapp/                      # dApp surfaces and local-stack pieces
@@ -34,6 +34,8 @@ When describing the project, prefer the implemented shape of the repository:
 - **Builder/API surface exists.** `crates/api` exposes protocol-facing HTTP endpoints and also contains off-chain object-store support for encrypted file workflows.
 - **Simulation harness exists.** `crates/simulation` runs multi-validator scenarios for normal operation, partial failure, quorum loss, malicious leader, Byzantine subsets, and network partitions.
 - **Wallet/privacy implementation exists.** The wallet crate and docs support consent receipts, encrypt-then-commit flows, selective field privacy, and hybrid ACL/DEK-based sharing.
+- **Mobile wallet implementation exists.** `wallet/mobile` is a Flutter-based iOS/Android wallet with WalletConnect v2 dApp integration, Riverpod state management, secure platform key storage (Keychain/Keystore), BIP39 mnemonic generation with mandatory backup flow, and the same crypto derivation parity as all other wallet surfaces.
+- **Desktop wallet implementation exists.** `wallet/desktop` is a Tauri-based desktop wallet with a Rust bridge for backup vault operations.
 - **Builder-facing SDK exists.** `sdk/typescript` is a first-class integration surface and should be treated as part of the core product story, not as a placeholder.
 - **Off-chain encrypted-file runtime path is implementation-aware but deployment-optional.** API and policy checks are implemented; production object-store wiring is profile/config dependent. Treat off-chain encrypted storage as a floating option for large encrypted artifacts when namespace on-chain-accepted size constraints are exceeded.
 
