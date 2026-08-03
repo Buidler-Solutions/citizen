@@ -32,6 +32,7 @@ type BlocksPageResponse = {
     height: number;
     header: BlockHeader;
     entry_count: number;
+    entry_ids: string[];
   }>;
   next_cursor: string | null;
   has_more: boolean;
@@ -186,6 +187,7 @@ export class CitizenService {
           height: lookup.height,
           header: lookup.block.header,
           entry_count: lookup.block.entries.length,
+          entry_ids: lookup.block.entries.map((e: any) => e.entry_id),
         });
       }
       nextHeight -= 1;
@@ -406,6 +408,52 @@ export class CitizenService {
     }
 
     return (await response.json()) as BlockLookup;
+  }
+
+  async lookupEntryBlock(entryId: string): Promise<ApiSource<{ entry_id: string; block_height: number; namespace: string } | null>> {
+    // Get latest height from the blocks list
+    const blocksEndpoint = `${this.baseUrl.replace(/\/$/, '')}/blocks`;
+    const blocksResp = await fetch(blocksEndpoint);
+    if (!blocksResp.ok) {
+      throw new Error(`Node unreachable: ${blocksResp.status}`);
+    }
+    const blocksJson: any = await blocksResp.json();
+    const items = Array.isArray(blocksJson?.items) ? blocksJson.items : [];
+    let latestHeight = 0;
+    for (const item of items) {
+      const h = item?.height ?? item?.header?.height;
+      if (typeof h === 'number' && h > latestHeight) latestHeight = h;
+    }
+    if (latestHeight === 0) {
+      // Fallback: try health endpoint
+      const healthResp = await fetch(`${this.baseUrl.replace(/\/$/, '')}/health`);
+      if (healthResp.ok) latestHeight = 500;
+    }
+
+    const SCAN_LIMIT = 10_000;
+    const endHeight = Math.max(0, latestHeight - SCAN_LIMIT);
+
+    for (let h = latestHeight; h >= endHeight; h--) {
+      const block = await this.fetchBlockOrNull(h);
+      if (!block?.block) continue;
+      for (const entry of block.block.entries as any[]) {
+        if (entry.entry_id === entryId) {
+          return {
+            source: `${this.baseUrl.replace(/\/$/, '')}/blocks/${h}`,
+            data: {
+              entry_id: entryId,
+              block_height: h,
+              namespace: entry.namespace,
+            },
+          };
+        }
+      }
+    }
+
+    return {
+      source: `${this.baseUrl.replace(/\/$/, '')}/entries/lookup/${entryId}`,
+      data: null,
+    };
   }
 
   private async fetchJson<T>(endpoint: string): Promise<ApiSource<T>> {
