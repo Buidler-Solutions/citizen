@@ -171,7 +171,9 @@ function normalizeBlockSummaryItem(raw: unknown): BlockSummary | null {
       : Array.isArray(block?.entries)
         ? block.entries.length
         : null;
-  const entryIds = extractEntryIds(block?.entries);
+  const entryIds = Array.isArray(value.entry_ids)
+    ? (value.entry_ids as string[]).filter((id): id is string => typeof id === 'string')
+    : extractEntryIds(block?.entries);
 
   if (
     height === null ||

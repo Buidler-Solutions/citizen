@@ -37,6 +37,11 @@ export class AppController {
     return this.citizenService.getEntries(namespace);
   }
 
+  @Get('entries/lookup/:entryId')
+  async entryLookup(@Param('entryId') entryId: string) {
+    return this.citizenService.lookupEntryBlock(entryId);
+  }
+
   @Get('entries/:namespace/wallet-signers/:signerDid')
   async entriesByWalletSigner(
     @Param('namespace') namespace: string,

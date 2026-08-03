@@ -38,6 +38,9 @@ let AppController = class AppController {
     async entries(namespace) {
         return this.citizenService.getEntries(namespace);
     }
+    async entryLookup(entryId) {
+        return this.citizenService.lookupEntryBlock(entryId);
+    }
     async entriesByWalletSigner(namespace, signerDid) {
         return this.citizenService.getEntriesByWalletSigner(namespace, decodeURIComponent(signerDid));
     }
@@ -161,6 +164,13 @@ __decorate([
     __metadata("design:paramtypes", [String]),
     __metadata("design:returntype", Promise)
 ], AppController.prototype, "entries", null);
+__decorate([
+    (0, common_1.Get)('entries/lookup/:entryId'),
+    __param(0, (0, common_1.Param)('entryId')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", Promise)
+], AppController.prototype, "entryLookup", null);
 __decorate([
     (0, common_1.Get)('entries/:namespace/wallet-signers/:signerDid'),
     __param(0, (0, common_1.Param)('namespace')),
