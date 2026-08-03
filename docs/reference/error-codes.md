@@ -8,7 +8,7 @@
 | `INVALID_SIGNATURE` | Signature verification failed | Verify signer key and signing algorithm |
 | `NAMESPACE_NOT_FOUND` | Namespace does not exist or is not active | Check namespace name or wait for governance activation |
 | `QUORUM_NOT_MET` | Consensus quorum not achieved | Wait for more validators to come online |
-| `DUPLICATE_ENTRY` | Entry with same hash already committed | No action needed — entry is already on-chain |
+| `DUPLICATE_ENTRY` | Entry with same hash already committed | No action needed - entry is already on-chain |
 | `UNAUTHORIZED` | Signer not authorized for the namespace | Check namespace admission policy |
 | `PAYLOAD_TOO_LARGE` | Entry payload exceeds namespace size limit | Reduce payload size or use off-chain encrypted storage |
 
@@ -25,7 +25,7 @@
 
 | Code | Meaning | Action |
 |------|---------|--------|
-| `WALLET_LOCKED` | Wallet is locked — password required | Unlock with password |
+| `WALLET_LOCKED` | Wallet is locked - password required | Unlock with password |
 | `WALLET_NOT_FOUND` | No wallet at the requested ID | Create or import a wallet |
 | `INVALID_PASSWORD` | Password verification failed | Retry with correct password |
 | `INVALID_MNEMONIC` | Mnemonic fails BIP39 checksum | Verify all words are correct |

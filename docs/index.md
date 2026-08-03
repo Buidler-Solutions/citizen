@@ -1,6 +1,6 @@
 # Citizen Protocol
 
-Welcome to the **Citizen Protocol** documentation — a governance-first ledger for public truth, records, and institutional accountability.
+Welcome to the **Citizen Protocol** documentation - a governance-first ledger for public truth, records, and institutional accountability.
 
 ---
 
@@ -19,7 +19,7 @@ Citizen is a **governed, namespace-first blockchain protocol** designed for veri
 | Component | Description |
 |-----------|-------------|
 | `citizen-protocol/` | Core Rust protocol workspace (node, consensus, ledger, governance, crypto, storage, API) |
-| `wallet/` | Wallet surfaces — CLI, browser extension, mobile (Flutter), desktop (Tauri), React console |
+| `wallet/` | Wallet surfaces - CLI, browser extension, mobile (Flutter), desktop (Tauri), React console |
 | `sdk/` | TypeScript SDK for builder integrations |
 | `explorer/` | Block and transaction explorer |
 | `compliance/` | GDPR compliance, data inventory, processing records |
@@ -27,14 +27,14 @@ Citizen is a **governed, namespace-first blockchain protocol** designed for veri
 
 ## Quick Links
 
-- :rocket: **[Getting Started](getting-started/overview.md)** — overview and architecture primer
-- :package: **[Installation](getting-started/installation.md)** — set up the protocol and tooling
-- :zap: **[Quick Start](getting-started/quickstart.md)** — run a local network in minutes
-- :wallet: **[Wallets](wallets/overview.md)** — choose and use a Citizen wallet
-- :coder: **[TypeScript SDK](sdk/typescript.md)** — integrate Citizen into your application
-- :server: **[Node Operators](node-operators/running-a-node.md)** — run validators and observers
+- :rocket: **[Getting Started](getting-started/overview.md)** - overview and architecture primer
+- :package: **[Installation](getting-started/installation.md)** - set up the protocol and tooling
+- :zap: **[Quick Start](getting-started/quickstart.md)** - run a local network in minutes
+- :wallet: **[Wallets](wallets/overview.md)** - choose and use a Citizen wallet
+- :coder: **[TypeScript SDK](sdk/typescript.md)** - integrate Citizen into your application
+- :server: **[Node Operators](node-operators/running-a-node.md)** - run validators and observers
 
 ## License
 
-- Repository-level: **Citizen Protocol Non-Commercial License (CPNCL) v1.0** — see [LICENSE](https://github.com/greenarmor/citizen/blob/main/LICENSE)
+- Repository-level: **Citizen Protocol Non-Commercial License (CPNCL) v1.0** - see [LICENSE](https://github.com/greenarmor/citizen/blob/main/LICENSE)
 - `citizen-protocol/`: **Apache License 2.0**

@@ -1,6 +1,6 @@
 # CTZN Token
 
-CTZN is a **soulbound (non-transferable) identity token** module built on the Citizen WASM execution engine. Once minted to a recipient, a CTZN token is permanently bound to that identity — the `transfer` operation is always rejected.
+CTZN is a **soulbound (non-transferable) identity token** module built on the Citizen WASM execution engine. Once minted to a recipient, a CTZN token is permanently bound to that identity - the `transfer` operation is always rejected.
 
 **Location:** `citizen-protocol/modules/ctzn-token/`
 
@@ -10,7 +10,7 @@ CTZN is a **soulbound (non-transferable) identity token** module built on the Ci
 
 | Feature | Description |
 |---------|-------------|
-| **Multi-issuer authority** | Configure authorized issuer DIDs with N-of-M signature thresholds. Initial configuration requires governance approval — no one can self-appoint as admin. |
+| **Multi-issuer authority** | Configure authorized issuer DIDs with N-of-M signature thresholds. Initial configuration requires governance approval - no one can self-appoint as admin. |
 | **Custom metadata schemas** | Each token has a `schema_type` (e.g., `degree`, `reputation`, `identity`) and free-form JSON metadata. |
 | **Hierarchical tiers** | Tokens are assigned `bronze` (0), `silver` (1), or `gold` (2). Per-tier supply is tracked independently. |
 | **Time-locked / revocable** | Optional `expiry_block` makes tokens expire at a future block height. Issuers can `revoke` tokens at any time. |
@@ -33,11 +33,11 @@ This prevents unauthorized privilege escalation at the protocol level.
 | `configure` | `admin_did`, `admin_sig`, `proposal_id`, `issuers`, `threshold` | Set authorized issuers and minimum signature count. Initial call requires governance-approved `proposal_id`; subsequent calls require admin signature. |
 | `mint` | `issuer_dids`, `signatures`, `token_id`, `recipient_did`, `tier?`, `schema_type?`, `metadata?`, `expiry_block?` | Mint a new CTZN token (backward-compatible with singular `issuer_did`/`signature_hex`) |
 | `owner_of` | `token_id` | Get owner and full token status (burned, revoked, expired) |
-| `total_supply` | — | Get global and per-tier supply counts |
+| `total_supply` | - | Get global and per-tier supply counts |
 | `get_metadata` | `token_id` | Get token metadata, tier, schema, and revocation/expiry status |
 | `burn` | `issuer_did`, `signature_hex`, `token_id` | Permanently destroy a token |
 | `revoke` | `issuer_did`, `signature_hex`, `token_id` | Issuer-revoke a token (keeps record, marks invalid) |
-| `transfer` | (any) | Always rejected — CTZN tokens are non-transferable |
+| `transfer` | (any) | Always rejected - CTZN tokens are non-transferable |
 | `check_access` | `did`, `token_id?`, `required_tier?`, `required_schema?` | Verify a DID holds a qualifying token |
 
 ## Minting Flow

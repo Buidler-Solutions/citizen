@@ -1,6 +1,6 @@
 # Governance
 
-Governance is a first-class Citizen concept. All significant protocol changes — namespace creation, policy updates, validator admission — flow through the governance system.
+Governance is a first-class Citizen concept. All significant protocol changes - namespace creation, policy updates, validator admission - flow through the governance system.
 
 ## Governance Lifecycle
 
@@ -12,9 +12,9 @@ Proposal → Voting Period → Quorum Check → Activation
 
 Any authorized participant can submit a governance proposal. Proposals include:
 
-- **Type** — namespace creation, policy update, validator admission, parameter change
-- **Payload** — the specific change being proposed
-- **Voting period** — how long the vote remains open
+- **Type** - namespace creation, policy update, validator admission, parameter change
+- **Payload** - the specific change being proposed
+- **Voting period** - how long the vote remains open
 
 ### 2. Voting
 
@@ -24,8 +24,8 @@ Validators cast votes during the voting period. Each validator gets one vote. Vo
 
 After the voting period closes, the governance engine evaluates:
 
-- **Participation quorum** — minimum percentage of validators that must vote
-- **Approval quorum** — minimum percentage of yes-votes among cast votes
+- **Participation quorum** - minimum percentage of validators that must vote
+- **Approval quorum** - minimum percentage of yes-votes among cast votes
 
 If both thresholds are met, the proposal passes.
 
@@ -33,10 +33,10 @@ If both thresholds are met, the proposal passes.
 
 Passed proposals activate according to their type:
 
-- **Namespace creation** — the new namespace is created with the proposed configuration
-- **Policy updates** — namespace policies are updated
-- **Validator admission** — the new validator is admitted to the consensus set
-- **Parameter changes** — protocol parameters are updated
+- **Namespace creation** - the new namespace is created with the proposed configuration
+- **Policy updates** - namespace policies are updated
+- **Validator admission** - the new validator is admitted to the consensus set
+- **Parameter changes** - protocol parameters are updated
 
 ## Namespace Activation Readiness
 

@@ -27,10 +27,10 @@ Specifies the cryptographic algorithms, key sizes, and protocols used throughout
 
 Key management follows these principles:
 
-- **Node identity keys** — generated locally, stored in `data/IDENTITY`, must be backed up securely
-- **Wallet private keys** — stored in platform secure storage (Keychain, Keystore, OS keyring)
-- **Wallet mnemonics** — stored in platform secure storage, never in plaintext
-- **Backup vault keys** — derived from user password via PBKDF2, never stored
+- **Node identity keys** - generated locally, stored in `data/IDENTITY`, must be backed up securely
+- **Wallet private keys** - stored in platform secure storage (Keychain, Keystore, OS keyring)
+- **Wallet mnemonics** - stored in platform secure storage, never in plaintext
+- **Backup vault keys** - derived from user password via PBKDF2, never stored
 
 ### [Incident Response](https://github.com/greenarmor/citizen/blob/main/security/incident-response.md)
 Defines the incident response process for security events including:

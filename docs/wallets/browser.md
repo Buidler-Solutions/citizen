@@ -34,10 +34,10 @@ Load the `dist/` directory as an unpacked extension:
 - View signer and reader DIDs
 
 ### dApp Interactions
-- **dApp login** — challenge/verify authentication flow
-- **Signing requests** — approve or reject transaction signing
-- **Content script injection** — enables web dApps to communicate with the wallet
-- **Request queue** — isolated, serialized request handling
+- **dApp login** - challenge/verify authentication flow
+- **Signing requests** - approve or reject transaction signing
+- **Content script injection** - enables web dApps to communicate with the wallet
+- **Request queue** - isolated, serialized request handling
 
 ### Decryption
 - Hybrid decryption of owned transactions (X25519 ECDH + ChaCha20-Poly1305)
@@ -51,9 +51,9 @@ Load the `dist/` directory as an unpacked extension:
 
 The extension uses a content-script/background-script architecture:
 
-- **Content script** (`content.ts`) — injected into web pages, provides the Citizen provider API
-- **Background script** (`background.ts`) — manages wallet state, handles signing requests
-- **Popup** (`App.tsx`) — user interface for wallet operations
+- **Content script** (`content.ts`) - injected into web pages, provides the Citizen provider API
+- **Background script** (`background.ts`) - manages wallet state, handles signing requests
+- **Popup** (`App.tsx`) - user interface for wallet operations
 
 ## dApp Login Flow
 

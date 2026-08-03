@@ -4,20 +4,20 @@ Validators are the consensus participants in the Citizen network. They propose b
 
 ## Validator Responsibilities
 
-1. **Stay online** — validators must maintain uptime to participate in consensus
-2. **Vote on blocks** — every validator must vote on proposed blocks
-3. **Vote on governance** — participate in governance proposals
-4. **Maintain synchronization** — keep the ledger in sync with the network
+1. **Stay online** - validators must maintain uptime to participate in consensus
+2. **Vote on blocks** - every validator must vote on proposed blocks
+3. **Vote on governance** - participate in governance proposals
+4. **Maintain synchronization** - keep the ledger in sync with the network
 
 ## Admission Process
 
 New validators must be admitted through governance:
 
-1. **Generate node identity** — create a cryptographic identity for the node
-2. **Submit admission manifest** — apply for validator status through a governance proposal
-3. **Pass preflight checks** — the node must pass admission preflight validation
-4. **Receive approval** — the governance vote must pass with required quorum
-5. **Join consensus** — upon approval, the validator joins the consensus set
+1. **Generate node identity** - create a cryptographic identity for the node
+2. **Submit admission manifest** - apply for validator status through a governance proposal
+3. **Pass preflight checks** - the node must pass admission preflight validation
+4. **Receive approval** - the governance vote must pass with required quorum
+5. **Join consensus** - upon approval, the validator joins the consensus set
 
 ### Generating Node Identity
 

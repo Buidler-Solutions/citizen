@@ -30,7 +30,7 @@ Transaction signing Data decryption
 - Seed length: 64 bytes (512 bits)
 
 !!! warning "Common Pitfall"
-    The salt must be exactly the string `"mnemonic"` — not `"mnemonic" + words` or any variation. An incorrect salt produces incompatible keys.
+    The salt must be exactly the string `"mnemonic"` - not `"mnemonic" + words` or any variation. An incorrect salt produces incompatible keys.
 
 ## SLIP-0010 Derivation
 
@@ -74,7 +74,7 @@ Because all surfaces use the exact same derivation parameters:
 | Generate on browser, import on mobile | Same keys ✅ |
 
 !!! tip
-    You only need one mnemonic. Import it on whichever surface you prefer — the derived keys will always match.
+    You only need one mnemonic. Import it on whichever surface you prefer - the derived keys will always match.
 
 ## Encryption Algorithms
 

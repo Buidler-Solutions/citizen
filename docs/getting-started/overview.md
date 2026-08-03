@@ -6,7 +6,7 @@ Citizen is a **governance-first, permissioned BFT consensus blockchain** built f
 
 ### 1. Governed Data Plane First
 
-Namespaces are the fundamental unit of organization. Each namespace has its own policies, consent rules, privacy controls, and admission criteria — all governed through on-chain proposals.
+Namespaces are the fundamental unit of organization. Each namespace has its own policies, consent rules, privacy controls, and admission criteria - all governed through on-chain proposals.
 
 ### 2. Deterministic Finality
 
@@ -31,7 +31,7 @@ Interop adapters are governed and explicit. Cross-chain or cross-system bridges 
 │                 GOVERNED DATA PLANE              │
 │                                                   │
 │  Namespaces · Policies · Receipts · Governance   │
-│  (Default path — always available)               │
+│  (Default path - always available)               │
 └─────────────────────────────────────────────────┘
                         │
 ┌─────────────────────────────────────────────────┐
@@ -42,8 +42,8 @@ Interop adapters are governed and explicit. Cross-chain or cross-system bridges 
 └─────────────────────────────────────────────────┘
 ```
 
-- **Governed Data Plane** — the default operating mode. Entries are validated against namespace policies, signed, committed, and produce deterministic receipts.
-- **Execution Plane** — optional, scoped, audited WASM execution that a namespace must explicitly activate through governance.
+- **Governed Data Plane** - the default operating mode. Entries are validated against namespace policies, signed, committed, and produce deterministic receipts.
+- **Execution Plane** - optional, scoped, audited WASM execution that a namespace must explicitly activate through governance.
 
 ## Implementation Status
 

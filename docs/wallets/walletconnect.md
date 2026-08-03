@@ -62,8 +62,8 @@ const { uri } = await signClient.connect({
 
 After pairing, the session exposes two accounts:
 
-- **Signer DID**: `did:key:ed25519:<hex>` — for transaction signing
-- **Reader DID**: `did:key:x25519:<hex>` — for data decryption
+- **Signer DID**: `did:key:ed25519:<hex>` - for transaction signing
+- **Reader DID**: `did:key:x25519:<hex>` - for data decryption
 
 ### Send a Request
 
@@ -87,7 +87,7 @@ console.log(result.signature); // base64url signature
 1. Open the **Connect** tab in the mobile wallet
 2. The dApp will display a QR code or pairing URI
 3. Tap **Scan QR** and point your camera at the code, or tap **Paste URI** to paste manually
-4. Review the session proposal — it shows the dApp name and requested methods
+4. Review the session proposal - it shows the dApp name and requested methods
 5. Tap **Approve** to connect
 
 ### Responding to Requests
