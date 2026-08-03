@@ -61,6 +61,7 @@ export type DirectSubmitResponse = {
   latencyMs: number;
   receiptId: string | null;
   receiptHash: string | null;
+  blockHeight: number | null;
 };
 
 export type DirectBatchSubmitResponse = {
@@ -267,11 +268,21 @@ export async function submitSignedArtifact(
   const latencyMs = Date.now() - startedAt;
   let receiptId: string | null = null;
   let receiptHash: string | null = null;
+  let blockHeight: number | null = null;
 
   try {
-    const parsed = (await response.json()) as { receipt?: { receipt_id?: string; receipt_hash?: string } };
+    const parsed = (await response.json()) as {
+      receipt?: {
+        receipt_id?: string;
+        receipt_hash?: string;
+        finality?: { block_height?: number };
+      };
+    };
     receiptId = typeof parsed.receipt?.receipt_id === 'string' ? parsed.receipt.receipt_id : null;
     receiptHash = typeof parsed.receipt?.receipt_hash === 'string' ? parsed.receipt.receipt_hash : null;
+    blockHeight = typeof parsed.receipt?.finality?.block_height === 'number'
+      ? parsed.receipt.finality.block_height
+      : null;
   } catch {
     // upstream may respond with empty body for accepted submissions
   }
@@ -287,6 +298,7 @@ export async function submitSignedArtifact(
     latencyMs,
     receiptId,
     receiptHash,
+    blockHeight,
   };
 }
 
@@ -331,6 +343,7 @@ export async function submitEnvelopeToCitizenNetwork(
     latencyMs,
     receiptId,
     receiptHash,
+    blockHeight: null,
   };
 }
 

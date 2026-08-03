@@ -90,6 +90,7 @@ type DirectSubmitReceipt = {
   latencyMs: number;
   receiptId: string | null;
   receiptHash: string | null;
+  blockHeight: number | null;
   submittedAt: string;
 };
 
@@ -1028,10 +1029,28 @@ export function App() {
         ? payload.hybrid_author_x25519_public_key
         : typeof payload.author_public_key === 'string'
           ? payload.author_public_key
+          : typeof payload.authorPublicKeyHex === 'string'
+            ? payload.authorPublicKeyHex
+            : typeof parsed.authorPublicKeyHex === 'string'
+              ? parsed.authorPublicKeyHex
+              : '';
+      const wrappedDekHex = typeof matchingWrap?.wrapped_dek === 'string'
+        ? matchingWrap.wrapped_dek
+        : typeof parsed.wrappedDekHex === 'string'
+          ? parsed.wrappedDekHex
+          : Array.isArray(parsed.key_wrapped_secrets)
+            ? (parsed.key_wrapped_secrets as Array<Record<string, unknown>>).find((e) => typeof e.wrappedDekHex === 'string')?.wrappedDekHex as string ?? ''
+            : '';
+      const nonceHex = typeof parsed.nonce_hex === 'string'
+        ? parsed.nonce_hex
+        : typeof parsed.nonceHex === 'string'
+          ? parsed.nonceHex
           : '';
-      const wrappedDekHex = typeof matchingWrap?.wrapped_dek === 'string' ? matchingWrap.wrapped_dek : '';
-      const nonceHex = typeof parsed.nonce_hex === 'string' ? parsed.nonce_hex : '';
-      const ciphertextHex = typeof parsed.ciphertext_hex === 'string' ? parsed.ciphertext_hex : '';
+      const ciphertextHex = typeof parsed.ciphertext_hex === 'string'
+        ? parsed.ciphertext_hex
+        : typeof parsed.ciphertextHex === 'string'
+          ? parsed.ciphertextHex
+          : '';
       setDecryptAuthorPublicKeyHex(authorPublicKeyHex);
       setDecryptWrappedDekHex(wrappedDekHex);
       setDecryptNonceHex(nonceHex);
@@ -1609,6 +1628,9 @@ export function App() {
                             <div>
                               <strong>{receipt.receiptId ?? mask(receipt.requestId)}</strong>
                               <p className="meta-text">{new Date(receipt.submittedAt).toLocaleString()}</p>
+                              {receipt.blockHeight != null && (
+                                <p className="meta-text" style={{fontWeight:'bold',color:'#2d6cdf'}}>Block #{receipt.blockHeight}</p>
+                              )}
                               {explorerHref ? (
                                 <a href={explorerHref} target="_blank" rel="noreferrer" className="meta-text">
                                   {mask(receiptHash ?? '')}
