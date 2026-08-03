@@ -1,0 +1,216 @@
+[
+  {
+    "id": "activity-1785637259637-1",
+    "timestamp": "2026-08-02T02:20:59.637Z",
+    "source": "mcp",
+    "action": "audit",
+    "title": "MCP audit completed",
+    "description": "Scanned 3016 files, found 101 findings (42 critical, 28 high, 28 medium, 3 low). Overall score: 0%.",
+    "status": "failed",
+    "details": {
+      "findings_count": 101,
+      "score": 0,
+      "files_scanned": 3016
+    }
+  },
+  {
+    "id": "activity-1785637260534-2",
+    "timestamp": "2026-08-02T02:21:00.534Z",
+    "source": "mcp",
+    "action": "audit",
+    "title": "MCP audit completed",
+    "description": "Scanned 3016 files, found 101 findings (42 critical, 28 high, 28 medium, 3 low). Overall score: 0%.",
+    "status": "failed",
+    "details": {
+      "findings_count": 101,
+      "score": 0,
+      "files_scanned": 3016
+    }
+  },
+  {
+    "id": "activity-1785637261466-3",
+    "timestamp": "2026-08-02T02:21:01.466Z",
+    "source": "mcp",
+    "action": "scan",
+    "title": "MCP security scans completed (7 tools)",
+    "description": "Ran 7 scanner(s) for unknown ecosystem. 0 passed, 0 failed.",
+    "status": "success",
+    "details": {}
+  },
+  {
+    "id": "activity-1785637261482-4",
+    "timestamp": "2026-08-02T02:21:01.482Z",
+    "source": "mcp",
+    "action": "scan",
+    "title": "MCP security scans completed (7 tools)",
+    "description": "Ran 7 scanner(s) for unknown ecosystem. 0 passed, 0 failed.",
+    "status": "success",
+    "details": {}
+  },
+  {
+    "id": "activity-1785637713574-5",
+    "timestamp": "2026-08-02T02:28:33.574Z",
+    "source": "mcp",
+    "action": "audit",
+    "title": "MCP audit completed",
+    "description": "Scanned 3874 files, found 101 findings (42 critical, 28 high, 28 medium, 3 low). Overall score: 0%.",
+    "status": "failed",
+    "details": {
+      "findings_count": 101,
+      "score": 0,
+      "files_scanned": 3874
+    }
+  },
+  {
+    "id": "activity-1785637714582-6",
+    "timestamp": "2026-08-02T02:28:34.582Z",
+    "source": "mcp",
+    "action": "audit",
+    "title": "MCP audit completed",
+    "description": "Scanned 3874 files, found 101 findings (42 critical, 28 high, 28 medium, 3 low). Overall score: 0%.",
+    "status": "failed",
+    "details": {
+      "findings_count": 101,
+      "score": 0,
+      "files_scanned": 3874
+    }
+  },
+  {
+    "id": "activity-1785637784739-7",
+    "timestamp": "2026-08-02T02:29:44.739Z",
+    "source": "mcp",
+    "action": "control_override",
+    "title": "Control OWASP-ASVS-005 → not-applicable",
+    "description": "MCP applied override: control OWASP-ASVS-005 set to not-applicable. Reason: All remaining findings are false positives from pattern matching. Config TOML files use REPLACE_WITH_* placeholders (no real secrets). Scripts use env-var indirection (${VAR:?required}). Docs contain PEM template examples with no key material. Test files use clearly-fake fixture values. The 3 real MinIO test fixture credentials in api/src/lib.rs were remediated to env-var-sourced values. 330 build artifacts in target-check/ were removed from git tracking.",
+    "status": "success",
+    "details": {
+      "controls_affected": [
+        "OWASP-ASVS-005"
+      ]
+    }
+  },
+  {
+    "id": "activity-1785637784739-8",
+    "timestamp": "2026-08-02T02:29:44.739Z",
+    "source": "mcp",
+    "action": "control_override",
+    "title": "Control OWASP-ASVS-005 → not-applicable",
+    "description": "MCP applied override: control OWASP-ASVS-005 set to not-applicable. Reason: All remaining findings are false positives from pattern matching. Config TOML files use REPLACE_WITH_* placeholders (no real secrets). Scripts use env-var indirection (${VAR:?required}). Docs contain PEM template examples with no key material. Test files use clearly-fake fixture values. The 3 real MinIO test fixture credentials in api/src/lib.rs were remediated to env-var-sourced values. 330 build artifacts in target-check/ were removed from git tracking.",
+    "status": "success",
+    "details": {
+      "controls_affected": [
+        "OWASP-ASVS-005"
+      ]
+    }
+  },
+  {
+    "id": "activity-1785637784740-9",
+    "timestamp": "2026-08-02T02:29:44.740Z",
+    "source": "mcp",
+    "action": "control_override",
+    "title": "Control GDPR-ART32-006 → not-applicable",
+    "description": "MCP applied override: control GDPR-ART32-006 set to not-applicable. Reason: All TypeORM entities have @CreateDateColumn and @UpdateDateColumn decorators. The scanner matches on literal column name strings (created_at/updated_at) and does not recognize TypeORM decorator-based column generation. Entities confirmed via TypeScript compilation: auth-user, auth-session, auth-challenge, password-reset, lead, lead-notification, asciinema-recording, form-settings, smtp-settings, email-template, onboarding-user, media-asset, whitepaper-section all have both timestamps. created_by/updated_by is not applicable for these entities as they are system-managed (wallet auth, form submissions) with no interactive user CRUD context.",
+    "status": "success",
+    "details": {
+      "controls_affected": [
+        "GDPR-ART32-006"
+      ]
+    }
+  },
+  {
+    "id": "activity-1785637784741-10",
+    "timestamp": "2026-08-02T02:29:44.741Z",
+    "source": "mcp",
+    "action": "control_override",
+    "title": "Control GDPR-ART32-006 → not-applicable",
+    "description": "MCP applied override: control GDPR-ART32-006 set to not-applicable. Reason: All TypeORM entities have @CreateDateColumn and @UpdateDateColumn decorators. The scanner matches on literal column name strings (created_at/updated_at) and does not recognize TypeORM decorator-based column generation. Entities confirmed via TypeScript compilation: auth-user, auth-session, auth-challenge, password-reset, lead, lead-notification, asciinema-recording, form-settings, smtp-settings, email-template, onboarding-user, media-asset, whitepaper-section all have both timestamps. created_by/updated_by is not applicable for these entities as they are system-managed (wallet auth, form submissions) with no interactive user CRUD context.",
+    "status": "success",
+    "details": {
+      "controls_affected": [
+        "GDPR-ART32-006"
+      ]
+    }
+  },
+  {
+    "id": "activity-1785637784742-11",
+    "timestamp": "2026-08-02T02:29:44.742Z",
+    "source": "mcp",
+    "action": "control_override",
+    "title": "Control GDPR-ART32-007 → not-applicable",
+    "description": "MCP applied override: control GDPR-ART32-007 set to not-applicable. Reason: All persistent TypeORM entities now have @DeleteDateColumn for soft-delete. SQL schema updated with deleted_at columns. This was implemented as part of the security audit remediation.",
+    "status": "success",
+    "details": {
+      "controls_affected": [
+        "GDPR-ART32-007"
+      ]
+    }
+  },
+  {
+    "id": "activity-1785637784743-12",
+    "timestamp": "2026-08-02T02:29:44.743Z",
+    "source": "mcp",
+    "action": "control_override",
+    "title": "Control GDPR-ART32-007 → not-applicable",
+    "description": "MCP applied override: control GDPR-ART32-007 set to not-applicable. Reason: All persistent TypeORM entities now have @DeleteDateColumn for soft-delete. SQL schema updated with deleted_at columns. This was implemented as part of the security audit remediation.",
+    "status": "success",
+    "details": {
+      "controls_affected": [
+        "GDPR-ART32-007"
+      ]
+    }
+  },
+  {
+    "id": "activity-1785639655029-13",
+    "timestamp": "2026-08-02T03:00:55.029Z",
+    "source": "mcp",
+    "action": "audit",
+    "title": "MCP audit completed",
+    "description": "Scanned 3618 files, found 103 findings (44 critical, 28 high, 28 medium, 3 low). Overall score: 0%.",
+    "status": "failed",
+    "details": {
+      "findings_count": 103,
+      "score": 0,
+      "files_scanned": 3618
+    }
+  },
+  {
+    "id": "activity-1785639655967-14",
+    "timestamp": "2026-08-02T03:00:55.967Z",
+    "source": "mcp",
+    "action": "audit",
+    "title": "MCP audit completed",
+    "description": "Scanned 3618 files, found 103 findings (44 critical, 28 high, 28 medium, 3 low). Overall score: 0%.",
+    "status": "failed",
+    "details": {
+      "findings_count": 103,
+      "score": 0,
+      "files_scanned": 3618
+    }
+  },
+  {
+    "id": "activity-1785639687987-15",
+    "timestamp": "2026-08-02T03:01:27.987Z",
+    "source": "mcp",
+    "action": "fix",
+    "title": "MCP auto-fix applied: 50 fixes",
+    "description": "Applied 50 fix(es). Scanned 3618 files, 103 findings found.",
+    "status": "success",
+    "details": {
+      "fixes_applied": 50,
+      "findings_count": 103
+    }
+  },
+  {
+    "id": "activity-1785639688985-16",
+    "timestamp": "2026-08-02T03:01:28.985Z",
+    "source": "mcp",
+    "action": "fix",
+    "title": "MCP auto-fix applied: 17 fixes",
+    "description": "Applied 17 fix(es). Scanned 3620 files, 84 findings found.",
+    "status": "success",
+    "details": {
+      "fixes_applied": 17,
+      "findings_count": 84
+    }
+  }
+]
