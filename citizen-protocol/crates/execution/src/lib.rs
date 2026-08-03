@@ -112,6 +112,14 @@ pub trait WasmHost: Send + Sync {
 
     /// Look up WASM bytecode for a module by its module ID.
     fn load_module_bytecode(&self, module_id: &str) -> Result<Vec<u8>, ExecutionError>;
+
+    /// Store a key-value pair in the module's persistent state.
+    /// State is scoped to the calling module ID and persisted across invocations.
+    fn store_state(&self, module_id: &str, key: &str, value: &str) -> Result<(), ExecutionError>;
+
+    /// Load a value from the module's persistent state.
+    /// Returns None if the key has not been set.
+    fn load_state(&self, module_id: &str, key: &str) -> Result<Option<String>, ExecutionError>;
 }
 
 /// Registry of deployed WASM modules

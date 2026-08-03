@@ -1,0 +1,8 @@
+[package]
+name = "citizen-module-sdk"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+description = "Ergonomic Rust SDK for writing Citizen Protocol WASM modules"
+
+[workspace]

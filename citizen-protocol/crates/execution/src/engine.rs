@@ -17,6 +17,7 @@ pub struct ExecutionEngine {
 impl ExecutionEngine {
     pub fn new(config: ExecutionConfig) -> Result<Self, ExecutionError> {
         let mut wasmtime_config = wasmtime::Config::new();
+        wasmtime_config.consume_fuel(true);
         wasmtime_config.strategy(wasmtime::Strategy::Cranelift);
         wasmtime_config.cranelift_opt_level(wasmtime::OptLevel::Speed);
 
@@ -35,6 +36,7 @@ impl ExecutionEngine {
     pub fn execute(
         &self,
         wasm_bytes: &[u8],
+        module_id: &str,
         params_json: &str,
         gas_limit: u64,
         host: Arc<dyn WasmHost>,
@@ -47,13 +49,13 @@ impl ExecutionEngine {
             StoreState {
                 host,
                 logs: Vec::new(),
+                module_id: module_id.to_string(),
             },
         );
 
-        // TODO: Re-enable fuel metering. wasmtime 25's Store API uses
-        // StoreContextMut / StoreContext traits for fuel access.
-        // For now, execution is bounded by compilation and memory limits.
-        let _ = gas_limit;
+        store
+            .set_fuel(gas_limit)
+            .map_err(|e| ExecutionError::RuntimeError(format!("set_fuel: {e}")))?;
 
         let mut linker: Linker<StoreState> = Linker::new(&self.engine);
         self.link_host_functions(&mut linker)?;
@@ -86,7 +88,14 @@ impl ExecutionEngine {
         let params_bytes = params_json.as_bytes();
         let params_ptr = alloc
             .call(&mut store, params_bytes.len() as u32)
-            .map_err(|e| ExecutionError::RuntimeError(format!("alloc failed: {e}")))?;
+            .map_err(|e| {
+                let msg = e.to_string();
+                if msg.contains("fuel") {
+                    ExecutionError::GasLimitExceeded { consumed: gas_limit, limit: gas_limit }
+                } else {
+                    ExecutionError::RuntimeError(format!("alloc failed: {msg}"))
+                }
+            })?;
 
         memory
             .write(&mut store, params_ptr as usize, params_bytes)
@@ -107,7 +116,9 @@ impl ExecutionEngine {
                 }
             })?;
 
-        let gas_consumed = 0u64; // TODO: store.fuel_consumed() when API is resolved
+        let gas_consumed = store.get_fuel().map(|remaining| {
+            gas_limit.saturating_sub(remaining)
+        }).unwrap_or(gas_limit);
 
         let result_ptr = (packed >> 32) as u32;
         let result_len = (packed & 0xFFFF_FFFF) as usize;
@@ -253,6 +264,61 @@ impl ExecutionEngine {
             )
             .map_err(|e| ExecutionError::RuntimeError(e.to_string()))?;
 
+        // host_store_state(key_ptr, key_len, val_ptr, val_len) -> u32 (0=ok, 1=error)
+        linker
+            .func_wrap(
+                MODULE_CATEGORY,
+                "host_store_state",
+                |mut caller: wasmtime::Caller<'_, StoreState>,
+                 key_ptr: u32, key_len: u32,
+                 val_ptr: u32, val_len: u32| -> u32 {
+                    let key = read_wasm_str(&mut caller, key_ptr, key_len);
+                    let val = read_wasm_str(&mut caller, val_ptr, val_len);
+                    let module_id = &caller.data().module_id;
+                    match caller.data().host.store_state(module_id, &key, &val) {
+                        Ok(()) => 0,
+                        Err(_) => 1,
+                    }
+                },
+            )
+            .map_err(|e| ExecutionError::RuntimeError(e.to_string()))?;
+
+        // host_load_state(key_ptr, key_len, out_ptr, out_len) -> u64
+        // packed: (bytes_written << 32) | status (0=ok, 1=not_found, 2=error)
+        linker
+            .func_wrap(
+                MODULE_CATEGORY,
+                "host_load_state",
+                |mut caller: wasmtime::Caller<'_, StoreState>,
+                 key_ptr: u32, key_len: u32,
+                 out_ptr: u32, out_len: u32| -> u64 {
+                    let key = read_wasm_str(&mut caller, key_ptr, key_len);
+                    let module_id = &caller.data().module_id;
+                    let result = caller.data().host.load_state(module_id, &key);
+                    match result {
+                        Ok(Some(json)) => {
+                            let bytes = json.as_bytes();
+                            let written = bytes.len().min(out_len as usize) as u64;
+                            if let Some(mem) = get_memory(&mut caller) {
+                                let _ = mem.write(&mut caller, out_ptr as usize, &bytes[..written as usize]);
+                            }
+                            (written << 32) | 0
+                        }
+                        Ok(None) => 1,
+                        Err(e) => {
+                            let msg = format!(r#"{{"error":"{}"}}"#, e);
+                            let bytes = msg.as_bytes();
+                            let written = bytes.len().min(out_len as usize) as u64;
+                            if let Some(mem) = get_memory(&mut caller) {
+                                let _ = mem.write(&mut caller, out_ptr as usize, &bytes[..written as usize]);
+                            }
+                            (written << 32) | 2
+                        }
+                    }
+                },
+            )
+            .map_err(|e| ExecutionError::RuntimeError(e.to_string()))?;
+
         Ok(())
     }
 }
@@ -262,6 +328,7 @@ impl ExecutionEngine {
 struct StoreState {
     host: Arc<dyn WasmHost>,
     logs: Vec<String>,
+    module_id: String,
 }
 
 // --- Helpers ---

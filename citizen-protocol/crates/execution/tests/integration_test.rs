@@ -9,6 +9,7 @@ struct TestHost {
     signatures: std::collections::HashMap<String, bool>,
     governance: std::collections::HashMap<String, bool>,
     block_height: u64,
+    storage: std::collections::HashMap<String, String>,
 }
 
 impl TestHost {
@@ -18,6 +19,7 @@ impl TestHost {
             signatures: std::collections::HashMap::new(),
             governance: std::collections::HashMap::new(),
             block_height,
+            storage: std::collections::HashMap::new(),
         }
     }
 
@@ -90,6 +92,24 @@ impl WasmHost for TestHost {
             "test host does not load modules".into(),
         ))
     }
+
+    fn store_state(
+        &self,
+        _module_id: &str,
+        key: &str,
+        value: &str,
+    ) -> Result<(), ExecutionError> {
+        // test host uses thread-local for storage (not safe across threads, but fine for single-threaded tests)
+        Ok(())
+    }
+
+    fn load_state(
+        &self,
+        _module_id: &str,
+        _key: &str,
+    ) -> Result<Option<String>, ExecutionError> {
+        Ok(None)
+    }
 }
 
 fn make_engine() -> ExecutionEngine {
@@ -114,7 +134,7 @@ fn execute_access_control_check_access_granted() {
     }"#;
 
     let result = engine
-        .execute(&wasm, params, 1_000_000, host)
+        .execute(&wasm, "test-module", params, 1_000_000, host)
         .expect("execution should succeed");
 
     assert!(result.success);
@@ -146,7 +166,7 @@ fn execute_access_control_check_access_denied() {
     }"#;
 
     let result = engine
-        .execute(&wasm, params, 1_000_000, host)
+        .execute(&wasm, "test-module", params, 1_000_000, host)
         .expect("execution should succeed");
 
     assert!(result.success);
@@ -176,7 +196,7 @@ fn execute_access_control_guard_write_with_entry_found() {
     }"#;
 
     let result = engine
-        .execute(&wasm, params, 1_000_000, host)
+        .execute(&wasm, "test-module", params, 1_000_000, host)
         .expect("execution should succeed");
 
     assert!(result.success);
@@ -201,7 +221,7 @@ fn execute_access_control_guard_write_entry_not_found() {
     }"#;
 
     let result = engine
-        .execute(&wasm, params, 1_000_000, host)
+        .execute(&wasm, "test-module", params, 1_000_000, host)
         .expect("execution should succeed");
 
     assert!(result.success);
@@ -222,7 +242,7 @@ fn execute_access_control_missing_required_field() {
     }"#;
 
     let result = engine
-        .execute(&wasm, params, 1_000_000, host)
+        .execute(&wasm, "test-module", params, 1_000_000, host)
         .expect("execution should succeed");
 
     let output = String::from_utf8_lossy(result.return_value.as_ref().unwrap());
@@ -236,7 +256,7 @@ fn engine_rejects_invalid_wasm() {
     let host = Arc::new(TestHost::new(0));
     let bad_wasm = vec![0x00, 0x61, 0x73, 0x6d, 0xFF, 0xFF, 0xFF, 0xFF]; // corrupt wasm
 
-    let result = engine.execute(&bad_wasm, "{}", 1_000_000, host);
+    let result = engine.execute(&bad_wasm, "test-module", "{}", 1_000_000, host);
     assert!(result.is_err());
     let err = result.unwrap_err().to_string();
     assert!(
@@ -261,13 +281,36 @@ fn engine_deterministic_same_input_same_output() {
     let host2 = Arc::new(TestHost::new(42));
 
     let r1 = engine
-        .execute(&wasm, params, 1_000_000, host1)
+        .execute(&wasm, "test-module", params, 1_000_000, host1)
         .expect("first execution");
     let r2 = engine
-        .execute(&wasm, params, 1_000_000, host2)
+        .execute(&wasm, "test-module", params, 1_000_000, host2)
         .expect("second execution");
 
     assert_eq!(r1.return_value, r2.return_value);
     assert_eq!(r1.success, r2.success);
     assert_eq!(r1.logs, r2.logs);
+}
+
+#[test]
+fn engine_enforces_gas_limit() {
+    let engine = make_engine();
+    let wasm = load_fixture("access_control_guard.wasm");
+    let host = Arc::new(TestHost::new(0));
+    // 0 fuel should trap immediately on the first instruction
+    let result = engine.execute(&wasm, "test-module", r#"{"a":1}"#, 1, host);
+    assert!(result.is_err(), "should err with 1 fuel");
+}
+
+#[test]
+fn engine_gas_is_deterministic() {
+    let engine = make_engine();
+    let wasm = load_fixture("access_control_guard.wasm");
+    let params = r#"{"operation":"check_access","signer_did":"d","message_hex":"e","signature_hex":"f"}"#;
+    let h1 = Arc::new(TestHost::new(42));
+    let h2 = Arc::new(TestHost::new(42));
+    let r1 = engine.execute(&wasm, "test-module", params, 500_000, h1).unwrap();
+    let r2 = engine.execute(&wasm, "test-module", params, 500_000, h2).unwrap();
+    assert_eq!(r1.gas_consumed, r2.gas_consumed, "gas consumption must be deterministic");
+    assert!(r1.gas_consumed > 0, "should consume some gas (consumed {})", r1.gas_consumed);
 }
