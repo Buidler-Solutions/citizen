@@ -135,6 +135,12 @@ where
             }
         });
 
+        // Initial block sync — request historical blocks from peers before
+        // entering the consensus event loop. This lets a node that joins mid-chain
+        // catch up by fetching blocks from existing validators.
+        info!(local_height = self.ledger.storage().latest_height().unwrap_or(0), "checking if block sync is needed");
+        let _ = self.sync_from_peers().await;
+
         loop {
             tokio::select! {
                 _ = watchdog_rx.recv() => {
@@ -273,7 +279,31 @@ where
         self.liveness
             .write()
             .last_heartbeat_height
-            .insert(validator, observed_height);
+            .insert(validator.clone(), observed_height);
+
+        if self.check_sync_needed(observed_height) {
+            let local = self.ledger.storage().latest_height().unwrap_or(0);
+            info!(
+                observed_height,
+                local_height = local,
+                "heartbeat reveals node is behind, requesting sync"
+            );
+            let vid = self.validator_id.clone();
+            let network = Arc::clone(&self.network);
+            let target = validator.clone();
+            tokio::spawn(async move {
+                let _ = network
+                    .unicast(
+                        &target,
+                        ConsensusMessage::SyncRequest {
+                            requester: vid,
+                            from_height: local + 1,
+                            to_height: local + 100,
+                        },
+                    )
+                    .await;
+            });
+        }
     }
 
     async fn handle_message(&self, message: ConsensusMessage) -> Result<()> {
@@ -337,6 +367,17 @@ where
                     warn!(%entry_id, ?err, "failed to apply gossiped entry");
                 }
                 Ok(())
+            }
+            ConsensusMessage::SyncRequest {
+                requester,
+                from_height,
+                to_height,
+            } => {
+                self.handle_sync_request(requester, from_height, to_height)
+                    .await
+            }
+            ConsensusMessage::SyncResponse { requester: _, blocks } => {
+                self.handle_sync_response(blocks).await
             }
         }
     }
@@ -658,6 +699,165 @@ where
         }
     }
 
+    // ── Block sync protocol ──
+
+    /// Respond to a sync request from a peer by serving historical blocks.
+    async fn handle_sync_request(
+        &self,
+        requester: ValidatorId,
+        from_height: u64,
+        to_height: u64,
+    ) -> Result<()> {
+        let latest = self.ledger.storage().latest_height()?;
+        let cap = to_height.min(latest);
+        if from_height > cap {
+            info!(
+                from_height, to_height, latest,
+                "sync request: nothing to serve (range beyond local height)"
+            );
+            let network = Arc::clone(&self.network);
+            let req_id = requester.clone();
+            tokio::spawn(async move {
+                let _ = network
+                    .unicast(
+                        &requester,
+                        ConsensusMessage::SyncResponse {
+                            requester: req_id,
+                            blocks: vec![],
+                        },
+                    )
+                    .await;
+            });
+            return Ok(());
+        }
+
+        const MAX_BLOCKS_PER_RESPONSE: u64 = 50;
+        let effective_to = cap.min(from_height + MAX_BLOCKS_PER_RESPONSE - 1);
+
+        let mut blocks = Vec::new();
+        for h in from_height..=effective_to {
+            if let Ok(Some(block)) = self.ledger.storage().get_block(h) {
+                blocks.push(block);
+            }
+        }
+
+        info!(
+            from_height,
+            effective_to,
+            served = blocks.len(),
+            latest,
+            "serving sync request"
+        );
+
+        let network = Arc::clone(&self.network);
+        let req_id = requester.clone();
+        tokio::spawn(async move {
+            let _ = network
+                .unicast(
+                    &requester,
+                    ConsensusMessage::SyncResponse {
+                        requester: req_id,
+                        blocks,
+                    },
+                )
+                .await;
+        });
+        Ok(())
+    }
+
+    /// Apply a batch of historical blocks received from a peer during sync.
+    async fn handle_sync_response(&self, blocks: Vec<Block>) -> Result<()> {
+        if blocks.is_empty() {
+            info!("sync response: no blocks (already at tip or peer has nothing)");
+            return Ok(());
+        }
+
+        let local_height = self.ledger.storage().latest_height()?;
+        let mut applied = 0u64;
+
+        for block in blocks {
+            if block.header.height <= local_height {
+                continue;
+            }
+
+            let expected_height = self.ledger.storage().latest_height()? + 1;
+            if block.header.height != expected_height {
+                warn!(
+                    block_height = block.header.height,
+                    expected_height,
+                    "sync: skipping non-contiguous block"
+                );
+                continue;
+            }
+
+            self.finalize_block(block.header.height, block).await?;
+            applied += 1;
+        }
+
+        if applied > 0 {
+            info!(applied, "sync response applied");
+        }
+
+        Ok(())
+    }
+
+    /// Attempt to catch up to the network's latest height by requesting
+    /// historical blocks from peers. Called at startup and when a heartbeat
+    /// reveals the node is behind.
+    pub async fn sync_from_peers(&self) -> Result<()> {
+        let local_height = self.ledger.storage().latest_height()?;
+        let snapshot = self.validator_set.read().clone();
+        let peer_ids: Vec<ValidatorId> = snapshot
+            .validators
+            .keys()
+            .filter(|id| *id != &self.validator_id)
+            .cloned()
+            .collect();
+
+        if peer_ids.is_empty() {
+            info!("sync: no peers to request blocks from");
+            return Ok(());
+        }
+
+        info!(
+            local_height,
+            peer_count = peer_ids.len(),
+            "sync: requesting blocks from peers"
+        );
+
+        for peer in &peer_ids {
+            let from = local_height + 1;
+            let to = local_height + 100;
+
+            if let Err(err) = self
+                .network
+                .unicast(
+                    peer,
+                    ConsensusMessage::SyncRequest {
+                        requester: self.validator_id.clone(),
+                        from_height: from,
+                        to_height: to,
+                    },
+                )
+                .await
+            {
+                warn!(peer = %peer, ?err, "sync: failed to send request");
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Check if the node is behind the observed height and trigger sync.
+    /// Called from the main event loop when heartbeats arrive.
+    fn check_sync_needed(&self, observed_height: u64) -> bool {
+        if let Ok(local) = self.ledger.storage().latest_height() {
+            observed_height > local
+        } else {
+            false
+        }
+    }
+
     async fn maybe_roll_epoch(&self, height: u64, block: &Block) -> Result<()> {
         let snapshot = self.validator_set.read().clone();
         let epoch_length_blocks = self.config.read().epoch_length_blocks;
@@ -913,9 +1113,140 @@ fn signature_from_hex(hex_signature: &str) -> Result<Signature> {
 
 #[cfg(test)]
 mod tests {
-    use super::compute_entry_root;
-    use citizen_types::LedgerEntry;
+    use super::*;
+    use citizen_crypto::{KeyRegistry, ValidatorKeypair};
+    use citizen_ledger::Ledger;
+    use citizen_network::{MockNetwork, NetworkLatency};
+    use citizen_storage::MemoryStorage;
+    use citizen_types::{
+        Block, BlockHeader, CommitProof, ConsensusConfig, NamespaceDescriptor,
+        ValidatorMetadata, ValidatorPerformance, ValidatorSetSnapshot, ValidatorStatus,
+        EpochState,
+    };
     use serde_json::json;
+    use std::collections::BTreeMap;
+
+    fn make_test_ledger(kp: &ValidatorKeypair) -> Arc<Ledger<MemoryStorage>> {
+        let storage = Arc::new(MemoryStorage::new());
+        let registry = KeyRegistry::new();
+        registry.insert("validator-alpha".to_string(), *kp.verifying_key());
+        let ledger = Arc::new(Ledger::new(storage, registry));
+        ledger.bootstrap_namespaces(vec![citizen_types::NamespaceRuleset {
+            descriptor: NamespaceDescriptor {
+                namespace: "test.ns".into(),
+                version: 1,
+                rules_hash: "sha256:test".into(),
+                governed_by: "governance.vote".into(),
+            },
+            writers: vec![].into_iter().collect(),
+            validators: vec![],
+        }]);
+        ledger
+    }
+
+    fn sign_block(header: &BlockHeader, kp: &ValidatorKeypair) -> CommitProof {
+        let message = citizen_crypto::hash_block_header(header);
+        let sig = citizen_crypto::sign_message(kp, message.as_bytes());
+        let sig_hex = hex::encode(sig.to_bytes());
+        CommitProof {
+            aggregated_signature: format!("validator-alpha:{sig_hex}"),
+            participant_ids: ["validator-alpha".to_string()].into_iter().collect(),
+        }
+    }
+
+    fn make_signed_block(height: u64, prev_hash: &str, kp: &ValidatorKeypair) -> Block {
+        let mut header = BlockHeader {
+            height,
+            prev_hash: prev_hash.to_string(),
+            entry_root: "EMPTY".to_string(),
+            proposer: "validator-alpha".to_string(),
+            timestamp: 1700000000 + height as i64,
+            commit_proof: CommitProof {
+                aggregated_signature: String::new(),
+                participant_ids: std::collections::BTreeSet::new(),
+            },
+        };
+        header.commit_proof = sign_block(&header, kp);
+        Block {
+            header,
+            entries: vec![],
+        }
+    }
+
+    fn make_validator_snapshot(
+        validator_ids: &[&str],
+        alpha_kp: &ValidatorKeypair,
+    ) -> ValidatorSetSnapshot {
+        let mut validators = BTreeMap::new();
+        for vid in validator_ids {
+            let public_key = if *vid == "validator-alpha" {
+                hex::encode(alpha_kp.verifying_key().to_bytes())
+            } else {
+                let kp = ValidatorKeypair::generate(vid.to_string());
+                hex::encode(kp.verifying_key().to_bytes())
+            };
+            validators.insert(
+                vid.to_string(),
+                ValidatorMetadata {
+                    validator_id: vid.to_string(),
+                    public_key,
+                    anchors: vec![format!("org:{vid}")],
+                    joined_at: chrono::Utc::now(),
+                    status: ValidatorStatus::Active,
+                    performance: ValidatorPerformance {
+                        uptime_bps: 10000,
+                        missed_prevotes: 0,
+                    },
+                },
+            );
+        }
+        ValidatorSetSnapshot {
+            height: 0,
+            validators,
+            quorum_bps: 6667,
+            epoch_state: EpochState {
+                epoch: 0,
+                epoch_length_blocks: 0,
+                pending_replacements: vec![],
+                manifest_digest: String::new(),
+                last_seed: String::new(),
+            },
+        }
+    }
+
+    fn make_engine() -> (
+        ConsensusEngine<MockNetwork, MemoryStorage>,
+        Arc<MockNetwork>,
+        ValidatorKeypair,
+    ) {
+        let kp = ValidatorKeypair::generate("validator-alpha".to_string());
+        let ledger = make_test_ledger(&kp);
+        let network = Arc::new(MockNetwork::new(NetworkLatency {
+            min_ms: 0,
+            max_ms: 0,
+            jitter_ms: 0,
+            packet_loss: 0.0,
+        }));
+        let snapshot = make_validator_snapshot(&["validator-alpha"], &kp);
+        let config = ConsensusConfig {
+            block_time_millis: 1000,
+            max_entries_per_block: 100,
+            quorum_bps: 6667,
+            epoch_length_blocks: 0,
+            heartbeat_interval_millis: 3000,
+            liveness_missed_prevote_threshold: 10,
+        };
+        let engine = ConsensusEngine::new(
+            "validator-alpha".to_string(),
+            kp.clone(),
+            config,
+            network.clone(),
+            ledger,
+            snapshot,
+        )
+        .unwrap();
+        (engine, network, kp)
+    }
 
     #[test]
     fn entry_root_is_deterministic_for_identical_entries() {
@@ -933,5 +1264,75 @@ mod tests {
         let root_a = compute_entry_root(std::slice::from_ref(&entry));
         let root_b = compute_entry_root(&[entry]);
         assert_eq!(root_a, root_b);
+    }
+
+    #[tokio::test]
+    async fn sync_response_applies_missing_blocks() {
+        let (engine, _network, kp) = make_engine();
+        assert_eq!(engine.ledger.storage().latest_height().unwrap(), 0);
+
+        let block1 = make_signed_block(1, "GENESIS", &kp);
+        let hash1 = citizen_crypto::hash_block_header(&block1.header);
+        let block2 = make_signed_block(2, &hash1, &kp);
+        let hash2 = citizen_crypto::hash_block_header(&block2.header);
+        let block3 = make_signed_block(3, &hash2, &kp);
+
+        engine
+            .handle_sync_response(vec![block1, block2, block3])
+            .await
+            .unwrap();
+
+        assert_eq!(engine.ledger.storage().latest_height().unwrap(), 3);
+        assert!(engine.ledger.storage().get_block(1).unwrap().is_some());
+        assert!(engine.ledger.storage().get_block(2).unwrap().is_some());
+        assert!(engine.ledger.storage().get_block(3).unwrap().is_some());
+    }
+
+    #[tokio::test]
+    async fn sync_response_skips_non_contiguous_blocks() {
+        let (engine, _network, kp) = make_engine();
+
+        let block5 = make_signed_block(5, "GENESIS", &kp);
+        engine
+            .handle_sync_response(vec![block5])
+            .await
+            .unwrap();
+
+        assert_eq!(engine.ledger.storage().latest_height().unwrap(), 0);
+    }
+
+    #[tokio::test]
+    async fn sync_response_empty_is_noop() {
+        let (engine, _network, _kp) = make_engine();
+
+        engine.handle_sync_response(vec![]).await.unwrap();
+        assert_eq!(engine.ledger.storage().latest_height().unwrap(), 0);
+    }
+
+    #[tokio::test]
+    async fn sync_response_does_not_reapply_existing_blocks() {
+        let (engine, _network, kp) = make_engine();
+
+        let block1 = make_signed_block(1, "GENESIS", &kp);
+        engine.ledger.storage().store_block(block1).unwrap();
+        assert_eq!(engine.ledger.storage().latest_height().unwrap(), 1);
+
+        let block1_dup = make_signed_block(1, "GENESIS", &kp);
+        engine.handle_sync_response(vec![block1_dup]).await.unwrap();
+        assert_eq!(engine.ledger.storage().latest_height().unwrap(), 1);
+    }
+
+    #[test]
+    fn check_sync_needed_detects_height_gap() {
+        let (engine, _network, _kp) = make_engine();
+
+        assert!(engine.check_sync_needed(10));
+
+        let block = make_signed_block(1, "GENESIS", &ValidatorKeypair::generate("validator-alpha".to_string()));
+        engine.ledger.storage().store_block(block).unwrap();
+
+        assert!(engine.check_sync_needed(10));
+        assert!(!engine.check_sync_needed(1));
+        assert!(!engine.check_sync_needed(0));
     }
 }
