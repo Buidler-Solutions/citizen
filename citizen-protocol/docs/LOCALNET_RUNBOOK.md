@@ -33,6 +33,19 @@ infrastructure.
      `data/validator-delta.log`, `data/validator-epsilon.log`.
    - Data: RocksDB state under `data/alpha|beta|gamma|delta|epsilon/`.
 
+### Lightweight alternatives
+
+For faster local development without the full 5-node overhead:
+
+| Mode | Script | Validators | Ports | Use case |
+|------|--------|-----------|-------|----------|
+| **Solo** | `scripts/run_solo.sh` | 1 | API `9081`, QUIC `9200` | API/SDK/wallet dev, fastest startup |
+| **Triolet** | `scripts/run_triolet.sh` | 3 | API `8091-8093`, QUIC `9210-9212` | Minimum BFT consensus testing (quorum: 3/3) |
+| **Full localnet** | `scripts/run_localnet.sh` | 5 | API `8081-8085`, QUIC `9100-9104` | Full fault-tolerance, quorum loss, Byzantine testing |
+
+All three modes share the same QUIC TLS certificates (`config/localnet/certs/`) and use
+separate data directories to avoid state collisions.
+
 3. In another shell, issue API reads/writes against any node (e.g. using `curl`
    against `http://127.0.0.1:8081`).
 4. Press `Ctrl+C` in the launcher to stop all nodes cleanly.

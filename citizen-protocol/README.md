@@ -155,7 +155,14 @@ cargo test -p citizen-wallet privacy_mode_hybrid_ -- --nocapture
    `config/localnet/` and the helper launcher:
 
    ```bash
-   scripts/run_localnet.sh
+   scripts/run_localnet.sh         # 5 validators (ports 8081-8085)
+   ```
+
+   **Lightweight alternatives** for faster local development:
+
+   ```bash
+   scripts/run_solo.sh             # 1 validator  (port 9081) — API/SDK/wallet dev
+   scripts/run_triolet.sh          # 3 validators  (ports 8091-8093) — minimum BFT testing
    ```
 
    See `docs/LOCALNET_RUNBOOK.md` for details on swapping in your own keys and
