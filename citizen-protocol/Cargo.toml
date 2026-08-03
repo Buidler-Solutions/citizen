@@ -10,6 +10,7 @@ members = [
     "crates/api",
     "crates/node",
     "crates/simulation",
+    "crates/execution",
     "crates/wallet",
     "wallet/cli",
     "tools/validator-keygen",
@@ -42,6 +43,7 @@ chrono = { version = "0.4", features = ["serde"] }
 uuid = { version = "1", features = ["serde", "v4"] }
 anyhow = "1.0"
 hex = "0.4"
+base64 = "0.22"
 futures = "0.3"
 libp2p = { version = "0.56", default-features = false, features = ["tokio", "tcp", "gossipsub", "noise", "tls", "macros"] }
 quinn = { version = "0.11", default-features = false, features = ["rustls-ring", "runtime-tokio", "log"] }

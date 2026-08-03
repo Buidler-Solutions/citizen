@@ -794,7 +794,14 @@ fn default_namespaces() -> Vec<NamespaceRuleset> {
                 citizen_types::NamespaceRule {
                     name: "wasm_runtime_policy".into(),
                     config: json!({
-                        "allowed_module_classes": ["deterministic-indexer", "policy-guard", "receipt-verifier"],
+                        "allowed_module_classes": [
+                            "deterministic-indexer",
+                            "policy-guard",
+                            "receipt-verifier",
+                            "escrow",
+                            "access-control",
+                            "conditional-transfer"
+                        ],
                         "required_governance_approvals": 3
                     }),
                 },

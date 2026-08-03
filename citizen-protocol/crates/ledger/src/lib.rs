@@ -1,6 +1,7 @@
 use citizen_crypto::{
     hash_block_header, parse_verifying_key, verify_commit_proof, verify_signature, KeyRegistry,
 };
+use citizen_execution::{ExecutionConfig, ExecutionEngine, ExecutionError, ExecutionResult, WasmHost};
 use citizen_storage::{LedgerStorage, MemoryStorage};
 use citizen_types::{
     Block, GovernanceProposal, LedgerEntry, NamespaceId, NamespaceRuleset, PrivacyMode,
@@ -22,6 +23,7 @@ pub struct Ledger<S: LedgerStorage + 'static> {
     namespace_rules: RwLock<HashMap<NamespaceId, NamespaceRuleset>>,
     key_registry: KeyRegistry,
     custom_rule_handlers: RwLock<HashMap<String, Arc<RuleHandler<S>>>>,
+    wasm_engine: Option<Arc<ExecutionEngine>>,
 }
 
 impl<S: LedgerStorage + 'static> Ledger<S> {
@@ -31,7 +33,17 @@ impl<S: LedgerStorage + 'static> Ledger<S> {
             namespace_rules: RwLock::new(HashMap::new()),
             key_registry,
             custom_rule_handlers: RwLock::new(HashMap::new()),
+            wasm_engine: None,
         }
+    }
+
+    /// Enable WASM execution in this ledger. Module execution will be handled
+    /// by the provided engine with the given configuration.
+    pub fn enable_wasm_execution(&mut self, config: ExecutionConfig) -> Result<()> {
+        let engine = ExecutionEngine::new(config)
+            .map_err(|e| ProtocolError::ValidationFailed(format!("wasm engine init: {e}")))?;
+        self.wasm_engine = Some(Arc::new(engine));
+        Ok(())
     }
 
     pub fn register_rule_handler<F>(&self, rule_name: impl Into<String>, handler: F)
@@ -1523,6 +1535,16 @@ impl<S: LedgerStorage + 'static> Ledger<S> {
                         "register module requires payload.audit_hash".to_string(),
                     ));
                 }
+                if entry
+                    .payload
+                    .get("wasm_bytes")
+                    .and_then(Value::as_str)
+                    .is_none()
+                {
+                    return Err(ProtocolError::ValidationFailed(
+                        "register module requires payload.wasm_bytes (base64-encoded WASM bytecode)".to_string(),
+                    ));
+                }
                 Ok(())
             }
             "ACTIVATE_MODULE" => {
@@ -1784,6 +1806,155 @@ fn canonical_json(value: &Value) -> String {
             format!("[{}]", encoded_items.join(","))
         }
         _ => serde_json::to_string(value).unwrap_or_else(|_| "null".to_string()),
+    }
+}
+
+/// A [`WasmHost`] implementation that bridges WASM host functions to the
+/// Citizen ledger storage. All operations are deterministic — given the same
+/// entry and state, they return the same result.
+struct LedgerWasmHost<S: LedgerStorage + 'static> {
+    storage: Arc<S>,
+}
+
+impl<S: LedgerStorage + 'static> WasmHost for LedgerWasmHost<S> {
+    fn read_namespace_entry(
+        &self,
+        namespace: &str,
+        entry_id: &str,
+    ) -> std::result::Result<Option<String>, ExecutionError> {
+        let entries = self
+            .storage
+            .namespace_entries(&namespace.to_string())
+            .map_err(|e| ExecutionError::HostError(e.to_string()))?;
+
+        for entry in &entries {
+            if entry.object_id == entry_id
+                || entry.entry_id.to_string() == entry_id
+            {
+                return Ok(Some(
+                    serde_json::to_string(&entry.payload)
+                        .map_err(|e| ExecutionError::SerializationError(e.to_string()))?,
+                ));
+            }
+        }
+        Ok(None)
+    }
+
+    fn write_namespace_entry(
+        &self,
+        _namespace: &str,
+        _payload_json: &str,
+    ) -> std::result::Result<String, ExecutionError> {
+        Err(ExecutionError::HostError(
+            "write_namespace_entry is not yet supported in ledger-backed WASM host".into(),
+        ))
+    }
+
+    fn verify_signature(
+        &self,
+        signer_did: &str,
+        message_hex: &str,
+        signature_hex: &str,
+    ) -> std::result::Result<bool, ExecutionError> {
+        let message_bytes = hex::decode(message_hex)
+            .map_err(|e| ExecutionError::HostError(format!("invalid message hex: {e}")))?;
+        let sig_bytes = hex::decode(signature_hex)
+            .map_err(|e| ExecutionError::HostError(format!("invalid signature hex: {e}")))?;
+        let sig = Signature::from_slice(&sig_bytes)
+            .map_err(|e| ExecutionError::HostError(format!("invalid signature: {e}")))?;
+
+        let pubkey = parse_verifying_key(signer_did)
+            .map_err(|e| ExecutionError::HostError(format!("invalid DID: {e}")))?;
+
+        Ok(pubkey.verify_strict(&message_bytes, &sig).is_ok())
+    }
+
+    fn check_governance_approval(
+        &self,
+        proposal_id: &str,
+    ) -> std::result::Result<bool, ExecutionError> {
+        let proposals = self
+            .storage
+            .governance_proposals()
+            .map_err(|e| ExecutionError::HostError(e.to_string()))?;
+
+        // Check if the proposal exists and is tracked.
+        // Full vote-counting requires the governance engine;
+        // this host function returns whether the proposal is registered.
+        Ok(proposals.iter().any(|p| p.proposal_id == proposal_id))
+    }
+
+    fn current_block_height(&self) -> std::result::Result<u64, ExecutionError> {
+        self.storage
+            .latest_height()
+            .map_err(|e| ExecutionError::HostError(e.to_string()))
+    }
+
+    fn load_module_bytecode(
+        &self,
+        module_id: &str,
+    ) -> std::result::Result<Vec<u8>, ExecutionError> {
+        let entries = self
+            .storage
+            .namespace_entries(&"execution.module".to_string())
+            .map_err(|e| ExecutionError::HostError(e.to_string()))?;
+
+        for entry in entries.iter().rev() {
+            if entry.object_id == module_id && entry.action == "REGISTER_MODULE" {
+                if let Some(b64) = entry.payload.get("wasm_bytes").and_then(|v| v.as_str()) {
+                    use base64::Engine;
+                    return base64::engine::general_purpose::STANDARD
+                        .decode(b64)
+                        .map_err(|e| {
+                            ExecutionError::HostError(format!("invalid base64 wasm: {e}"))
+                        });
+                }
+            }
+        }
+        Err(ExecutionError::ModuleNotFound(module_id.to_string()))
+    }
+}
+
+impl<S: LedgerStorage + 'static> Ledger<S> {
+    /// Execute a WASM module that has been registered and activated in the
+    /// `execution.module` namespace.
+    ///
+    /// Looks up the module's bytecode from the REGISTER_MODULE entry, checks
+    /// that an ACTIVATE_MODULE entry exists, and runs the handler.
+    pub fn execute_wasm_module(
+        &self,
+        module_id: &str,
+        params_json: &str,
+        gas_limit: u64,
+    ) -> Result<ExecutionResult> {
+        let engine = self.wasm_engine.as_ref().ok_or_else(|| {
+            ProtocolError::ValidationFailed("wasm execution not enabled on this ledger".into())
+        })?;
+
+        // Verify the module is activated
+        let entries = self
+            .storage
+            .namespace_entries(&"execution.module".to_string())?;
+        let activated = entries.iter().any(|e| {
+            e.object_id == module_id && e.action == "ACTIVATE_MODULE"
+        });
+        if !activated {
+            return Err(ProtocolError::ValidationFailed(format!(
+                "module '{module_id}' is not activated"
+            )));
+        }
+
+        let host = Arc::new(LedgerWasmHost {
+            storage: self.storage.clone(),
+        });
+
+        let wasm_bytes = host
+            .load_module_bytecode(module_id)
+            .map_err(|e| ProtocolError::ValidationFailed(format!("load module: {e}")))?;
+
+        engine
+            .execute(&wasm_bytes, params_json, gas_limit, host)
+            .map_err(|e| ProtocolError::ValidationFailed(format!("wasm execution: {e}")))
     }
 }
 
@@ -2886,7 +3057,8 @@ mod tests {
             "module_id": "module.asset.v1",
             "module_class": "asset",
             "wasm_hash": "wasm:abc",
-            "audit_hash": "audit:abc"
+            "audit_hash": "audit:abc",
+            "wasm_bytes": "AAECAwQFBgc="
         });
         ledger
             .apply_entry(register)
