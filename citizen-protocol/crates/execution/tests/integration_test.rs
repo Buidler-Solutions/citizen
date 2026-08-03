@@ -752,3 +752,384 @@ fn sbt_unauthorized_mint_rejected() {
         "token should not exist, got: {owner_out}"
     );
 }
+
+// ═══════════════════════════════════════════════════════════════
+// SBT Advanced Feature Tests
+// ═══════════════════════════════════════════════════════════════
+
+// ── Multi-Issuer Authority ──
+
+#[test]
+fn sbt_configure_and_mint_multi_issuer() {
+    let engine = make_engine();
+    let wasm = load_fixture("soulbound_token.wasm");
+    let host = Arc::new(TestHost::new(100));
+
+    // Bootstrap configuration: 3 issuers, threshold 2
+    let configure = r#"{"operation":"configure","admin_did":"did:key:ed25519:admin","admin_sig":"sig","issuers":"did:key:ed25519:uni,did:key:ed25519:gov,did:key:ed25519:corp","threshold":"2"}"#;
+    let result = engine
+        .execute(&wasm, "sbt-module", configure, 1_000_000, host.clone())
+        .expect("configure");
+    assert!(result.success);
+    let out = String::from_utf8_lossy(result.return_value.as_ref().unwrap());
+    assert!(out.contains(r#""ok":true"#), "configure should succeed: {out}");
+    assert!(out.contains(r#""issuers":3"#));
+    assert!(out.contains(r#""threshold":2"#));
+
+    // Mint with 2 valid issuers (uni + gov) — meets threshold
+    let mint = r#"{"operation":"mint","issuer_dids":"did:key:ed25519:uni,did:key:ed25519:gov","signatures":"sig1,sig2","token_id":"sbt_multi","recipient_did":"did:key:ed25519:alice"}"#;
+    let result = engine
+        .execute(&wasm, "sbt-module", mint, 1_000_000, host.clone())
+        .expect("mint");
+    assert!(result.success);
+    let out = String::from_utf8_lossy(result.return_value.as_ref().unwrap());
+    assert!(out.contains(r#""ok":true"#), "mint with 2 issuers should succeed: {out}");
+    assert!(out.contains(r#""verified_issuers":2"#));
+    assert!(out.contains(r#""required_issuers":2"#));
+}
+
+#[test]
+fn sbt_mint_below_threshold_rejected() {
+    let engine = make_engine();
+    let wasm = load_fixture("soulbound_token.wasm");
+    let host = Arc::new(TestHost::new(100));
+
+    // Configure: threshold 2
+    let configure = r#"{"operation":"configure","admin_did":"did:key:ed25519:admin","admin_sig":"s","issuers":"did:key:ed25519:a,did:key:ed25519:b","threshold":"2"}"#;
+    engine
+        .execute(&wasm, "sbt-module", configure, 1_000_000, host.clone())
+        .expect("configure");
+
+    // Mint with only 1 issuer — below threshold
+    let mint = r#"{"operation":"mint","issuer_dids":"did:key:ed25519:a","signatures":"sig1","token_id":"sbt_low","recipient_did":"did:key:ed25519:bob"}"#;
+    let result = engine
+        .execute(&wasm, "sbt-module", mint, 1_000_000, host)
+        .expect("mint");
+    assert!(result.success);
+    let out = String::from_utf8_lossy(result.return_value.as_ref().unwrap());
+    assert!(out.contains(r#""ok":false"#), "below-threshold mint should fail: {out}");
+    assert!(out.contains("insufficient"), "should explain: {out}");
+}
+
+#[test]
+fn sbt_mint_unauthorized_issuer_rejected() {
+    let engine = make_engine();
+    let wasm = load_fixture("soulbound_token.wasm");
+    let host = Arc::new(TestHost::new(100));
+
+    // Configure: only uni and gov are authorized
+    let configure = r#"{"operation":"configure","admin_did":"did:key:ed25519:admin","admin_sig":"s","issuers":"did:key:ed25519:uni,did:key:ed25519:gov","threshold":"2"}"#;
+    engine
+        .execute(&wasm, "sbt-module", configure, 1_000_000, host.clone())
+        .expect("configure");
+
+    // Mint with an unauthorized issuer + authorized issuer
+    let mint = r#"{"operation":"mint","issuer_dids":"did:key:ed25519:evil,did:key:ed25519:uni","signatures":"s1,s2","token_id":"sbt_unauthz","recipient_did":"did:key:ed25519:bob"}"#;
+    let result = engine
+        .execute(&wasm, "sbt-module", mint, 1_000_000, host)
+        .expect("mint");
+    assert!(result.success);
+    let out = String::from_utf8_lossy(result.return_value.as_ref().unwrap());
+    assert!(
+        out.contains(r#""ok":false"#) && out.contains("insufficient"),
+        "unauthorized issuer should not count, got: {out}"
+    );
+}
+
+#[test]
+fn sbt_reconfigure_requires_admin_sig() {
+    let engine = make_engine();
+    let wasm = load_fixture("soulbound_token.wasm");
+    let host = Arc::new(
+        TestHost::new(100)
+            .with_signature("did:key:ed25519:admin", false),
+    );
+
+    // Bootstrap (no verification needed)
+    let configure1 = r#"{"operation":"configure","admin_did":"did:key:ed25519:admin","admin_sig":"s","issuers":"did:key:ed25519:uni","threshold":"1"}"#;
+    let result = engine
+        .execute(&wasm, "sbt-module", configure1, 1_000_000, host.clone())
+        .expect("bootstrap");
+    assert!(result.success);
+
+    // Reconfigure — admin sig marked as invalid
+    let configure2 = r#"{"operation":"configure","admin_did":"did:key:ed25519:attacker","admin_sig":"fake","issuers":"did:key:ed25519:evil","threshold":"1"}"#;
+    let result = engine
+        .execute(&wasm, "sbt-module", configure2, 1_000_000, host)
+        .expect("reconfigure");
+    assert!(result.success);
+    let out = String::from_utf8_lossy(result.return_value.as_ref().unwrap());
+    assert!(out.contains(r#""ok":false"#), "reconfigure without admin sig should fail: {out}");
+    assert!(out.contains("signature"), "should mention signature: {out}");
+}
+
+// ── Hierarchical Tiers ──
+
+#[test]
+fn sbt_tiers_and_per_tier_supply() {
+    let engine = make_engine();
+    let wasm = load_fixture("soulbound_token.wasm");
+    let host = Arc::new(TestHost::new(100));
+
+    // Mint one of each tier
+    let mint_bronze = r#"{"operation":"mint","issuer_did":"did:key:ed25519:issuer","signature_hex":"s","token_id":"sbt_b","recipient_did":"did:key:ed25519:b1","tier":"bronze"}"#;
+    engine.execute(&wasm, "sbt-module", mint_bronze, 1_000_000, host.clone()).expect("bronze");
+
+    let mint_silver = r#"{"operation":"mint","issuer_did":"did:key:ed25519:issuer","signature_hex":"s","token_id":"sbt_s","recipient_did":"did:key:ed25519:s1","tier":"silver"}"#;
+    engine.execute(&wasm, "sbt-module", mint_silver, 1_000_000, host.clone()).expect("silver");
+
+    let mint_gold = r#"{"operation":"mint","issuer_did":"did:key:ed25519:issuer","signature_hex":"s","token_id":"sbt_g","recipient_did":"did:key:ed25519:g1","tier":"2"}"#;
+    engine.execute(&wasm, "sbt-module", mint_gold, 1_000_000, host.clone()).expect("gold");
+
+    // Check supply breakdown
+    let result = engine
+        .execute(&wasm, "sbt-module", r#"{"operation":"total_supply"}"#, 1_000_000, host.clone())
+        .expect("supply");
+    let out = String::from_utf8_lossy(result.return_value.as_ref().unwrap());
+    assert!(out.contains(r#""total_supply":3"#), "total should be 3: {out}");
+    assert!(out.contains(r#""bronze":1"#));
+    assert!(out.contains(r#""silver":1"#));
+    assert!(out.contains(r#""gold":1"#));
+
+    // Verify tier in owner_of
+    let result = engine
+        .execute(&wasm, "sbt-module", r#"{"operation":"owner_of","token_id":"sbt_g"}"#, 1_000_000, host.clone())
+        .expect("owner");
+    let out = String::from_utf8_lossy(result.return_value.as_ref().unwrap());
+    assert!(out.contains(r#""tier":"gold""#), "should show gold tier: {out}");
+}
+
+// ── Custom Metadata Schemas ──
+
+#[test]
+fn sbt_schema_and_metadata() {
+    let engine = make_engine();
+    let wasm = load_fixture("soulbound_token.wasm");
+    let host = Arc::new(TestHost::new(100));
+
+    let mint = r#"{"operation":"mint","issuer_did":"did:key:ed25519:uni","signature_hex":"s","token_id":"sbt_deg","recipient_did":"did:key:ed25519:student","tier":"gold","schema_type":"degree","metadata":{"degree":"MSc","field":"Computer Science","university":"Citizen U"}}"#;
+    engine
+        .execute(&wasm, "sbt-module", mint, 1_000_000, host.clone())
+        .expect("mint");
+
+    // Verify schema in mint response was correct
+    let result = engine
+        .execute(&wasm, "sbt-module", r#"{"operation":"get_metadata","token_id":"sbt_deg"}"#, 1_000_000, host)
+        .expect("metadata");
+    let out = String::from_utf8_lossy(result.return_value.as_ref().unwrap());
+    assert!(out.contains(r#""schema":"degree""#), "should show degree schema: {out}");
+    assert!(out.contains("MSc") && out.contains("Computer Science"), "should contain metadata: {out}");
+    assert!(out.contains(r#""tier":"gold""#), "should show tier: {out}");
+}
+
+// ── Time-Locked / Expirable Tokens ──
+
+#[test]
+fn sbt_expiry_active_token() {
+    let engine = make_engine();
+    let wasm = load_fixture("soulbound_token.wasm");
+    let host = Arc::new(TestHost::new(100));
+
+    // Mint with expiry at block 500 (current = 100, so not expired)
+    let mint = r#"{"operation":"mint","issuer_did":"did:key:ed25519:issuer","signature_hex":"s","token_id":"sbt_exp_ok","recipient_did":"did:key:ed25519:alice","expiry_block":"500"}"#;
+    engine
+        .execute(&wasm, "sbt-module", mint, 1_000_000, host.clone())
+        .expect("mint");
+
+    let result = engine
+        .execute(&wasm, "sbt-module", r#"{"operation":"owner_of","token_id":"sbt_exp_ok"}"#, 1_000_000, host)
+        .expect("owner");
+    let out = String::from_utf8_lossy(result.return_value.as_ref().unwrap());
+    assert!(out.contains(r#""expired":false"#), "should not be expired: {out}");
+    assert!(out.contains(r#""expiry_block":500"#));
+}
+
+#[test]
+fn sbt_expiry_already_expired() {
+    let engine = make_engine();
+    let wasm = load_fixture("soulbound_token.wasm");
+    let host = Arc::new(TestHost::new(300));
+
+    // Mint with expiry at block 50 (current = 300, so already expired)
+    let mint = r#"{"operation":"mint","issuer_did":"did:key:ed25519:issuer","signature_hex":"s","token_id":"sbt_exp_dead","recipient_did":"did:key:ed25519:bob","expiry_block":"50"}"#;
+    engine
+        .execute(&wasm, "sbt-module", mint, 1_000_000, host.clone())
+        .expect("mint");
+
+    let result = engine
+        .execute(&wasm, "sbt-module", r#"{"operation":"owner_of","token_id":"sbt_exp_dead"}"#, 1_000_000, host)
+        .expect("owner");
+    let out = String::from_utf8_lossy(result.return_value.as_ref().unwrap());
+    assert!(out.contains(r#""expired":true"#), "should be expired: {out}");
+}
+
+// ── Revocable Tokens ──
+
+#[test]
+fn sbt_revoke_flow() {
+    let engine = make_engine();
+    let wasm = load_fixture("soulbound_token.wasm");
+    let host = Arc::new(TestHost::new(100));
+
+    let mint = r#"{"operation":"mint","issuer_did":"did:key:ed25519:issuer","signature_hex":"s","token_id":"sbt_rev","recipient_did":"did:key:ed25519:carol"}"#;
+    engine
+        .execute(&wasm, "sbt-module", mint, 1_000_000, host.clone())
+        .expect("mint");
+
+    // Revoke
+    let revoke = r#"{"operation":"revoke","issuer_did":"did:key:ed25519:issuer","signature_hex":"s","token_id":"sbt_rev"}"#;
+    let result = engine
+        .execute(&wasm, "sbt-module", revoke, 1_000_000, host.clone())
+        .expect("revoke");
+    assert!(result.success);
+    let out = String::from_utf8_lossy(result.return_value.as_ref().unwrap());
+    assert!(out.contains(r#""ok":true"#) && out.contains(r#""revoked":true"#), "revoke should succeed: {out}");
+
+    // Verify revoked status in owner_of
+    let result = engine
+        .execute(&wasm, "sbt-module", r#"{"operation":"owner_of","token_id":"sbt_rev"}"#, 1_000_000, host.clone())
+        .expect("owner");
+    let out = String::from_utf8_lossy(result.return_value.as_ref().unwrap());
+    assert!(out.contains(r#""revoked":true"#), "should show revoked: {out}");
+
+    // Supply should have decremented
+    let result = engine
+        .execute(&wasm, "sbt-module", r#"{"operation":"total_supply"}"#, 1_000_000, host)
+        .expect("supply");
+    let out = String::from_utf8_lossy(result.return_value.as_ref().unwrap());
+    assert!(out.contains(r#""total_supply":0"#), "supply should be 0 after revoke: {out}");
+}
+
+// ── Attribute-Based Access Control ──
+
+#[test]
+fn sbt_check_access_with_token_id_granted() {
+    let engine = make_engine();
+    let wasm = load_fixture("soulbound_token.wasm");
+    let host = Arc::new(TestHost::new(100));
+
+    // Mint a gold degree token to alice
+    let mint = r#"{"operation":"mint","issuer_did":"did:key:ed25519:uni","signature_hex":"s","token_id":"sbt_access_1","recipient_did":"did:key:ed25519:alice","tier":"gold","schema_type":"degree"}"#;
+    engine
+        .execute(&wasm, "sbt-module", mint, 1_000_000, host.clone())
+        .expect("mint");
+
+    // Alice checks access with her token
+    let check = r#"{"operation":"check_access","did":"did:key:ed25519:alice","token_id":"sbt_access_1","required_tier":"silver"}"#;
+    let result = engine
+        .execute(&wasm, "sbt-module", check, 1_000_000, host)
+        .expect("check");
+    let out = String::from_utf8_lossy(result.return_value.as_ref().unwrap());
+    assert!(out.contains(r#""has_access":true"#), "gold >= silver, should be granted: {out}");
+    assert!(out.contains(r#""tier":"gold""#));
+}
+
+#[test]
+fn sbt_check_access_denied_insufficient_tier() {
+    let engine = make_engine();
+    let wasm = load_fixture("soulbound_token.wasm");
+    let host = Arc::new(TestHost::new(100));
+
+    // Mint a bronze token to alice
+    let mint = r#"{"operation":"mint","issuer_did":"did:key:ed25519:uni","signature_hex":"s","token_id":"sbt_low_tier","recipient_did":"did:key:ed25519:alice","tier":"0"}"#;
+    engine
+        .execute(&wasm, "sbt-module", mint, 1_000_000, host.clone())
+        .expect("mint");
+
+    // Check access requiring silver — bronze < silver
+    let check = r#"{"operation":"check_access","did":"did:key:ed25519:alice","token_id":"sbt_low_tier","required_tier":"silver"}"#;
+    let result = engine
+        .execute(&wasm, "sbt-module", check, 1_000_000, host)
+        .expect("check");
+    let out = String::from_utf8_lossy(result.return_value.as_ref().unwrap());
+    assert!(out.contains(r#""has_access":false"#), "bronze < silver, should be denied: {out}");
+    assert!(out.contains("tier"), "should mention tier: {out}");
+}
+
+#[test]
+fn sbt_check_access_denied_schema_mismatch() {
+    let engine = make_engine();
+    let wasm = load_fixture("soulbound_token.wasm");
+    let host = Arc::new(TestHost::new(100));
+
+    let mint = r#"{"operation":"mint","issuer_did":"did:key:ed25519:uni","signature_hex":"s","token_id":"sbt_schema_m","recipient_did":"did:key:ed25519:alice","schema_type":"degree"}"#;
+    engine
+        .execute(&wasm, "sbt-module", mint, 1_000_000, host.clone())
+        .expect("mint");
+
+    // Check access requiring "reputation" schema — token is "degree"
+    let check = r#"{"operation":"check_access","did":"did:key:ed25519:alice","token_id":"sbt_schema_m","required_schema":"reputation"}"#;
+    let result = engine
+        .execute(&wasm, "sbt-module", check, 1_000_000, host)
+        .expect("check");
+    let out = String::from_utf8_lossy(result.return_value.as_ref().unwrap());
+    assert!(out.contains(r#""has_access":false"#), "schema mismatch should be denied: {out}");
+    assert!(out.contains("schema"), "should mention schema: {out}");
+}
+
+#[test]
+fn sbt_check_access_denied_not_owner() {
+    let engine = make_engine();
+    let wasm = load_fixture("soulbound_token.wasm");
+    let host = Arc::new(TestHost::new(100));
+
+    let mint = r#"{"operation":"mint","issuer_did":"did:key:ed25519:uni","signature_hex":"s","token_id":"sbt_notown","recipient_did":"did:key:ed25519:alice"}"#;
+    engine
+        .execute(&wasm, "sbt-module", mint, 1_000_000, host.clone())
+        .expect("mint");
+
+    // Bob tries to access alice's token
+    let check = r#"{"operation":"check_access","did":"did:key:ed25519:bob","token_id":"sbt_notown"}"#;
+    let result = engine
+        .execute(&wasm, "sbt-module", check, 1_000_000, host)
+        .expect("check");
+    let out = String::from_utf8_lossy(result.return_value.as_ref().unwrap());
+    assert!(out.contains(r#""has_access":false"#), "non-owner should be denied: {out}");
+    assert!(out.contains("not owner"), "should explain: {out}");
+}
+
+#[test]
+fn sbt_check_access_enumerate_held_tokens() {
+    let engine = make_engine();
+    let wasm = load_fixture("soulbound_token.wasm");
+    let host = Arc::new(TestHost::new(100));
+
+    // Mint two tokens to alice: one bronze degree, one gold reputation
+    let mint1 = r#"{"operation":"mint","issuer_did":"did:key:ed25519:uni","signature_hex":"s","token_id":"sbt_e1","recipient_did":"did:key:ed25519:alice","tier":"bronze","schema_type":"degree"}"#;
+    engine.execute(&wasm, "sbt-module", mint1, 1_000_000, host.clone()).expect("mint1");
+
+    let mint2 = r#"{"operation":"mint","issuer_did":"did:key:ed25519:gov","signature_hex":"s","token_id":"sbt_e2","recipient_did":"did:key:ed25519:alice","tier":"gold","schema_type":"reputation"}"#;
+    engine.execute(&wasm, "sbt-module", mint2, 1_000_000, host.clone()).expect("mint2");
+
+    // Enumerate: no token_id, require gold tier — should find sbt_e2
+    let check = r#"{"operation":"check_access","did":"did:key:ed25519:alice","required_tier":"gold"}"#;
+    let result = engine
+        .execute(&wasm, "sbt-module", check, 1_000_000, host.clone())
+        .expect("check");
+    let out = String::from_utf8_lossy(result.return_value.as_ref().unwrap());
+    assert!(out.contains(r#""has_access":true"#), "should find gold token: {out}");
+    assert!(out.contains(r#""token_id":"sbt_e2""#), "should match the gold token: {out}");
+
+    // Enumerate: require silver reputation — sbt_e2 is gold reputation
+    let check2 = r#"{"operation":"check_access","did":"did:key:ed25519:alice","required_tier":"silver","required_schema":"reputation"}"#;
+    let result = engine
+        .execute(&wasm, "sbt-module", check2, 1_000_000, host)
+        .expect("check2");
+    let out = String::from_utf8_lossy(result.return_value.as_ref().unwrap());
+    assert!(out.contains(r#""has_access":true"#), "gold reputation >= silver reputation: {out}");
+}
+
+#[test]
+fn sbt_check_access_no_holdings() {
+    let engine = make_engine();
+    let wasm = load_fixture("soulbound_token.wasm");
+    let host = Arc::new(TestHost::new(100));
+
+    let check = r#"{"operation":"check_access","did":"did:key:ed25519:nobody"}"#;
+    let result = engine
+        .execute(&wasm, "sbt-module", check, 1_000_000, host)
+        .expect("check");
+    let out = String::from_utf8_lossy(result.return_value.as_ref().unwrap());
+    assert!(out.contains(r#""has_access":false"#), "no tokens should deny: {out}");
+    assert!(out.contains("no tokens"), "should explain: {out}");
+}
