@@ -334,7 +334,10 @@ impl RocksDbStorage {
         let iter = self.db.prefix_iterator_cf(cf_handle, prefix);
         let mut out = Vec::new();
         for item in iter {
-            let (_, value) = item.map_err(ProtocolError::storage)?;
+            let (key, value) = item.map_err(ProtocolError::storage)?;
+            if !key.starts_with(prefix) {
+                break;
+            }
             out.push(deserialize(&value)?);
         }
         Ok(out)
