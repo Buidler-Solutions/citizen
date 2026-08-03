@@ -24,12 +24,17 @@ The protocol mission is to provide verifiable public truth infrastructure (recor
 .
 ├── citizen-protocol/    # Core Rust protocol workspace (node, crates, docs, config, scripts)
 ├── sdk/                 # Builder-facing SDKs (Node.js package + docs)
-├── wallet/              # Wallet surfaces (CLI + browser + React)
+├── wallet/              # Wallet surfaces (CLI + browser + React + mobile + desktop)
 ├── explorer/            # Explorer backend/frontend + infra
 ├── demo/                # Demo application surface
 ├── dapp/                # dApp surfaces and local-stack pieces
-├── whitepaper/          # Whitepaper web/docs surface
+├── whitepaper/          # Whitepaper web/docs surface (deployed to GitHub Pages)
 ├── landing-page/        # Government adoption landing page (frontend + backend)
+├── compliance/          # GDPR compliance, data inventory, processing records
+├── controls/            # Blockchain + GDPR control packs
+├── security/            # Security policies (backup, DR, encryption, incident response)
+├── .ges/                # GESF compliance framework configuration and evidence
+├── .github/workflows/   # CI (compliance, dependency scan, secret scan, security, Pages)
 ├── LICENSE              # Citizen Protocol Non-Commercial License (CPNCL) v1.0
 └── README.md            # This file
 ```
@@ -67,7 +72,7 @@ The active direction emphasizes:
 5. **Non-speculative economics**
    - Builder fee credits and sponsored usage over speculative token-first design
 
-## Implementation Status Snapshot (2026-04-12)
+## Implementation Status Snapshot (2026-08-03)
 
 - The Rust runtime, ledger policy engine, governance workflows, and canonical API
   surfaces are implemented in the current workspace.
@@ -92,11 +97,33 @@ When we refer to the **wallet system tech-stack**, this includes all of the foll
 3. **Wallet SDK (`sdk/typescript/`)**
    - Builder integration layer for provider access, canonicalization, transaction submission, and wallet signing helpers.
 4. **Wallet browser extension (`wallet/browser/`)**
-   - User custody surface for account management, consented signing, and protocol payload commitment generation.
-5. **Wallet CLI (`citizen-protocol/crates/wallet`, `wallet/cli`)**
+   - User custody surface for account management, consented signing, dApp login, decryption, and protocol payload commitment generation.
+5. **Wallet mobile app (`wallet/mobile/`)**
+   - Flutter-based client-facing mobile wallet with WalletConnect dApp integration, transaction signing, hybrid decryption, vault management, and direct submit. Supports both iOS and Android.
+6. **Wallet desktop app (`wallet/desktop/`)**
+   - Tauri-based desktop wallet with Rust bridge for backup vault operations.
+7. **Wallet CLI (`citizen-protocol/crates/wallet`, `wallet/cli`)**
    - Operator/developer wallet workflows and cryptographic parity reference for canonical signing behavior.
+8. **Wallet auth backend (`wallet/backend/`)**
+   - Challenge/verify login APIs for dApp authentication flows.
 
 Design changes touching user-data separation should be evaluated across this full stack, not as isolated extension-only behavior.
+
+### Crypto Parity Across Wallet Surfaces
+
+All wallet surfaces share the same derivation chain to ensure cross-platform key compatibility:
+
+```
+BIP39 mnemonic → PBKDF2-HMAC-SHA512 (2048 iters) seed → SLIP-0010 m/44'/930'/0'/0'/0'
+                                                                        │
+                                                  ┌───────────────────────┴───────────────────────┐
+                                                  ▼                                               ▼
+                                          Ed25519 signer                                 X25519 reader
+                                          (did:key:ed25519:)                             (did:key:x25519:)
+                                          Transaction signing                            Data decryption
+```
+
+A mnemonic imported on any surface (CLI, browser, mobile, desktop) derives the same Ed25519/X25519 key material.
 
 ## Quick Start
 
