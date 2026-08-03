@@ -8,7 +8,7 @@ across all validator runtimes without creating validation drift.
 Use this with:
 
 - `docs/ONCHAIN_POLICY_RUNTIME_SYNC_SAMPLE.md`
-- `docs/LOCALNET_80_QUORUM_MULTISIG_RUNBOOK.md`
+- `docs/LOCALNET_BFT_QUORUM_MULTISIG_RUNBOOK.md`
 
 ## Scope
 

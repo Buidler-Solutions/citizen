@@ -7,7 +7,7 @@ Citizen uses **linear BFT (Byzantine Fault Tolerance)** consensus with determini
 | Property | Value |
 |----------|-------|
 | Consensus type | Linear BFT |
-| Quorum threshold | >2/3 supermajority (80%) |
+| Quorum threshold | >2/3 supermajority (6667 bps) |
 | Finality | Deterministic (~1 second) |
 | Fault tolerance | Up to f faulty validators in a network of 3f+1 |
 | Leader rotation | Round-robin with view-change on failure |
@@ -52,7 +52,13 @@ N ≥ 3f + 1
 | 7 | 2 | 5 (71%) |
 | 10 | 3 | 7 (70%) |
 
-The localnet configuration uses 5 validators, tolerating 1 faulty node with an 80% quorum threshold.
+Quorum is configured at 6667 basis points (>2/3). The resulting vote count
+is `ceiling(N × 6667/10000)`. With 5 validators this yields 4 votes — which
+*looks* like 80% but is simply ceiling rounding at small N, not a separate
+80% policy.
+
+The localnet configuration uses 5 validators, tolerating 1 faulty node at the
+>2/3 BFT quorum threshold (6667 bps).
 
 ## Simulation
 

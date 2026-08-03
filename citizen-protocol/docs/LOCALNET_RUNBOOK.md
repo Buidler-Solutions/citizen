@@ -158,10 +158,10 @@ The checker submits through `API_SUBMIT_ENDPOINT` (default `/api/v1/entries/subm
 - `config/localnet/validator-epsilon.toml` – uses signing key
   `ed71...ae9bc7`, binds `127.0.0.1:9104`, API `8085`.
 
-The localnet bootstrap snapshot intentionally models a 200% validator list: the
-first half (rounded up) starts as `Active` and the remainder starts as `Standby`.
-Standby validators sync blocks but do not prevote until liveness rotation
-promotes them.
+All five validators start as `Active` — each participates in consensus,
+prevotes on blocks, and serves the read API. There is no default standby
+split. The `standby_only` config flag is available for operators who want
+to run a node in sync-only mode, but it is opt-in and not the default.
 
 All five share identical namespace rulesets and admit one another by verifying
 key. Replace these values with your institution keys and endpoint coordinates to
