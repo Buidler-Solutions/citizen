@@ -24,6 +24,32 @@ class StoredWallet {
     return (count == 12 || count == 24) ? count : null;
   }
 
+  /// Metadata only — safe for shared_preferences. No secrets.
+  Map<String, dynamic> toMetadataJson() => {
+        'id': id,
+        'name': name,
+        'createdAt': createdAt,
+        if (derivationPath != null) 'derivationPath': derivationPath,
+        'hasMnemonic': hasMnemonic,
+        'mnemonicWordCount': mnemonicWordCount,
+      };
+
+  factory StoredWallet.fromMetadataJson(
+    Map<String, dynamic> json, {
+    required String privateKeyHex,
+    String? mnemonicPhrase,
+  }) {
+    return StoredWallet(
+      id: json['id'] as String,
+      name: json['name'] as String,
+      createdAt: json['createdAt'] as String,
+      privateKeyHex: privateKeyHex,
+      mnemonicPhrase: mnemonicPhrase ?? (json['mnemonicPhrase'] as String?),
+      derivationPath: json['derivationPath'] as String?,
+    );
+  }
+
+  /// Full JSON including secrets — use only for secure storage.
   Map<String, dynamic> toJson() => {
         'id': id,
         'name': name,
@@ -45,24 +71,42 @@ class StoredWallet {
   }
 }
 
-class VaultWalletInfo {
+class WalletMetadata {
   final String id;
   final String name;
-  final String signerDid;
+  final String createdAt;
+  final String? derivationPath;
   final bool hasMnemonic;
   final int? mnemonicWordCount;
-  final String createdAt;
-  final bool isActive;
 
-  const VaultWalletInfo({
+  const WalletMetadata({
     required this.id,
     required this.name,
-    required this.signerDid,
-    required this.hasMnemonic,
-    this.mnemonicWordCount,
     required this.createdAt,
-    required this.isActive,
+    this.derivationPath,
+    this.hasMnemonic = false,
+    this.mnemonicWordCount,
   });
+
+  factory WalletMetadata.fromJson(Map<String, dynamic> json) {
+    return WalletMetadata(
+      id: json['id'] as String,
+      name: json['name'] as String,
+      createdAt: json['createdAt'] as String,
+      derivationPath: json['derivationPath'] as String?,
+      hasMnemonic: json['hasMnemonic'] as bool? ?? false,
+      mnemonicWordCount: json['mnemonicWordCount'] as int?,
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'name': name,
+        'createdAt': createdAt,
+        if (derivationPath != null) 'derivationPath': derivationPath,
+        'hasMnemonic': hasMnemonic,
+        'mnemonicWordCount': mnemonicWordCount,
+      };
 }
 
 class ProtocolSigner {

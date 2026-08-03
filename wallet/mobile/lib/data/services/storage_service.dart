@@ -27,19 +27,80 @@ class StorageService {
   }
 
   // ─── Wallet Vault ─────────────────────────────────────────
+  // Metadata lives in shared_preferences; secrets in flutter_secure_storage.
 
-  Future<List<StoredWallet>> getVault() async {
+  static const _privKeyPrefix = 'citizen.mobile.wallet.priv.';
+  static const _mnemonicKeyPrefix = 'citizen.mobile.wallet.mnemonic.';
+
+  String _privKeyStorageKey(String walletId) => '$_privKeyPrefix$walletId';
+  String _mnemonicStorageKey(String walletId) => '$_mnemonicKeyPrefix$walletId';
+
+  Future<List<WalletMetadata>> getVaultMetadata() async {
     final raw = (await prefs).getString(AppConfig.vaultKey);
     if (raw == null) return [];
     final list = jsonDecode(raw) as List;
-    return list.map((e) => StoredWallet.fromJson(e as Map<String, dynamic>)).toList();
+    return list.map((e) => WalletMetadata.fromJson(e as Map<String, dynamic>)).toList();
   }
 
-  Future<void> saveVault(List<StoredWallet> vault, {String? activeWalletId}) async {
+  Future<void> saveVaultMetadata(List<WalletMetadata> vault, {String? activeWalletId}) async {
     final nextActiveId = activeWalletId ?? vault.firstOrNull?.id;
     await (await prefs).setString(AppConfig.vaultKey, jsonEncode(vault.map((e) => e.toJson()).toList()));
     if (nextActiveId != null) {
       await (await prefs).setString(AppConfig.activeWalletIdKey, nextActiveId);
+    }
+  }
+
+  Future<void> storeWalletSecrets(StoredWallet wallet) async {
+    await _secureStorage.write(key: _privKeyStorageKey(wallet.id), value: wallet.privateKeyHex);
+    if (wallet.mnemonicPhrase != null) {
+      await _secureStorage.write(key: _mnemonicStorageKey(wallet.id), value: wallet.mnemonicPhrase);
+    }
+  }
+
+  Future<String?> getPrivateKey(String walletId) async {
+    return _secureStorage.read(key: _privKeyStorageKey(walletId));
+  }
+
+  Future<String?> getMnemonic(String walletId) async {
+    return _secureStorage.read(key: _mnemonicStorageKey(walletId));
+  }
+
+  Future<void> deleteWalletSecrets(String walletId) async {
+    await _secureStorage.delete(key: _privKeyStorageKey(walletId));
+    await _secureStorage.delete(key: _mnemonicStorageKey(walletId));
+  }
+
+  Future<List<StoredWallet>> getVault() async {
+    final metadataList = await getVaultMetadata();
+    final result = <StoredWallet>[];
+    for (final meta in metadataList) {
+      final privateKey = await getPrivateKey(meta.id);
+      if (privateKey == null) continue;
+      final mnemonic = await getMnemonic(meta.id);
+      result.add(StoredWallet(
+        id: meta.id,
+        name: meta.name,
+        createdAt: meta.createdAt,
+        privateKeyHex: privateKey,
+        mnemonicPhrase: mnemonic,
+        derivationPath: meta.derivationPath,
+      ));
+    }
+    return result;
+  }
+
+  Future<void> saveVault(List<StoredWallet> vault, {String? activeWalletId}) async {
+    final metadataList = vault.map((w) => WalletMetadata(
+      id: w.id,
+      name: w.name,
+      createdAt: w.createdAt,
+      derivationPath: w.derivationPath,
+      hasMnemonic: w.hasMnemonic,
+      mnemonicWordCount: w.mnemonicWordCount,
+    )).toList();
+    await saveVaultMetadata(metadataList, activeWalletId: activeWalletId);
+    for (final wallet in vault) {
+      await storeWalletSecrets(wallet);
     }
   }
 
