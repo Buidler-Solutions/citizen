@@ -33,7 +33,7 @@ export function useResponsiveFrameSet({ preferredDesktopFrameCount, frameAssetBy
       isMobile,
       totalFrames: isMobile ? mobileFrameCount : desktopFrameCount,
       framePath: (frame: number) => {
-        const assetBaseUrl = process.env.NEXT_PUBLIC_ASSET_BASE_URL?.replace(/\/$/, '') ?? '';
+        const assetBaseUrl = process.env.NEXT_PUBLIC_ASSET_BASE_URL?.replace(/\/$/, '') ?? '/citizen';
 
         if (!isMobile) {
           const mappedFilename = frameAssetByNumber[frame] ?? frameAssetByNumber[frame + 1];
