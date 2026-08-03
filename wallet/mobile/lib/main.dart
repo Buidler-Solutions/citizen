@@ -8,6 +8,7 @@ import 'providers/security_provider.dart';
 import 'providers/activity_provider.dart';
 import 'providers/profile_provider.dart';
 import 'providers/direct_submit_provider.dart';
+import 'providers/walletconnect_provider.dart';
 import 'router/app_router.dart';
 
 void main() {
@@ -37,6 +38,7 @@ class _CitizenWalletAppState extends ConsumerState<CitizenWalletApp> {
     ref.read(activityProvider.notifier).refresh();
     ref.read(profileProvider.notifier).refresh();
     ref.read(directSubmitProvider.notifier).initialize();
+    ref.read(walletConnectProvider.notifier).initialize();
   }
 
   @override

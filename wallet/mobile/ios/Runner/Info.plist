@@ -49,6 +49,10 @@
 	</dict>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>Camera is used to scan WalletConnect QR codes from dApps.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Photo library access is used to import QR codes for wallet connections.</string>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
 	<key>UIMainStoryboardFile</key>
