@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../data/models/wallet_models.dart';
 import '../../providers/wallet_provider.dart';
 
 class VaultScreen extends ConsumerStatefulWidget {
@@ -96,47 +97,66 @@ class _VaultScreenState extends ConsumerState<VaultScreen> {
                       style: const TextStyle(fontSize: 12),
                     ),
                     children: [
-                      Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            _detailRow('ID', wallet.id),
-                            _detailRow('Created', wallet.createdAt.substring(0, 19)),
-                            _detailRow('Has Mnemonic', wallet.hasMnemonic ? 'Yes (${wallet.mnemonicWordCount} words)' : 'No'),
-                            if (wallet.hasMnemonic) ...[
-                              const SizedBox(height: 8),
-                              if (_showMnemonicFor)
-                                Container(
-                                  padding: const EdgeInsets.all(8),
-                                  decoration: BoxDecoration(
-                                    color: Colors.orange.withValues(alpha: 0.1),
-                                    borderRadius: BorderRadius.circular(8),
+                      FutureBuilder<ProtocolKeyMaterial?>(
+                        future: ref.read(walletProvider.notifier).getKeyMaterialForWallet(wallet),
+                        builder: (context, snapshot) {
+                          if (snapshot.connectionState == ConnectionState.waiting) {
+                            return const Padding(
+                              padding: EdgeInsets.all(16),
+                              child: Center(child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))),
+                            );
+                          }
+                          final km = snapshot.data;
+                          return Padding(
+                            padding: const EdgeInsets.all(16),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                if (km != null) ...[
+                                  _detailRow('Signer DID', km.signer.did),
+                                  _detailRow('Signer Key', km.signer.verifyingKeyHex),
+                                  _detailRow('Reader DID', km.reader.did),
+                                  _detailRow('Reader Key', km.reader.publicKeyHex),
+                                  const SizedBox(height: 8),
+                                ],
+                                _detailRow('ID', wallet.id),
+                                _detailRow('Created', wallet.createdAt.substring(0, 19)),
+                                _detailRow('Has Mnemonic', wallet.hasMnemonic ? 'Yes (${wallet.mnemonicWordCount} words)' : 'No'),
+                                if (wallet.hasMnemonic) ...[
+                                  const SizedBox(height: 8),
+                                  if (_showMnemonicFor)
+                                    Container(
+                                      padding: const EdgeInsets.all(8),
+                                      decoration: BoxDecoration(
+                                        color: Colors.orange.withValues(alpha: 0.1),
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                      child: SelectableText(
+                                        wallet.mnemonicPhrase!,
+                                        style: const TextStyle(fontFamily: 'monospace', fontSize: 13),
+                                      ),
+                                    )
+                                  else
+                                    FilledButton.tonal(
+                                      onPressed: () => setState(() => _showMnemonicFor = !_showMnemonicFor),
+                                      child: const Text('Reveal Mnemonic'),
+                                    ),
+                                ],
+                                const SizedBox(height: 8),
+                                if (!isActive)
+                                  FilledButton.tonal(
+                                    onPressed: () => ref.read(walletProvider.notifier).setActiveWallet(wallet.id),
+                                    child: const Text('Set Active'),
                                   ),
-                                  child: SelectableText(
-                                    wallet.mnemonicPhrase!,
-                                    style: const TextStyle(fontFamily: 'monospace', fontSize: 13),
-                                  ),
-                                )
-                              else
-                                FilledButton.tonal(
-                                  onPressed: () => setState(() => _showMnemonicFor = !_showMnemonicFor),
-                                  child: const Text('Reveal Mnemonic'),
+                                const SizedBox(height: 8),
+                                TextButton(
+                                  onPressed: () => _confirmDelete(wallet.id),
+                                  child: const Text('Delete', style: TextStyle(color: Colors.red)),
                                 ),
-                            ],
-                            const SizedBox(height: 8),
-                            if (!isActive)
-                              FilledButton.tonal(
-                                onPressed: () => ref.read(walletProvider.notifier).setActiveWallet(wallet.id),
-                                child: const Text('Set Active'),
-                              ),
-                            const SizedBox(height: 8),
-                            TextButton(
-                              onPressed: () => _confirmDelete(wallet.id),
-                              child: const Text('Delete', style: TextStyle(color: Colors.red)),
+                              ],
                             ),
-                          ],
-                        ),
+                          );
+                        },
                       ),
                     ],
                   ),

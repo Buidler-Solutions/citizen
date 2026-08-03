@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../data/models/wallet_models.dart';
 import '../../providers/decrypt_provider.dart';
 import '../../providers/wallet_provider.dart';
 
@@ -17,6 +18,9 @@ class _DecryptScreenState extends ConsumerState<DecryptScreen> {
   final _nonceController = TextEditingController();
   final _wrappedDekController = TextEditingController();
 
+  ProtocolKeyMaterial? _keyMaterial;
+  bool _loadingKeys = false;
+
   @override
   void dispose() {
     _authorKeyController.dispose();
@@ -24,6 +28,20 @@ class _DecryptScreenState extends ConsumerState<DecryptScreen> {
     _nonceController.dispose();
     _wrappedDekController.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadKeyMaterial() async {
+    final walletState = ref.read(walletProvider);
+    if (walletState.activeWallet == null) return;
+    setState(() => _loadingKeys = true);
+    final material = await ref.read(walletProvider.notifier).getKeyMaterial();
+    if (mounted) setState(() { _keyMaterial = material; _loadingKeys = false; });
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadKeyMaterial());
   }
 
   @override
@@ -47,6 +65,8 @@ class _DecryptScreenState extends ConsumerState<DecryptScreen> {
                 ),
               )
             else ...[
+              _buildCredentialsCard(),
+              const SizedBox(height: 16),
               _buildField(_authorKeyController, 'Author Public Key (hex)'),
               const SizedBox(height: 12),
               _buildField(_wrappedDekController, 'Wrapped DEK (hex)'),
@@ -93,6 +113,78 @@ class _DecryptScreenState extends ConsumerState<DecryptScreen> {
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildCredentialsCard() {
+    if (_loadingKeys) {
+      return const Card(child: ListTile(title: Text('Loading credentials...')));
+    }
+    final km = _keyMaterial;
+    if (km == null) {
+      return Card(
+        child: ListTile(
+          leading: const Icon(Icons.error_outline, color: Colors.orange),
+          title: const Text('Unable to derive credentials'),
+        ),
+      );
+    }
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.vpn_key, size: 18, color: Colors.blue),
+                const SizedBox(width: 8),
+                Text('Reader Key (X25519)', style: Theme.of(context).textTheme.titleSmall),
+              ],
+            ),
+            const SizedBox(height: 4),
+            _copyableText(context, km.reader.did),
+            const SizedBox(height: 4),
+            _copyableText(context, 'Public: ${km.reader.publicKeyHex}', muted: true),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                const Icon(Icons.draw, size: 18, color: Colors.teal),
+                const SizedBox(width: 8),
+                Text('Signer Key (Ed25519)', style: Theme.of(context).textTheme.titleSmall),
+              ],
+            ),
+            const SizedBox(height: 4),
+            _copyableText(context, km.signer.did),
+            const SizedBox(height: 4),
+            _copyableText(context, 'Public: ${km.signer.verifyingKeyHex}', muted: true),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _copyableText(BuildContext context, String text, {bool muted = false}) {
+    return Row(
+      children: [
+        Expanded(
+          child: SelectableText(
+            text,
+            style: TextStyle(
+              fontFamily: 'monospace',
+              fontSize: 12,
+              color: muted ? Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5) : null,
+            ),
+          ),
+        ),
+        IconButton(
+          icon: const Icon(Icons.copy, size: 16),
+          visualDensity: VisualDensity.compact,
+          onPressed: () {
+            // copy to clipboard via SelectionRegister is handled by SelectableText
+          },
+        ),
+      ],
     );
   }
 

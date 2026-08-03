@@ -163,6 +163,10 @@ class WalletNotifier extends StateNotifier<WalletState> {
     return _crypto.getKeyMaterial(wallet);
   }
 
+  Future<ProtocolKeyMaterial?> getKeyMaterialForWallet(StoredWallet wallet) async {
+    return _crypto.getKeyMaterial(wallet);
+  }
+
   Future<EncryptionReaderKey?> getReaderKey() async {
     final wallet = state.activeWallet;
     if (wallet == null) return null;

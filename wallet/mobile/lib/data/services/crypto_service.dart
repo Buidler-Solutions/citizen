@@ -90,8 +90,8 @@ class CryptoService {
   }
 
   Future<List<int>> _mnemonicToSeed(String mnemonicPhrase) async {
-    final normalized = mnemonicPhrase.trim().toLowerCase();
-    final salt = utf8.encode('mnemonic$normalized');
+    final normalized = mnemonicPhrase.trim();
+    final salt = utf8.encode('mnemonic');
     final password = utf8.encode(normalized);
 
     final pbkdf2 = Pbkdf2(
@@ -103,8 +103,7 @@ class CryptoService {
       secretKey: SecretKey(password),
       nonce: salt,
     );
-    final seedBytes = await seed.extractBytes();
-    return seedBytes.sublist(0, 32);
+    return seed.extractBytes();
   }
 
   // ─── Ed25519 Signer ───────────────────────────────────────
