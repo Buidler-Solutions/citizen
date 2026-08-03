@@ -9,7 +9,10 @@ struct TestHost {
     signatures: std::collections::HashMap<String, bool>,
     governance: std::collections::HashMap<String, bool>,
     block_height: u64,
-    storage: std::collections::HashMap<String, String>,
+    storage: std::sync::Mutex<std::collections::HashMap<String, String>>,
+    writes: std::sync::Mutex<Vec<(String, String)>>,
+    cross_calls: std::sync::Mutex<Vec<(String, String)>>,
+    cross_call_results: std::collections::HashMap<String, String>,
 }
 
 impl TestHost {
@@ -19,7 +22,10 @@ impl TestHost {
             signatures: std::collections::HashMap::new(),
             governance: std::collections::HashMap::new(),
             block_height,
-            storage: std::collections::HashMap::new(),
+            storage: std::sync::Mutex::new(std::collections::HashMap::new()),
+            writes: std::sync::Mutex::new(Vec::new()),
+            cross_calls: std::sync::Mutex::new(Vec::new()),
+            cross_call_results: std::collections::HashMap::new(),
         }
     }
 
@@ -37,6 +43,19 @@ impl TestHost {
         self.governance.insert(proposal.to_string(), approved);
         self
     }
+
+    fn with_cross_call_result(mut self, module_id: &str, result: &str) -> Self {
+        self.cross_call_results.insert(module_id.to_string(), result.to_string());
+        self
+    }
+
+    fn get_writes(&self) -> Vec<(String, String)> {
+        self.writes.lock().unwrap().clone()
+    }
+
+    fn get_cross_calls(&self) -> Vec<(String, String)> {
+        self.cross_calls.lock().unwrap().clone()
+    }
 }
 
 impl WasmHost for TestHost {
@@ -50,12 +69,14 @@ impl WasmHost for TestHost {
 
     fn write_namespace_entry(
         &self,
-        _namespace: &str,
-        _payload_json: &str,
+        namespace: &str,
+        payload_json: &str,
     ) -> Result<String, ExecutionError> {
-        Err(ExecutionError::HostError(
-            "write not supported in test host".into(),
-        ))
+        self.writes
+            .lock()
+            .unwrap()
+            .push((namespace.to_string(), payload_json.to_string()));
+        Ok(format!(r#"{{"namespace":"{namespace}","status":"ok"}}"#))
     }
 
     fn verify_signature(
@@ -99,16 +120,19 @@ impl WasmHost for TestHost {
         key: &str,
         value: &str,
     ) -> Result<(), ExecutionError> {
-        // test host uses thread-local for storage (not safe across threads, but fine for single-threaded tests)
+        self.storage
+            .lock()
+            .unwrap()
+            .insert(key.to_string(), value.to_string());
         Ok(())
     }
 
     fn load_state(
         &self,
         _module_id: &str,
-        _key: &str,
+        key: &str,
     ) -> Result<Option<String>, ExecutionError> {
-        Ok(None)
+        Ok(self.storage.lock().unwrap().get(key).cloned())
     }
 
     fn verify_signature_batch(&self, batch_json: &str) -> Result<u32, ExecutionError> {
@@ -124,6 +148,18 @@ impl WasmHost for TestHost {
             }
         }
         Ok(valid)
+    }
+
+    fn call_module(
+        &self,
+        target_module_id: &str,
+        params_json: &str,
+    ) -> Result<Option<String>, ExecutionError> {
+        self.cross_calls
+            .lock()
+            .unwrap()
+            .push((target_module_id.to_string(), params_json.to_string()));
+        Ok(self.cross_call_results.get(target_module_id).cloned())
     }
 }
 
@@ -382,4 +418,67 @@ fn engine_default_config_has_security_limits() {
     assert!(config.max_batch_items > 0, "batch items must be bounded");
     assert!(config.max_batch_json_size > 0, "batch JSON size must be bounded");
     assert!(config.execution_epoch_deadline > 0, "epoch deadline must be set");
+    assert!(config.max_call_depth > 0, "call depth must be bounded");
+    assert!(config.cross_call_gas_limit > 0, "cross-call gas must be set");
+}
+
+#[test]
+fn host_call_module_default_returns_error() {
+    struct NoCallHost;
+    impl WasmHost for NoCallHost {
+        fn read_namespace_entry(&self, _: &str, _: &str) -> Result<Option<String>, ExecutionError> { Ok(None) }
+        fn write_namespace_entry(&self, _: &str, _: &str) -> Result<String, ExecutionError> { Ok(String::new()) }
+        fn verify_signature(&self, _: &str, _: &str, _: &str) -> Result<bool, ExecutionError> { Ok(false) }
+        fn check_governance_approval(&self, _: &str) -> Result<bool, ExecutionError> { Ok(false) }
+        fn current_block_height(&self) -> Result<u64, ExecutionError> { Ok(0) }
+        fn load_module_bytecode(&self, _: &str) -> Result<Vec<u8>, ExecutionError> { Ok(vec![]) }
+        fn store_state(&self, _: &str, _: &str, _: &str) -> Result<(), ExecutionError> { Ok(()) }
+        fn load_state(&self, _: &str, _: &str) -> Result<Option<String>, ExecutionError> { Ok(None) }
+        fn verify_signature_batch(&self, _: &str) -> Result<u32, ExecutionError> { Ok(0) }
+    }
+
+    let host = NoCallHost;
+    let result = host.call_module("target", "{}");
+    assert!(result.is_err(), "default call_module should error");
+    let err = result.unwrap_err().to_string();
+    assert!(err.contains("not supported"), "expected not-supported error: {err}");
+}
+
+#[test]
+fn test_host_records_cross_calls() {
+    let host = TestHost::new(0)
+        .with_cross_call_result("oracle-module", r#"{"price":42000}"#);
+
+    let result = host.call_module("oracle-module", r#"{"query":"btc_usd"}"#).unwrap();
+    assert_eq!(result.as_deref(), Some(r#"{"price":42000}"#));
+
+    let calls = host.get_cross_calls();
+    assert_eq!(calls.len(), 1);
+    assert_eq!(calls[0].0, "oracle-module");
+    assert!(calls[0].1.contains("btc_usd"));
+}
+
+#[test]
+fn test_host_records_writes() {
+    let host = TestHost::new(0);
+    let receipt = host.write_namespace_entry(
+        "records",
+        r#"{"object_id":"rec1","payload":{"data":"hello"}}"#,
+    ).unwrap();
+    assert!(receipt.contains("records"));
+
+    let writes = host.get_writes();
+    assert_eq!(writes.len(), 1);
+    assert_eq!(writes[0].0, "records");
+    assert!(writes[0].1.contains("rec1"));
+}
+
+#[test]
+fn test_host_state_persists() {
+    let host = TestHost::new(0);
+    host.store_state("m1", "counter", "42").unwrap();
+    let val = host.load_state("m1", "counter").unwrap();
+    assert_eq!(val.as_deref(), Some("42"));
+
+    assert_eq!(host.load_state("m1", "missing").unwrap(), None);
 }

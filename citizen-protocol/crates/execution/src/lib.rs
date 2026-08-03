@@ -77,6 +77,13 @@ pub struct ExecutionConfig {
 
     /// Maximum allowed JSON size for batch signature verification (bytes)
     pub max_batch_json_size: usize,
+
+    /// Gas budget for a single cross-contract call.
+    /// Deducted from the caller's logical gas, not from wasmtime fuel directly.
+    pub cross_call_gas_limit: u64,
+
+    /// Maximum call depth for cross-contract calls (prevents infinite recursion).
+    pub max_call_depth: u32,
 }
 
 impl Default for ExecutionConfig {
@@ -94,6 +101,8 @@ impl Default for ExecutionConfig {
             execution_epoch_deadline: 1_000,
             max_batch_items: 256,
             max_batch_json_size: 1_048_576, // 1 MB
+            cross_call_gas_limit: 500_000,
+            max_call_depth: 4,
         }
     }
 }
@@ -147,6 +156,22 @@ pub trait WasmHost: Send + Sync {
     /// of `{"signer_did","message_hex","signature_hex"}` objects and returns the
     /// count of valid signatures (0..total).
     fn verify_signature_batch(&self, batch_json: &str) -> Result<u32, ExecutionError>;
+
+    /// Execute another registered and activated WASM module, returning its
+    /// serialized return value. Enables cross-contract composition.
+    ///
+    /// The host MUST enforce a call-depth limit to prevent infinite recursion.
+    /// Returns `Ok(None)` if cross-contract calls are not supported.
+    fn call_module(
+        &self,
+        target_module_id: &str,
+        params_json: &str,
+    ) -> Result<Option<String>, ExecutionError> {
+        let _ = (target_module_id, params_json);
+        Err(ExecutionError::HostError(
+            "cross-contract calls not supported by this host".into(),
+        ))
+    }
 }
 
 /// Registry of deployed WASM modules

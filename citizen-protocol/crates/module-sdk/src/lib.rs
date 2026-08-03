@@ -6,22 +6,41 @@
 //! WASM modules. Modules import the host functions via `extern "C"` declarations
 //! and use the SDK's typed wrappers.
 //!
+//! ## Quick Start
+//!
 //! ```rust,ignore
 //! use citizen_module_sdk::*;
 //!
-//! #[no_mangle] pub extern "C" fn handle(ptr: u32, len: u32) -> u64 {
-//!     let params = read_params(ptr, len);
-//!     let op = field(&params, "operation").unwrap_or("");
-//!     let did = field(&params, "signer_did").unwrap_or("");
-//!     let valid = verify_signature(did, "...", "...");
-//!     // ... respond with manual write_result ...
+//! #[no_mangle] pub extern "C" fn alloc(size: u32) -> u32 {
+//!     // your bump allocator
 //! }
+//!
+//! #[no_mangle] pub extern "C" fn handle(ptr: u32, len: u32) -> u64 {
+//!     let params = read_params_str(ptr, len);
+//!     let op = field(params, "operation").unwrap_or("");
+//!     let signer = field(params, "signer_did").unwrap_or("");
+//!
+//!     if verify_signature(signer, "0xabcd", "0x1234") {
+//!         write_namespace_entry("records", r#"{"object_id":"rec1","payload":{"v":1}}"#);
+//!         write_result_json(r#"{"ok":true}"#)
+//!     } else {
+//!         write_result_json(r#"{"ok":false,"reason":"bad sig"}"##)
+//!     }
+//! }
+//! ```
+//!
+//! ## Cross-Contract Calls
+//!
+//! ```rust,ignore
+//! let result = call_module("other-module", r#"{"query":"foo"}"#);
+//! // result is Option<String> — None if module not found or call failed
 //! ```
 
 extern crate alloc;
 use alloc::string::String;
+use alloc::vec::Vec;
 
-// --- Host function imports (module must also declare these) ---
+// --- Host function imports ---
 
 extern "C" {
     #[link_name = "host_log"]
@@ -29,6 +48,12 @@ extern "C" {
     #[link_name = "host_read_namespace_entry"]
     fn _host_read_namespace_entry(
         ns_ptr: *const u8, ns_len: u32, eid_ptr: *const u8, eid_len: u32,
+        out_ptr: *mut u8, out_len: u32,
+    ) -> u64;
+    #[link_name = "host_write_namespace_entry"]
+    fn _host_write_namespace_entry(
+        ns_ptr: *const u8, ns_len: u32,
+        payload_ptr: *const u8, payload_len: u32,
         out_ptr: *mut u8, out_len: u32,
     ) -> u64;
     #[link_name = "host_verify_signature"]
@@ -53,9 +78,15 @@ extern "C" {
         key_ptr: *const u8, key_len: u32,
         out_ptr: *mut u8, out_len: u32,
     ) -> u64;
+    #[link_name = "host_call_module"]
+    fn _host_call_module(
+        target_ptr: *const u8, target_len: u32,
+        params_ptr: *const u8, params_len: u32,
+        out_ptr: *mut u8, out_len: u32,
+    ) -> u64;
 }
 
-// --- Public API ---
+// --- Parameter reading ---
 
 /// Read the raw parameter bytes from WASM memory.
 pub fn read_params(ptr: u32, len: u32) -> &'static [u8] {
@@ -67,6 +98,8 @@ pub fn read_params_str(ptr: u32, len: u32) -> &'static str {
     let raw = read_params(ptr, len);
     core::str::from_utf8(raw).unwrap_or("")
 }
+
+// --- JSON field extraction ---
 
 /// Extract a JSON field value by name. No heap allocation.
 pub fn field<'a>(json: &'a str, name: &str) -> Option<&'a str> {
@@ -110,6 +143,48 @@ pub fn field<'a>(json: &'a str, name: &str) -> Option<&'a str> {
     None
 }
 
+/// Extract a u64 JSON field by name. Returns 0 if not found or unparseable.
+pub fn field_u64(json: &str, name: &str) -> u64 {
+    field(json, name)
+        .and_then(|s| s.trim().parse::<u64>().ok())
+        .unwrap_or(0)
+}
+
+/// Extract an i64 JSON field by name. Returns 0 if not found or unparseable.
+pub fn field_i64(json: &str, name: &str) -> i64 {
+    field(json, name)
+        .and_then(|s| s.trim().parse::<i64>().ok())
+        .unwrap_or(0)
+}
+
+/// Extract a bool JSON field by name (checks for `true`). Returns false otherwise.
+pub fn field_bool(json: &str, name: &str) -> bool {
+    field(json, name)
+        .map(|s| s.trim() == "true")
+        .unwrap_or(false)
+}
+
+// --- Result packing ---
+
+/// Pack a pointer and length into the `u64` return format expected by the engine.
+/// Use this at the end of your `handle()` function after writing the result
+/// into linear memory via your allocator.
+#[inline]
+pub fn pack_result(ptr: u32, len: u32) -> u64 {
+    ((ptr as u64) << 32) | (len as u64)
+}
+
+/// Write a JSON result string into a buffer and return the packed result.
+/// The buffer must be large enough to hold the JSON string.
+pub fn write_result_to_buf(buf: &mut [u8], json: &str) -> u64 {
+    let bytes = json.as_bytes();
+    let written = bytes.len().min(buf.len());
+    buf[..written].copy_from_slice(&bytes[..written]);
+    pack_result(buf.as_ptr() as u32, written as u32)
+}
+
+// --- Host functions ---
+
 /// Log a message to the engine's log collector.
 pub fn log(msg: &str) {
     let b = msg.as_bytes();
@@ -128,21 +203,65 @@ pub fn verify_signature(signer_did: &str, message_hex: &str, signature_hex: &str
 }
 
 /// Read a namespace entry, returning its JSON payload.
+/// Uses a dynamic `Vec<u8>` buffer for arbitrary-size responses.
 pub fn read_namespace_entry(namespace: &str, entry_id: &str) -> Option<String> {
-    let mut buf = [0u8; 1024];
-    let packed = unsafe {
-        _host_read_namespace_entry(
-            namespace.as_ptr(), namespace.len() as u32,
-            entry_id.as_ptr(), entry_id.len() as u32,
-            buf.as_mut_ptr(), buf.len() as u32,
-        )
-    };
-    let written = ((packed >> 32) & 0xFFFF_FFFF) as usize;
-    let status = packed & 0xFFFF_FFFF;
-    if status == 0 && written > 0 && written <= buf.len() {
-        Some(String::from_utf8_lossy(&buf[..written]).into_owned())
-    } else {
-        None
+    read_namespace_entry_dynamic(namespace, entry_id, 8192)
+}
+
+/// Read a namespace entry with a caller-specified initial buffer size.
+pub fn read_namespace_entry_dynamic(namespace: &str, entry_id: &str, initial_buf: usize) -> Option<String> {
+    let mut buf: Vec<u8> = alloc::vec![0u8; initial_buf];
+    loop {
+        let packed = unsafe {
+            _host_read_namespace_entry(
+                namespace.as_ptr(), namespace.len() as u32,
+                entry_id.as_ptr(), entry_id.len() as u32,
+                buf.as_mut_ptr(), buf.len() as u32,
+            )
+        };
+        let written = ((packed >> 32) & 0xFFFF_FFFF) as usize;
+        let status = packed & 0xFFFF_FFFF;
+        match status {
+            0 if written > 0 && written <= buf.len() => {
+                return Some(String::from_utf8_lossy(&buf[..written]).into_owned());
+            }
+            0 if written > buf.len() => {
+                buf.resize(written, 0);
+                continue;
+            }
+            _ => return None,
+        }
+    }
+}
+
+/// Write an entry to a namespace. The `payload_json` must include at least
+/// `"object_id"` (string). Optional fields: `"action"` (defaults to
+/// `"MODULE_WRITE"`), `"payload"` (the data to store).
+///
+/// Returns the receipt JSON on success, or `None` on error.
+pub fn write_namespace_entry(namespace: &str, payload_json: &str) -> Option<String> {
+    let mut buf: Vec<u8> = alloc::vec![0u8; 2048];
+    loop {
+        let packed = unsafe {
+            _host_write_namespace_entry(
+                namespace.as_ptr(), namespace.len() as u32,
+                payload_json.as_ptr(), payload_json.len() as u32,
+                buf.as_mut_ptr(), buf.len() as u32,
+            )
+        };
+        let written = ((packed >> 32) & 0xFFFF_FFFF) as usize;
+        let status = packed & 0xFFFF_FFFF;
+        match status {
+            0 if written > 0 && written <= buf.len() => {
+                return Some(String::from_utf8_lossy(&buf[..written]).into_owned());
+            }
+            0 if written > buf.len() => {
+                buf.resize(written, 0);
+                continue;
+            }
+            0 => return Some(String::new()),
+            _ => return None,
+        }
     }
 }
 
@@ -157,20 +276,33 @@ pub fn store_state(key: &str, value: &str) -> bool {
 }
 
 /// Load a value from module persistent state. Returns None if not found.
+/// Uses a dynamic buffer for arbitrary-size values.
 pub fn load_state(key: &str) -> Option<String> {
-    let mut buf = [0u8; 1024];
-    let packed = unsafe {
-        _host_load_state(
-            key.as_ptr(), key.len() as u32,
-            buf.as_mut_ptr(), buf.len() as u32,
-        )
-    };
-    let written = ((packed >> 32) & 0xFFFF_FFFF) as usize;
-    let status = packed & 0xFFFF_FFFF;
-    if status == 0 && written > 0 && written <= buf.len() {
-        Some(String::from_utf8_lossy(&buf[..written]).into_owned())
-    } else {
-        None
+    load_state_dynamic(key, 4096)
+}
+
+/// Load a value from module state with a caller-specified initial buffer size.
+pub fn load_state_dynamic(key: &str, initial_buf: usize) -> Option<String> {
+    let mut buf: Vec<u8> = alloc::vec![0u8; initial_buf];
+    loop {
+        let packed = unsafe {
+            _host_load_state(
+                key.as_ptr(), key.len() as u32,
+                buf.as_mut_ptr(), buf.len() as u32,
+            )
+        };
+        let written = ((packed >> 32) & 0xFFFF_FFFF) as usize;
+        let status = packed & 0xFFFF_FFFF;
+        match status {
+            0 if written > 0 && written <= buf.len() => {
+                return Some(String::from_utf8_lossy(&buf[..written]).into_owned());
+            }
+            0 if written > buf.len() => {
+                buf.resize(written, 0);
+                continue;
+            }
+            _ => return None,
+        }
     }
 }
 
@@ -189,4 +321,40 @@ pub fn check_governance_approval(proposal_id: &str) -> bool {
 /// Returns the count of valid signatures.
 pub fn verify_signature_batch(batch_json: &str) -> u32 {
     unsafe { _host_verify_signature_batch(batch_json.as_ptr(), batch_json.len() as u32) }
+}
+
+/// Execute another registered and activated module, returning its result.
+/// Enables cross-contract composition.
+///
+/// Returns `None` if the target module is not found, not activated,
+/// or if call depth is exceeded.
+pub fn call_module(target_module_id: &str, params_json: &str) -> Option<String> {
+    call_module_dynamic(target_module_id, params_json, 8192)
+}
+
+/// Cross-contract call with a caller-specified initial buffer size.
+pub fn call_module_dynamic(target_module_id: &str, params_json: &str, initial_buf: usize) -> Option<String> {
+    let mut buf: Vec<u8> = alloc::vec![0u8; initial_buf];
+    loop {
+        let packed = unsafe {
+            _host_call_module(
+                target_module_id.as_ptr(), target_module_id.len() as u32,
+                params_json.as_ptr(), params_json.len() as u32,
+                buf.as_mut_ptr(), buf.len() as u32,
+            )
+        };
+        let written = ((packed >> 32) & 0xFFFF_FFFF) as usize;
+        let status = packed & 0xFFFF_FFFF;
+        match status {
+            0 if written > 0 && written <= buf.len() => {
+                return Some(String::from_utf8_lossy(&buf[..written]).into_owned());
+            }
+            0 if written > buf.len() => {
+                buf.resize(written, 0);
+                continue;
+            }
+            0 => return Some(String::new()),
+            _ => return None,
+        }
+    }
 }

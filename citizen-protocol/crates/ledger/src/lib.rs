@@ -1815,6 +1815,11 @@ fn canonical_json(value: &Value) -> String {
 /// entry and state, they return the same result.
 struct LedgerWasmHost<S: LedgerStorage + 'static> {
     storage: Arc<S>,
+    engine: Option<Arc<ExecutionEngine>>,
+    call_depth: u32,
+    max_call_depth: u32,
+    cross_call_gas_limit: u64,
+    module_id: Option<String>,
 }
 
 impl<S: LedgerStorage + 'static> WasmHost for LedgerWasmHost<S> {
@@ -1843,12 +1848,74 @@ impl<S: LedgerStorage + 'static> WasmHost for LedgerWasmHost<S> {
 
     fn write_namespace_entry(
         &self,
-        _namespace: &str,
-        _payload_json: &str,
+        namespace: &str,
+        payload_json: &str,
     ) -> std::result::Result<String, ExecutionError> {
-        Err(ExecutionError::HostError(
-            "write_namespace_entry is not yet supported in ledger-backed WASM host".into(),
-        ))
+        // Parse payload to extract object_id (required) and action (optional)
+        let payload: serde_json::Value = serde_json::from_str(payload_json)
+            .map_err(|e| ExecutionError::SerializationError(format!("invalid payload JSON: {e}")))?;
+
+        let object_id = payload
+            .get("object_id")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| {
+                ExecutionError::HostError("payload must include string field 'object_id'".into())
+            })?;
+
+        let action = payload
+            .get("action")
+            .and_then(|v| v.as_str())
+            .unwrap_or("MODULE_WRITE");
+
+        let entry_payload = payload
+            .get("payload")
+            .cloned()
+            .unwrap_or(serde_json::Value::Null);
+
+        let module_id = self.module_id.as_deref().unwrap_or("unknown");
+
+        let canonical =
+            format!("MODULE_WRITE\n{namespace}\n{object_id}\n{action}\n{entry_payload}");
+        let commitment = hex::encode(Sha256::digest(canonical.as_bytes()));
+
+        let entry_id = Uuid::new_v4();
+        let receipt = serde_json::json!({
+            "entry_id": entry_id,
+            "namespace": namespace,
+            "action": action,
+            "object_id": object_id,
+            "author": format!("system.execution#{module_id}"),
+        });
+
+        let entry = citizen_types::LedgerEntry {
+            entry_id,
+            namespace: namespace.to_string(),
+            action: action.into(),
+            object_id: object_id.into(),
+            payload: entry_payload,
+            privacy_flag: false,
+            privacy_mode: citizen_types::PrivacyMode::None,
+            payload_commitment: None,
+            ciphertext_hex: None,
+            nonce_hex: None,
+            salt_hex: None,
+            kdf_params: None,
+            consent_receipt: None,
+            authorized_readers: vec![],
+            custodian_policy_id: None,
+            field_reader_acls: BTreeMap::new(),
+            key_wrapped_secrets: vec![],
+            revocation_events: vec![],
+            author: format!("system.execution#{module_id}"),
+            signature: commitment,
+            timestamp: chrono::Utc::now().timestamp(),
+        };
+        self.storage
+            .store_entry(entry)
+            .map_err(|e| ExecutionError::HostError(e.to_string()))?;
+
+        Ok(serde_json::to_string(&receipt)
+            .map_err(|e| ExecutionError::SerializationError(e.to_string()))?)
     }
 
     fn verify_signature(
@@ -2042,6 +2109,60 @@ impl<S: LedgerStorage + 'static> WasmHost for LedgerWasmHost<S> {
         }
         Ok(valid)
     }
+
+    fn call_module(
+        &self,
+        target_module_id: &str,
+        params_json: &str,
+    ) -> std::result::Result<Option<String>, ExecutionError> {
+        if self.call_depth >= self.max_call_depth {
+            return Err(ExecutionError::SecurityViolation(format!(
+                "cross-contract call depth exceeded: {}/{}",
+                self.call_depth, self.max_call_depth
+            )));
+        }
+
+        let engine = self.engine.as_ref().ok_or_else(|| {
+            ExecutionError::HostError("execution engine not available for cross-contract call".into())
+        })?;
+
+        // Check target module is activated
+        let entries = self
+            .storage
+            .namespace_entries(&"execution.module".to_string())
+            .map_err(|e| ExecutionError::HostError(e.to_string()))?;
+        let activated = entries.iter().any(|e| {
+            e.object_id == target_module_id && e.action == "ACTIVATE_MODULE"
+        });
+        if !activated {
+            return Err(ExecutionError::AccessDenied(format!(
+                "target module '{target_module_id}' is not activated"
+            )));
+        }
+
+        let wasm_bytes = self.load_module_bytecode(target_module_id)?;
+
+        let callee_host = LedgerWasmHost {
+            storage: self.storage.clone(),
+            engine: self.engine.clone(),
+            call_depth: self.call_depth + 1,
+            max_call_depth: self.max_call_depth,
+            cross_call_gas_limit: self.cross_call_gas_limit,
+            module_id: Some(target_module_id.to_string()),
+        };
+
+        let result = engine.execute(
+            &wasm_bytes,
+            target_module_id,
+            params_json,
+            self.cross_call_gas_limit,
+            Arc::new(callee_host),
+        )?;
+
+        Ok(result
+            .return_value
+            .map(|bytes| String::from_utf8_lossy(&bytes).into_owned()))
+    }
 }
 
 impl<S: LedgerStorage + 'static> Ledger<S> {
@@ -2075,6 +2196,19 @@ impl<S: LedgerStorage + 'static> Ledger<S> {
 
         let host = Arc::new(LedgerWasmHost {
             storage: self.storage.clone(),
+            engine: Some(engine.clone()),
+            call_depth: 0,
+            max_call_depth: self
+                .wasm_engine
+                .as_ref()
+                .map(|e| {
+                    let cfg = ExecutionConfig::default();
+                    let _ = e;
+                    cfg.max_call_depth
+                })
+                .unwrap_or(4),
+            cross_call_gas_limit: ExecutionConfig::default().cross_call_gas_limit,
+            module_id: Some(module_id.to_string()),
         });
 
         let wasm_bytes = host
@@ -3552,10 +3686,21 @@ mod tests {
         assert!(message.contains("fields=email,country"));
     }
 
+    fn make_test_host(storage: Arc<MemoryStorage>) -> super::LedgerWasmHost<MemoryStorage> {
+        super::LedgerWasmHost {
+            storage,
+            engine: None,
+            call_depth: 0,
+            max_call_depth: 4,
+            cross_call_gas_limit: 500_000,
+            module_id: Some("test-module".into()),
+        }
+    }
+
     #[test]
     fn wasm_host_check_governance_fails_closed() {
         let storage = Arc::new(MemoryStorage::new());
-        let host = super::LedgerWasmHost { storage };
+        let host = make_test_host(storage);
         let result = WasmHost::check_governance_approval(&host, "prop-123");
         assert_eq!(result.unwrap(), false);
     }
@@ -3563,7 +3708,7 @@ mod tests {
     #[test]
     fn wasm_host_batch_rejects_oversized_json() {
         let storage = Arc::new(MemoryStorage::new());
-        let host = super::LedgerWasmHost { storage };
+        let host = make_test_host(storage);
         let big = "a".repeat(2_000_000);
         let batch = format!(
             r#"[{{"signer_did":"d","message_hex":"{big}","signature_hex":"s"}}]"#
@@ -3577,7 +3722,7 @@ mod tests {
     #[test]
     fn wasm_host_batch_rejects_too_many_items() {
         let storage = Arc::new(MemoryStorage::new());
-        let host = super::LedgerWasmHost { storage };
+        let host = make_test_host(storage);
         let items: Vec<String> = (0..300)
             .map(|i| {
                 format!(
@@ -3595,9 +3740,7 @@ mod tests {
     #[test]
     fn wasm_host_store_state_uses_hash_commitment() {
         let storage = Arc::new(MemoryStorage::new());
-        let host = super::LedgerWasmHost {
-            storage: storage.clone(),
-        };
+        let host = make_test_host(storage.clone());
 
         WasmHost::store_state(&host, "test-module", "counter", "42").unwrap();
 
@@ -3630,5 +3773,97 @@ mod tests {
                 .and_then(|v| v.as_bool()),
             Some(true)
         );
+    }
+
+    #[test]
+    fn wasm_host_write_namespace_entry_creates_ledger_entry() {
+        let storage = Arc::new(MemoryStorage::new());
+        let host = make_test_host(storage.clone());
+
+        let payload = r#"{"object_id":"rec-001","action":"CREATE","payload":{"name":"alice","value":42}}"#;
+        let receipt_json = WasmHost::write_namespace_entry(&host, "records", payload).unwrap();
+
+        let receipt: serde_json::Value =
+            serde_json::from_str(&receipt_json).expect("receipt should be valid JSON");
+        assert_eq!(receipt["namespace"], "records");
+        assert_eq!(receipt["object_id"], "rec-001");
+        assert_eq!(receipt["action"], "CREATE");
+
+        let entries = storage.namespace_entries(&"records".to_string()).unwrap();
+        assert_eq!(entries.len(), 1);
+        let entry = &entries[0];
+        assert_eq!(entry.action, "CREATE");
+        assert_eq!(entry.object_id, "rec-001");
+        assert_eq!(entry.payload["name"], "alice");
+        assert_eq!(entry.payload["value"], 42);
+        assert!(entry.author.contains("test-module"));
+        assert_eq!(entry.signature.len(), 64);
+    }
+
+    #[test]
+    fn wasm_host_write_namespace_entry_requires_object_id() {
+        let storage = Arc::new(MemoryStorage::new());
+        let host = make_test_host(storage);
+
+        let payload = r#"{"payload":{"data":"no id"}}"#;
+        let result = WasmHost::write_namespace_entry(&host, "records", payload);
+        assert!(result.is_err(), "should fail without object_id");
+        let err = result.unwrap_err().to_string();
+        assert!(err.contains("object_id"), "expected object_id error: {err}");
+    }
+
+    #[test]
+    fn wasm_host_write_namespace_entry_default_action() {
+        let storage = Arc::new(MemoryStorage::new());
+        let host = make_test_host(storage.clone());
+
+        let payload = r#"{"object_id":"rec-002","payload":{"x":1}}"#;
+        WasmHost::write_namespace_entry(&host, "data", payload).unwrap();
+
+        let entries = storage.namespace_entries(&"data".to_string()).unwrap();
+        assert_eq!(entries[0].action, "MODULE_WRITE");
+    }
+
+    #[test]
+    fn wasm_host_write_then_read_roundtrip() {
+        let storage = Arc::new(MemoryStorage::new());
+        let host = make_test_host(storage.clone());
+
+        let payload = r#"{"object_id":"item-1","payload":{"status":"active"}}"#;
+        WasmHost::write_namespace_entry(&host, "inventory", payload).unwrap();
+
+        let read_result = WasmHost::read_namespace_entry(&host, "inventory", "item-1").unwrap();
+        assert!(read_result.is_some(), "should find written entry");
+        let data: serde_json::Value = serde_json::from_str(&read_result.unwrap()).unwrap();
+        assert_eq!(data["status"], "active");
+    }
+
+    #[test]
+    fn wasm_host_call_module_without_engine_fails() {
+        let storage = Arc::new(MemoryStorage::new());
+        let host = make_test_host(storage);
+
+        let result = WasmHost::call_module(&host, "some-module", "{}");
+        assert!(result.is_err(), "should fail without engine");
+        let err = result.unwrap_err().to_string();
+        assert!(err.contains("engine"), "expected engine error: {err}");
+    }
+
+    #[test]
+    fn wasm_host_call_module_depth_tracking() {
+        let storage = Arc::new(MemoryStorage::new());
+        let host = super::LedgerWasmHost {
+            storage,
+            engine: None,
+            call_depth: 5,
+            max_call_depth: 4,
+            cross_call_gas_limit: 500_000,
+            module_id: Some("test".into()),
+        };
+
+        let result = WasmHost::call_module(&host, "target", "{}");
+        assert!(result.is_err(), "should fail at max depth");
+        let err = result.unwrap_err().to_string();
+        assert!(err.contains("depth"), "expected depth error: {err}");
     }
 }
