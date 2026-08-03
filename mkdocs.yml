@@ -1,0 +1,110 @@
+site_name: Citizen Protocol
+site_description: User manual and documentation for the Citizen Protocol — a governance-first ledger for public truth, records, and institutional accountability.
+site_url: https://greenarmor.github.io/citizen/
+repo_url: https://github.com/greenarmor/citizen
+repo_name: greenarmor/citizen
+edit_uri: edit/main/docs/
+
+docs_dir: docs
+site_dir: site
+
+theme:
+  name: material
+  font:
+    text: Inter
+    code: JetBrains Mono
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: blue
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: blue
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - navigation.indexes
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    - content.code.annotate
+    - content.tabs.link
+  icon:
+    repo: fontawesome/brands/github
+  logo: assets/logo.svg
+  favicon: assets/favicon.svg
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.tasklist:
+      custom_checkbox: true
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+  - attr_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+
+plugins:
+  - search
+  - tags
+
+nav:
+  - Home: index.md
+  - Getting Started:
+      - Overview: getting-started/overview.md
+      - Installation: getting-started/installation.md
+      - Quick Start: getting-started/quickstart.md
+  - Protocol:
+      - Architecture: protocol/architecture.md
+      - Consensus: protocol/consensus.md
+      - Governance: protocol/governance.md
+      - Namespaces: protocol/namespaces.md
+      - Networks: protocol/networks.md
+  - Wallets:
+      - Overview: wallets/overview.md
+      - Mobile Wallet: wallets/mobile.md
+      - Browser Extension: wallets/browser.md
+      - Desktop Wallet: wallets/desktop.md
+      - CLI Wallet: wallets/cli.md
+      - WalletConnect: wallets/walletconnect.md
+      - Key Derivation: wallets/key-derivation.md
+      - Backup Vault: wallets/backup.md
+  - SDK:
+      - TypeScript SDK: sdk/typescript.md
+  - Explorer:
+      - Overview: explorer/overview.md
+  - Node Operators:
+      - Running a Node: node-operators/running-a-node.md
+      - Validator Guide: node-operators/validator.md
+      - Localnet: node-operators/localnet.md
+  - Compliance:
+      - GDPR: compliance/gdpr.md
+      - Security Policies: compliance/security.md
+  - Reference:
+      - API Reference: reference/api.md
+      - Error Codes: reference/error-codes.md
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/greenarmor/citizen
