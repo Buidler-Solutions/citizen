@@ -11,9 +11,10 @@ use ed25519_dalek::Signature;
 use parking_lot::RwLock;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::Arc;
 use tracing::debug;
+use uuid::Uuid;
 
 pub type Result<T> = std::result::Result<T, ProtocolError>;
 type RuleHandler<S> = dyn Fn(&Ledger<S>, &LedgerEntry, &Value) -> Result<()> + Send + Sync;
@@ -1913,6 +1914,68 @@ impl<S: LedgerStorage + 'static> WasmHost for LedgerWasmHost<S> {
         }
         Err(ExecutionError::ModuleNotFound(module_id.to_string()))
     }
+
+    fn store_state(
+        &self,
+        module_id: &str,
+        key: &str,
+        value: &str,
+    ) -> std::result::Result<(), ExecutionError> {
+        // Store module state as a ledger entry in the execution.module namespace
+        let entry = citizen_types::LedgerEntry {
+            entry_id: Uuid::new_v4(),
+            namespace: "execution.module".into(),
+            action: "STATE_WRITE".into(),
+            object_id: module_id.to_string(),
+            payload: serde_json::json!({
+                "state_key": key,
+                "state_value": value,
+            }),
+            privacy_flag: false,
+            privacy_mode: citizen_types::PrivacyMode::None,
+            payload_commitment: None,
+            ciphertext_hex: None,
+            nonce_hex: None,
+            salt_hex: None,
+            kdf_params: None,
+            consent_receipt: None,
+            authorized_readers: vec![],
+            custodian_policy_id: None,
+            field_reader_acls: BTreeMap::new(),
+            key_wrapped_secrets: vec![],
+            revocation_events: vec![],
+            author: "system.execution".into(),
+            signature: "system.execution".into(),
+            timestamp: chrono::Utc::now().timestamp(),
+        };
+        self.storage
+            .store_entry(entry)
+            .map_err(|e| ExecutionError::HostError(e.to_string()))
+    }
+
+    fn load_state(
+        &self,
+        module_id: &str,
+        key: &str,
+    ) -> std::result::Result<Option<String>, ExecutionError> {
+        let entries = self
+            .storage
+            .namespace_entries(&"execution.module".to_string())
+            .map_err(|e| ExecutionError::HostError(e.to_string()))?;
+
+        for entry in entries.iter().rev() {
+            if entry.object_id == module_id && entry.action == "STATE_WRITE" {
+                if let Some(state_key) = entry.payload.get("state_key").and_then(|v| v.as_str()) {
+                    if state_key == key {
+                        if let Some(state_value) = entry.payload.get("state_value").and_then(|v| v.as_str()) {
+                            return Ok(Some(state_value.to_string()));
+                        }
+                    }
+                }
+            }
+        }
+        Ok(None)
+    }
 }
 
 impl<S: LedgerStorage + 'static> Ledger<S> {
@@ -1953,7 +2016,7 @@ impl<S: LedgerStorage + 'static> Ledger<S> {
             .map_err(|e| ProtocolError::ValidationFailed(format!("load module: {e}")))?;
 
         engine
-            .execute(&wasm_bytes, params_json, gas_limit, host)
+            .execute(&wasm_bytes, module_id, params_json, gas_limit, host)
             .map_err(|e| ProtocolError::ValidationFailed(format!("wasm execution: {e}")))
     }
 }
