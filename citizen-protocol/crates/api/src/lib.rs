@@ -4985,7 +4985,8 @@ mod tests {
                 "module_id": "module.asset.v1",
                 "module_class": "asset",
                 "wasm_hash": "wasm:abc",
-                "audit_hash": "audit:abc"
+                "audit_hash": "audit:abc",
+                "wasm_bytes": "AGFzbQ"
             }),
             privacy_flag: false,
             privacy_mode: citizen_types::PrivacyMode::None,
