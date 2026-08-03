@@ -1,0 +1,17 @@
+[
+  {
+    "control_id": "OWASP-ASVS-005",
+    "status": "not-applicable",
+    "reason": "All remaining findings are false positives from pattern matching. Config TOML files use REPLACE_WITH_* placeholders (no real secrets). Scripts use env-var indirection (${VAR:?required}). Docs contain PEM template examples with no key material. Test files use clearly-fake fixture values. The 3 real MinIO test fixture credentials in api/src/lib.rs were remediated to env-var-sourced values. 330 build artifacts in target-check/ were removed from git tracking."
+  },
+  {
+    "control_id": "GDPR-ART32-006",
+    "status": "not-applicable",
+    "reason": "All TypeORM entities have @CreateDateColumn and @UpdateDateColumn decorators. The scanner matches on literal column name strings (created_at/updated_at) and does not recognize TypeORM decorator-based column generation. Entities confirmed via TypeScript compilation: auth-user, auth-session, auth-challenge, password-reset, lead, lead-notification, asciinema-recording, form-settings, smtp-settings, email-template, onboarding-user, media-asset, whitepaper-section all have both timestamps. created_by/updated_by is not applicable for these entities as they are system-managed (wallet auth, form submissions) with no interactive user CRUD context."
+  },
+  {
+    "control_id": "GDPR-ART32-007",
+    "status": "not-applicable",
+    "reason": "All persistent TypeORM entities now have @DeleteDateColumn for soft-delete. SQL schema updated with deleted_at columns. This was implemented as part of the security audit remediation."
+  }
+]

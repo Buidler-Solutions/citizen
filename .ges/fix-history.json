@@ -1,0 +1,3084 @@
+[
+  {
+    "id": "fix-1785639687978-1",
+    "timestamp": "2026-08-02T03:01:27.978Z",
+    "source": "mcp",
+    "dry_run": false,
+    "finding": {
+      "rule_id": "SECRETS-001",
+      "severity": "critical",
+      "category": "secrets",
+      "title": "Hardcoded password",
+      "file": ".dev-logs/ai-artifacts/ai-security-audit-2026-08-02.md",
+      "line": 27,
+      "evidence": "PASS***ass}",
+      "description": "A secret or credential was found in source code. Secrets must never be committed to repositories."
+    },
+    "controls": [
+      {
+        "id": "GDPR-ART32-002",
+        "name": "Encryption at Rest",
+        "framework": "GDPR",
+        "article": "Article 32(1)(a)",
+        "status": "not-implemented"
+      },
+      {
+        "id": "OWASP-ASVS-005",
+        "name": "Secrets Management",
+        "framework": "OWASP",
+        "status": "not-implemented"
+      }
+    ],
+    "fix": {
+      "action_type": "append",
+      "file_path": ".env",
+      "description": "Move PASSWORD to .env",
+      "guidance": "Move this secret to a secure vault (Vault, AWS KMS, etc.) or environment variable. Never commit secrets to source control.",
+      "applied": true
+    },
+    "compliance_impact": {
+      "frameworks_affected": [
+        "GDPR",
+        "OWASP"
+      ],
+      "controls_addressed": 2,
+      "severity_resolved": "critical"
+    }
+  },
+  {
+    "id": "fix-1785639687978-2",
+    "timestamp": "2026-08-02T03:01:27.978Z",
+    "source": "mcp",
+    "dry_run": false,
+    "finding": {
+      "rule_id": "SECRETS-001",
+      "severity": "critical",
+      "category": "secrets",
+      "title": "Hardcoded password",
+      "file": ".dev-logs/ai-artifacts/ai-security-audit-2026-08-02.md",
+      "line": 27,
+      "evidence": "PASS***ass}",
+      "description": "A secret or credential was found in source code. Secrets must never be committed to repositories."
+    },
+    "controls": [
+      {
+        "id": "GDPR-ART32-002",
+        "name": "Encryption at Rest",
+        "framework": "GDPR",
+        "article": "Article 32(1)(a)",
+        "status": "not-implemented"
+      },
+      {
+        "id": "OWASP-ASVS-005",
+        "name": "Secrets Management",
+        "framework": "OWASP",
+        "status": "not-implemented"
+      }
+    ],
+    "fix": {
+      "action_type": "modify",
+      "file_path": ".dev-logs/ai-artifacts/ai-security-audit-2026-08-02.md",
+      "description": "Replace hardcoded PASSWORD with env variable",
+      "guidance": "Move this secret to a secure vault (Vault, AWS KMS, etc.) or environment variable. Never commit secrets to source control.",
+      "applied": true
+    },
+    "compliance_impact": {
+      "frameworks_affected": [
+        "GDPR",
+        "OWASP"
+      ],
+      "controls_addressed": 2,
+      "severity_resolved": "critical"
+    }
+  },
+  {
+    "id": "fix-1785639687978-3",
+    "timestamp": "2026-08-02T03:01:27.978Z",
+    "source": "mcp",
+    "dry_run": false,
+    "finding": {
+      "rule_id": "SECRETS-001",
+      "severity": "critical",
+      "category": "secrets",
+      "title": "Hardcoded password",
+      "file": ".dev-logs/ai-artifacts/ai-security-audit-2026-08-02.md",
+      "line": 27,
+      "evidence": "PASS***ass}",
+      "description": "A secret or credential was found in source code. Secrets must never be committed to repositories."
+    },
+    "controls": [
+      {
+        "id": "GDPR-ART32-002",
+        "name": "Encryption at Rest",
+        "framework": "GDPR",
+        "article": "Article 32(1)(a)",
+        "status": "not-implemented"
+      },
+      {
+        "id": "OWASP-ASVS-005",
+        "name": "Secrets Management",
+        "framework": "OWASP",
+        "status": "not-implemented"
+      }
+    ],
+    "fix": {
+      "action_type": "append",
+      "file_path": ".env",
+      "description": "Move api_key to .env",
+      "guidance": "Move this secret to a secure vault (Vault, AWS KMS, etc.) or environment variable. Never commit secrets to source control.",
+      "applied": true
+    },
+    "compliance_impact": {
+      "frameworks_affected": [
+        "GDPR",
+        "OWASP"
+      ],
+      "controls_addressed": 2,
+      "severity_resolved": "critical"
+    }
+  },
+  {
+    "id": "fix-1785639687979-4",
+    "timestamp": "2026-08-02T03:01:27.979Z",
+    "source": "mcp",
+    "dry_run": false,
+    "finding": {
+      "rule_id": "SECRETS-001",
+      "severity": "critical",
+      "category": "secrets",
+      "title": "Hardcoded password",
+      "file": ".dev-logs/ai-artifacts/ai-security-audit-2026-08-02.md",
+      "line": 27,
+      "evidence": "PASS***ass}",
+      "description": "A secret or credential was found in source code. Secrets must never be committed to repositories."
+    },
+    "controls": [
+      {
+        "id": "GDPR-ART32-002",
+        "name": "Encryption at Rest",
+        "framework": "GDPR",
+        "article": "Article 32(1)(a)",
+        "status": "not-implemented"
+      },
+      {
+        "id": "OWASP-ASVS-005",
+        "name": "Secrets Management",
+        "framework": "OWASP",
+        "status": "not-implemented"
+      }
+    ],
+    "fix": {
+      "action_type": "modify",
+      "file_path": "citizen-protocol/config/futurenet/validator-alpha.toml",
+      "description": "Replace hardcoded api_key with env variable",
+      "guidance": "Move this secret to a secure vault (Vault, AWS KMS, etc.) or environment variable. Never commit secrets to source control.",
+      "applied": true
+    },
+    "compliance_impact": {
+      "frameworks_affected": [
+        "GDPR",
+        "OWASP"
+      ],
+      "controls_addressed": 2,
+      "severity_resolved": "critical"
+    }
+  },
+  {
+    "id": "fix-1785639687979-5",
+    "timestamp": "2026-08-02T03:01:27.979Z",
+    "source": "mcp",
+    "dry_run": false,
+    "finding": {
+      "rule_id": "SECRETS-001",
+      "severity": "critical",
+      "category": "secrets",
+      "title": "Hardcoded password",
+      "file": ".dev-logs/ai-artifacts/ai-security-audit-2026-08-02.md",
+      "line": 27,
+      "evidence": "PASS***ass}",
+      "description": "A secret or credential was found in source code. Secrets must never be committed to repositories."
+    },
+    "controls": [
+      {
+        "id": "GDPR-ART32-002",
+        "name": "Encryption at Rest",
+        "framework": "GDPR",
+        "article": "Article 32(1)(a)",
+        "status": "not-implemented"
+      },
+      {
+        "id": "OWASP-ASVS-005",
+        "name": "Secrets Management",
+        "framework": "OWASP",
+        "status": "not-implemented"
+      }
+    ],
+    "fix": {
+      "action_type": "append",
+      "file_path": ".env",
+      "description": "Move api_key to .env",
+      "guidance": "Move this secret to a secure vault (Vault, AWS KMS, etc.) or environment variable. Never commit secrets to source control.",
+      "applied": true
+    },
+    "compliance_impact": {
+      "frameworks_affected": [
+        "GDPR",
+        "OWASP"
+      ],
+      "controls_addressed": 2,
+      "severity_resolved": "critical"
+    }
+  },
+  {
+    "id": "fix-1785639687979-6",
+    "timestamp": "2026-08-02T03:01:27.979Z",
+    "source": "mcp",
+    "dry_run": false,
+    "finding": {
+      "rule_id": "SECRETS-001",
+      "severity": "critical",
+      "category": "secrets",
+      "title": "Hardcoded password",
+      "file": ".dev-logs/ai-artifacts/ai-security-audit-2026-08-02.md",
+      "line": 27,
+      "evidence": "PASS***ass}",
+      "description": "A secret or credential was found in source code. Secrets must never be committed to repositories."
+    },
+    "controls": [
+      {
+        "id": "GDPR-ART32-002",
+        "name": "Encryption at Rest",
+        "framework": "GDPR",
+        "article": "Article 32(1)(a)",
+        "status": "not-implemented"
+      },
+      {
+        "id": "OWASP-ASVS-005",
+        "name": "Secrets Management",
+        "framework": "OWASP",
+        "status": "not-implemented"
+      }
+    ],
+    "fix": {
+      "action_type": "modify",
+      "file_path": "citizen-protocol/config/futurenet/validator-beta.toml",
+      "description": "Replace hardcoded api_key with env variable",
+      "guidance": "Move this secret to a secure vault (Vault, AWS KMS, etc.) or environment variable. Never commit secrets to source control.",
+      "applied": true
+    },
+    "compliance_impact": {
+      "frameworks_affected": [
+        "GDPR",
+        "OWASP"
+      ],
+      "controls_addressed": 2,
+      "severity_resolved": "critical"
+    }
+  },
+  {
+    "id": "fix-1785639687979-7",
+    "timestamp": "2026-08-02T03:01:27.979Z",
+    "source": "mcp",
+    "dry_run": false,
+    "finding": {
+      "rule_id": "SECRETS-001",
+      "severity": "critical",
+      "category": "secrets",
+      "title": "Hardcoded password",
+      "file": ".dev-logs/ai-artifacts/ai-security-audit-2026-08-02.md",
+      "line": 27,
+      "evidence": "PASS***ass}",
+      "description": "A secret or credential was found in source code. Secrets must never be committed to repositories."
+    },
+    "controls": [
+      {
+        "id": "GDPR-ART32-002",
+        "name": "Encryption at Rest",
+        "framework": "GDPR",
+        "article": "Article 32(1)(a)",
+        "status": "not-implemented"
+      },
+      {
+        "id": "OWASP-ASVS-005",
+        "name": "Secrets Management",
+        "framework": "OWASP",
+        "status": "not-implemented"
+      }
+    ],
+    "fix": {
+      "action_type": "append",
+      "file_path": ".env",
+      "description": "Move api_key to .env",
+      "guidance": "Move this secret to a secure vault (Vault, AWS KMS, etc.) or environment variable. Never commit secrets to source control.",
+      "applied": true
+    },
+    "compliance_impact": {
+      "frameworks_affected": [
+        "GDPR",
+        "OWASP"
+      ],
+      "controls_addressed": 2,
+      "severity_resolved": "critical"
+    }
+  },
+  {
+    "id": "fix-1785639687979-8",
+    "timestamp": "2026-08-02T03:01:27.979Z",
+    "source": "mcp",
+    "dry_run": false,
+    "finding": {
+      "rule_id": "SECRETS-001",
+      "severity": "critical",
+      "category": "secrets",
+      "title": "Hardcoded password",
+      "file": ".dev-logs/ai-artifacts/ai-security-audit-2026-08-02.md",
+      "line": 27,
+      "evidence": "PASS***ass}",
+      "description": "A secret or credential was found in source code. Secrets must never be committed to repositories."
+    },
+    "controls": [
+      {
+        "id": "GDPR-ART32-002",
+        "name": "Encryption at Rest",
+        "framework": "GDPR",
+        "article": "Article 32(1)(a)",
+        "status": "not-implemented"
+      },
+      {
+        "id": "OWASP-ASVS-005",
+        "name": "Secrets Management",
+        "framework": "OWASP",
+        "status": "not-implemented"
+      }
+    ],
+    "fix": {
+      "action_type": "modify",
+      "file_path": "citizen-protocol/config/futurenet/validator-gamma.toml",
+      "description": "Replace hardcoded api_key with env variable",
+      "guidance": "Move this secret to a secure vault (Vault, AWS KMS, etc.) or environment variable. Never commit secrets to source control.",
+      "applied": true
+    },
+    "compliance_impact": {
+      "frameworks_affected": [
+        "GDPR",
+        "OWASP"
+      ],
+      "controls_addressed": 2,
+      "severity_resolved": "critical"
+    }
+  },
+  {
+    "id": "fix-1785639687979-9",
+    "timestamp": "2026-08-02T03:01:27.979Z",
+    "source": "mcp",
+    "dry_run": false,
+    "finding": {
+      "rule_id": "SECRETS-001",
+      "severity": "critical",
+      "category": "secrets",
+      "title": "Hardcoded password",
+      "file": ".dev-logs/ai-artifacts/ai-security-audit-2026-08-02.md",
+      "line": 27,
+      "evidence": "PASS***ass}",
+      "description": "A secret or credential was found in source code. Secrets must never be committed to repositories."
+    },
+    "controls": [
+      {
+        "id": "GDPR-ART32-002",
+        "name": "Encryption at Rest",
+        "framework": "GDPR",
+        "article": "Article 32(1)(a)",
+        "status": "not-implemented"
+      },
+      {
+        "id": "OWASP-ASVS-005",
+        "name": "Secrets Management",
+        "framework": "OWASP",
+        "status": "not-implemented"
+      }
+    ],
+    "fix": {
+      "action_type": "append",
+      "file_path": ".env",
+      "description": "Move startup_secret to .env",
+      "guidance": "Move this secret to a secure vault (Vault, AWS KMS, etc.) or environment variable. Never commit secrets to source control.",
+      "applied": true
+    },
+    "compliance_impact": {
+      "frameworks_affected": [
+        "GDPR",
+        "OWASP"
+      ],
+      "controls_addressed": 2,
+      "severity_resolved": "critical"
+    }
+  },
+  {
+    "id": "fix-1785639687979-10",
+    "timestamp": "2026-08-02T03:01:27.979Z",
+    "source": "mcp",
+    "dry_run": false,
+    "finding": {
+      "rule_id": "SECRETS-001",
+      "severity": "critical",
+      "category": "secrets",
+      "title": "Hardcoded password",
+      "file": ".dev-logs/ai-artifacts/ai-security-audit-2026-08-02.md",
+      "line": 27,
+      "evidence": "PASS***ass}",
+      "description": "A secret or credential was found in source code. Secrets must never be committed to repositories."
+    },
+    "controls": [
+      {
+        "id": "GDPR-ART32-002",
+        "name": "Encryption at Rest",
+        "framework": "GDPR",
+        "article": "Article 32(1)(a)",
+        "status": "not-implemented"
+      },
+      {
+        "id": "OWASP-ASVS-005",
+        "name": "Secrets Management",
+        "framework": "OWASP",
+        "status": "not-implemented"
+      }
+    ],
+    "fix": {
+      "action_type": "modify",
+      "file_path": "citizen-protocol/config/futurenet/validator-sample.toml",
+      "description": "Replace hardcoded startup_secret with env variable",
+      "guidance": "Move this secret to a secure vault (Vault, AWS KMS, etc.) or environment variable. Never commit secrets to source control.",
+      "applied": true
+    },
+    "compliance_impact": {
+      "frameworks_affected": [
+        "GDPR",
+        "OWASP"
+      ],
+      "controls_addressed": 2,
+      "severity_resolved": "critical"
+    }
+  },
+  {
+    "id": "fix-1785639687979-11",
+    "timestamp": "2026-08-02T03:01:27.979Z",
+    "source": "mcp",
+    "dry_run": false,
+    "finding": {
+      "rule_id": "SECRETS-001",
+      "severity": "critical",
+      "category": "secrets",
+      "title": "Hardcoded password",
+      "file": ".dev-logs/ai-artifacts/ai-security-audit-2026-08-02.md",
+      "line": 27,
+      "evidence": "PASS***ass}",
+      "description": "A secret or credential was found in source code. Secrets must never be committed to repositories."
+    },
+    "controls": [
+      {
+        "id": "GDPR-ART32-002",
+        "name": "Encryption at Rest",
+        "framework": "GDPR",
+        "article": "Article 32(1)(a)",
+        "status": "not-implemented"
+      },
+      {
+        "id": "OWASP-ASVS-005",
+        "name": "Secrets Management",
+        "framework": "OWASP",
+        "status": "not-implemented"
+      }
+    ],
+    "fix": {
+      "action_type": "append",
+      "file_path": ".env",
+      "description": "Move startup_secret to .env",
+      "guidance": "Move this secret to a secure vault (Vault, AWS KMS, etc.) or environment variable. Never commit secrets to source control.",
+      "applied": true
+    },
+    "compliance_impact": {
+      "frameworks_affected": [
+        "GDPR",
+        "OWASP"
+      ],
+      "controls_addressed": 2,
+      "severity_resolved": "critical"
+    }
+  },
+  {
+    "id": "fix-1785639687979-12",
+    "timestamp": "2026-08-02T03:01:27.979Z",
+    "source": "mcp",
+    "dry_run": false,
+    "finding": {
+      "rule_id": "SECRETS-001",
+      "severity": "critical",
+      "category": "secrets",
+      "title": "Hardcoded password",
+      "file": ".dev-logs/ai-artifacts/ai-security-audit-2026-08-02.md",
+      "line": 27,
+      "evidence": "PASS***ass}",
+      "description": "A secret or credential was found in source code. Secrets must never be committed to repositories."
+    },
+    "controls": [
+      {
+        "id": "GDPR-ART32-002",
+        "name": "Encryption at Rest",
+        "framework": "GDPR",
+        "article": "Article 32(1)(a)",
+        "status": "not-implemented"
+      },
+      {
+        "id": "OWASP-ASVS-005",
+        "name": "Secrets Management",
+        "framework": "OWASP",
+        "status": "not-implemented"
+      }
+    ],
+    "fix": {
+      "action_type": "modify",
+      "file_path": "citizen-protocol/config/miannet/validator-sample.toml",
+      "description": "Replace hardcoded startup_secret with env variable",
+      "guidance": "Move this secret to a secure vault (Vault, AWS KMS, etc.) or environment variable. Never commit secrets to source control.",
+      "applied": true
+    },
+    "compliance_impact": {
+      "frameworks_affected": [
+        "GDPR",
+        "OWASP"
+      ],
+      "controls_addressed": 2,
+      "severity_resolved": "critical"
+    }
+  },
+  {
+    "id": "fix-1785639687979-13",
+    "timestamp": "2026-08-02T03:01:27.979Z",
+    "source": "mcp",
+    "dry_run": false,
+    "finding": {
+      "rule_id": "SECRETS-001",
+      "severity": "critical",
+      "category": "secrets",
+      "title": "Hardcoded password",
+      "file": ".dev-logs/ai-artifacts/ai-security-audit-2026-08-02.md",
+      "line": 27,
+      "evidence": "PASS***ass}",
+      "description": "A secret or credential was found in source code. Secrets must never be committed to repositories."
+    },
+    "controls": [
+      {
+        "id": "GDPR-ART32-002",
+        "name": "Encryption at Rest",
+        "framework": "GDPR",
+        "article": "Article 32(1)(a)",
+        "status": "not-implemented"
+      },
+      {
+        "id": "OWASP-ASVS-005",
+        "name": "Secrets Management",
+        "framework": "OWASP",
+        "status": "not-implemented"
+      }
+    ],
+    "fix": {
+      "action_type": "append",
+      "file_path": ".env",
+      "description": "Move startup_secret to .env",
+      "guidance": "Move this secret to a secure vault (Vault, AWS KMS, etc.) or environment variable. Never commit secrets to source control.",
+      "applied": true
+    },
+    "compliance_impact": {
+      "frameworks_affected": [
+        "GDPR",
+        "OWASP"
+      ],
+      "controls_addressed": 2,
+      "severity_resolved": "critical"
+    }
+  },
+  {
+    "id": "fix-1785639687979-14",
+    "timestamp": "2026-08-02T03:01:27.979Z",
+    "source": "mcp",
+    "dry_run": false,
+    "finding": {
+      "rule_id": "SECRETS-001",
+      "severity": "critical",
+      "category": "secrets",
+      "title": "Hardcoded password",
+      "file": ".dev-logs/ai-artifacts/ai-security-audit-2026-08-02.md",
+      "line": 27,
+      "evidence": "PASS***ass}",
+      "description": "A secret or credential was found in source code. Secrets must never be committed to repositories."
+    },
+    "controls": [
+      {
+        "id": "GDPR-ART32-002",
+        "name": "Encryption at Rest",
+        "framework": "GDPR",
+        "article": "Article 32(1)(a)",
+        "status": "not-implemented"
+      },
+      {
+        "id": "OWASP-ASVS-005",
+        "name": "Secrets Management",
+        "framework": "OWASP",
+        "status": "not-implemented"
+      }
+    ],
+    "fix": {
+      "action_type": "modify",
+      "file_path": "citizen-protocol/config/testnet/validator-sample.toml",
+      "description": "Replace hardcoded startup_secret with env variable",
+      "guidance": "Move this secret to a secure vault (Vault, AWS KMS, etc.) or environment variable. Never commit secrets to source control.",
+      "applied": true
+    },
+    "compliance_impact": {
+      "frameworks_affected": [
+        "GDPR",
+        "OWASP"
+      ],
+      "controls_addressed": 2,
+      "severity_resolved": "critical"
+    }
+  },
+  {
+    "id": "fix-1785639687979-15",
+    "timestamp": "2026-08-02T03:01:27.979Z",
+    "source": "mcp",
+    "dry_run": false,
+    "finding": {
+      "rule_id": "SECRETS-001",
+      "severity": "critical",
+      "category": "secrets",
+      "title": "Hardcoded password",
+      "file": ".dev-logs/ai-artifacts/ai-security-audit-2026-08-02.md",
+      "line": 27,
+      "evidence": "PASS***ass}",
+      "description": "A secret or credential was found in source code. Secrets must never be committed to repositories."
+    },
+    "controls": [
+      {
+        "id": "GDPR-ART32-002",
+        "name": "Encryption at Rest",
+        "framework": "GDPR",
+        "article": "Article 32(1)(a)",
+        "status": "not-implemented"
+      },
+      {
+        "id": "OWASP-ASVS-005",
+        "name": "Secrets Management",
+        "framework": "OWASP",
+        "status": "not-implemented"
+      }
+    ],
+    "fix": {
+      "action_type": "append",
+      "file_path": ".env",
+      "description": "Move api_key to .env",
+      "guidance": "Move this secret to a secure vault (Vault, AWS KMS, etc.) or environment variable. Never commit secrets to source control.",
+      "applied": true
+    },
+    "compliance_impact": {
+      "frameworks_affected": [
+        "GDPR",
+        "OWASP"
+      ],
+      "controls_addressed": 2,
+      "severity_resolved": "critical"
+    }
+  },
+  {
+    "id": "fix-1785639687980-16",
+    "timestamp": "2026-08-02T03:01:27.980Z",
+    "source": "mcp",
+    "dry_run": false,
+    "finding": {
+      "rule_id": "SECRETS-001",
+      "severity": "critical",
+      "category": "secrets",
+      "title": "Hardcoded password",
+      "file": ".dev-logs/ai-artifacts/ai-security-audit-2026-08-02.md",
+      "line": 27,
+      "evidence": "PASS***ass}",
+      "description": "A secret or credential was found in source code. Secrets must never be committed to repositories."
+    },
+    "controls": [
+      {
+        "id": "GDPR-ART32-002",
+        "name": "Encryption at Rest",
+        "framework": "GDPR",
+        "article": "Article 32(1)(a)",
+        "status": "not-implemented"
+      },
+      {
+        "id": "OWASP-ASVS-005",
+        "name": "Secrets Management",
+        "framework": "OWASP",
+        "status": "not-implemented"
+      }
+    ],
+    "fix": {
+      "action_type": "modify",
+      "file_path": "citizen-protocol/docs/LOCALNET_RUNBOOK.md",
+      "description": "Replace hardcoded api_key with env variable",
+      "guidance": "Move this secret to a secure vault (Vault, AWS KMS, etc.) or environment variable. Never commit secrets to source control.",
+      "applied": true
+    },
+    "compliance_impact": {
+      "frameworks_affected": [
+        "GDPR",
+        "OWASP"
+      ],
+      "controls_addressed": 2,
+      "severity_resolved": "critical"
+    }
+  },
+  {
+    "id": "fix-1785639687980-17",
+    "timestamp": "2026-08-02T03:01:27.980Z",
+    "source": "mcp",
+    "dry_run": false,
+    "finding": {
+      "rule_id": "SECRETS-001",
+      "severity": "critical",
+      "category": "secrets",
+      "title": "Hardcoded password",
+      "file": ".dev-logs/ai-artifacts/ai-security-audit-2026-08-02.md",
+      "line": 27,
+      "evidence": "PASS***ass}",
+      "description": "A secret or credential was found in source code. Secrets must never be committed to repositories."
+    },
+    "controls": [
+      {
+        "id": "GDPR-ART32-002",
+        "name": "Encryption at Rest",
+        "framework": "GDPR",
+        "article": "Article 32(1)(a)",
+        "status": "not-implemented"
+      },
+      {
+        "id": "OWASP-ASVS-005",
+        "name": "Secrets Management",
+        "framework": "OWASP",
+        "status": "not-implemented"
+      }
+    ],
+    "fix": {
+      "action_type": "append",
+      "file_path": ".env",
+      "description": "Move api_key to .env",
+      "guidance": "Move this secret to a secure vault (Vault, AWS KMS, etc.) or environment variable. Never commit secrets to source control.",
+      "applied": true
+    },
+    "compliance_impact": {
+      "frameworks_affected": [
+        "GDPR",
+        "OWASP"
+      ],
+      "controls_addressed": 2,
+      "severity_resolved": "critical"
+    }
+  },
+  {
+    "id": "fix-1785639687980-18",
+    "timestamp": "2026-08-02T03:01:27.980Z",
+    "source": "mcp",
+    "dry_run": false,
+    "finding": {
+      "rule_id": "SECRETS-001",
+      "severity": "critical",
+      "category": "secrets",
+      "title": "Hardcoded password",
+      "file": ".dev-logs/ai-artifacts/ai-security-audit-2026-08-02.md",
+      "line": 27,
+      "evidence": "PASS***ass}",
+      "description": "A secret or credential was found in source code. Secrets must never be committed to repositories."
+    },
+    "controls": [
+      {
+        "id": "GDPR-ART32-002",
+        "name": "Encryption at Rest",
+        "framework": "GDPR",
+        "article": "Article 32(1)(a)",
+        "status": "not-implemented"
+      },
+      {
+        "id": "OWASP-ASVS-005",
+        "name": "Secrets Management",
+        "framework": "OWASP",
+        "status": "not-implemented"
+      }
+    ],
+    "fix": {
+      "action_type": "modify",
+      "file_path": "citizen-protocol/docs/VALIDATOR_BUILDER_API_KEY_ISSUANCE_RUNBOOK.md",
+      "description": "Replace hardcoded api_key with env variable",
+      "guidance": "Move this secret to a secure vault (Vault, AWS KMS, etc.) or environment variable. Never commit secrets to source control.",
+      "applied": true
+    },
+    "compliance_impact": {
+      "frameworks_affected": [
+        "GDPR",
+        "OWASP"
+      ],
+      "controls_addressed": 2,
+      "severity_resolved": "critical"
+    }
+  },
+  {
+    "id": "fix-1785639687980-19",
+    "timestamp": "2026-08-02T03:01:27.980Z",
+    "source": "mcp",
+    "dry_run": false,
+    "finding": {
+      "rule_id": "SECRETS-001",
+      "severity": "critical",
+      "category": "secrets",
+      "title": "Hardcoded password",
+      "file": ".dev-logs/ai-artifacts/ai-security-audit-2026-08-02.md",
+      "line": 27,
+      "evidence": "PASS***ass}",
+      "description": "A secret or credential was found in source code. Secrets must never be committed to repositories."
+    },
+    "controls": [
+      {
+        "id": "GDPR-ART32-002",
+        "name": "Encryption at Rest",
+        "framework": "GDPR",
+        "article": "Article 32(1)(a)",
+        "status": "not-implemented"
+      },
+      {
+        "id": "OWASP-ASVS-005",
+        "name": "Secrets Management",
+        "framework": "OWASP",
+        "status": "not-implemented"
+      }
+    ],
+    "fix": {
+      "action_type": "append",
+      "file_path": ".env",
+      "description": "Move CITIZEN_WALLET_PASSWORD to .env",
+      "guidance": "Move this secret to a secure vault (Vault, AWS KMS, etc.) or environment variable. Never commit secrets to source control.",
+      "applied": true
+    },
+    "compliance_impact": {
+      "frameworks_affected": [
+        "GDPR",
+        "OWASP"
+      ],
+      "controls_addressed": 2,
+      "severity_resolved": "critical"
+    }
+  },
+  {
+    "id": "fix-1785639687980-20",
+    "timestamp": "2026-08-02T03:01:27.980Z",
+    "source": "mcp",
+    "dry_run": false,
+    "finding": {
+      "rule_id": "SECRETS-001",
+      "severity": "critical",
+      "category": "secrets",
+      "title": "Hardcoded password",
+      "file": ".dev-logs/ai-artifacts/ai-security-audit-2026-08-02.md",
+      "line": 27,
+      "evidence": "PASS***ass}",
+      "description": "A secret or credential was found in source code. Secrets must never be committed to repositories."
+    },
+    "controls": [
+      {
+        "id": "GDPR-ART32-002",
+        "name": "Encryption at Rest",
+        "framework": "GDPR",
+        "article": "Article 32(1)(a)",
+        "status": "not-implemented"
+      },
+      {
+        "id": "OWASP-ASVS-005",
+        "name": "Secrets Management",
+        "framework": "OWASP",
+        "status": "not-implemented"
+      }
+    ],
+    "fix": {
+      "action_type": "modify",
+      "file_path": "citizen-protocol/docs/WALLET_ENCRYPTED_BACKUP_VAULT_RUNBOOK.md",
+      "description": "Replace hardcoded CITIZEN_WALLET_PASSWORD with env variable",
+      "guidance": "Move this secret to a secure vault (Vault, AWS KMS, etc.) or environment variable. Never commit secrets to source control.",
+      "applied": true
+    },
+    "compliance_impact": {
+      "frameworks_affected": [
+        "GDPR",
+        "OWASP"
+      ],
+      "controls_addressed": 2,
+      "severity_resolved": "critical"
+    }
+  },
+  {
+    "id": "fix-1785639687980-21",
+    "timestamp": "2026-08-02T03:01:27.980Z",
+    "source": "mcp",
+    "dry_run": false,
+    "finding": {
+      "rule_id": "SECRETS-001",
+      "severity": "critical",
+      "category": "secrets",
+      "title": "Hardcoded password",
+      "file": ".dev-logs/ai-artifacts/ai-security-audit-2026-08-02.md",
+      "line": 27,
+      "evidence": "PASS***ass}",
+      "description": "A secret or credential was found in source code. Secrets must never be committed to repositories."
+    },
+    "controls": [
+      {
+        "id": "GDPR-ART32-002",
+        "name": "Encryption at Rest",
+        "framework": "GDPR",
+        "article": "Article 32(1)(a)",
+        "status": "not-implemented"
+      },
+      {
+        "id": "OWASP-ASVS-005",
+        "name": "Secrets Management",
+        "framework": "OWASP",
+        "status": "not-implemented"
+      }
+    ],
+    "fix": {
+      "action_type": "append",
+      "file_path": ".env",
+      "description": "Move CITIZEN_WALLET_PASSWORD to .env",
+      "guidance": "Move this secret to a secure vault (Vault, AWS KMS, etc.) or environment variable. Never commit secrets to source control.",
+      "applied": true
+    },
+    "compliance_impact": {
+      "frameworks_affected": [
+        "GDPR",
+        "OWASP"
+      ],
+      "controls_addressed": 2,
+      "severity_resolved": "critical"
+    }
+  },
+  {
+    "id": "fix-1785639687981-22",
+    "timestamp": "2026-08-02T03:01:27.981Z",
+    "source": "mcp",
+    "dry_run": false,
+    "finding": {
+      "rule_id": "SECRETS-001",
+      "severity": "critical",
+      "category": "secrets",
+      "title": "Hardcoded password",
+      "file": ".dev-logs/ai-artifacts/ai-security-audit-2026-08-02.md",
+      "line": 27,
+      "evidence": "PASS***ass}",
+      "description": "A secret or credential was found in source code. Secrets must never be committed to repositories."
+    },
+    "controls": [
+      {
+        "id": "GDPR-ART32-002",
+        "name": "Encryption at Rest",
+        "framework": "GDPR",
+        "article": "Article 32(1)(a)",
+        "status": "not-implemented"
+      },
+      {
+        "id": "OWASP-ASVS-005",
+        "name": "Secrets Management",
+        "framework": "OWASP",
+        "status": "not-implemented"
+      }
+    ],
+    "fix": {
+      "action_type": "modify",
+      "file_path": "citizen-protocol/docs/WALLET_GENERATION_GUIDE.md",
+      "description": "Replace hardcoded CITIZEN_WALLET_PASSWORD with env variable",
+      "guidance": "Move this secret to a secure vault (Vault, AWS KMS, etc.) or environment variable. Never commit secrets to source control.",
+      "applied": true
+    },
+    "compliance_impact": {
+      "frameworks_affected": [
+        "GDPR",
+        "OWASP"
+      ],
+      "controls_addressed": 2,
+      "severity_resolved": "critical"
+    }
+  },
+  {
+    "id": "fix-1785639687981-23",
+    "timestamp": "2026-08-02T03:01:27.981Z",
+    "source": "mcp",
+    "dry_run": false,
+    "finding": {
+      "rule_id": "SECRETS-001",
+      "severity": "critical",
+      "category": "secrets",
+      "title": "Hardcoded password",
+      "file": ".dev-logs/ai-artifacts/ai-security-audit-2026-08-02.md",
+      "line": 27,
+      "evidence": "PASS***ass}",
+      "description": "A secret or credential was found in source code. Secrets must never be committed to repositories."
+    },
+    "controls": [
+      {
+        "id": "GDPR-ART32-002",
+        "name": "Encryption at Rest",
+        "framework": "GDPR",
+        "article": "Article 32(1)(a)",
+        "status": "not-implemented"
+      },
+      {
+        "id": "OWASP-ASVS-005",
+        "name": "Secrets Management",
+        "framework": "OWASP",
+        "status": "not-implemented"
+      }
+    ],
+    "fix": {
+      "action_type": "append",
+      "file_path": ".env",
+      "description": "Move SIGNER_PRIVATE_KEY to .env",
+      "guidance": "Move this secret to a secure vault (Vault, AWS KMS, etc.) or environment variable. Never commit secrets to source control.",
+      "applied": true
+    },
+    "compliance_impact": {
+      "frameworks_affected": [
+        "GDPR",
+        "OWASP"
+      ],
+      "controls_addressed": 2,
+      "severity_resolved": "critical"
+    }
+  },
+  {
+    "id": "fix-1785639687981-24",
+    "timestamp": "2026-08-02T03:01:27.981Z",
+    "source": "mcp",
+    "dry_run": false,
+    "finding": {
+      "rule_id": "SECRETS-001",
+      "severity": "critical",
+      "category": "secrets",
+      "title": "Hardcoded password",
+      "file": ".dev-logs/ai-artifacts/ai-security-audit-2026-08-02.md",
+      "line": 27,
+      "evidence": "PASS***ass}",
+      "description": "A secret or credential was found in source code. Secrets must never be committed to repositories."
+    },
+    "controls": [
+      {
+        "id": "GDPR-ART32-002",
+        "name": "Encryption at Rest",
+        "framework": "GDPR",
+        "article": "Article 32(1)(a)",
+        "status": "not-implemented"
+      },
+      {
+        "id": "OWASP-ASVS-005",
+        "name": "Secrets Management",
+        "framework": "OWASP",
+        "status": "not-implemented"
+      }
+    ],
+    "fix": {
+      "action_type": "modify",
+      "file_path": "citizen-protocol/scripts/bootstrap_single_validator_observer.sh",
+      "description": "Replace hardcoded SIGNER_PRIVATE_KEY with env variable",
+      "guidance": "Move this secret to a secure vault (Vault, AWS KMS, etc.) or environment variable. Never commit secrets to source control.",
+      "applied": true
+    },
+    "compliance_impact": {
+      "frameworks_affected": [
+        "GDPR",
+        "OWASP"
+      ],
+      "controls_addressed": 2,
+      "severity_resolved": "critical"
+    }
+  },
+  {
+    "id": "fix-1785639687981-25",
+    "timestamp": "2026-08-02T03:01:27.981Z",
+    "source": "mcp",
+    "dry_run": false,
+    "finding": {
+      "rule_id": "SECRETS-001",
+      "severity": "critical",
+      "category": "secrets",
+      "title": "Hardcoded password",
+      "file": ".dev-logs/ai-artifacts/ai-security-audit-2026-08-02.md",
+      "line": 27,
+      "evidence": "PASS***ass}",
+      "description": "A secret or credential was found in source code. Secrets must never be committed to repositories."
+    },
+    "controls": [
+      {
+        "id": "GDPR-ART32-002",
+        "name": "Encryption at Rest",
+        "framework": "GDPR",
+        "article": "Article 32(1)(a)",
+        "status": "not-implemented"
+      },
+      {
+        "id": "OWASP-ASVS-005",
+        "name": "Secrets Management",
+        "framework": "OWASP",
+        "status": "not-implemented"
+      }
+    ],
+    "fix": {
+      "action_type": "append",
+      "file_path": ".env",
+      "description": "Move PASSWORD to .env",
+      "guidance": "Move this secret to a secure vault (Vault, AWS KMS, etc.) or environment variable. Never commit secrets to source control.",
+      "applied": true
+    },
+    "compliance_impact": {
+      "frameworks_affected": [
+        "GDPR",
+        "OWASP"
+      ],
+      "controls_addressed": 2,
+      "severity_resolved": "critical"
+    }
+  },
+  {
+    "id": "fix-1785639687981-26",
+    "timestamp": "2026-08-02T03:01:27.981Z",
+    "source": "mcp",
+    "dry_run": false,
+    "finding": {
+      "rule_id": "SECRETS-001",
+      "severity": "critical",
+      "category": "secrets",
+      "title": "Hardcoded password",
+      "file": ".dev-logs/ai-artifacts/ai-security-audit-2026-08-02.md",
+      "line": 27,
+      "evidence": "PASS***ass}",
+      "description": "A secret or credential was found in source code. Secrets must never be committed to repositories."
+    },
+    "controls": [
+      {
+        "id": "GDPR-ART32-002",
+        "name": "Encryption at Rest",
+        "framework": "GDPR",
+        "article": "Article 32(1)(a)",
+        "status": "not-implemented"
+      },
+      {
+        "id": "OWASP-ASVS-005",
+        "name": "Secrets Management",
+        "framework": "OWASP",
+        "status": "not-implemented"
+      }
+    ],
+    "fix": {
+      "action_type": "modify",
+      "file_path": "citizen-protocol/scripts/check_localnet_replication_finality.sh",
+      "description": "Replace hardcoded PASSWORD with env variable",
+      "guidance": "Move this secret to a secure vault (Vault, AWS KMS, etc.) or environment variable. Never commit secrets to source control.",
+      "applied": true
+    },
+    "compliance_impact": {
+      "frameworks_affected": [
+        "GDPR",
+        "OWASP"
+      ],
+      "controls_addressed": 2,
+      "severity_resolved": "critical"
+    }
+  },
+  {
+    "id": "fix-1785639687981-27",
+    "timestamp": "2026-08-02T03:01:27.981Z",
+    "source": "mcp",
+    "dry_run": false,
+    "finding": {
+      "rule_id": "SECRETS-001",
+      "severity": "critical",
+      "category": "secrets",
+      "title": "Hardcoded password",
+      "file": ".dev-logs/ai-artifacts/ai-security-audit-2026-08-02.md",
+      "line": 27,
+      "evidence": "PASS***ass}",
+      "description": "A secret or credential was found in source code. Secrets must never be committed to repositories."
+    },
+    "controls": [
+      {
+        "id": "GDPR-ART32-002",
+        "name": "Encryption at Rest",
+        "framework": "GDPR",
+        "article": "Article 32(1)(a)",
+        "status": "not-implemented"
+      },
+      {
+        "id": "OWASP-ASVS-005",
+        "name": "Secrets Management",
+        "framework": "OWASP",
+        "status": "not-implemented"
+      }
+    ],
+    "fix": {
+      "action_type": "append",
+      "file_path": ".env",
+      "description": "Move PASSWORD to .env",
+      "guidance": "Move this secret to a secure vault (Vault, AWS KMS, etc.) or environment variable. Never commit secrets to source control.",
+      "applied": true
+    },
+    "compliance_impact": {
+      "frameworks_affected": [
+        "GDPR",
+        "OWASP"
+      ],
+      "controls_addressed": 2,
+      "severity_resolved": "critical"
+    }
+  },
+  {
+    "id": "fix-1785639687981-28",
+    "timestamp": "2026-08-02T03:01:27.981Z",
+    "source": "mcp",
+    "dry_run": false,
+    "finding": {
+      "rule_id": "SECRETS-001",
+      "severity": "critical",
+      "category": "secrets",
+      "title": "Hardcoded password",
+      "file": ".dev-logs/ai-artifacts/ai-security-audit-2026-08-02.md",
+      "line": 27,
+      "evidence": "PASS***ass}",
+      "description": "A secret or credential was found in source code. Secrets must never be committed to repositories."
+    },
+    "controls": [
+      {
+        "id": "GDPR-ART32-002",
+        "name": "Encryption at Rest",
+        "framework": "GDPR",
+        "article": "Article 32(1)(a)",
+        "status": "not-implemented"
+      },
+      {
+        "id": "OWASP-ASVS-005",
+        "name": "Secrets Management",
+        "framework": "OWASP",
+        "status": "not-implemented"
+      }
+    ],
+    "fix": {
+      "action_type": "modify",
+      "file_path": "citizen-protocol/scripts/prepare_localnet_manual_credentials.sh",
+      "description": "Replace hardcoded PASSWORD with env variable",
+      "guidance": "Move this secret to a secure vault (Vault, AWS KMS, etc.) or environment variable. Never commit secrets to source control.",
+      "applied": true
+    },
+    "compliance_impact": {
+      "frameworks_affected": [
+        "GDPR",
+        "OWASP"
+      ],
+      "controls_addressed": 2,
+      "severity_resolved": "critical"
+    }
+  },
+  {
+    "id": "fix-1785639687981-29",
+    "timestamp": "2026-08-02T03:01:27.981Z",
+    "source": "mcp",
+    "dry_run": false,
+    "finding": {
+      "rule_id": "SECRETS-001",
+      "severity": "critical",
+      "category": "secrets",
+      "title": "Hardcoded password",
+      "file": ".dev-logs/ai-artifacts/ai-security-audit-2026-08-02.md",
+      "line": 27,
+      "evidence": "PASS***ass}",
+      "description": "A secret or credential was found in source code. Secrets must never be committed to repositories."
+    },
+    "controls": [
+      {
+        "id": "GDPR-ART32-002",
+        "name": "Encryption at Rest",
+        "framework": "GDPR",
+        "article": "Article 32(1)(a)",
+        "status": "not-implemented"
+      },
+      {
+        "id": "OWASP-ASVS-005",
+        "name": "Secrets Management",
+        "framework": "OWASP",
+        "status": "not-implemented"
+      }
+    ],
+    "fix": {
+      "action_type": "append",
+      "file_path": ".env",
+      "description": "Move pem to .env",
+      "guidance": "Move this secret to a secure vault (Vault, AWS KMS, etc.) or environment variable. Never commit secrets to source control.",
+      "applied": true
+    },
+    "compliance_impact": {
+      "frameworks_affected": [
+        "GDPR",
+        "OWASP"
+      ],
+      "controls_addressed": 2,
+      "severity_resolved": "critical"
+    }
+  },
+  {
+    "id": "fix-1785639687982-30",
+    "timestamp": "2026-08-02T03:01:27.982Z",
+    "source": "mcp",
+    "dry_run": false,
+    "finding": {
+      "rule_id": "SECRETS-001",
+      "severity": "critical",
+      "category": "secrets",
+      "title": "Hardcoded password",
+      "file": ".dev-logs/ai-artifacts/ai-security-audit-2026-08-02.md",
+      "line": 27,
+      "evidence": "PASS***ass}",
+      "description": "A secret or credential was found in source code. Secrets must never be committed to repositories."
+    },
+    "controls": [
+      {
+        "id": "GDPR-ART32-002",
+        "name": "Encryption at Rest",
+        "framework": "GDPR",
+        "article": "Article 32(1)(a)",
+        "status": "not-implemented"
+      },
+      {
+        "id": "OWASP-ASVS-005",
+        "name": "Secrets Management",
+        "framework": "OWASP",
+        "status": "not-implemented"
+      }
+    ],
+    "fix": {
+      "action_type": "modify",
+      "file_path": "citizen-protocol/target/debug/deps/libed25519_dalek-2ecf84886742ed93.rmeta",
+      "description": "Replace hardcoded pem with env variable",
+      "guidance": "Move this secret to a secure vault (Vault, AWS KMS, etc.) or environment variable. Never commit secrets to source control.",
+      "applied": true
+    },
+    "compliance_impact": {
+      "frameworks_affected": [
+        "GDPR",
+        "OWASP"
+      ],
+      "controls_addressed": 2,
+      "severity_resolved": "critical"
+    }
+  },
+  {
+    "id": "fix-1785639687982-31",
+    "timestamp": "2026-08-02T03:01:27.982Z",
+    "source": "mcp",
+    "dry_run": false,
+    "finding": {
+      "rule_id": "SECRETS-001",
+      "severity": "critical",
+      "category": "secrets",
+      "title": "Hardcoded password",
+      "file": ".dev-logs/ai-artifacts/ai-security-audit-2026-08-02.md",
+      "line": 27,
+      "evidence": "PASS***ass}",
+      "description": "A secret or credential was found in source code. Secrets must never be committed to repositories."
+    },
+    "controls": [
+      {
+        "id": "GDPR-ART32-002",
+        "name": "Encryption at Rest",
+        "framework": "GDPR",
+        "article": "Article 32(1)(a)",
+        "status": "not-implemented"
+      },
+      {
+        "id": "OWASP-ASVS-005",
+        "name": "Secrets Management",
+        "framework": "OWASP",
+        "status": "not-implemented"
+      }
+    ],
+    "fix": {
+      "action_type": "append",
+      "file_path": ".env",
+      "description": "Move pem to .env",
+      "guidance": "Move this secret to a secure vault (Vault, AWS KMS, etc.) or environment variable. Never commit secrets to source control.",
+      "applied": true
+    },
+    "compliance_impact": {
+      "frameworks_affected": [
+        "GDPR",
+        "OWASP"
+      ],
+      "controls_addressed": 2,
+      "severity_resolved": "critical"
+    }
+  },
+  {
+    "id": "fix-1785639687983-32",
+    "timestamp": "2026-08-02T03:01:27.983Z",
+    "source": "mcp",
+    "dry_run": false,
+    "finding": {
+      "rule_id": "SECRETS-001",
+      "severity": "critical",
+      "category": "secrets",
+      "title": "Hardcoded password",
+      "file": ".dev-logs/ai-artifacts/ai-security-audit-2026-08-02.md",
+      "line": 27,
+      "evidence": "PASS***ass}",
+      "description": "A secret or credential was found in source code. Secrets must never be committed to repositories."
+    },
+    "controls": [
+      {
+        "id": "GDPR-ART32-002",
+        "name": "Encryption at Rest",
+        "framework": "GDPR",
+        "article": "Article 32(1)(a)",
+        "status": "not-implemented"
+      },
+      {
+        "id": "OWASP-ASVS-005",
+        "name": "Secrets Management",
+        "framework": "OWASP",
+        "status": "not-implemented"
+      }
+    ],
+    "fix": {
+      "action_type": "modify",
+      "file_path": "citizen-protocol/target/debug/deps/libed25519_dalek-c5d3a4dd5ca288b1.rmeta",
+      "description": "Replace hardcoded pem with env variable",
+      "guidance": "Move this secret to a secure vault (Vault, AWS KMS, etc.) or environment variable. Never commit secrets to source control.",
+      "applied": true
+    },
+    "compliance_impact": {
+      "frameworks_affected": [
+        "GDPR",
+        "OWASP"
+      ],
+      "controls_addressed": 2,
+      "severity_resolved": "critical"
+    }
+  },
+  {
+    "id": "fix-1785639687983-33",
+    "timestamp": "2026-08-02T03:01:27.983Z",
+    "source": "mcp",
+    "dry_run": false,
+    "finding": {
+      "rule_id": "SECRETS-001",
+      "severity": "critical",
+      "category": "secrets",
+      "title": "Hardcoded password",
+      "file": ".dev-logs/ai-artifacts/ai-security-audit-2026-08-02.md",
+      "line": 27,
+      "evidence": "PASS***ass}",
+      "description": "A secret or credential was found in source code. Secrets must never be committed to repositories."
+    },
+    "controls": [
+      {
+        "id": "GDPR-ART32-002",
+        "name": "Encryption at Rest",
+        "framework": "GDPR",
+        "article": "Article 32(1)(a)",
+        "status": "not-implemented"
+      },
+      {
+        "id": "OWASP-ASVS-005",
+        "name": "Secrets Management",
+        "framework": "OWASP",
+        "status": "not-implemented"
+      }
+    ],
+    "fix": {
+      "action_type": "append",
+      "file_path": ".env",
+      "description": "Move pem to .env",
+      "guidance": "Move this secret to a secure vault (Vault, AWS KMS, etc.) or environment variable. Never commit secrets to source control.",
+      "applied": true
+    },
+    "compliance_impact": {
+      "frameworks_affected": [
+        "GDPR",
+        "OWASP"
+      ],
+      "controls_addressed": 2,
+      "severity_resolved": "critical"
+    }
+  },
+  {
+    "id": "fix-1785639687984-34",
+    "timestamp": "2026-08-02T03:01:27.984Z",
+    "source": "mcp",
+    "dry_run": false,
+    "finding": {
+      "rule_id": "SECRETS-001",
+      "severity": "critical",
+      "category": "secrets",
+      "title": "Hardcoded password",
+      "file": ".dev-logs/ai-artifacts/ai-security-audit-2026-08-02.md",
+      "line": 27,
+      "evidence": "PASS***ass}",
+      "description": "A secret or credential was found in source code. Secrets must never be committed to repositories."
+    },
+    "controls": [
+      {
+        "id": "GDPR-ART32-002",
+        "name": "Encryption at Rest",
+        "framework": "GDPR",
+        "article": "Article 32(1)(a)",
+        "status": "not-implemented"
+      },
+      {
+        "id": "OWASP-ASVS-005",
+        "name": "Secrets Management",
+        "framework": "OWASP",
+        "status": "not-implemented"
+      }
+    ],
+    "fix": {
+      "action_type": "modify",
+      "file_path": "citizen-protocol/target/debug/deps/libpem-868814021d23fa14.rmeta",
+      "description": "Replace hardcoded pem with env variable",
+      "guidance": "Move this secret to a secure vault (Vault, AWS KMS, etc.) or environment variable. Never commit secrets to source control.",
+      "applied": true
+    },
+    "compliance_impact": {
+      "frameworks_affected": [
+        "GDPR",
+        "OWASP"
+      ],
+      "controls_addressed": 2,
+      "severity_resolved": "critical"
+    }
+  },
+  {
+    "id": "fix-1785639687984-35",
+    "timestamp": "2026-08-02T03:01:27.984Z",
+    "source": "mcp",
+    "dry_run": false,
+    "finding": {
+      "rule_id": "SECRETS-001",
+      "severity": "critical",
+      "category": "secrets",
+      "title": "Hardcoded password",
+      "file": ".dev-logs/ai-artifacts/ai-security-audit-2026-08-02.md",
+      "line": 27,
+      "evidence": "PASS***ass}",
+      "description": "A secret or credential was found in source code. Secrets must never be committed to repositories."
+    },
+    "controls": [
+      {
+        "id": "GDPR-ART32-002",
+        "name": "Encryption at Rest",
+        "framework": "GDPR",
+        "article": "Article 32(1)(a)",
+        "status": "not-implemented"
+      },
+      {
+        "id": "OWASP-ASVS-005",
+        "name": "Secrets Management",
+        "framework": "OWASP",
+        "status": "not-implemented"
+      }
+    ],
+    "fix": {
+      "action_type": "append",
+      "file_path": ".env",
+      "description": "Move CITIZEN_SIGNED_SUBMISSION_RUNTIME_SIGNING_PRIVATE_KEY_PEM to .env",
+      "guidance": "Move this secret to a secure vault (Vault, AWS KMS, etc.) or environment variable. Never commit secrets to source control.",
+      "applied": true
+    },
+    "compliance_impact": {
+      "frameworks_affected": [
+        "GDPR",
+        "OWASP"
+      ],
+      "controls_addressed": 2,
+      "severity_resolved": "critical"
+    }
+  },
+  {
+    "id": "fix-1785639687984-36",
+    "timestamp": "2026-08-02T03:01:27.984Z",
+    "source": "mcp",
+    "dry_run": false,
+    "finding": {
+      "rule_id": "SECRETS-001",
+      "severity": "critical",
+      "category": "secrets",
+      "title": "Hardcoded password",
+      "file": ".dev-logs/ai-artifacts/ai-security-audit-2026-08-02.md",
+      "line": 27,
+      "evidence": "PASS***ass}",
+      "description": "A secret or credential was found in source code. Secrets must never be committed to repositories."
+    },
+    "controls": [
+      {
+        "id": "GDPR-ART32-002",
+        "name": "Encryption at Rest",
+        "framework": "GDPR",
+        "article": "Article 32(1)(a)",
+        "status": "not-implemented"
+      },
+      {
+        "id": "OWASP-ASVS-005",
+        "name": "Secrets Management",
+        "framework": "OWASP",
+        "status": "not-implemented"
+      }
+    ],
+    "fix": {
+      "action_type": "modify",
+      "file_path": "landing-page/README.md",
+      "description": "Replace hardcoded CITIZEN_SIGNED_SUBMISSION_RUNTIME_SIGNING_PRIVATE_KEY_PEM with env variable",
+      "guidance": "Move this secret to a secure vault (Vault, AWS KMS, etc.) or environment variable. Never commit secrets to source control.",
+      "applied": true
+    },
+    "compliance_impact": {
+      "frameworks_affected": [
+        "GDPR",
+        "OWASP"
+      ],
+      "controls_addressed": 2,
+      "severity_resolved": "critical"
+    }
+  },
+  {
+    "id": "fix-1785639687984-37",
+    "timestamp": "2026-08-02T03:01:27.984Z",
+    "source": "mcp",
+    "dry_run": false,
+    "finding": {
+      "rule_id": "SECRETS-001",
+      "severity": "critical",
+      "category": "secrets",
+      "title": "Hardcoded password",
+      "file": ".dev-logs/ai-artifacts/ai-security-audit-2026-08-02.md",
+      "line": 27,
+      "evidence": "PASS***ass}",
+      "description": "A secret or credential was found in source code. Secrets must never be committed to repositories."
+    },
+    "controls": [
+      {
+        "id": "GDPR-ART32-002",
+        "name": "Encryption at Rest",
+        "framework": "GDPR",
+        "article": "Article 32(1)(a)",
+        "status": "not-implemented"
+      },
+      {
+        "id": "OWASP-ASVS-005",
+        "name": "Secrets Management",
+        "framework": "OWASP",
+        "status": "not-implemented"
+      }
+    ],
+    "fix": {
+      "action_type": "append",
+      "file_path": ".env",
+      "description": "Move CITIZEN_SIGNED_SUBMISSION_RUNTIME_SIGNING_PRIVATE_KEY_PEM to .env",
+      "guidance": "Move this secret to a secure vault (Vault, AWS KMS, etc.) or environment variable. Never commit secrets to source control.",
+      "applied": true
+    },
+    "compliance_impact": {
+      "frameworks_affected": [
+        "GDPR",
+        "OWASP"
+      ],
+      "controls_addressed": 2,
+      "severity_resolved": "critical"
+    }
+  },
+  {
+    "id": "fix-1785639687985-38",
+    "timestamp": "2026-08-02T03:01:27.985Z",
+    "source": "mcp",
+    "dry_run": false,
+    "finding": {
+      "rule_id": "SECRETS-001",
+      "severity": "critical",
+      "category": "secrets",
+      "title": "Hardcoded password",
+      "file": ".dev-logs/ai-artifacts/ai-security-audit-2026-08-02.md",
+      "line": 27,
+      "evidence": "PASS***ass}",
+      "description": "A secret or credential was found in source code. Secrets must never be committed to repositories."
+    },
+    "controls": [
+      {
+        "id": "GDPR-ART32-002",
+        "name": "Encryption at Rest",
+        "framework": "GDPR",
+        "article": "Article 32(1)(a)",
+        "status": "not-implemented"
+      },
+      {
+        "id": "OWASP-ASVS-005",
+        "name": "Secrets Management",
+        "framework": "OWASP",
+        "status": "not-implemented"
+      }
+    ],
+    "fix": {
+      "action_type": "modify",
+      "file_path": "landing-page/runbook/runtime-envelope-gate-checklist.md",
+      "description": "Replace hardcoded CITIZEN_SIGNED_SUBMISSION_RUNTIME_SIGNING_PRIVATE_KEY_PEM with env variable",
+      "guidance": "Move this secret to a secure vault (Vault, AWS KMS, etc.) or environment variable. Never commit secrets to source control.",
+      "applied": true
+    },
+    "compliance_impact": {
+      "frameworks_affected": [
+        "GDPR",
+        "OWASP"
+      ],
+      "controls_addressed": 2,
+      "severity_resolved": "critical"
+    }
+  },
+  {
+    "id": "fix-1785639687985-39",
+    "timestamp": "2026-08-02T03:01:27.985Z",
+    "source": "mcp",
+    "dry_run": false,
+    "finding": {
+      "rule_id": "SECRETS-001",
+      "severity": "critical",
+      "category": "secrets",
+      "title": "Hardcoded password",
+      "file": ".dev-logs/ai-artifacts/ai-security-audit-2026-08-02.md",
+      "line": 27,
+      "evidence": "PASS***ass}",
+      "description": "A secret or credential was found in source code. Secrets must never be committed to repositories."
+    },
+    "controls": [
+      {
+        "id": "GDPR-ART32-002",
+        "name": "Encryption at Rest",
+        "framework": "GDPR",
+        "article": "Article 32(1)(a)",
+        "status": "not-implemented"
+      },
+      {
+        "id": "OWASP-ASVS-005",
+        "name": "Secrets Management",
+        "framework": "OWASP",
+        "status": "not-implemented"
+      }
+    ],
+    "fix": {
+      "action_type": "append",
+      "file_path": ".env",
+      "description": "Move CITIZEN_SIGNED_SUBMISSION_RUNTIME_SIGNING_PRIVATE_KEY_PEM to .env",
+      "guidance": "Move this secret to a secure vault (Vault, AWS KMS, etc.) or environment variable. Never commit secrets to source control.",
+      "applied": true
+    },
+    "compliance_impact": {
+      "frameworks_affected": [
+        "GDPR",
+        "OWASP"
+      ],
+      "controls_addressed": 2,
+      "severity_resolved": "critical"
+    }
+  },
+  {
+    "id": "fix-1785639687985-40",
+    "timestamp": "2026-08-02T03:01:27.985Z",
+    "source": "mcp",
+    "dry_run": false,
+    "finding": {
+      "rule_id": "SECRETS-001",
+      "severity": "critical",
+      "category": "secrets",
+      "title": "Hardcoded password",
+      "file": ".dev-logs/ai-artifacts/ai-security-audit-2026-08-02.md",
+      "line": 27,
+      "evidence": "PASS***ass}",
+      "description": "A secret or credential was found in source code. Secrets must never be committed to repositories."
+    },
+    "controls": [
+      {
+        "id": "GDPR-ART32-002",
+        "name": "Encryption at Rest",
+        "framework": "GDPR",
+        "article": "Article 32(1)(a)",
+        "status": "not-implemented"
+      },
+      {
+        "id": "OWASP-ASVS-005",
+        "name": "Secrets Management",
+        "framework": "OWASP",
+        "status": "not-implemented"
+      }
+    ],
+    "fix": {
+      "action_type": "modify",
+      "file_path": "landing-page/runbook/wallet-signed-onboarding-e2e.md",
+      "description": "Replace hardcoded CITIZEN_SIGNED_SUBMISSION_RUNTIME_SIGNING_PRIVATE_KEY_PEM with env variable",
+      "guidance": "Move this secret to a secure vault (Vault, AWS KMS, etc.) or environment variable. Never commit secrets to source control.",
+      "applied": true
+    },
+    "compliance_impact": {
+      "frameworks_affected": [
+        "GDPR",
+        "OWASP"
+      ],
+      "controls_addressed": 2,
+      "severity_resolved": "critical"
+    }
+  },
+  {
+    "id": "fix-1785639687985-41",
+    "timestamp": "2026-08-02T03:01:27.985Z",
+    "source": "mcp",
+    "dry_run": false,
+    "finding": {
+      "rule_id": "SECRETS-001",
+      "severity": "critical",
+      "category": "secrets",
+      "title": "Hardcoded password",
+      "file": ".dev-logs/ai-artifacts/ai-security-audit-2026-08-02.md",
+      "line": 27,
+      "evidence": "PASS***ass}",
+      "description": "A secret or credential was found in source code. Secrets must never be committed to repositories."
+    },
+    "controls": [
+      {
+        "id": "GDPR-ART32-002",
+        "name": "Encryption at Rest",
+        "framework": "GDPR",
+        "article": "Article 32(1)(a)",
+        "status": "not-implemented"
+      },
+      {
+        "id": "OWASP-ASVS-005",
+        "name": "Secrets Management",
+        "framework": "OWASP",
+        "status": "not-implemented"
+      }
+    ],
+    "fix": {
+      "action_type": "append",
+      "file_path": ".env",
+      "description": "Move apiKey to .env",
+      "guidance": "Move this secret to a secure vault (Vault, AWS KMS, etc.) or environment variable. Never commit secrets to source control.",
+      "applied": true
+    },
+    "compliance_impact": {
+      "frameworks_affected": [
+        "GDPR",
+        "OWASP"
+      ],
+      "controls_addressed": 2,
+      "severity_resolved": "critical"
+    }
+  },
+  {
+    "id": "fix-1785639687985-42",
+    "timestamp": "2026-08-02T03:01:27.985Z",
+    "source": "mcp",
+    "dry_run": false,
+    "finding": {
+      "rule_id": "SECRETS-001",
+      "severity": "critical",
+      "category": "secrets",
+      "title": "Hardcoded password",
+      "file": ".dev-logs/ai-artifacts/ai-security-audit-2026-08-02.md",
+      "line": 27,
+      "evidence": "PASS***ass}",
+      "description": "A secret or credential was found in source code. Secrets must never be committed to repositories."
+    },
+    "controls": [
+      {
+        "id": "GDPR-ART32-002",
+        "name": "Encryption at Rest",
+        "framework": "GDPR",
+        "article": "Article 32(1)(a)",
+        "status": "not-implemented"
+      },
+      {
+        "id": "OWASP-ASVS-005",
+        "name": "Secrets Management",
+        "framework": "OWASP",
+        "status": "not-implemented"
+      }
+    ],
+    "fix": {
+      "action_type": "modify",
+      "file_path": "sdk/typescript/test/client.test.ts",
+      "description": "Replace hardcoded apiKey with env variable",
+      "guidance": "Move this secret to a secure vault (Vault, AWS KMS, etc.) or environment variable. Never commit secrets to source control.",
+      "applied": true
+    },
+    "compliance_impact": {
+      "frameworks_affected": [
+        "GDPR",
+        "OWASP"
+      ],
+      "controls_addressed": 2,
+      "severity_resolved": "critical"
+    }
+  },
+  {
+    "id": "fix-1785639687985-43",
+    "timestamp": "2026-08-02T03:01:27.985Z",
+    "source": "mcp",
+    "dry_run": false,
+    "finding": {
+      "rule_id": "SECRETS-001",
+      "severity": "critical",
+      "category": "secrets",
+      "title": "Hardcoded password",
+      "file": ".dev-logs/ai-artifacts/ai-security-audit-2026-08-02.md",
+      "line": 27,
+      "evidence": "PASS***ass}",
+      "description": "A secret or credential was found in source code. Secrets must never be committed to repositories."
+    },
+    "controls": [
+      {
+        "id": "GDPR-ART32-002",
+        "name": "Encryption at Rest",
+        "framework": "GDPR",
+        "article": "Article 32(1)(a)",
+        "status": "not-implemented"
+      },
+      {
+        "id": "OWASP-ASVS-005",
+        "name": "Secrets Management",
+        "framework": "OWASP",
+        "status": "not-implemented"
+      }
+    ],
+    "fix": {
+      "action_type": "append",
+      "file_path": ".env",
+      "description": "Move backupPassword to .env",
+      "guidance": "Move this secret to a secure vault (Vault, AWS KMS, etc.) or environment variable. Never commit secrets to source control.",
+      "applied": true
+    },
+    "compliance_impact": {
+      "frameworks_affected": [
+        "GDPR",
+        "OWASP"
+      ],
+      "controls_addressed": 2,
+      "severity_resolved": "critical"
+    }
+  },
+  {
+    "id": "fix-1785639687985-44",
+    "timestamp": "2026-08-02T03:01:27.985Z",
+    "source": "mcp",
+    "dry_run": false,
+    "finding": {
+      "rule_id": "SECRETS-001",
+      "severity": "critical",
+      "category": "secrets",
+      "title": "Hardcoded password",
+      "file": ".dev-logs/ai-artifacts/ai-security-audit-2026-08-02.md",
+      "line": 27,
+      "evidence": "PASS***ass}",
+      "description": "A secret or credential was found in source code. Secrets must never be committed to repositories."
+    },
+    "controls": [
+      {
+        "id": "GDPR-ART32-002",
+        "name": "Encryption at Rest",
+        "framework": "GDPR",
+        "article": "Article 32(1)(a)",
+        "status": "not-implemented"
+      },
+      {
+        "id": "OWASP-ASVS-005",
+        "name": "Secrets Management",
+        "framework": "OWASP",
+        "status": "not-implemented"
+      }
+    ],
+    "fix": {
+      "action_type": "modify",
+      "file_path": "vaultier/src/lib/runtimeBridge.test.ts",
+      "description": "Replace hardcoded backupPassword with env variable",
+      "guidance": "Move this secret to a secure vault (Vault, AWS KMS, etc.) or environment variable. Never commit secrets to source control.",
+      "applied": true
+    },
+    "compliance_impact": {
+      "frameworks_affected": [
+        "GDPR",
+        "OWASP"
+      ],
+      "controls_addressed": 2,
+      "severity_resolved": "critical"
+    }
+  },
+  {
+    "id": "fix-1785639687985-45",
+    "timestamp": "2026-08-02T03:01:27.985Z",
+    "source": "mcp",
+    "dry_run": false,
+    "finding": {
+      "rule_id": "SECRETS-001",
+      "severity": "critical",
+      "category": "secrets",
+      "title": "Hardcoded password",
+      "file": ".dev-logs/ai-artifacts/ai-security-audit-2026-08-02.md",
+      "line": 27,
+      "evidence": "PASS***ass}",
+      "description": "A secret or credential was found in source code. Secrets must never be committed to repositories."
+    },
+    "controls": [
+      {
+        "id": "GDPR-ART32-002",
+        "name": "Encryption at Rest",
+        "framework": "GDPR",
+        "article": "Article 32(1)(a)",
+        "status": "not-implemented"
+      },
+      {
+        "id": "OWASP-ASVS-005",
+        "name": "Secrets Management",
+        "framework": "OWASP",
+        "status": "not-implemented"
+      }
+    ],
+    "fix": {
+      "action_type": "append",
+      "file_path": ".env",
+      "description": "Move apiKey to .env",
+      "guidance": "Move this secret to a secure vault (Vault, AWS KMS, etc.) or environment variable. Never commit secrets to source control.",
+      "applied": true
+    },
+    "compliance_impact": {
+      "frameworks_affected": [
+        "GDPR",
+        "OWASP"
+      ],
+      "controls_addressed": 2,
+      "severity_resolved": "critical"
+    }
+  },
+  {
+    "id": "fix-1785639687985-46",
+    "timestamp": "2026-08-02T03:01:27.985Z",
+    "source": "mcp",
+    "dry_run": false,
+    "finding": {
+      "rule_id": "SECRETS-001",
+      "severity": "critical",
+      "category": "secrets",
+      "title": "Hardcoded password",
+      "file": ".dev-logs/ai-artifacts/ai-security-audit-2026-08-02.md",
+      "line": 27,
+      "evidence": "PASS***ass}",
+      "description": "A secret or credential was found in source code. Secrets must never be committed to repositories."
+    },
+    "controls": [
+      {
+        "id": "GDPR-ART32-002",
+        "name": "Encryption at Rest",
+        "framework": "GDPR",
+        "article": "Article 32(1)(a)",
+        "status": "not-implemented"
+      },
+      {
+        "id": "OWASP-ASVS-005",
+        "name": "Secrets Management",
+        "framework": "OWASP",
+        "status": "not-implemented"
+      }
+    ],
+    "fix": {
+      "action_type": "modify",
+      "file_path": "wallet/browser/src/directSubmitClient.test.ts",
+      "description": "Replace hardcoded apiKey with env variable",
+      "guidance": "Move this secret to a secure vault (Vault, AWS KMS, etc.) or environment variable. Never commit secrets to source control.",
+      "applied": true
+    },
+    "compliance_impact": {
+      "frameworks_affected": [
+        "GDPR",
+        "OWASP"
+      ],
+      "controls_addressed": 2,
+      "severity_resolved": "critical"
+    }
+  },
+  {
+    "id": "fix-1785639687985-47",
+    "timestamp": "2026-08-02T03:01:27.985Z",
+    "source": "mcp",
+    "dry_run": false,
+    "finding": {
+      "rule_id": "SECRETS-001",
+      "severity": "critical",
+      "category": "secrets",
+      "title": "Hardcoded password",
+      "file": ".dev-logs/ai-artifacts/ai-security-audit-2026-08-02.md",
+      "line": 27,
+      "evidence": "PASS***ass}",
+      "description": "A secret or credential was found in source code. Secrets must never be committed to repositories."
+    },
+    "controls": [
+      {
+        "id": "GDPR-ART32-002",
+        "name": "Encryption at Rest",
+        "framework": "GDPR",
+        "article": "Article 32(1)(a)",
+        "status": "not-implemented"
+      },
+      {
+        "id": "OWASP-ASVS-005",
+        "name": "Secrets Management",
+        "framework": "OWASP",
+        "status": "not-implemented"
+      }
+    ],
+    "fix": {
+      "action_type": "append",
+      "file_path": ".env",
+      "description": "Move CITIZEN_WALLET_PASSWORD to .env",
+      "guidance": "Move this secret to a secure vault (Vault, AWS KMS, etc.) or environment variable. Never commit secrets to source control.",
+      "applied": true
+    },
+    "compliance_impact": {
+      "frameworks_affected": [
+        "GDPR",
+        "OWASP"
+      ],
+      "controls_addressed": 2,
+      "severity_resolved": "critical"
+    }
+  },
+  {
+    "id": "fix-1785639687986-48",
+    "timestamp": "2026-08-02T03:01:27.986Z",
+    "source": "mcp",
+    "dry_run": false,
+    "finding": {
+      "rule_id": "SECRETS-001",
+      "severity": "critical",
+      "category": "secrets",
+      "title": "Hardcoded password",
+      "file": ".dev-logs/ai-artifacts/ai-security-audit-2026-08-02.md",
+      "line": 27,
+      "evidence": "PASS***ass}",
+      "description": "A secret or credential was found in source code. Secrets must never be committed to repositories."
+    },
+    "controls": [
+      {
+        "id": "GDPR-ART32-002",
+        "name": "Encryption at Rest",
+        "framework": "GDPR",
+        "article": "Article 32(1)(a)",
+        "status": "not-implemented"
+      },
+      {
+        "id": "OWASP-ASVS-005",
+        "name": "Secrets Management",
+        "framework": "OWASP",
+        "status": "not-implemented"
+      }
+    ],
+    "fix": {
+      "action_type": "modify",
+      "file_path": "wallet/cli/README.md",
+      "description": "Replace hardcoded CITIZEN_WALLET_PASSWORD with env variable",
+      "guidance": "Move this secret to a secure vault (Vault, AWS KMS, etc.) or environment variable. Never commit secrets to source control.",
+      "applied": true
+    },
+    "compliance_impact": {
+      "frameworks_affected": [
+        "GDPR",
+        "OWASP"
+      ],
+      "controls_addressed": 2,
+      "severity_resolved": "critical"
+    }
+  },
+  {
+    "id": "fix-1785639687986-49",
+    "timestamp": "2026-08-02T03:01:27.986Z",
+    "source": "mcp",
+    "dry_run": false,
+    "finding": {
+      "rule_id": "CRYPTO-003",
+      "severity": "critical",
+      "category": "authentication",
+      "title": "Hardcoded password comparison (use Argon2id/bcrypt)",
+      "file": "vaultier/src/lib/runtimeBridge.test.ts",
+      "line": 72,
+      "evidence": "assert((sanitized.nested as Record<string, unknown>).backupPassword === '[REDACTED]', 'nested password field should be redacted');",
+      "description": "Passwords must be hashed using Argon2id before comparison. Never compare plaintext passwords."
+    },
+    "controls": [
+      {
+        "id": "GDPR-ART32-004",
+        "name": "Unique User Identification",
+        "framework": "GDPR",
+        "article": "Article 32(1)(b)",
+        "status": "not-implemented"
+      },
+      {
+        "id": "OWASP-ASVS-003",
+        "name": "Authentication Security",
+        "framework": "OWASP",
+        "status": "not-implemented"
+      }
+    ],
+    "fix": {
+      "action_type": "npm-install",
+      "file_path": "package.json",
+      "description": "Install argon2",
+      "guidance": "Use argon2.verify(hashedPassword, inputPassword) for password comparison.",
+      "applied": true
+    },
+    "compliance_impact": {
+      "frameworks_affected": [
+        "GDPR",
+        "OWASP"
+      ],
+      "controls_addressed": 2,
+      "severity_resolved": "critical"
+    }
+  },
+  {
+    "id": "fix-1785639687986-50",
+    "timestamp": "2026-08-02T03:01:27.986Z",
+    "source": "mcp",
+    "dry_run": false,
+    "finding": {
+      "rule_id": "CRYPTO-003",
+      "severity": "critical",
+      "category": "authentication",
+      "title": "Hardcoded password comparison (use Argon2id/bcrypt)",
+      "file": "vaultier/src/lib/runtimeBridge.test.ts",
+      "line": 72,
+      "evidence": "assert((sanitized.nested as Record<string, unknown>).backupPassword === '[REDACTED]', 'nested password field should be redacted');",
+      "description": "Passwords must be hashed using Argon2id before comparison. Never compare plaintext passwords."
+    },
+    "controls": [
+      {
+        "id": "GDPR-ART32-004",
+        "name": "Unique User Identification",
+        "framework": "GDPR",
+        "article": "Article 32(1)(b)",
+        "status": "not-implemented"
+      },
+      {
+        "id": "OWASP-ASVS-003",
+        "name": "Authentication Security",
+        "framework": "OWASP",
+        "status": "not-implemented"
+      }
+    ],
+    "fix": {
+      "action_type": "create",
+      "file_path": "lib/auth.ts",
+      "description": "Create Argon2id password utility",
+      "guidance": "Use argon2.verify(hashedPassword, inputPassword) for password comparison.",
+      "applied": true
+    },
+    "compliance_impact": {
+      "frameworks_affected": [
+        "GDPR",
+        "OWASP"
+      ],
+      "controls_addressed": 2,
+      "severity_resolved": "critical"
+    }
+  },
+  {
+    "id": "fix-1785639688983-51",
+    "timestamp": "2026-08-02T03:01:28.983Z",
+    "source": "mcp",
+    "dry_run": false,
+    "finding": {
+      "rule_id": "SECRETS-001",
+      "severity": "critical",
+      "category": "secrets",
+      "title": "Private key in source",
+      "file": ".dev-logs/ai-artifacts/ai-security-audit-2026-08-02.md",
+      "line": 76,
+      "evidence": "----***----",
+      "description": "A secret or credential was found in source code. Secrets must never be committed to repositories."
+    },
+    "controls": [
+      {
+        "id": "GDPR-ART32-002",
+        "name": "Encryption at Rest",
+        "framework": "GDPR",
+        "article": "Article 32(1)(a)",
+        "status": "not-implemented"
+      },
+      {
+        "id": "OWASP-ASVS-005",
+        "name": "Secrets Management",
+        "framework": "OWASP",
+        "status": "not-implemented"
+      }
+    ],
+    "fix": {
+      "action_type": "append",
+      "file_path": ".env",
+      "description": "Move api_key to .env",
+      "guidance": "Move this secret to a secure vault (Vault, AWS KMS, etc.) or environment variable. Never commit secrets to source control.",
+      "applied": true
+    },
+    "compliance_impact": {
+      "frameworks_affected": [
+        "GDPR",
+        "OWASP"
+      ],
+      "controls_addressed": 2,
+      "severity_resolved": "critical"
+    }
+  },
+  {
+    "id": "fix-1785639688984-52",
+    "timestamp": "2026-08-02T03:01:28.984Z",
+    "source": "mcp",
+    "dry_run": false,
+    "finding": {
+      "rule_id": "SECRETS-001",
+      "severity": "critical",
+      "category": "secrets",
+      "title": "Private key in source",
+      "file": ".dev-logs/ai-artifacts/ai-security-audit-2026-08-02.md",
+      "line": 76,
+      "evidence": "----***----",
+      "description": "A secret or credential was found in source code. Secrets must never be committed to repositories."
+    },
+    "controls": [
+      {
+        "id": "GDPR-ART32-002",
+        "name": "Encryption at Rest",
+        "framework": "GDPR",
+        "article": "Article 32(1)(a)",
+        "status": "not-implemented"
+      },
+      {
+        "id": "OWASP-ASVS-005",
+        "name": "Secrets Management",
+        "framework": "OWASP",
+        "status": "not-implemented"
+      }
+    ],
+    "fix": {
+      "action_type": "modify",
+      "file_path": "citizen-protocol/config/futurenet/validator-alpha.toml",
+      "description": "Replace hardcoded api_key with env variable",
+      "guidance": "Move this secret to a secure vault (Vault, AWS KMS, etc.) or environment variable. Never commit secrets to source control.",
+      "applied": true
+    },
+    "compliance_impact": {
+      "frameworks_affected": [
+        "GDPR",
+        "OWASP"
+      ],
+      "controls_addressed": 2,
+      "severity_resolved": "critical"
+    }
+  },
+  {
+    "id": "fix-1785639688984-53",
+    "timestamp": "2026-08-02T03:01:28.984Z",
+    "source": "mcp",
+    "dry_run": false,
+    "finding": {
+      "rule_id": "SECRETS-001",
+      "severity": "critical",
+      "category": "secrets",
+      "title": "Private key in source",
+      "file": ".dev-logs/ai-artifacts/ai-security-audit-2026-08-02.md",
+      "line": 76,
+      "evidence": "----***----",
+      "description": "A secret or credential was found in source code. Secrets must never be committed to repositories."
+    },
+    "controls": [
+      {
+        "id": "GDPR-ART32-002",
+        "name": "Encryption at Rest",
+        "framework": "GDPR",
+        "article": "Article 32(1)(a)",
+        "status": "not-implemented"
+      },
+      {
+        "id": "OWASP-ASVS-005",
+        "name": "Secrets Management",
+        "framework": "OWASP",
+        "status": "not-implemented"
+      }
+    ],
+    "fix": {
+      "action_type": "append",
+      "file_path": ".env",
+      "description": "Move api_key to .env",
+      "guidance": "Move this secret to a secure vault (Vault, AWS KMS, etc.) or environment variable. Never commit secrets to source control.",
+      "applied": true
+    },
+    "compliance_impact": {
+      "frameworks_affected": [
+        "GDPR",
+        "OWASP"
+      ],
+      "controls_addressed": 2,
+      "severity_resolved": "critical"
+    }
+  },
+  {
+    "id": "fix-1785639688984-54",
+    "timestamp": "2026-08-02T03:01:28.984Z",
+    "source": "mcp",
+    "dry_run": false,
+    "finding": {
+      "rule_id": "SECRETS-001",
+      "severity": "critical",
+      "category": "secrets",
+      "title": "Private key in source",
+      "file": ".dev-logs/ai-artifacts/ai-security-audit-2026-08-02.md",
+      "line": 76,
+      "evidence": "----***----",
+      "description": "A secret or credential was found in source code. Secrets must never be committed to repositories."
+    },
+    "controls": [
+      {
+        "id": "GDPR-ART32-002",
+        "name": "Encryption at Rest",
+        "framework": "GDPR",
+        "article": "Article 32(1)(a)",
+        "status": "not-implemented"
+      },
+      {
+        "id": "OWASP-ASVS-005",
+        "name": "Secrets Management",
+        "framework": "OWASP",
+        "status": "not-implemented"
+      }
+    ],
+    "fix": {
+      "action_type": "modify",
+      "file_path": "citizen-protocol/config/futurenet/validator-beta.toml",
+      "description": "Replace hardcoded api_key with env variable",
+      "guidance": "Move this secret to a secure vault (Vault, AWS KMS, etc.) or environment variable. Never commit secrets to source control.",
+      "applied": true
+    },
+    "compliance_impact": {
+      "frameworks_affected": [
+        "GDPR",
+        "OWASP"
+      ],
+      "controls_addressed": 2,
+      "severity_resolved": "critical"
+    }
+  },
+  {
+    "id": "fix-1785639688984-55",
+    "timestamp": "2026-08-02T03:01:28.984Z",
+    "source": "mcp",
+    "dry_run": false,
+    "finding": {
+      "rule_id": "SECRETS-001",
+      "severity": "critical",
+      "category": "secrets",
+      "title": "Private key in source",
+      "file": ".dev-logs/ai-artifacts/ai-security-audit-2026-08-02.md",
+      "line": 76,
+      "evidence": "----***----",
+      "description": "A secret or credential was found in source code. Secrets must never be committed to repositories."
+    },
+    "controls": [
+      {
+        "id": "GDPR-ART32-002",
+        "name": "Encryption at Rest",
+        "framework": "GDPR",
+        "article": "Article 32(1)(a)",
+        "status": "not-implemented"
+      },
+      {
+        "id": "OWASP-ASVS-005",
+        "name": "Secrets Management",
+        "framework": "OWASP",
+        "status": "not-implemented"
+      }
+    ],
+    "fix": {
+      "action_type": "append",
+      "file_path": ".env",
+      "description": "Move api_key to .env",
+      "guidance": "Move this secret to a secure vault (Vault, AWS KMS, etc.) or environment variable. Never commit secrets to source control.",
+      "applied": true
+    },
+    "compliance_impact": {
+      "frameworks_affected": [
+        "GDPR",
+        "OWASP"
+      ],
+      "controls_addressed": 2,
+      "severity_resolved": "critical"
+    }
+  },
+  {
+    "id": "fix-1785639688984-56",
+    "timestamp": "2026-08-02T03:01:28.984Z",
+    "source": "mcp",
+    "dry_run": false,
+    "finding": {
+      "rule_id": "SECRETS-001",
+      "severity": "critical",
+      "category": "secrets",
+      "title": "Private key in source",
+      "file": ".dev-logs/ai-artifacts/ai-security-audit-2026-08-02.md",
+      "line": 76,
+      "evidence": "----***----",
+      "description": "A secret or credential was found in source code. Secrets must never be committed to repositories."
+    },
+    "controls": [
+      {
+        "id": "GDPR-ART32-002",
+        "name": "Encryption at Rest",
+        "framework": "GDPR",
+        "article": "Article 32(1)(a)",
+        "status": "not-implemented"
+      },
+      {
+        "id": "OWASP-ASVS-005",
+        "name": "Secrets Management",
+        "framework": "OWASP",
+        "status": "not-implemented"
+      }
+    ],
+    "fix": {
+      "action_type": "modify",
+      "file_path": "citizen-protocol/config/futurenet/validator-gamma.toml",
+      "description": "Replace hardcoded api_key with env variable",
+      "guidance": "Move this secret to a secure vault (Vault, AWS KMS, etc.) or environment variable. Never commit secrets to source control.",
+      "applied": true
+    },
+    "compliance_impact": {
+      "frameworks_affected": [
+        "GDPR",
+        "OWASP"
+      ],
+      "controls_addressed": 2,
+      "severity_resolved": "critical"
+    }
+  },
+  {
+    "id": "fix-1785639688984-57",
+    "timestamp": "2026-08-02T03:01:28.984Z",
+    "source": "mcp",
+    "dry_run": false,
+    "finding": {
+      "rule_id": "SECRETS-001",
+      "severity": "critical",
+      "category": "secrets",
+      "title": "Private key in source",
+      "file": ".dev-logs/ai-artifacts/ai-security-audit-2026-08-02.md",
+      "line": 76,
+      "evidence": "----***----",
+      "description": "A secret or credential was found in source code. Secrets must never be committed to repositories."
+    },
+    "controls": [
+      {
+        "id": "GDPR-ART32-002",
+        "name": "Encryption at Rest",
+        "framework": "GDPR",
+        "article": "Article 32(1)(a)",
+        "status": "not-implemented"
+      },
+      {
+        "id": "OWASP-ASVS-005",
+        "name": "Secrets Management",
+        "framework": "OWASP",
+        "status": "not-implemented"
+      }
+    ],
+    "fix": {
+      "action_type": "append",
+      "file_path": ".env",
+      "description": "Move api_key to .env",
+      "guidance": "Move this secret to a secure vault (Vault, AWS KMS, etc.) or environment variable. Never commit secrets to source control.",
+      "applied": true
+    },
+    "compliance_impact": {
+      "frameworks_affected": [
+        "GDPR",
+        "OWASP"
+      ],
+      "controls_addressed": 2,
+      "severity_resolved": "critical"
+    }
+  },
+  {
+    "id": "fix-1785639688984-58",
+    "timestamp": "2026-08-02T03:01:28.984Z",
+    "source": "mcp",
+    "dry_run": false,
+    "finding": {
+      "rule_id": "SECRETS-001",
+      "severity": "critical",
+      "category": "secrets",
+      "title": "Private key in source",
+      "file": ".dev-logs/ai-artifacts/ai-security-audit-2026-08-02.md",
+      "line": 76,
+      "evidence": "----***----",
+      "description": "A secret or credential was found in source code. Secrets must never be committed to repositories."
+    },
+    "controls": [
+      {
+        "id": "GDPR-ART32-002",
+        "name": "Encryption at Rest",
+        "framework": "GDPR",
+        "article": "Article 32(1)(a)",
+        "status": "not-implemented"
+      },
+      {
+        "id": "OWASP-ASVS-005",
+        "name": "Secrets Management",
+        "framework": "OWASP",
+        "status": "not-implemented"
+      }
+    ],
+    "fix": {
+      "action_type": "modify",
+      "file_path": "citizen-protocol/config/futurenet/validator-sample.toml",
+      "description": "Replace hardcoded api_key with env variable",
+      "guidance": "Move this secret to a secure vault (Vault, AWS KMS, etc.) or environment variable. Never commit secrets to source control.",
+      "applied": true
+    },
+    "compliance_impact": {
+      "frameworks_affected": [
+        "GDPR",
+        "OWASP"
+      ],
+      "controls_addressed": 2,
+      "severity_resolved": "critical"
+    }
+  },
+  {
+    "id": "fix-1785639688984-59",
+    "timestamp": "2026-08-02T03:01:28.984Z",
+    "source": "mcp",
+    "dry_run": false,
+    "finding": {
+      "rule_id": "SECRETS-001",
+      "severity": "critical",
+      "category": "secrets",
+      "title": "Private key in source",
+      "file": ".dev-logs/ai-artifacts/ai-security-audit-2026-08-02.md",
+      "line": 76,
+      "evidence": "----***----",
+      "description": "A secret or credential was found in source code. Secrets must never be committed to repositories."
+    },
+    "controls": [
+      {
+        "id": "GDPR-ART32-002",
+        "name": "Encryption at Rest",
+        "framework": "GDPR",
+        "article": "Article 32(1)(a)",
+        "status": "not-implemented"
+      },
+      {
+        "id": "OWASP-ASVS-005",
+        "name": "Secrets Management",
+        "framework": "OWASP",
+        "status": "not-implemented"
+      }
+    ],
+    "fix": {
+      "action_type": "append",
+      "file_path": ".env",
+      "description": "Move api_key to .env",
+      "guidance": "Move this secret to a secure vault (Vault, AWS KMS, etc.) or environment variable. Never commit secrets to source control.",
+      "applied": true
+    },
+    "compliance_impact": {
+      "frameworks_affected": [
+        "GDPR",
+        "OWASP"
+      ],
+      "controls_addressed": 2,
+      "severity_resolved": "critical"
+    }
+  },
+  {
+    "id": "fix-1785639688984-60",
+    "timestamp": "2026-08-02T03:01:28.984Z",
+    "source": "mcp",
+    "dry_run": false,
+    "finding": {
+      "rule_id": "SECRETS-001",
+      "severity": "critical",
+      "category": "secrets",
+      "title": "Private key in source",
+      "file": ".dev-logs/ai-artifacts/ai-security-audit-2026-08-02.md",
+      "line": 76,
+      "evidence": "----***----",
+      "description": "A secret or credential was found in source code. Secrets must never be committed to repositories."
+    },
+    "controls": [
+      {
+        "id": "GDPR-ART32-002",
+        "name": "Encryption at Rest",
+        "framework": "GDPR",
+        "article": "Article 32(1)(a)",
+        "status": "not-implemented"
+      },
+      {
+        "id": "OWASP-ASVS-005",
+        "name": "Secrets Management",
+        "framework": "OWASP",
+        "status": "not-implemented"
+      }
+    ],
+    "fix": {
+      "action_type": "modify",
+      "file_path": "citizen-protocol/config/miannet/validator-sample.toml",
+      "description": "Replace hardcoded api_key with env variable",
+      "guidance": "Move this secret to a secure vault (Vault, AWS KMS, etc.) or environment variable. Never commit secrets to source control.",
+      "applied": true
+    },
+    "compliance_impact": {
+      "frameworks_affected": [
+        "GDPR",
+        "OWASP"
+      ],
+      "controls_addressed": 2,
+      "severity_resolved": "critical"
+    }
+  },
+  {
+    "id": "fix-1785639688984-61",
+    "timestamp": "2026-08-02T03:01:28.984Z",
+    "source": "mcp",
+    "dry_run": false,
+    "finding": {
+      "rule_id": "SECRETS-001",
+      "severity": "critical",
+      "category": "secrets",
+      "title": "Private key in source",
+      "file": ".dev-logs/ai-artifacts/ai-security-audit-2026-08-02.md",
+      "line": 76,
+      "evidence": "----***----",
+      "description": "A secret or credential was found in source code. Secrets must never be committed to repositories."
+    },
+    "controls": [
+      {
+        "id": "GDPR-ART32-002",
+        "name": "Encryption at Rest",
+        "framework": "GDPR",
+        "article": "Article 32(1)(a)",
+        "status": "not-implemented"
+      },
+      {
+        "id": "OWASP-ASVS-005",
+        "name": "Secrets Management",
+        "framework": "OWASP",
+        "status": "not-implemented"
+      }
+    ],
+    "fix": {
+      "action_type": "append",
+      "file_path": ".env",
+      "description": "Move api_key to .env",
+      "guidance": "Move this secret to a secure vault (Vault, AWS KMS, etc.) or environment variable. Never commit secrets to source control.",
+      "applied": true
+    },
+    "compliance_impact": {
+      "frameworks_affected": [
+        "GDPR",
+        "OWASP"
+      ],
+      "controls_addressed": 2,
+      "severity_resolved": "critical"
+    }
+  },
+  {
+    "id": "fix-1785639688984-62",
+    "timestamp": "2026-08-02T03:01:28.984Z",
+    "source": "mcp",
+    "dry_run": false,
+    "finding": {
+      "rule_id": "SECRETS-001",
+      "severity": "critical",
+      "category": "secrets",
+      "title": "Private key in source",
+      "file": ".dev-logs/ai-artifacts/ai-security-audit-2026-08-02.md",
+      "line": 76,
+      "evidence": "----***----",
+      "description": "A secret or credential was found in source code. Secrets must never be committed to repositories."
+    },
+    "controls": [
+      {
+        "id": "GDPR-ART32-002",
+        "name": "Encryption at Rest",
+        "framework": "GDPR",
+        "article": "Article 32(1)(a)",
+        "status": "not-implemented"
+      },
+      {
+        "id": "OWASP-ASVS-005",
+        "name": "Secrets Management",
+        "framework": "OWASP",
+        "status": "not-implemented"
+      }
+    ],
+    "fix": {
+      "action_type": "modify",
+      "file_path": "citizen-protocol/config/testnet/validator-sample.toml",
+      "description": "Replace hardcoded api_key with env variable",
+      "guidance": "Move this secret to a secure vault (Vault, AWS KMS, etc.) or environment variable. Never commit secrets to source control.",
+      "applied": true
+    },
+    "compliance_impact": {
+      "frameworks_affected": [
+        "GDPR",
+        "OWASP"
+      ],
+      "controls_addressed": 2,
+      "severity_resolved": "critical"
+    }
+  },
+  {
+    "id": "fix-1785639688984-63",
+    "timestamp": "2026-08-02T03:01:28.984Z",
+    "source": "mcp",
+    "dry_run": false,
+    "finding": {
+      "rule_id": "SECRETS-001",
+      "severity": "critical",
+      "category": "secrets",
+      "title": "Private key in source",
+      "file": ".dev-logs/ai-artifacts/ai-security-audit-2026-08-02.md",
+      "line": 76,
+      "evidence": "----***----",
+      "description": "A secret or credential was found in source code. Secrets must never be committed to repositories."
+    },
+    "controls": [
+      {
+        "id": "GDPR-ART32-002",
+        "name": "Encryption at Rest",
+        "framework": "GDPR",
+        "article": "Article 32(1)(a)",
+        "status": "not-implemented"
+      },
+      {
+        "id": "OWASP-ASVS-005",
+        "name": "Secrets Management",
+        "framework": "OWASP",
+        "status": "not-implemented"
+      }
+    ],
+    "fix": {
+      "action_type": "append",
+      "file_path": ".env",
+      "description": "Move api_key to .env",
+      "guidance": "Move this secret to a secure vault (Vault, AWS KMS, etc.) or environment variable. Never commit secrets to source control.",
+      "applied": true
+    },
+    "compliance_impact": {
+      "frameworks_affected": [
+        "GDPR",
+        "OWASP"
+      ],
+      "controls_addressed": 2,
+      "severity_resolved": "critical"
+    }
+  },
+  {
+    "id": "fix-1785639688984-64",
+    "timestamp": "2026-08-02T03:01:28.984Z",
+    "source": "mcp",
+    "dry_run": false,
+    "finding": {
+      "rule_id": "SECRETS-001",
+      "severity": "critical",
+      "category": "secrets",
+      "title": "Private key in source",
+      "file": ".dev-logs/ai-artifacts/ai-security-audit-2026-08-02.md",
+      "line": 76,
+      "evidence": "----***----",
+      "description": "A secret or credential was found in source code. Secrets must never be committed to repositories."
+    },
+    "controls": [
+      {
+        "id": "GDPR-ART32-002",
+        "name": "Encryption at Rest",
+        "framework": "GDPR",
+        "article": "Article 32(1)(a)",
+        "status": "not-implemented"
+      },
+      {
+        "id": "OWASP-ASVS-005",
+        "name": "Secrets Management",
+        "framework": "OWASP",
+        "status": "not-implemented"
+      }
+    ],
+    "fix": {
+      "action_type": "modify",
+      "file_path": "citizen-protocol/docs/LOCALNET_RUNBOOK.md",
+      "description": "Replace hardcoded api_key with env variable",
+      "guidance": "Move this secret to a secure vault (Vault, AWS KMS, etc.) or environment variable. Never commit secrets to source control.",
+      "applied": true
+    },
+    "compliance_impact": {
+      "frameworks_affected": [
+        "GDPR",
+        "OWASP"
+      ],
+      "controls_addressed": 2,
+      "severity_resolved": "critical"
+    }
+  },
+  {
+    "id": "fix-1785639688984-65",
+    "timestamp": "2026-08-02T03:01:28.984Z",
+    "source": "mcp",
+    "dry_run": false,
+    "finding": {
+      "rule_id": "SECRETS-001",
+      "severity": "critical",
+      "category": "secrets",
+      "title": "Private key in source",
+      "file": ".dev-logs/ai-artifacts/ai-security-audit-2026-08-02.md",
+      "line": 76,
+      "evidence": "----***----",
+      "description": "A secret or credential was found in source code. Secrets must never be committed to repositories."
+    },
+    "controls": [
+      {
+        "id": "GDPR-ART32-002",
+        "name": "Encryption at Rest",
+        "framework": "GDPR",
+        "article": "Article 32(1)(a)",
+        "status": "not-implemented"
+      },
+      {
+        "id": "OWASP-ASVS-005",
+        "name": "Secrets Management",
+        "framework": "OWASP",
+        "status": "not-implemented"
+      }
+    ],
+    "fix": {
+      "action_type": "append",
+      "file_path": ".env",
+      "description": "Move CITIZEN_WALLET_PASSWORD to .env",
+      "guidance": "Move this secret to a secure vault (Vault, AWS KMS, etc.) or environment variable. Never commit secrets to source control.",
+      "applied": true
+    },
+    "compliance_impact": {
+      "frameworks_affected": [
+        "GDPR",
+        "OWASP"
+      ],
+      "controls_addressed": 2,
+      "severity_resolved": "critical"
+    }
+  },
+  {
+    "id": "fix-1785639688985-66",
+    "timestamp": "2026-08-02T03:01:28.985Z",
+    "source": "mcp",
+    "dry_run": false,
+    "finding": {
+      "rule_id": "SECRETS-001",
+      "severity": "critical",
+      "category": "secrets",
+      "title": "Private key in source",
+      "file": ".dev-logs/ai-artifacts/ai-security-audit-2026-08-02.md",
+      "line": 76,
+      "evidence": "----***----",
+      "description": "A secret or credential was found in source code. Secrets must never be committed to repositories."
+    },
+    "controls": [
+      {
+        "id": "GDPR-ART32-002",
+        "name": "Encryption at Rest",
+        "framework": "GDPR",
+        "article": "Article 32(1)(a)",
+        "status": "not-implemented"
+      },
+      {
+        "id": "OWASP-ASVS-005",
+        "name": "Secrets Management",
+        "framework": "OWASP",
+        "status": "not-implemented"
+      }
+    ],
+    "fix": {
+      "action_type": "modify",
+      "file_path": "citizen-protocol/docs/WALLET_GENERATION_GUIDE.md",
+      "description": "Replace hardcoded CITIZEN_WALLET_PASSWORD with env variable",
+      "guidance": "Move this secret to a secure vault (Vault, AWS KMS, etc.) or environment variable. Never commit secrets to source control.",
+      "applied": true
+    },
+    "compliance_impact": {
+      "frameworks_affected": [
+        "GDPR",
+        "OWASP"
+      ],
+      "controls_addressed": 2,
+      "severity_resolved": "critical"
+    }
+  },
+  {
+    "id": "fix-1785639688985-67",
+    "timestamp": "2026-08-02T03:01:28.985Z",
+    "source": "mcp",
+    "dry_run": false,
+    "finding": {
+      "rule_id": "CRYPTO-003",
+      "severity": "critical",
+      "category": "authentication",
+      "title": "Hardcoded password comparison (use Argon2id/bcrypt)",
+      "file": "vaultier/src/lib/runtimeBridge.test.ts",
+      "line": 72,
+      "evidence": "assert((sanitized.nested as Record<string, unknown>).backupPassword === '[REDACTED]', 'nested password field should be redacted');",
+      "description": "Passwords must be hashed using Argon2id before comparison. Never compare plaintext passwords."
+    },
+    "controls": [
+      {
+        "id": "GDPR-ART32-004",
+        "name": "Unique User Identification",
+        "framework": "GDPR",
+        "article": "Article 32(1)(b)",
+        "status": "not-implemented"
+      },
+      {
+        "id": "OWASP-ASVS-003",
+        "name": "Authentication Security",
+        "framework": "OWASP",
+        "status": "not-implemented"
+      }
+    ],
+    "fix": {
+      "action_type": "npm-install",
+      "file_path": "package.json",
+      "description": "Install argon2",
+      "guidance": "Use argon2.verify(hashedPassword, inputPassword) for password comparison.",
+      "applied": true
+    },
+    "compliance_impact": {
+      "frameworks_affected": [
+        "GDPR",
+        "OWASP"
+      ],
+      "controls_addressed": 2,
+      "severity_resolved": "critical"
+    }
+  }
+]

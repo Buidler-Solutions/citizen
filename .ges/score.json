@@ -1,0 +1,102 @@
+{
+  "overall": 0,
+  "overall_grade": "F",
+  "frameworks": {
+    "GDPR": {
+      "framework": "GDPR",
+      "score": 5,
+      "grade": "F",
+      "total_controls": 40,
+      "passed_controls": 2,
+      "failed_controls": 2,
+      "warning_controls": 0,
+      "not_applicable": 2,
+      "not_implemented": 36,
+      "severity_breakdown": {
+        "critical": {
+          "total": 26,
+          "passed": 1,
+          "failed": 2,
+          "warning": 0,
+          "not_implemented": 23
+        },
+        "high": {
+          "total": 12,
+          "passed": 1,
+          "failed": 0,
+          "warning": 0,
+          "not_implemented": 11
+        },
+        "medium": {
+          "total": 2,
+          "passed": 0,
+          "failed": 0,
+          "warning": 0,
+          "not_implemented": 2
+        },
+        "low": {
+          "total": 0,
+          "passed": 0,
+          "failed": 0,
+          "warning": 0,
+          "not_implemented": 0
+        }
+      },
+      "critical_failures": 2,
+      "max_possible_score": 352,
+      "evaluated_at": "2026-08-02T03:00:55.966Z"
+    },
+    "OWASP": {
+      "framework": "OWASP",
+      "score": 17,
+      "grade": "F",
+      "total_controls": 6,
+      "passed_controls": 1,
+      "failed_controls": 1,
+      "warning_controls": 0,
+      "not_applicable": 1,
+      "not_implemented": 4,
+      "severity_breakdown": {
+        "critical": {
+          "total": 6,
+          "passed": 1,
+          "failed": 1,
+          "warning": 0,
+          "not_implemented": 4
+        },
+        "high": {
+          "total": 0,
+          "passed": 0,
+          "failed": 0,
+          "warning": 0,
+          "not_implemented": 0
+        },
+        "medium": {
+          "total": 0,
+          "passed": 0,
+          "failed": 0,
+          "warning": 0,
+          "not_implemented": 0
+        },
+        "low": {
+          "total": 0,
+          "passed": 0,
+          "failed": 0,
+          "warning": 0,
+          "not_implemented": 0
+        }
+      },
+      "critical_failures": 1,
+      "max_possible_score": 60,
+      "evaluated_at": "2026-08-02T03:00:55.966Z"
+    }
+  },
+  "audit_impact": {
+    "total_deduction": 100,
+    "critical_findings": 44,
+    "high_findings": 28,
+    "medium_findings": 28,
+    "low_findings": 3
+  },
+  "evaluated_at": "2026-08-02T03:00:55.966Z"
+}

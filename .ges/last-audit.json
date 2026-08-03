@@ -1,0 +1,1156 @@
+{
+  "findings": [
+    {
+      "ruleId": "SECRETS-001",
+      "severity": "critical",
+      "category": "secrets",
+      "title": "Private key in source",
+      "description": "A secret or credential was found in source code. Secrets must never be committed to repositories.",
+      "file": ".dev-logs/ai-artifacts/ai-security-audit-2026-08-02.md",
+      "line": 76,
+      "evidence": "----***----",
+      "controlIds": [
+        "OWASP-ASVS-005",
+        "GDPR-ART32-002"
+      ],
+      "fix": "Move this secret to a secure vault (Vault, AWS KMS, etc.) or environment variable. Never commit secrets to source control."
+    },
+    {
+      "ruleId": "SECRETS-001",
+      "severity": "critical",
+      "category": "secrets",
+      "title": "Hardcoded API key",
+      "description": "A secret or credential was found in source code. Secrets must never be committed to repositories.",
+      "file": "citizen-protocol/config/futurenet/validator-alpha.toml",
+      "line": 19,
+      "evidence": "api_***_KEY",
+      "controlIds": [
+        "OWASP-ASVS-005",
+        "GDPR-ART32-002"
+      ],
+      "fix": "Move this secret to a secure vault (Vault, AWS KMS, etc.) or environment variable. Never commit secrets to source control."
+    },
+    {
+      "ruleId": "SECRETS-001",
+      "severity": "critical",
+      "category": "secrets",
+      "title": "Hardcoded API key",
+      "description": "A secret or credential was found in source code. Secrets must never be committed to repositories.",
+      "file": "citizen-protocol/config/futurenet/validator-beta.toml",
+      "line": 19,
+      "evidence": "api_***_KEY",
+      "controlIds": [
+        "OWASP-ASVS-005",
+        "GDPR-ART32-002"
+      ],
+      "fix": "Move this secret to a secure vault (Vault, AWS KMS, etc.) or environment variable. Never commit secrets to source control."
+    },
+    {
+      "ruleId": "SECRETS-001",
+      "severity": "critical",
+      "category": "secrets",
+      "title": "Hardcoded API key",
+      "description": "A secret or credential was found in source code. Secrets must never be committed to repositories.",
+      "file": "citizen-protocol/config/futurenet/validator-gamma.toml",
+      "line": 19,
+      "evidence": "api_***_KEY",
+      "controlIds": [
+        "OWASP-ASVS-005",
+        "GDPR-ART32-002"
+      ],
+      "fix": "Move this secret to a secure vault (Vault, AWS KMS, etc.) or environment variable. Never commit secrets to source control."
+    },
+    {
+      "ruleId": "SECRETS-001",
+      "severity": "critical",
+      "category": "secrets",
+      "title": "Hardcoded API key",
+      "description": "A secret or credential was found in source code. Secrets must never be committed to repositories.",
+      "file": "citizen-protocol/config/futurenet/validator-sample.toml",
+      "line": 24,
+      "evidence": "api_***_KEY",
+      "controlIds": [
+        "OWASP-ASVS-005",
+        "GDPR-ART32-002"
+      ],
+      "fix": "Move this secret to a secure vault (Vault, AWS KMS, etc.) or environment variable. Never commit secrets to source control."
+    },
+    {
+      "ruleId": "SECRETS-001",
+      "severity": "critical",
+      "category": "secrets",
+      "title": "Hardcoded API key",
+      "description": "A secret or credential was found in source code. Secrets must never be committed to repositories.",
+      "file": "citizen-protocol/config/miannet/validator-sample.toml",
+      "line": 24,
+      "evidence": "api_***_KEY",
+      "controlIds": [
+        "OWASP-ASVS-005",
+        "GDPR-ART32-002"
+      ],
+      "fix": "Move this secret to a secure vault (Vault, AWS KMS, etc.) or environment variable. Never commit secrets to source control."
+    },
+    {
+      "ruleId": "SECRETS-001",
+      "severity": "critical",
+      "category": "secrets",
+      "title": "Hardcoded API key",
+      "description": "A secret or credential was found in source code. Secrets must never be committed to repositories.",
+      "file": "citizen-protocol/config/testnet/validator-sample.toml",
+      "line": 24,
+      "evidence": "api_***_KEY",
+      "controlIds": [
+        "OWASP-ASVS-005",
+        "GDPR-ART32-002"
+      ],
+      "fix": "Move this secret to a secure vault (Vault, AWS KMS, etc.) or environment variable. Never commit secrets to source control."
+    },
+    {
+      "ruleId": "SECRETS-001",
+      "severity": "critical",
+      "category": "secrets",
+      "title": "Hardcoded API key",
+      "description": "A secret or credential was found in source code. Secrets must never be committed to repositories.",
+      "file": "citizen-protocol/docs/LOCALNET_RUNBOOK.md",
+      "line": 135,
+      "evidence": "api_***KEY>",
+      "controlIds": [
+        "OWASP-ASVS-005",
+        "GDPR-ART32-002"
+      ],
+      "fix": "Move this secret to a secure vault (Vault, AWS KMS, etc.) or environment variable. Never commit secrets to source control."
+    },
+    {
+      "ruleId": "SECRETS-001",
+      "severity": "critical",
+      "category": "secrets",
+      "title": "Hardcoded password",
+      "description": "A secret or credential was found in source code. Secrets must never be committed to repositories.",
+      "file": "citizen-protocol/docs/WALLET_GENERATION_GUIDE.md",
+      "line": 37,
+      "evidence": "PASS***ase}",
+      "controlIds": [
+        "OWASP-ASVS-005",
+        "GDPR-ART32-002"
+      ],
+      "fix": "Move this secret to a secure vault (Vault, AWS KMS, etc.) or environment variable. Never commit secrets to source control."
+    },
+    {
+      "ruleId": "SECRETS-001",
+      "severity": "critical",
+      "category": "secrets",
+      "title": "Hardcoded password",
+      "description": "A secret or credential was found in source code. Secrets must never be committed to repositories.",
+      "file": "citizen-protocol/docs/WALLET_GENERATION_GUIDE.md",
+      "line": 53,
+      "evidence": "PASS***ase}",
+      "controlIds": [
+        "OWASP-ASVS-005",
+        "GDPR-ART32-002"
+      ],
+      "fix": "Move this secret to a secure vault (Vault, AWS KMS, etc.) or environment variable. Never commit secrets to source control."
+    },
+    {
+      "ruleId": "SECRETS-001",
+      "severity": "critical",
+      "category": "secrets",
+      "title": "Sensitive environment variable with value",
+      "description": "A secret or credential was found in source code. Secrets must never be committed to repositories.",
+      "file": "citizen-protocol/docs/WALLET_GENERATION_GUIDE.md",
+      "line": 73,
+      "evidence": "secr***_hex",
+      "controlIds": [
+        "OWASP-ASVS-005",
+        "GDPR-ART32-002"
+      ],
+      "fix": "Move this secret to a secure vault (Vault, AWS KMS, etc.) or environment variable. Never commit secrets to source control."
+    },
+    {
+      "ruleId": "SECRETS-001",
+      "severity": "critical",
+      "category": "secrets",
+      "title": "Hardcoded password",
+      "description": "A secret or credential was found in source code. Secrets must never be committed to repositories.",
+      "file": "citizen-protocol/docs/WALLET_GENERATION_GUIDE.md",
+      "line": 116,
+      "evidence": "PASS***ase}",
+      "controlIds": [
+        "OWASP-ASVS-005",
+        "GDPR-ART32-002"
+      ],
+      "fix": "Move this secret to a secure vault (Vault, AWS KMS, etc.) or environment variable. Never commit secrets to source control."
+    },
+    {
+      "ruleId": "SECRETS-001",
+      "severity": "critical",
+      "category": "secrets",
+      "title": "Private key in source",
+      "description": "A secret or credential was found in source code. Secrets must never be committed to repositories.",
+      "file": "citizen-protocol/target/debug/deps/libed25519-647068e9828651cf.rmeta",
+      "line": 120,
+      "evidence": "----***----",
+      "controlIds": [
+        "OWASP-ASVS-005",
+        "GDPR-ART32-002"
+      ],
+      "fix": "Move this secret to a secure vault (Vault, AWS KMS, etc.) or environment variable. Never commit secrets to source control."
+    },
+    {
+      "ruleId": "SECRETS-001",
+      "severity": "critical",
+      "category": "secrets",
+      "title": "Private key in source",
+      "description": "A secret or credential was found in source code. Secrets must never be committed to repositories.",
+      "file": "citizen-protocol/target/debug/deps/libed25519-c40782e5ae6fc456.rmeta",
+      "line": 120,
+      "evidence": "----***----",
+      "controlIds": [
+        "OWASP-ASVS-005",
+        "GDPR-ART32-002"
+      ],
+      "fix": "Move this secret to a secure vault (Vault, AWS KMS, etc.) or environment variable. Never commit secrets to source control."
+    },
+    {
+      "ruleId": "SECRETS-001",
+      "severity": "critical",
+      "category": "secrets",
+      "title": "Private key in source",
+      "description": "A secret or credential was found in source code. Secrets must never be committed to repositories.",
+      "file": "citizen-protocol/target/debug/deps/libpkcs8-4420491404622412.rmeta",
+      "line": 58,
+      "evidence": "----***----",
+      "controlIds": [
+        "OWASP-ASVS-005",
+        "GDPR-ART32-002"
+      ],
+      "fix": "Move this secret to a secure vault (Vault, AWS KMS, etc.) or environment variable. Never commit secrets to source control."
+    },
+    {
+      "ruleId": "SECRETS-001",
+      "severity": "critical",
+      "category": "secrets",
+      "title": "Private key in source",
+      "description": "A secret or credential was found in source code. Secrets must never be committed to repositories.",
+      "file": "citizen-protocol/target/debug/deps/libpkcs8-92e0f127722d0157.rmeta",
+      "line": 66,
+      "evidence": "----***----",
+      "controlIds": [
+        "OWASP-ASVS-005",
+        "GDPR-ART32-002"
+      ],
+      "fix": "Move this secret to a secure vault (Vault, AWS KMS, etc.) or environment variable. Never commit secrets to source control."
+    },
+    {
+      "ruleId": "CRYPTO-003",
+      "severity": "critical",
+      "category": "authentication",
+      "title": "Hardcoded password comparison (use Argon2id/bcrypt)",
+      "description": "Passwords must be hashed using Argon2id before comparison. Never compare plaintext passwords.",
+      "file": "vaultier/src/lib/runtimeBridge.test.ts",
+      "line": 72,
+      "evidence": "assert((sanitized.nested as Record<string, unknown>).backupPassword === '[REDACTED]', 'nested password field should be redacted');",
+      "controlIds": [
+        "GDPR-ART32-004",
+        "OWASP-ASVS-003"
+      ],
+      "fix": "Use argon2.verify(hashedPassword, inputPassword) for password comparison."
+    },
+    {
+      "ruleId": "CONFIG-004",
+      "severity": "critical",
+      "category": "secrets",
+      "title": "Secret with value in .env file",
+      "description": "A .env file contains actual secret values. Ensure .env files are in .gitignore and never committed.",
+      "file": ".env",
+      "line": 2,
+      "evidence": "PASSWORD=***",
+      "controlIds": [
+        "OWASP-ASVS-005",
+        "GDPR-ART32-002"
+      ],
+      "fix": "Ensure .env is in .gitignore. Use a secrets management solution for production."
+    },
+    {
+      "ruleId": "CONFIG-004",
+      "severity": "critical",
+      "category": "secrets",
+      "title": "Secret with value in .env file",
+      "description": "A .env file contains actual secret values. Ensure .env files are in .gitignore and never committed.",
+      "file": ".env",
+      "line": 26,
+      "evidence": "PASSWORD=***",
+      "controlIds": [
+        "OWASP-ASVS-005",
+        "GDPR-ART32-002"
+      ],
+      "fix": "Ensure .env is in .gitignore. Use a secrets management solution for production."
+    },
+    {
+      "ruleId": "CONFIG-004",
+      "severity": "critical",
+      "category": "secrets",
+      "title": "Secret with value in .env file",
+      "description": "A .env file contains actual secret values. Ensure .env files are in .gitignore and never committed.",
+      "file": ".env",
+      "line": 28,
+      "evidence": "PASSWORD=***",
+      "controlIds": [
+        "OWASP-ASVS-005",
+        "GDPR-ART32-002"
+      ],
+      "fix": "Ensure .env is in .gitignore. Use a secrets management solution for production."
+    },
+    {
+      "ruleId": "CONFIG-004",
+      "severity": "critical",
+      "category": "secrets",
+      "title": "Secret with value in .env file",
+      "description": "A .env file contains actual secret values. Ensure .env files are in .gitignore and never committed.",
+      "file": ".env",
+      "line": 30,
+      "evidence": "pem=***",
+      "controlIds": [
+        "OWASP-ASVS-005",
+        "GDPR-ART32-002"
+      ],
+      "fix": "Ensure .env is in .gitignore. Use a secrets management solution for production."
+    },
+    {
+      "ruleId": "CONFIG-004",
+      "severity": "critical",
+      "category": "secrets",
+      "title": "Secret with value in .env file",
+      "description": "A .env file contains actual secret values. Ensure .env files are in .gitignore and never committed.",
+      "file": ".env",
+      "line": 32,
+      "evidence": "pem=***",
+      "controlIds": [
+        "OWASP-ASVS-005",
+        "GDPR-ART32-002"
+      ],
+      "fix": "Ensure .env is in .gitignore. Use a secrets management solution for production."
+    },
+    {
+      "ruleId": "DB-001",
+      "severity": "high",
+      "category": "database",
+      "title": "Missing audit timestamps in schema",
+      "description": "Database schema does not include created_at/updated_at timestamps. These are mandatory for audit trails.",
+      "file": "landing-page/backend/src/auth/auth-challenge.entity.ts",
+      "evidence": "No created_at/updated_at columns detected",
+      "controlIds": [
+        "GDPR-ART32-006"
+      ],
+      "fix": "Add created_at and updated_at columns. In Prisma: add DateTime fields, in Sequelize: timestamps: true, in Django: auto_now_add=True."
+    },
+    {
+      "ruleId": "DB-002",
+      "severity": "medium",
+      "category": "database",
+      "title": "Missing soft delete pattern",
+      "description": "No deleted_at column or soft delete pattern found. Hard deletes prevent audit trail and data recovery.",
+      "file": "landing-page/backend/src/auth/auth-challenge.entity.ts",
+      "evidence": "No deleted_at/softDelete pattern detected",
+      "controlIds": [
+        "GDPR-ART32-007"
+      ],
+      "fix": "Add deleted_at column or soft delete flag. In Prisma: DeletedAt DateTime?, in Sequelize: paranoid: true, in Django: SoftDeleteModel."
+    },
+    {
+      "ruleId": "DB-003",
+      "severity": "medium",
+      "category": "database",
+      "title": "Missing user audit columns",
+      "description": "No created_by/updated_by columns found. Track who makes changes for accountability.",
+      "file": "landing-page/backend/src/auth/auth-challenge.entity.ts",
+      "evidence": "No created_by/updated_by columns detected",
+      "controlIds": [
+        "GDPR-ART32-006"
+      ],
+      "fix": "Add created_by and updated_by columns to track which user made changes."
+    },
+    {
+      "ruleId": "DB-001",
+      "severity": "high",
+      "category": "database",
+      "title": "Missing audit timestamps in schema",
+      "description": "Database schema does not include created_at/updated_at timestamps. These are mandatory for audit trails.",
+      "file": "landing-page/backend/src/auth/auth-session.entity.ts",
+      "evidence": "No created_at/updated_at columns detected",
+      "controlIds": [
+        "GDPR-ART32-006"
+      ],
+      "fix": "Add created_at and updated_at columns. In Prisma: add DateTime fields, in Sequelize: timestamps: true, in Django: auto_now_add=True."
+    },
+    {
+      "ruleId": "DB-002",
+      "severity": "medium",
+      "category": "database",
+      "title": "Missing soft delete pattern",
+      "description": "No deleted_at column or soft delete pattern found. Hard deletes prevent audit trail and data recovery.",
+      "file": "landing-page/backend/src/auth/auth-session.entity.ts",
+      "evidence": "No deleted_at/softDelete pattern detected",
+      "controlIds": [
+        "GDPR-ART32-007"
+      ],
+      "fix": "Add deleted_at column or soft delete flag. In Prisma: DeletedAt DateTime?, in Sequelize: paranoid: true, in Django: SoftDeleteModel."
+    },
+    {
+      "ruleId": "DB-003",
+      "severity": "medium",
+      "category": "database",
+      "title": "Missing user audit columns",
+      "description": "No created_by/updated_by columns found. Track who makes changes for accountability.",
+      "file": "landing-page/backend/src/auth/auth-session.entity.ts",
+      "evidence": "No created_by/updated_by columns detected",
+      "controlIds": [
+        "GDPR-ART32-006"
+      ],
+      "fix": "Add created_by and updated_by columns to track which user made changes."
+    },
+    {
+      "ruleId": "DB-001",
+      "severity": "high",
+      "category": "database",
+      "title": "Missing audit timestamps in schema",
+      "description": "Database schema does not include created_at/updated_at timestamps. These are mandatory for audit trails.",
+      "file": "landing-page/backend/src/auth/auth-user.entity.ts",
+      "evidence": "No created_at/updated_at columns detected",
+      "controlIds": [
+        "GDPR-ART32-006"
+      ],
+      "fix": "Add created_at and updated_at columns. In Prisma: add DateTime fields, in Sequelize: timestamps: true, in Django: auto_now_add=True."
+    },
+    {
+      "ruleId": "DB-002",
+      "severity": "medium",
+      "category": "database",
+      "title": "Missing soft delete pattern",
+      "description": "No deleted_at column or soft delete pattern found. Hard deletes prevent audit trail and data recovery.",
+      "file": "landing-page/backend/src/auth/auth-user.entity.ts",
+      "evidence": "No deleted_at/softDelete pattern detected",
+      "controlIds": [
+        "GDPR-ART32-007"
+      ],
+      "fix": "Add deleted_at column or soft delete flag. In Prisma: DeletedAt DateTime?, in Sequelize: paranoid: true, in Django: SoftDeleteModel."
+    },
+    {
+      "ruleId": "DB-003",
+      "severity": "medium",
+      "category": "database",
+      "title": "Missing user audit columns",
+      "description": "No created_by/updated_by columns found. Track who makes changes for accountability.",
+      "file": "landing-page/backend/src/auth/auth-user.entity.ts",
+      "evidence": "No created_by/updated_by columns detected",
+      "controlIds": [
+        "GDPR-ART32-006"
+      ],
+      "fix": "Add created_by and updated_by columns to track which user made changes."
+    },
+    {
+      "ruleId": "DB-001",
+      "severity": "high",
+      "category": "database",
+      "title": "Missing audit timestamps in schema",
+      "description": "Database schema does not include created_at/updated_at timestamps. These are mandatory for audit trails.",
+      "file": "landing-page/backend/src/auth/password-reset.entity.ts",
+      "evidence": "No created_at/updated_at columns detected",
+      "controlIds": [
+        "GDPR-ART32-006"
+      ],
+      "fix": "Add created_at and updated_at columns. In Prisma: add DateTime fields, in Sequelize: timestamps: true, in Django: auto_now_add=True."
+    },
+    {
+      "ruleId": "DB-002",
+      "severity": "medium",
+      "category": "database",
+      "title": "Missing soft delete pattern",
+      "description": "No deleted_at column or soft delete pattern found. Hard deletes prevent audit trail and data recovery.",
+      "file": "landing-page/backend/src/auth/password-reset.entity.ts",
+      "evidence": "No deleted_at/softDelete pattern detected",
+      "controlIds": [
+        "GDPR-ART32-007"
+      ],
+      "fix": "Add deleted_at column or soft delete flag. In Prisma: DeletedAt DateTime?, in Sequelize: paranoid: true, in Django: SoftDeleteModel."
+    },
+    {
+      "ruleId": "DB-003",
+      "severity": "medium",
+      "category": "database",
+      "title": "Missing user audit columns",
+      "description": "No created_by/updated_by columns found. Track who makes changes for accountability.",
+      "file": "landing-page/backend/src/auth/password-reset.entity.ts",
+      "evidence": "No created_by/updated_by columns detected",
+      "controlIds": [
+        "GDPR-ART32-006"
+      ],
+      "fix": "Add created_by and updated_by columns to track which user made changes."
+    },
+    {
+      "ruleId": "DB-001",
+      "severity": "high",
+      "category": "database",
+      "title": "Missing audit timestamps in schema",
+      "description": "Database schema does not include created_at/updated_at timestamps. These are mandatory for audit trails.",
+      "file": "landing-page/backend/src/lead/asciinema-recording.entity.ts",
+      "evidence": "No created_at/updated_at columns detected",
+      "controlIds": [
+        "GDPR-ART32-006"
+      ],
+      "fix": "Add created_at and updated_at columns. In Prisma: add DateTime fields, in Sequelize: timestamps: true, in Django: auto_now_add=True."
+    },
+    {
+      "ruleId": "DB-002",
+      "severity": "medium",
+      "category": "database",
+      "title": "Missing soft delete pattern",
+      "description": "No deleted_at column or soft delete pattern found. Hard deletes prevent audit trail and data recovery.",
+      "file": "landing-page/backend/src/lead/asciinema-recording.entity.ts",
+      "evidence": "No deleted_at/softDelete pattern detected",
+      "controlIds": [
+        "GDPR-ART32-007"
+      ],
+      "fix": "Add deleted_at column or soft delete flag. In Prisma: DeletedAt DateTime?, in Sequelize: paranoid: true, in Django: SoftDeleteModel."
+    },
+    {
+      "ruleId": "DB-003",
+      "severity": "medium",
+      "category": "database",
+      "title": "Missing user audit columns",
+      "description": "No created_by/updated_by columns found. Track who makes changes for accountability.",
+      "file": "landing-page/backend/src/lead/asciinema-recording.entity.ts",
+      "evidence": "No created_by/updated_by columns detected",
+      "controlIds": [
+        "GDPR-ART32-006"
+      ],
+      "fix": "Add created_by and updated_by columns to track which user made changes."
+    },
+    {
+      "ruleId": "DB-001",
+      "severity": "high",
+      "category": "database",
+      "title": "Missing audit timestamps in schema",
+      "description": "Database schema does not include created_at/updated_at timestamps. These are mandatory for audit trails.",
+      "file": "landing-page/backend/src/lead/form-settings.entity.ts",
+      "evidence": "No created_at/updated_at columns detected",
+      "controlIds": [
+        "GDPR-ART32-006"
+      ],
+      "fix": "Add created_at and updated_at columns. In Prisma: add DateTime fields, in Sequelize: timestamps: true, in Django: auto_now_add=True."
+    },
+    {
+      "ruleId": "DB-002",
+      "severity": "medium",
+      "category": "database",
+      "title": "Missing soft delete pattern",
+      "description": "No deleted_at column or soft delete pattern found. Hard deletes prevent audit trail and data recovery.",
+      "file": "landing-page/backend/src/lead/form-settings.entity.ts",
+      "evidence": "No deleted_at/softDelete pattern detected",
+      "controlIds": [
+        "GDPR-ART32-007"
+      ],
+      "fix": "Add deleted_at column or soft delete flag. In Prisma: DeletedAt DateTime?, in Sequelize: paranoid: true, in Django: SoftDeleteModel."
+    },
+    {
+      "ruleId": "DB-003",
+      "severity": "medium",
+      "category": "database",
+      "title": "Missing user audit columns",
+      "description": "No created_by/updated_by columns found. Track who makes changes for accountability.",
+      "file": "landing-page/backend/src/lead/form-settings.entity.ts",
+      "evidence": "No created_by/updated_by columns detected",
+      "controlIds": [
+        "GDPR-ART32-006"
+      ],
+      "fix": "Add created_by and updated_by columns to track which user made changes."
+    },
+    {
+      "ruleId": "DB-001",
+      "severity": "high",
+      "category": "database",
+      "title": "Missing audit timestamps in schema",
+      "description": "Database schema does not include created_at/updated_at timestamps. These are mandatory for audit trails.",
+      "file": "landing-page/backend/src/lead/lead.entity.ts",
+      "evidence": "No created_at/updated_at columns detected",
+      "controlIds": [
+        "GDPR-ART32-006"
+      ],
+      "fix": "Add created_at and updated_at columns. In Prisma: add DateTime fields, in Sequelize: timestamps: true, in Django: auto_now_add=True."
+    },
+    {
+      "ruleId": "DB-002",
+      "severity": "medium",
+      "category": "database",
+      "title": "Missing soft delete pattern",
+      "description": "No deleted_at column or soft delete pattern found. Hard deletes prevent audit trail and data recovery.",
+      "file": "landing-page/backend/src/lead/lead.entity.ts",
+      "evidence": "No deleted_at/softDelete pattern detected",
+      "controlIds": [
+        "GDPR-ART32-007"
+      ],
+      "fix": "Add deleted_at column or soft delete flag. In Prisma: DeletedAt DateTime?, in Sequelize: paranoid: true, in Django: SoftDeleteModel."
+    },
+    {
+      "ruleId": "DB-003",
+      "severity": "medium",
+      "category": "database",
+      "title": "Missing user audit columns",
+      "description": "No created_by/updated_by columns found. Track who makes changes for accountability.",
+      "file": "landing-page/backend/src/lead/lead.entity.ts",
+      "evidence": "No created_by/updated_by columns detected",
+      "controlIds": [
+        "GDPR-ART32-006"
+      ],
+      "fix": "Add created_by and updated_by columns to track which user made changes."
+    },
+    {
+      "ruleId": "DB-001",
+      "severity": "high",
+      "category": "database",
+      "title": "Missing audit timestamps in schema",
+      "description": "Database schema does not include created_at/updated_at timestamps. These are mandatory for audit trails.",
+      "file": "landing-page/backend/src/mail/email-template.entity.ts",
+      "evidence": "No created_at/updated_at columns detected",
+      "controlIds": [
+        "GDPR-ART32-006"
+      ],
+      "fix": "Add created_at and updated_at columns. In Prisma: add DateTime fields, in Sequelize: timestamps: true, in Django: auto_now_add=True."
+    },
+    {
+      "ruleId": "DB-002",
+      "severity": "medium",
+      "category": "database",
+      "title": "Missing soft delete pattern",
+      "description": "No deleted_at column or soft delete pattern found. Hard deletes prevent audit trail and data recovery.",
+      "file": "landing-page/backend/src/mail/email-template.entity.ts",
+      "evidence": "No deleted_at/softDelete pattern detected",
+      "controlIds": [
+        "GDPR-ART32-007"
+      ],
+      "fix": "Add deleted_at column or soft delete flag. In Prisma: DeletedAt DateTime?, in Sequelize: paranoid: true, in Django: SoftDeleteModel."
+    },
+    {
+      "ruleId": "DB-003",
+      "severity": "medium",
+      "category": "database",
+      "title": "Missing user audit columns",
+      "description": "No created_by/updated_by columns found. Track who makes changes for accountability.",
+      "file": "landing-page/backend/src/mail/email-template.entity.ts",
+      "evidence": "No created_by/updated_by columns detected",
+      "controlIds": [
+        "GDPR-ART32-006"
+      ],
+      "fix": "Add created_by and updated_by columns to track which user made changes."
+    },
+    {
+      "ruleId": "DB-001",
+      "severity": "high",
+      "category": "database",
+      "title": "Missing audit timestamps in schema",
+      "description": "Database schema does not include created_at/updated_at timestamps. These are mandatory for audit trails.",
+      "file": "landing-page/backend/src/mail/lead-notification.entity.ts",
+      "evidence": "No created_at/updated_at columns detected",
+      "controlIds": [
+        "GDPR-ART32-006"
+      ],
+      "fix": "Add created_at and updated_at columns. In Prisma: add DateTime fields, in Sequelize: timestamps: true, in Django: auto_now_add=True."
+    },
+    {
+      "ruleId": "DB-002",
+      "severity": "medium",
+      "category": "database",
+      "title": "Missing soft delete pattern",
+      "description": "No deleted_at column or soft delete pattern found. Hard deletes prevent audit trail and data recovery.",
+      "file": "landing-page/backend/src/mail/lead-notification.entity.ts",
+      "evidence": "No deleted_at/softDelete pattern detected",
+      "controlIds": [
+        "GDPR-ART32-007"
+      ],
+      "fix": "Add deleted_at column or soft delete flag. In Prisma: DeletedAt DateTime?, in Sequelize: paranoid: true, in Django: SoftDeleteModel."
+    },
+    {
+      "ruleId": "DB-003",
+      "severity": "medium",
+      "category": "database",
+      "title": "Missing user audit columns",
+      "description": "No created_by/updated_by columns found. Track who makes changes for accountability.",
+      "file": "landing-page/backend/src/mail/lead-notification.entity.ts",
+      "evidence": "No created_by/updated_by columns detected",
+      "controlIds": [
+        "GDPR-ART32-006"
+      ],
+      "fix": "Add created_by and updated_by columns to track which user made changes."
+    },
+    {
+      "ruleId": "DB-001",
+      "severity": "high",
+      "category": "database",
+      "title": "Missing audit timestamps in schema",
+      "description": "Database schema does not include created_at/updated_at timestamps. These are mandatory for audit trails.",
+      "file": "landing-page/backend/src/mail/smtp-settings.entity.ts",
+      "evidence": "No created_at/updated_at columns detected",
+      "controlIds": [
+        "GDPR-ART32-006"
+      ],
+      "fix": "Add created_at and updated_at columns. In Prisma: add DateTime fields, in Sequelize: timestamps: true, in Django: auto_now_add=True."
+    },
+    {
+      "ruleId": "DB-002",
+      "severity": "medium",
+      "category": "database",
+      "title": "Missing soft delete pattern",
+      "description": "No deleted_at column or soft delete pattern found. Hard deletes prevent audit trail and data recovery.",
+      "file": "landing-page/backend/src/mail/smtp-settings.entity.ts",
+      "evidence": "No deleted_at/softDelete pattern detected",
+      "controlIds": [
+        "GDPR-ART32-007"
+      ],
+      "fix": "Add deleted_at column or soft delete flag. In Prisma: DeletedAt DateTime?, in Sequelize: paranoid: true, in Django: SoftDeleteModel."
+    },
+    {
+      "ruleId": "DB-003",
+      "severity": "medium",
+      "category": "database",
+      "title": "Missing user audit columns",
+      "description": "No created_by/updated_by columns found. Track who makes changes for accountability.",
+      "file": "landing-page/backend/src/mail/smtp-settings.entity.ts",
+      "evidence": "No created_by/updated_by columns detected",
+      "controlIds": [
+        "GDPR-ART32-006"
+      ],
+      "fix": "Add created_by and updated_by columns to track which user made changes."
+    },
+    {
+      "ruleId": "DB-001",
+      "severity": "high",
+      "category": "database",
+      "title": "Missing audit timestamps in schema",
+      "description": "Database schema does not include created_at/updated_at timestamps. These are mandatory for audit trails.",
+      "file": "landing-page/backend/src/user/onboarding-user.entity.ts",
+      "evidence": "No created_at/updated_at columns detected",
+      "controlIds": [
+        "GDPR-ART32-006"
+      ],
+      "fix": "Add created_at and updated_at columns. In Prisma: add DateTime fields, in Sequelize: timestamps: true, in Django: auto_now_add=True."
+    },
+    {
+      "ruleId": "DB-002",
+      "severity": "medium",
+      "category": "database",
+      "title": "Missing soft delete pattern",
+      "description": "No deleted_at column or soft delete pattern found. Hard deletes prevent audit trail and data recovery.",
+      "file": "landing-page/backend/src/user/onboarding-user.entity.ts",
+      "evidence": "No deleted_at/softDelete pattern detected",
+      "controlIds": [
+        "GDPR-ART32-007"
+      ],
+      "fix": "Add deleted_at column or soft delete flag. In Prisma: DeletedAt DateTime?, in Sequelize: paranoid: true, in Django: SoftDeleteModel."
+    },
+    {
+      "ruleId": "DB-003",
+      "severity": "medium",
+      "category": "database",
+      "title": "Missing user audit columns",
+      "description": "No created_by/updated_by columns found. Track who makes changes for accountability.",
+      "file": "landing-page/backend/src/user/onboarding-user.entity.ts",
+      "evidence": "No created_by/updated_by columns detected",
+      "controlIds": [
+        "GDPR-ART32-006"
+      ],
+      "fix": "Add created_by and updated_by columns to track which user made changes."
+    },
+    {
+      "ruleId": "DB-001",
+      "severity": "high",
+      "category": "database",
+      "title": "Missing audit timestamps in schema",
+      "description": "Database schema does not include created_at/updated_at timestamps. These are mandatory for audit trails.",
+      "file": "whitepaper/backend/db/schema.sql",
+      "evidence": "No created_at/updated_at columns detected",
+      "controlIds": [
+        "GDPR-ART32-006"
+      ],
+      "fix": "Add created_at and updated_at columns. In Prisma: add DateTime fields, in Sequelize: timestamps: true, in Django: auto_now_add=True."
+    },
+    {
+      "ruleId": "DB-002",
+      "severity": "medium",
+      "category": "database",
+      "title": "Missing soft delete pattern",
+      "description": "No deleted_at column or soft delete pattern found. Hard deletes prevent audit trail and data recovery.",
+      "file": "whitepaper/backend/db/schema.sql",
+      "evidence": "No deleted_at/softDelete pattern detected",
+      "controlIds": [
+        "GDPR-ART32-007"
+      ],
+      "fix": "Add deleted_at column or soft delete flag. In Prisma: DeletedAt DateTime?, in Sequelize: paranoid: true, in Django: SoftDeleteModel."
+    },
+    {
+      "ruleId": "DB-003",
+      "severity": "medium",
+      "category": "database",
+      "title": "Missing user audit columns",
+      "description": "No created_by/updated_by columns found. Track who makes changes for accountability.",
+      "file": "whitepaper/backend/db/schema.sql",
+      "evidence": "No created_by/updated_by columns detected",
+      "controlIds": [
+        "GDPR-ART32-006"
+      ],
+      "fix": "Add created_by and updated_by columns to track which user made changes."
+    },
+    {
+      "ruleId": "DB-001",
+      "severity": "high",
+      "category": "database",
+      "title": "Missing audit timestamps in schema",
+      "description": "Database schema does not include created_at/updated_at timestamps. These are mandatory for audit trails.",
+      "file": "whitepaper/backend/src/whitepaper/entities/media-asset.entity.ts",
+      "evidence": "No created_at/updated_at columns detected",
+      "controlIds": [
+        "GDPR-ART32-006"
+      ],
+      "fix": "Add created_at and updated_at columns. In Prisma: add DateTime fields, in Sequelize: timestamps: true, in Django: auto_now_add=True."
+    },
+    {
+      "ruleId": "DB-002",
+      "severity": "medium",
+      "category": "database",
+      "title": "Missing soft delete pattern",
+      "description": "No deleted_at column or soft delete pattern found. Hard deletes prevent audit trail and data recovery.",
+      "file": "whitepaper/backend/src/whitepaper/entities/media-asset.entity.ts",
+      "evidence": "No deleted_at/softDelete pattern detected",
+      "controlIds": [
+        "GDPR-ART32-007"
+      ],
+      "fix": "Add deleted_at column or soft delete flag. In Prisma: DeletedAt DateTime?, in Sequelize: paranoid: true, in Django: SoftDeleteModel."
+    },
+    {
+      "ruleId": "DB-003",
+      "severity": "medium",
+      "category": "database",
+      "title": "Missing user audit columns",
+      "description": "No created_by/updated_by columns found. Track who makes changes for accountability.",
+      "file": "whitepaper/backend/src/whitepaper/entities/media-asset.entity.ts",
+      "evidence": "No created_by/updated_by columns detected",
+      "controlIds": [
+        "GDPR-ART32-006"
+      ],
+      "fix": "Add created_by and updated_by columns to track which user made changes."
+    },
+    {
+      "ruleId": "DB-001",
+      "severity": "high",
+      "category": "database",
+      "title": "Missing audit timestamps in schema",
+      "description": "Database schema does not include created_at/updated_at timestamps. These are mandatory for audit trails.",
+      "file": "whitepaper/backend/src/whitepaper/entities/whitepaper-section.entity.ts",
+      "evidence": "No created_at/updated_at columns detected",
+      "controlIds": [
+        "GDPR-ART32-006"
+      ],
+      "fix": "Add created_at and updated_at columns. In Prisma: add DateTime fields, in Sequelize: timestamps: true, in Django: auto_now_add=True."
+    },
+    {
+      "ruleId": "DB-002",
+      "severity": "medium",
+      "category": "database",
+      "title": "Missing soft delete pattern",
+      "description": "No deleted_at column or soft delete pattern found. Hard deletes prevent audit trail and data recovery.",
+      "file": "whitepaper/backend/src/whitepaper/entities/whitepaper-section.entity.ts",
+      "evidence": "No deleted_at/softDelete pattern detected",
+      "controlIds": [
+        "GDPR-ART32-007"
+      ],
+      "fix": "Add deleted_at column or soft delete flag. In Prisma: DeletedAt DateTime?, in Sequelize: paranoid: true, in Django: SoftDeleteModel."
+    },
+    {
+      "ruleId": "DB-003",
+      "severity": "medium",
+      "category": "database",
+      "title": "Missing user audit columns",
+      "description": "No created_by/updated_by columns found. Track who makes changes for accountability.",
+      "file": "whitepaper/backend/src/whitepaper/entities/whitepaper-section.entity.ts",
+      "evidence": "No created_by/updated_by columns detected",
+      "controlIds": [
+        "GDPR-ART32-006"
+      ],
+      "fix": "Add created_by and updated_by columns to track which user made changes."
+    },
+    {
+      "ruleId": "DOCKER-001",
+      "severity": "critical",
+      "category": "container-security",
+      "title": "Dockerfile runs as root (no USER instruction)",
+      "description": "No non-root USER instruction found. The container will run as root, which is a major security risk.",
+      "file": "citizen-protocol/deploy/runtime-stack/Dockerfile",
+      "evidence": "No USER instruction found in Dockerfile",
+      "controlIds": [
+        "CIS-DOCKER-001"
+      ],
+      "fix": "Add a non-root user: RUN adduser -D appuser && USER appuser"
+    },
+    {
+      "ruleId": "DOCKER-003",
+      "severity": "low",
+      "category": "operational",
+      "title": "No HEALTHCHECK instruction in Dockerfile",
+      "description": "Without a HEALTHCHECK, orchestrators cannot detect unhealthy containers automatically.",
+      "file": "citizen-protocol/deploy/runtime-stack/Dockerfile",
+      "evidence": "No HEALTHCHECK instruction found in Dockerfile",
+      "controlIds": [
+        "CIS-DOCKER-009"
+      ],
+      "fix": "Add HEALTHCHECK --interval=30s CMD curl -f http://localhost:3000/health || exit 1"
+    },
+    {
+      "ruleId": "DOCKER-010",
+      "severity": "high",
+      "category": "container-security",
+      "title": "docker-compose service \"citizen-node\" runs without non-root user",
+      "description": "No 'user' directive found for this service. The container will run as root.",
+      "file": "citizen-protocol/deploy/runtime-stack/docker-compose.yml",
+      "line": 2,
+      "evidence": "Service \"citizen-node\" has no user: directive",
+      "controlIds": [
+        "CIS-DOCKER-001"
+      ],
+      "fix": "Add 'user: 1000:1000' or 'user: appuser' to the service definition."
+    },
+    {
+      "ruleId": "DOCKER-010",
+      "severity": "high",
+      "category": "container-security",
+      "title": "docker-compose service \"citizen_node_data\" runs without non-root user",
+      "description": "No 'user' directive found for this service. The container will run as root.",
+      "file": "citizen-protocol/deploy/runtime-stack/docker-compose.yml",
+      "line": 19,
+      "evidence": "Service \"citizen_node_data\" has no user: directive",
+      "controlIds": [
+        "CIS-DOCKER-001"
+      ],
+      "fix": "Add 'user: 1000:1000' or 'user: appuser' to the service definition."
+    },
+    {
+      "ruleId": "DOCKER-009",
+      "severity": "high",
+      "category": "container-security",
+      "title": "docker-compose service \"citizen_node_data\" has no read-only root filesystem",
+      "description": "Without read_only: true, attackers can write malicious files to the container's root filesystem.",
+      "file": "citizen-protocol/deploy/runtime-stack/docker-compose.yml",
+      "line": 19,
+      "evidence": "Service \"citizen_node_data\" has no read_only: true directive",
+      "controlIds": [
+        "CIS-DOCKER-006"
+      ],
+      "fix": "Add 'read_only: true' to the service definition. Mount writable volumes for paths that need writes."
+    },
+    {
+      "ruleId": "DOCKER-010",
+      "severity": "high",
+      "category": "container-security",
+      "title": "docker-compose service \"postgres\" runs without non-root user",
+      "description": "No 'user' directive found for this service. The container will run as root.",
+      "file": "dapp/docker-compose.yml",
+      "line": 3,
+      "evidence": "Service \"postgres\" has no user: directive",
+      "controlIds": [
+        "CIS-DOCKER-001"
+      ],
+      "fix": "Add 'user: 1000:1000' or 'user: appuser' to the service definition."
+    },
+    {
+      "ruleId": "DOCKER-010",
+      "severity": "high",
+      "category": "container-security",
+      "title": "docker-compose service \"citizen_pgdata\" runs without non-root user",
+      "description": "No 'user' directive found for this service. The container will run as root.",
+      "file": "dapp/docker-compose.yml",
+      "line": 15,
+      "evidence": "Service \"citizen_pgdata\" has no user: directive",
+      "controlIds": [
+        "CIS-DOCKER-001"
+      ],
+      "fix": "Add 'user: 1000:1000' or 'user: appuser' to the service definition."
+    },
+    {
+      "ruleId": "DOCKER-009",
+      "severity": "high",
+      "category": "container-security",
+      "title": "docker-compose service \"citizen_pgdata\" has no read-only root filesystem",
+      "description": "Without read_only: true, attackers can write malicious files to the container's root filesystem.",
+      "file": "dapp/docker-compose.yml",
+      "line": 15,
+      "evidence": "Service \"citizen_pgdata\" has no read_only: true directive",
+      "controlIds": [
+        "CIS-DOCKER-006"
+      ],
+      "fix": "Add 'read_only: true' to the service definition. Mount writable volumes for paths that need writes."
+    },
+    {
+      "ruleId": "DOCKER-010",
+      "severity": "high",
+      "category": "container-security",
+      "title": "docker-compose service \"postgres\" runs without non-root user",
+      "description": "No 'user' directive found for this service. The container will run as root.",
+      "file": "explorer/infra/docker-compose.yml",
+      "line": 4,
+      "evidence": "Service \"postgres\" has no user: directive",
+      "controlIds": [
+        "CIS-DOCKER-001"
+      ],
+      "fix": "Add 'user: 1000:1000' or 'user: appuser' to the service definition."
+    },
+    {
+      "ruleId": "DOCKER-010",
+      "severity": "high",
+      "category": "container-security",
+      "title": "docker-compose service \"citizen_explorer_data\" runs without non-root user",
+      "description": "No 'user' directive found for this service. The container will run as root.",
+      "file": "explorer/infra/docker-compose.yml",
+      "line": 17,
+      "evidence": "Service \"citizen_explorer_data\" has no user: directive",
+      "controlIds": [
+        "CIS-DOCKER-001"
+      ],
+      "fix": "Add 'user: 1000:1000' or 'user: appuser' to the service definition."
+    },
+    {
+      "ruleId": "DOCKER-009",
+      "severity": "high",
+      "category": "container-security",
+      "title": "docker-compose service \"citizen_explorer_data\" has no read-only root filesystem",
+      "description": "Without read_only: true, attackers can write malicious files to the container's root filesystem.",
+      "file": "explorer/infra/docker-compose.yml",
+      "line": 17,
+      "evidence": "Service \"citizen_explorer_data\" has no read_only: true directive",
+      "controlIds": [
+        "CIS-DOCKER-006"
+      ],
+      "fix": "Add 'read_only: true' to the service definition. Mount writable volumes for paths that need writes."
+    },
+    {
+      "ruleId": "DOCKER-001",
+      "severity": "critical",
+      "category": "container-security",
+      "title": "Dockerfile runs as root (no USER instruction)",
+      "description": "No non-root USER instruction found. The container will run as root, which is a major security risk.",
+      "file": "landing-page/backend/Dockerfile",
+      "evidence": "No USER instruction found in Dockerfile",
+      "controlIds": [
+        "CIS-DOCKER-001"
+      ],
+      "fix": "Add a non-root user: RUN adduser -D appuser && USER appuser"
+    },
+    {
+      "ruleId": "DOCKER-003",
+      "severity": "low",
+      "category": "operational",
+      "title": "No HEALTHCHECK instruction in Dockerfile",
+      "description": "Without a HEALTHCHECK, orchestrators cannot detect unhealthy containers automatically.",
+      "file": "landing-page/backend/Dockerfile",
+      "evidence": "No HEALTHCHECK instruction found in Dockerfile",
+      "controlIds": [
+        "CIS-DOCKER-009"
+      ],
+      "fix": "Add HEALTHCHECK --interval=30s CMD curl -f http://localhost:3000/health || exit 1"
+    },
+    {
+      "ruleId": "DOCKER-010",
+      "severity": "high",
+      "category": "container-security",
+      "title": "docker-compose service \"postgres\" runs without non-root user",
+      "description": "No 'user' directive found for this service. The container will run as root.",
+      "file": "landing-page/docker-compose.yml",
+      "line": 2,
+      "evidence": "Service \"postgres\" has no user: directive",
+      "controlIds": [
+        "CIS-DOCKER-001"
+      ],
+      "fix": "Add 'user: 1000:1000' or 'user: appuser' to the service definition."
+    },
+    {
+      "ruleId": "DOCKER-010",
+      "severity": "high",
+      "category": "container-security",
+      "title": "docker-compose service \"backend\" runs without non-root user",
+      "description": "No 'user' directive found for this service. The container will run as root.",
+      "file": "landing-page/docker-compose.yml",
+      "line": 14,
+      "evidence": "Service \"backend\" has no user: directive",
+      "controlIds": [
+        "CIS-DOCKER-001"
+      ],
+      "fix": "Add 'user: 1000:1000' or 'user: appuser' to the service definition."
+    },
+    {
+      "ruleId": "DOCKER-010",
+      "severity": "high",
+      "category": "container-security",
+      "title": "docker-compose service \"frontend\" runs without non-root user",
+      "description": "No 'user' directive found for this service. The container will run as root.",
+      "file": "landing-page/docker-compose.yml",
+      "line": 34,
+      "evidence": "Service \"frontend\" has no user: directive",
+      "controlIds": [
+        "CIS-DOCKER-001"
+      ],
+      "fix": "Add 'user: 1000:1000' or 'user: appuser' to the service definition."
+    },
+    {
+      "ruleId": "DOCKER-010",
+      "severity": "high",
+      "category": "container-security",
+      "title": "docker-compose service \"pgdata\" runs without non-root user",
+      "description": "No 'user' directive found for this service. The container will run as root.",
+      "file": "landing-page/docker-compose.yml",
+      "line": 45,
+      "evidence": "Service \"pgdata\" has no user: directive",
+      "controlIds": [
+        "CIS-DOCKER-001"
+      ],
+      "fix": "Add 'user: 1000:1000' or 'user: appuser' to the service definition."
+    },
+    {
+      "ruleId": "DOCKER-009",
+      "severity": "high",
+      "category": "container-security",
+      "title": "docker-compose service \"pgdata\" has no read-only root filesystem",
+      "description": "Without read_only: true, attackers can write malicious files to the container's root filesystem.",
+      "file": "landing-page/docker-compose.yml",
+      "line": 45,
+      "evidence": "Service \"pgdata\" has no read_only: true directive",
+      "controlIds": [
+        "CIS-DOCKER-006"
+      ],
+      "fix": "Add 'read_only: true' to the service definition. Mount writable volumes for paths that need writes."
+    },
+    {
+      "ruleId": "DOCKER-001",
+      "severity": "critical",
+      "category": "container-security",
+      "title": "Dockerfile runs as root (no USER instruction)",
+      "description": "No non-root USER instruction found. The container will run as root, which is a major security risk.",
+      "file": "landing-page/frontend/Dockerfile",
+      "evidence": "No USER instruction found in Dockerfile",
+      "controlIds": [
+        "CIS-DOCKER-001"
+      ],
+      "fix": "Add a non-root user: RUN adduser -D appuser && USER appuser"
+    },
+    {
+      "ruleId": "DOCKER-003",
+      "severity": "low",
+      "category": "operational",
+      "title": "No HEALTHCHECK instruction in Dockerfile",
+      "description": "Without a HEALTHCHECK, orchestrators cannot detect unhealthy containers automatically.",
+      "file": "landing-page/frontend/Dockerfile",
+      "evidence": "No HEALTHCHECK instruction found in Dockerfile",
+      "controlIds": [
+        "CIS-DOCKER-009"
+      ],
+      "fix": "Add HEALTHCHECK --interval=30s CMD curl -f http://localhost:3000/health || exit 1"
+    }
+  ],
+  "scannedFiles": 3620,
+  "timestamp": "2026-08-02T03:01:28.980Z"
+}
