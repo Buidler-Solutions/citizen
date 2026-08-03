@@ -1,4 +1,4 @@
-use axum::extract::{Path, Query};
+use axum::extract::{DefaultBodyLimit, Path, Query};
 use axum::http::HeaderMap;
 use axum::http::StatusCode;
 use axum::routing::{get, post};
@@ -699,6 +699,7 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
                     async move { Self::handle_get_governance_proposals(ledger).await }
                 }),
             )
+            .layer(DefaultBodyLimit::max(50 * 1024 * 1024))
     }
 
     async fn health() -> Json<serde_json::Value> {
@@ -2701,6 +2702,22 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
         ledger: Arc<Ledger<S>>,
         envelope: SignedEnvelope<LedgerEntry>,
     ) -> (StatusCode, Json<serde_json::Value>) {
+        tracing::info!(envelope_id = %envelope.envelope_id, namespace = %envelope.payload.namespace, action = %envelope.payload.action, "process_envelope_submission: received");
+
+        // Reject entries that are unreasonably large for on-chain storage.
+        // Encrypted attachments should be stored off-chain via MinIO / object store.
+        const MAX_ENVELOPE_BYTES: usize = 50_000_000;
+        let envelope_size = serde_json::to_vec(&envelope).map(|v| v.len()).unwrap_or(0);
+        if envelope_size > MAX_ENVELOPE_BYTES {
+            return (
+                StatusCode::PAYLOAD_TOO_LARGE,
+                Json(serde_json::json!({
+                    "error": "envelope_too_large",
+                    "message": format!("Envelope {} bytes exceeds {} byte maximum. Encrypted file attachments must be stored off-chain.", envelope_size, MAX_ENVELOPE_BYTES),
+                })),
+            );
+        }
+
         let validation = match validate_envelope_signatures(&envelope) {
             Ok(validated) => validated,
             Err(err) => return protocol_error_response(err),
@@ -2715,8 +2732,10 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
         let entry_id = entry.entry_id;
         let namespace = entry.namespace.clone();
         if let Err(err) = ledger.apply_entry(entry.clone()) {
+            tracing::error!(%entry_id, %namespace, ?err, "apply_entry failed");
             return protocol_error_response(err);
         }
+        tracing::info!(%entry_id, %namespace, "entry stored successfully");
 
         let offchain_commitments = extract_offchain_commitments(&entry);
         let finality = match Self::finalize_entry(Arc::clone(&ledger), entry).await {

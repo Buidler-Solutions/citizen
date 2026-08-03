@@ -398,6 +398,7 @@ pub enum ConsensusMessage {
     },
     GovernanceProposal(GovernanceProposal),
     GovernanceVote(GovernanceVote),
+    NewEntry(LedgerEntry),
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, Default)]
@@ -693,6 +694,7 @@ pub struct QuicNetwork {
     local_validator_id: ValidatorId,
     local_public_key: String,
     local_signing_key: Option<Arc<SigningKey>>,
+    connections: Arc<tokio::sync::Mutex<HashMap<ValidatorId, quinn::Connection>>>,
 }
 
 impl QuicNetwork {
@@ -724,6 +726,13 @@ impl QuicNetwork {
             quinn::VarInt::from_u32(10_000),
         )));
         transport.keep_alive_interval(Some(StdDuration::from_secs(3)));
+        transport.initial_mtu(1200);
+        transport.stream_receive_window(quinn::VarInt::from_u32(2 * 1024 * 1024));
+        transport.receive_window(quinn::VarInt::from_u32(8 * 1024 * 1024));
+        #[cfg(target_os = "macos")]
+        {
+            transport.mtu_discovery_config(None);
+        }
         let transport = Arc::new(transport);
 
         let mut server_config = ServerConfig::with_single_cert(certificate_chain, private_key)
@@ -747,6 +756,7 @@ impl QuicNetwork {
             local_validator_id,
             local_public_key,
             local_signing_key,
+            connections: Arc::new(tokio::sync::Mutex::new(HashMap::new())),
         };
         network.spawn_accept_loop();
         Ok(network)
@@ -769,23 +779,27 @@ impl QuicNetwork {
         tokio::spawn(async move {
             const CONNECT_TIMEOUT: StdDuration = StdDuration::from_secs(5);
             while let Some(connecting) = endpoint.accept().await {
-                match tokio::time::timeout(CONNECT_TIMEOUT, connecting).await {
-                    Ok(Ok(conn)) => {
-                        loop {
-                            match conn.accept_bi().await {
-                                Ok((send, recv)) => {
-                                    QuicNetwork::spawn_reader(tx.clone(), admission.clone(), recv);
-                                    drop(send);
+                let tx = tx.clone();
+                let admission = admission.clone();
+                tokio::spawn(async move {
+                    match tokio::time::timeout(CONNECT_TIMEOUT, connecting).await {
+                        Ok(Ok(conn)) => {
+                            loop {
+                                match conn.accept_bi().await {
+                                    Ok((send, recv)) => {
+                                        QuicNetwork::spawn_reader(tx.clone(), admission.clone(), recv);
+                                        drop(send);
+                                    }
+                                    Err(_) => break,
                                 }
-                                Err(_) => break,
                             }
                         }
+                        Ok(Err(_)) => {}
+                        Err(_) => {
+                            tracing::warn!("QUIC accept handshake timed out after {:?}", CONNECT_TIMEOUT);
+                        }
                     }
-                    Ok(Err(_)) => {}
-                    Err(_) => {
-                        tracing::warn!("QUIC accept handshake timed out after {:?}", CONNECT_TIMEOUT);
-                    }
-                }
+                });
             }
         });
     }
@@ -797,24 +811,42 @@ impl QuicNetwork {
     ) {
         tokio::spawn(async move {
             loop {
-                match recv.read_to_end(1024 * 1024).await {
+                match recv.read_to_end(16 * 1024 * 1024).await {
                     Ok(data) => {
                         if data.is_empty() {
                             break;
                         }
-                        if let Ok(wire) = bincode::deserialize::<WireMessage>(&data) {
-                            match admission.check_handshake(&wire.handshake).await {
-                                Ok(()) => {
-                                    let _ = tx.send(wire.message);
+                        match serde_json::from_slice::<WireMessage>(&data) {
+                            Ok(wire) => {
+                                let msg_type = match &wire.message {
+                                    ConsensusMessage::Propose(_) => "Propose",
+                                    ConsensusMessage::Heartbeat { .. } => "Heartbeat",
+                                    ConsensusMessage::PreVote { .. } => "PreVote",
+                                    ConsensusMessage::Commit { .. } => "Commit",
+                                    ConsensusMessage::GovernanceProposal(_) => "GovProposal",
+                                    ConsensusMessage::GovernanceVote(_) => "GovVote",
+                                    ConsensusMessage::NewEntry(e) => {
+                                        tracing::info!(from = %wire.handshake.validator_id, entry_id = %e.entry_id, namespace = %e.namespace, bytes = data.len(), "quic recv NewEntry");
+                                        "NewEntry"
+                                    }
+                                };
+                                tracing::trace!(%msg_type, from = %wire.handshake.validator_id, bytes = data.len(), "quic recv");
+                                match admission.check_handshake(&wire.handshake).await {
+                                    Ok(()) => {
+                                        let _ = tx.send(wire.message);
+                                    }
+                                    Err(reason) => {
+                                        warn!(
+                                            validator = %wire.handshake.validator_id,
+                                            ?reason,
+                                            "quic message rejected by admission policy; closing stream"
+                                        );
+                                        break;
+                                    }
                                 }
-                                Err(reason) => {
-                                    warn!(
-                                        validator = %wire.handshake.validator_id,
-                                        ?reason,
-                                        "quic message rejected by admission policy; closing stream"
-                                    );
-                                    break;
-                                }
+                            }
+                            Err(err) => {
+                                tracing::warn!(bytes = data.len(), ?err, "quic deserialize failed");
                             }
                         }
                     }
@@ -834,6 +866,24 @@ impl QuicNetwork {
         };
         let addr = *addr;
         drop(peers);
+
+        // Try to reuse an existing connection — clone the Connection handle
+        // out of the map so we DON'T hold the mutex during open_bi/await.
+        {
+            let mut conns = self.connections.lock().await;
+            if let Some(conn) = conns.get(target).cloned() {
+                drop(conns);
+                match tokio::time::timeout(CONNECT_TIMEOUT, conn.open_bi()).await {
+                    Ok(Ok((send, recv))) => return Ok((send, recv)),
+                    Ok(Err(_)) | Err(_) => {
+                        let mut conns = self.connections.lock().await;
+                        conns.remove(target);
+                    }
+                }
+            }
+        }
+
+        // Create a new connection
         let conn = self
             .endpoint
             .connect_with(self.client_cfg.clone(), addr, "citizen.local")
@@ -846,14 +896,19 @@ impl QuicNetwork {
                 ))
             })?
             .map_err(ProtocolError::storage)?;
-        tokio::time::timeout(CONNECT_TIMEOUT, conn.open_bi())
+        let (send, recv) = tokio::time::timeout(CONNECT_TIMEOUT, conn.open_bi())
             .await
             .map_err(|_| {
                 ProtocolError::timeout(format!(
                     "QUIC stream open to {addr} timed out after {CONNECT_TIMEOUT:?}"
                 ))
             })?
-            .map_err(ProtocolError::storage)
+            .map_err(ProtocolError::storage)?;
+
+        // Store the connection in the pool so it stays alive
+        self.connections.lock().await.insert(target.clone(), conn);
+
+        Ok((send, recv))
     }
 }
 
@@ -892,6 +947,7 @@ impl Network for QuicNetwork {
     }
 
     async fn unicast(&self, target: &ValidatorId, message: ConsensusMessage) -> Result<()> {
+        const WRITE_TIMEOUT: StdDuration = StdDuration::from_secs(5);
         let (mut send, _) = self.connection(target).await?;
         let epoch = self.admission.maybe_rotate().await;
         let wire = WireMessage {
@@ -924,9 +980,13 @@ impl Network for QuicNetwork {
             },
             message,
         };
-        let data = bincode::serialize(&wire).map_err(ProtocolError::storage)?;
-        send.write_all(&data)
-            .await
+        let data = serde_json::to_vec(&wire).map_err(ProtocolError::storage)?;
+        if let ConsensusMessage::NewEntry(e) = &wire.message {
+            tracing::info!(to = %target, entry_id = %e.entry_id, bytes = data.len(), "quic send NewEntry");
+        }
+        let write_result = tokio::time::timeout(WRITE_TIMEOUT, send.write_all(&data)).await;
+        write_result
+            .map_err(|_| ProtocolError::timeout(format!("QUIC write to {target} timed out")))?
             .map_err(ProtocolError::storage)?;
         send.finish().map_err(ProtocolError::storage)
     }
@@ -935,9 +995,18 @@ impl Network for QuicNetwork {
         let mut rx = self.subscribers.subscribe();
         let (tx, client_rx) = mpsc::channel(256);
         tokio::spawn(async move {
-            while let Ok(msg) = rx.recv().await {
-                if tx.send(msg).await.is_err() {
-                    break;
+            loop {
+                match rx.recv().await {
+                    Ok(msg) => {
+                        if tx.send(msg).await.is_err() {
+                            break;
+                        }
+                    }
+                    Err(broadcast::error::RecvError::Lagged(n)) => {
+                        tracing::warn!(skipped = n, "consensus subscriber lagged, resuming");
+                        continue;
+                    }
+                    Err(broadcast::error::RecvError::Closed) => break,
                 }
             }
         });
