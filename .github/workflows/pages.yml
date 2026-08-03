@@ -4,7 +4,8 @@ on:
   push:
     branches: [main]
     paths:
-      - 'whitepaper/frontend/**'
+      - 'docs/**'
+      - 'mkdocs.yml'
       - '.github/workflows/pages.yml'
   workflow_dispatch:
 
@@ -21,24 +22,20 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-python@v5
         with:
-          node-version: 22
-          cache: npm
-          cache-dependency-path: whitepaper/frontend/package-lock.json
+          python-version: '3.12'
 
-      - name: Install dependencies
-        working-directory: whitepaper/frontend
-        run: npm ci
+      - name: Install MkDocs Material
+        run: pip install mkdocs-material pymdown-extensions
 
-      - name: Build static export
-        working-directory: whitepaper/frontend
-        run: npm run build
+      - name: Build documentation
+        run: mkdocs build --clean --strict
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: whitepaper/frontend/out
+          path: site
 
   deploy:
     needs: build
