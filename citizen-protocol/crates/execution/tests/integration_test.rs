@@ -356,3 +356,30 @@ fn engine_batch_empty() {
     let host = TestHost::new(0);
     assert_eq!(host.verify_signature_batch("[]").unwrap(), 0);
 }
+
+#[test]
+fn engine_rejects_oversized_bytecode() {
+    let mut config = ExecutionConfig::default();
+    config.max_bytecode_size = 100;
+    let engine = ExecutionEngine::new(config).expect("create engine");
+    let wasm = load_fixture("access_control_guard.wasm");
+    let host = Arc::new(TestHost::new(0));
+
+    let result = engine.execute(&wasm, "test-module", "{}", 1_000_000, host);
+    assert!(result.is_err(), "should reject oversized bytecode");
+    let err = result.unwrap_err().to_string();
+    assert!(
+        err.contains("bytecode") || err.contains("size"),
+        "expected size violation, got: {err}"
+    );
+}
+
+#[test]
+fn engine_default_config_has_security_limits() {
+    let config = ExecutionConfig::default();
+    assert!(config.max_bytecode_size > 0, "bytecode size must be bounded");
+    assert!(config.max_memory_pages > 0, "memory pages must be bounded");
+    assert!(config.max_batch_items > 0, "batch items must be bounded");
+    assert!(config.max_batch_json_size > 0, "batch JSON size must be bounded");
+    assert!(config.execution_epoch_deadline > 0, "epoch deadline must be set");
+}

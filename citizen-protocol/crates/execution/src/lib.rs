@@ -43,6 +43,9 @@ pub enum ExecutionError {
 
     #[error("access denied: {0}")]
     AccessDenied(String),
+
+    #[error("security violation: {0}")]
+    SecurityViolation(String),
 }
 
 /// Configuration for the execution engine
@@ -59,6 +62,21 @@ pub struct ExecutionConfig {
 
     /// Allowed module classes that this engine will execute
     pub allowed_module_classes: Vec<String>,
+
+    /// Maximum allowed WASM bytecode size in bytes
+    pub max_bytecode_size: usize,
+
+    /// Epoch deadline for execution timeout.
+    /// When epoch interruption is enabled, execution traps after this many
+    /// epoch ticks have elapsed without the host calling `Engine::increment_epoch()`.
+    /// Acts as a secondary wall-clock safety net alongside fuel-based gas metering.
+    pub execution_epoch_deadline: u64,
+
+    /// Maximum number of items allowed in a single signature batch
+    pub max_batch_items: usize,
+
+    /// Maximum allowed JSON size for batch signature verification (bytes)
+    pub max_batch_json_size: usize,
 }
 
 impl Default for ExecutionConfig {
@@ -72,6 +90,10 @@ impl Default for ExecutionConfig {
                 "deterministic-indexer".into(),
                 "receipt-verifier".into(),
             ],
+            max_bytecode_size: 1_048_576, // 1 MB
+            execution_epoch_deadline: 1_000,
+            max_batch_items: 256,
+            max_batch_json_size: 1_048_576, // 1 MB
         }
     }
 }
