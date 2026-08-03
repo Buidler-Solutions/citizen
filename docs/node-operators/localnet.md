@@ -26,7 +26,7 @@ cargo build --release
 | delta | Validator | 7031 | 7030 |
 | epsilon | Validator | 7041 | 7040 |
 
-With 5 validators, the network tolerates 1 faulty node (quorum: 4 of 5 = 80%).
+With 5 validators at >2/3 BFT quorum (6667 bps), the network tolerates 1 faulty node (quorum threshold: ceiling(5 × 6667/10000) = 4 of 5 votes required).
 
 ## Resetting Localnet Data
 
