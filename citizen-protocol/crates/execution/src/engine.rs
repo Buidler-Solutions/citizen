@@ -16,6 +16,7 @@ const ALLOWED_HOST_FUNCTIONS: &[&str] = &[
     "host_current_block_height",
     "host_store_state",
     "host_load_state",
+    "host_call_module",
 ];
 
 /// Maximum length of a single host string read from WASM memory (1 MB).
@@ -402,6 +403,32 @@ impl ExecutionEngine {
                             (written << 32) | 2
                         }
                     }
+                },
+            )
+            .map_err(|e| ExecutionError::RuntimeError(e.to_string()))?;
+
+        // host_call_module(target_ptr, target_len, params_ptr, params_len, out_ptr, out_len) -> u64
+        // packed: (bytes_written << 32) | status (0=ok, 1=not_found/none, 2=error)
+        // Executes another module and returns its serialized result.
+        linker
+            .func_wrap(
+                MODULE_CATEGORY,
+                "host_call_module",
+                |mut caller: wasmtime::Caller<'_, StoreState>,
+                 target_ptr: u32,
+                 target_len: u32,
+                 params_ptr: u32,
+                 params_len: u32,
+                 out_ptr: u32,
+                 out_len: u32|
+                 -> u64 {
+                    let target_module_id = read_wasm_str(&mut caller, target_ptr, target_len);
+                    let params_json = read_wasm_str(&mut caller, params_ptr, params_len);
+                    let result = caller
+                        .data()
+                        .host
+                        .call_module(&target_module_id, &params_json);
+                    write_host_result(&mut caller, out_ptr, out_len, result)
                 },
             )
             .map_err(|e| ExecutionError::RuntimeError(e.to_string()))?;
