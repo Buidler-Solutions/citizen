@@ -1,9 +1,10 @@
 #![no_std]
 #![no_main]
 
-/// Soulbound Token (SBT) WASM module for Citizen Protocol.
+/// CTZN Token — a soulbound (non-transferable) identity WASM module for Citizen Protocol.
 ///
-/// A non-transferable NFT with the following features:
+/// Once minted to a recipient, a CTZN token is permanently bound to that identity.
+/// Transfers are always rejected. Features:
 /// - Custom metadata schemas (degree, reputation, identity, custom)
 /// - Multi-issuer authority (N-of-M signatures required for mint)
 /// - Time-locked/expirable tokens (via expiry_block)
@@ -93,7 +94,7 @@ pub extern "C" fn handle(params_ptr: u32, params_len: u32) -> u64 {
         "burn" => handle_burn(&fields),
         "revoke" => handle_revoke(&fields),
         "transfer" => {
-            log("sbt: transfer rejected — soulbound tokens are non-transferable");
+            log("ctzn: transfer rejected — CTZN tokens are non-transferable");
             json_err("soulbound: non-transferable")
         }
         "check_access" => handle_check_access(&fields),
@@ -140,7 +141,7 @@ fn handle_configure(fields: &[(StackStr, StackStr); 12]) -> u64 {
             }
         }
         None => {
-            log("sbt: initial configuration (bootstrap)");
+            log("ctzn: initial configuration (bootstrap)");
         }
     }
 
@@ -153,7 +154,7 @@ fn handle_configure(fields: &[(StackStr, StackStr); 12]) -> u64 {
     let mut tmp: [&str; 16] = [""; 16];
     let n_issuers = split_commas(issuers, &mut tmp);
 
-    log("sbt: configured");
+    log("ctzn: configured");
 
     let mut buf: [u8; 256] = [0; 256];
     let mut off = 0;
@@ -253,7 +254,7 @@ fn handle_mint(fields: &[(StackStr, StackStr); 12]) -> u64 {
     add_to_held(recipient_did, token_id);
 
     let block = current_block();
-    log("sbt: minted");
+    log("ctzn: minted");
 
     let mut buf: [u8; 512] = [0; 512];
     let mut off = 0;
@@ -422,7 +423,7 @@ fn handle_burn(fields: &[(StackStr, StackStr); 12]) -> u64 {
         set_tier_supply(tier, tsupply - 1);
     }
 
-    log("sbt: burned");
+    log("ctzn: burned");
 
     let mut buf: [u8; 128] = [0; 128];
     let mut off = 0;
@@ -468,7 +469,7 @@ fn handle_revoke(fields: &[(StackStr, StackStr); 12]) -> u64 {
         set_tier_supply(tier, tsupply - 1);
     }
 
-    log("sbt: revoked");
+    log("ctzn: revoked");
 
     let mut buf: [u8; 128] = [0; 128];
     let mut off = 0;
