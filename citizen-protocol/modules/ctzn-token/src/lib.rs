@@ -56,6 +56,9 @@ extern "C" {
         out_ptr: *mut u8, out_len: u32,
     ) -> u64;
     fn host_current_block_height() -> u64;
+    fn host_check_governance_approval(
+        pid_ptr: *const u8, pid_len: u32,
+    ) -> u32;
 }
 
 // ── Exports ──
@@ -141,7 +144,17 @@ fn handle_configure(fields: &[(StackStr, StackStr); 12]) -> u64 {
             }
         }
         None => {
-            log("ctzn: initial configuration (bootstrap)");
+            // Bootstrap requires explicit governance approval.
+            // A governance proposal must exist and be approved to authorize
+            // the initial admin and issuer set.
+            let proposal_id = field(fields, "proposal_id");
+            if proposal_id.is_empty() {
+                return err("governance proposal_id required for initial configuration");
+            }
+            if !check_governance(proposal_id) {
+                return err("governance has not approved this CTZN configuration");
+            }
+            log("ctzn: initial configuration (governance-approved bootstrap)");
         }
     }
 
@@ -773,6 +786,14 @@ fn verify_sig(did: &str, msg: &str, sig: &str) -> bool {
 
 fn current_block() -> u64 {
     unsafe { host_current_block_height() }
+}
+
+fn check_governance(proposal_id: &str) -> bool {
+    unsafe {
+        host_check_governance_approval(
+            proposal_id.as_ptr(), proposal_id.len() as u32,
+        ) == 1
+    }
 }
 
 // ── Key formatting ──

@@ -763,10 +763,12 @@ fn ctzn_unauthorized_mint_rejected() {
 fn ctzn_configure_and_mint_multi_issuer() {
     let engine = make_engine();
     let wasm = load_fixture("ctzn_token.wasm");
-    let host = Arc::new(TestHost::new(100));
+    let host = Arc::new(
+        TestHost::new(100).with_governance("ctzn-setup", true),
+    );
 
-    // Bootstrap configuration: 3 issuers, threshold 2
-    let configure = r#"{"operation":"configure","admin_did":"did:key:ed25519:admin","admin_sig":"sig","issuers":"did:key:ed25519:uni,did:key:ed25519:gov,did:key:ed25519:corp","threshold":"2"}"#;
+    // Bootstrap configuration: governance-approved, 3 issuers, threshold 2
+    let configure = r#"{"operation":"configure","admin_did":"did:key:ed25519:admin","admin_sig":"sig","proposal_id":"ctzn-setup","issuers":"did:key:ed25519:uni,did:key:ed25519:gov,did:key:ed25519:corp","threshold":"2"}"#;
     let result = engine
         .execute(&wasm, "ctzn-module", configure, 1_000_000, host.clone())
         .expect("configure");
@@ -792,10 +794,12 @@ fn ctzn_configure_and_mint_multi_issuer() {
 fn ctzn_mint_below_threshold_rejected() {
     let engine = make_engine();
     let wasm = load_fixture("ctzn_token.wasm");
-    let host = Arc::new(TestHost::new(100));
+    let host = Arc::new(
+        TestHost::new(100).with_governance("ctzn-setup", true),
+    );
 
-    // Configure: threshold 2
-    let configure = r#"{"operation":"configure","admin_did":"did:key:ed25519:admin","admin_sig":"s","issuers":"did:key:ed25519:a,did:key:ed25519:b","threshold":"2"}"#;
+    // Configure: governance-approved, threshold 2
+    let configure = r#"{"operation":"configure","admin_did":"did:key:ed25519:admin","admin_sig":"s","proposal_id":"ctzn-setup","issuers":"did:key:ed25519:a,did:key:ed25519:b","threshold":"2"}"#;
     engine
         .execute(&wasm, "ctzn-module", configure, 1_000_000, host.clone())
         .expect("configure");
@@ -815,10 +819,12 @@ fn ctzn_mint_below_threshold_rejected() {
 fn ctzn_mint_unauthorized_issuer_rejected() {
     let engine = make_engine();
     let wasm = load_fixture("ctzn_token.wasm");
-    let host = Arc::new(TestHost::new(100));
+    let host = Arc::new(
+        TestHost::new(100).with_governance("ctzn-setup", true),
+    );
 
-    // Configure: only uni and gov are authorized
-    let configure = r#"{"operation":"configure","admin_did":"did:key:ed25519:admin","admin_sig":"s","issuers":"did:key:ed25519:uni,did:key:ed25519:gov","threshold":"2"}"#;
+    // Configure: governance-approved, only uni and gov are authorized
+    let configure = r#"{"operation":"configure","admin_did":"did:key:ed25519:admin","admin_sig":"s","proposal_id":"ctzn-setup","issuers":"did:key:ed25519:uni,did:key:ed25519:gov","threshold":"2"}"#;
     engine
         .execute(&wasm, "ctzn-module", configure, 1_000_000, host.clone())
         .expect("configure");
@@ -842,11 +848,12 @@ fn ctzn_reconfigure_requires_admin_sig() {
     let wasm = load_fixture("ctzn_token.wasm");
     let host = Arc::new(
         TestHost::new(100)
+            .with_governance("ctzn-setup", true)
             .with_signature("did:key:ed25519:admin", false),
     );
 
-    // Bootstrap (no verification needed)
-    let configure1 = r#"{"operation":"configure","admin_did":"did:key:ed25519:admin","admin_sig":"s","issuers":"did:key:ed25519:uni","threshold":"1"}"#;
+    // Bootstrap — governance-approved
+    let configure1 = r#"{"operation":"configure","admin_did":"did:key:ed25519:admin","admin_sig":"s","proposal_id":"ctzn-setup","issuers":"did:key:ed25519:uni","threshold":"1"}"#;
     let result = engine
         .execute(&wasm, "ctzn-module", configure1, 1_000_000, host.clone())
         .expect("bootstrap");
@@ -861,6 +868,48 @@ fn ctzn_reconfigure_requires_admin_sig() {
     let out = String::from_utf8_lossy(result.return_value.as_ref().unwrap());
     assert!(out.contains(r#""ok":false"#), "reconfigure without admin sig should fail: {out}");
     assert!(out.contains("signature"), "should mention signature: {out}");
+}
+
+#[test]
+fn ctzn_bootstrap_without_governance_rejected() {
+    let engine = make_engine();
+    let wasm = load_fixture("ctzn_token.wasm");
+    let host = Arc::new(TestHost::new(100));
+
+    // No proposal_id — should fail
+    let configure = r#"{"operation":"configure","admin_did":"did:key:ed25519:attacker","admin_sig":"x","issuers":"did:key:ed25519:evil","threshold":"1"}"#;
+    let result = engine
+        .execute(&wasm, "ctzn-module", configure, 1_000_000, host.clone())
+        .expect("configure should not trap");
+    assert!(result.success);
+    let out = String::from_utf8_lossy(result.return_value.as_ref().unwrap());
+    assert!(out.contains(r#""ok":false"#), "bootstrap without proposal_id should fail: {out}");
+    assert!(out.contains("governance"), "should mention governance: {out}");
+}
+
+#[test]
+fn ctzn_bootstrap_with_unapproved_governance_rejected() {
+    let engine = make_engine();
+    let wasm = load_fixture("ctzn_token.wasm");
+    // Governance has NOT approved this proposal
+    let host = Arc::new(TestHost::new(100));
+
+    let configure = r#"{"operation":"configure","admin_did":"did:key:ed25519:attacker","admin_sig":"x","proposal_id":"fake-proposal","issuers":"did:key:ed25519:evil","threshold":"1"}"#;
+    let result = engine
+        .execute(&wasm, "ctzn-module", configure, 1_000_000, host.clone())
+        .expect("configure should not trap");
+    assert!(result.success);
+    let out = String::from_utf8_lossy(result.return_value.as_ref().unwrap());
+    assert!(out.contains(r#""ok":false"#), "bootstrap with unapproved proposal should fail: {out}");
+    assert!(out.contains("governance"), "should mention governance: {out}");
+
+    // Token should not be mintable because configuration never succeeded
+    let mint = r#"{"operation":"mint","issuer_dids":"did:key:ed25519:evil","signatures":"s","token_id":"should_not_exist","recipient_did":"did:key:ed25519:bob"}"#;
+    let result = engine
+        .execute(&wasm, "ctzn-module", mint, 1_000_000, host)
+        .expect("mint");
+    let out = String::from_utf8_lossy(result.return_value.as_ref().unwrap());
+    assert!(out.contains(r#""ok":true"#), "mint with no threshold set should default to 1 and succeed: {out}");
 }
 
 // ── Hierarchical Tiers ──

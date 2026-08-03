@@ -16,7 +16,7 @@ CTZN is a soulbound token: once minted to a recipient, it is permanently bound t
 
 | Feature | How it works |
 |---------|-------------|
-| **Multi-issuer authority** | `configure` operation sets authorized issuer DIDs and a signature threshold. Mints require N-of-M issuer signatures. |
+| **Multi-issuer authority** | `configure` operation sets authorized issuer DIDs and a signature threshold. Mints require N-of-M issuer signatures. Initial configuration requires a governance-approved proposal — no one can self-appoint as admin. |
 | **Custom metadata schemas** | Each token has a `schema_type` (e.g., `degree`, `reputation`, `identity`) and free-form JSON `metadata`. |
 | **Hierarchical tiers** | Tokens are assigned `bronze` (0), `silver` (1), or `gold` (2). Per-tier supply is tracked independently. |
 | **Time-locked / revocable** | Optional `expiry_block` makes tokens expire at a future block height. Issuers can `revoke` tokens at any time. |
@@ -26,7 +26,7 @@ CTZN is a soulbound token: once minted to a recipient, it is permanently bound t
 
 | Operation | Parameters | Purpose |
 |-----------|-----------|---------|
-| `configure` | `admin_did`, `admin_sig`, `issuers`, `threshold` | Set authorized issuers and minimum signature count (bootstrap on first call, admin-gated after) |
+| `configure` | `admin_did`, `admin_sig`, `proposal_id`, `issuers`, `threshold` | Set authorized issuers and minimum signature count. **Initial call requires a governance-approved `proposal_id`**; subsequent calls require admin signature. |
 | `mint` | `issuer_dids`, `signatures`, `token_id`, `recipient_did`, `tier?`, `schema_type?`, `metadata?`, `expiry_block?` | Mint a new CTZN token (backward-compatible with singular `issuer_did`/`signature_hex`) |
 | `owner_of` | `token_id` | Get owner and full token status (burned, revoked, expired) |
 | `total_supply` | — | Get global and per-tier supply counts |
