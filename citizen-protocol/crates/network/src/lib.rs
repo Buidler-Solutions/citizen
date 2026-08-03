@@ -870,7 +870,7 @@ impl QuicNetwork {
         // Try to reuse an existing connection — clone the Connection handle
         // out of the map so we DON'T hold the mutex during open_bi/await.
         {
-            let mut conns = self.connections.lock().await;
+            let conns = self.connections.lock().await;
             if let Some(conn) = conns.get(target).cloned() {
                 drop(conns);
                 match tokio::time::timeout(CONNECT_TIMEOUT, conn.open_bi()).await {
