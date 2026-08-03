@@ -176,6 +176,7 @@ type DirectSubmitReceipt = {
   latencyMs: number;
   receiptId: string | null;
   receiptHash: string | null;
+  blockHeight: number | null;
   submittedAt: string;
 };
 
@@ -485,6 +486,7 @@ async function confirmSubmittedRequestFromBuilderApp(
     latencyMs: 0,
     receiptId: null,
     receiptHash: receiptHash.trim(),
+    blockHeight: null,
     submittedAt: new Date().toISOString(),
   });
 
@@ -1443,6 +1445,7 @@ async function directSubmitLatestSignedArtifact(
       latencyMs: response.latencyMs,
       receiptId: response.receiptId,
       receiptHash: response.receiptHash,
+      blockHeight: response.blockHeight,
       submittedAt: new Date().toISOString(),
     });
     return { ok: true, result: response };
@@ -1581,6 +1584,7 @@ async function directSubmitSignedBatchToCitizenNetwork(
         latencyMs: response.latencyMs,
         receiptId: receipt.receiptId,
         receiptHash: receipt.receiptHash,
+        blockHeight: null,
         submittedAt,
       });
     }
