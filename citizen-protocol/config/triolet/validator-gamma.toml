@@ -187,3 +187,13 @@ writers = []
 [[namespaces.validators]]
 name = "election_ballot_policy"
 config.election_namespace = "civic.election"
+
+[[namespaces]]
+descriptor.namespace = "execution.module"
+descriptor.version = 1
+descriptor.rules_hash = "sha256:execution-module-triolet-v1"
+descriptor.governed_by = "governance.vote"
+writers = []
+[[namespaces.validators]]
+name = "allowed_actions"
+config.actions = ["REGISTER_MODULE", "ACTIVATE_MODULE", "EXECUTE_MODULE", "STATE_WRITE"]
