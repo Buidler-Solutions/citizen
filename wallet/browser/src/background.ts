@@ -155,13 +155,13 @@ const DIRECT_SUBMIT_ALLOWLIST: readonly string[] = [
   'https://mainnet.ctzn.space/api/v1/direct-submit',
   'https://futurenet.ctzn.space/api/v1/direct-submit',
   'https://testnet.ctzn.space/api/v1/direct-submit',
-  'http://localhost:8081/api/v1/direct-submit',
+  'http://localhost:8091/api/v1/direct-submit',
 ];
 const CITIZEN_API_BASE_ALLOWLIST: readonly string[] = [
   'https://mainnet.ctzn.space',
   'https://futurenet.ctzn.space',
   'https://testnet.ctzn.space',
-  'http://localhost:8081',
+  'http://localhost:8091',
 ];
 
 type DirectSubmitReceipt = {
@@ -210,7 +210,7 @@ const NETWORK_HEALTHCHECK_URL_BY_NETWORK: Record<NetworkId, string> = {
   mainnet: 'https://mainnet.ctzn.space/health',
   futurenet: 'https://futurenet.ctzn.space/health',
   testnet: 'https://testnet.ctzn.space/health',
-  localnode: 'http://localhost:8081/health',
+  localnode: 'http://localhost:8091/health',
 };
 
 type StoredProtocolSigner = {
