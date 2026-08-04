@@ -9,6 +9,7 @@ import 'activity_screen.dart';
 import 'connect_screen.dart';
 import 'decrypt_screen.dart';
 import 'compose_screen.dart';
+import 'vote_screen.dart';
 import 'vault_screen.dart';
 import 'security_screen.dart';
 import 'profile_screen.dart';
@@ -28,6 +29,7 @@ class _MainScreenState extends ConsumerState<MainScreen> {
     ConnectScreen(),
     DecryptScreen(),
     ComposeScreen(),
+    VoteScreen(),
     VaultScreen(),
     SecurityScreen(),
     ProfileScreen(),
@@ -78,6 +80,11 @@ class _MainScreenState extends ConsumerState<MainScreen> {
             icon: Icon(Icons.edit_note_outlined),
             selectedIcon: Icon(Icons.edit_note),
             label: 'Compose',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.how_to_vote_outlined),
+            selectedIcon: Icon(Icons.how_to_vote),
+            label: 'Vote',
           ),
           NavigationDestination(
             icon: Icon(Icons.account_balance_wallet_outlined),

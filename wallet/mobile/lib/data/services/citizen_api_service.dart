@@ -134,6 +134,45 @@ class CitizenApiService {
         : response.data as Map<String, dynamic>;
   }
 
+  // ─── Civic Voting ────────────────────────────────────────
+
+  Future<List<Map<String, dynamic>>> getCivicProposals(String apiBaseUrl) async {
+    final normalizedBase = apiBaseUrl.replaceAll(RegExp(r'/+$'), '');
+    final url = '$normalizedBase/api/v1/civic/proposals';
+    final response = await _dio.get<dynamic>(url);
+    final data = response.data is String
+        ? jsonDecode(response.data as String) as Map<String, dynamic>
+        : response.data as Map<String, dynamic>;
+    final proposals = data['proposals'] as List? ?? [];
+    return proposals.cast<Map<String, dynamic>>();
+  }
+
+  Future<Map<String, dynamic>?> getCivicTally(String apiBaseUrl, String proposalId) async {
+    final normalizedBase = apiBaseUrl.replaceAll(RegExp(r'/+$'), '');
+    final url = '$normalizedBase/api/v1/civic/proposals/$proposalId/tally';
+    final response = await _dio.get<dynamic>(url);
+    if (response.statusCode == 404) return null;
+    return response.data is String
+        ? jsonDecode(response.data as String) as Map<String, dynamic>
+        : response.data as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> submitBallot({
+    required String apiBaseUrl,
+    required Map<String, dynamic> entry,
+  }) async {
+    final normalizedBase = apiBaseUrl.replaceAll(RegExp(r'/+$'), '');
+    final url = '$normalizedBase/api/v1/entries/submit';
+    final response = await _dio.post<dynamic>(
+      url,
+      data: jsonEncode(entry),
+      options: Options(headers: {'Content-Type': 'application/json'}),
+    );
+    return response.data is String
+        ? jsonDecode(response.data as String) as Map<String, dynamic>
+        : response.data as Map<String, dynamic>;
+  }
+
   // ─── Helpers ──────────────────────────────────────────────
 
   DirectSubmitResponse _extractReceipt(Map<String, dynamic> payload, int latencyMs) {
