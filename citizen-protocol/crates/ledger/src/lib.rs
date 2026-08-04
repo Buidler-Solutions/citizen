@@ -179,6 +179,7 @@ impl<S: LedgerStorage + 'static> Ledger<S> {
             "envelope_multisig_policy" => self.envelope_multisig_policy(entry, config),
             "privacy_policy" => self.privacy_policy(entry, config),
             "asset_control_policy" => self.asset_control_policy(entry, config),
+            "ctzn_citizenship_policy" => self.ctzn_citizenship_policy(entry, config),
             "wasm_runtime_policy" => self.wasm_runtime_policy(entry, config),
             "interop_adapter_policy" => self.interop_adapter_policy(entry, config),
             _ => {
@@ -1684,6 +1685,100 @@ impl<S: LedgerStorage + 'static> Ledger<S> {
                 "interop adapter action is not supported".to_string(),
             )),
         }
+    }
+
+    fn load_module_state_value(&self, module_id: &str, key: &str) -> Option<String> {
+        let entries = self
+            .storage
+            .namespace_entries(&"execution.module".to_string())
+            .ok()?;
+        for entry in entries.iter().rev() {
+            if entry.object_id == module_id && entry.action == "STATE_WRITE" {
+                if let Some(state_key) = entry.payload.get("state_key").and_then(|v| v.as_str()) {
+                    if state_key == key {
+                        return entry
+                            .payload
+                            .get("state_value")
+                            .and_then(|v| v.as_str())
+                            .map(ToString::to_string);
+                    }
+                }
+            }
+        }
+        None
+    }
+
+    fn ctzn_citizenship_policy(&self, entry: &LedgerEntry, config: &Value) -> Result<()> {
+        let module_id = config
+            .get("ctzn_module_id")
+            .and_then(Value::as_str)
+            .unwrap_or("ctzn-token.v1");
+
+        let required_schema = config.get("required_schema").and_then(Value::as_str);
+        let required_tier: u64 = config
+            .get("required_tier")
+            .and_then(Value::as_u64)
+            .unwrap_or(0);
+        let current_height: Option<u64> = config
+            .get("current_block_height")
+            .and_then(Value::as_u64);
+
+        let held_key = format!("held:{}", entry.author);
+        let held_value = self.load_module_state_value(module_id, &held_key).ok_or_else(|| {
+            ProtocolError::ValidationFailed(format!(
+                "ctzn_citizenship_policy: author {} holds no CTZN tokens in module {}",
+                entry.author, module_id
+            ))
+        })?;
+
+        let token_ids: Vec<&str> = held_value.split(',').map(str::trim).filter(|s| !s.is_empty()).collect();
+        if token_ids.is_empty() {
+            return Err(ProtocolError::ValidationFailed(format!(
+                "ctzn_citizenship_policy: author {} holds no CTZN tokens",
+                entry.author
+            )));
+        }
+
+        for tid in &token_ids {
+            if self.load_module_state_value(module_id, &format!("burned:{tid}")).as_deref() == Some("true") {
+                continue;
+            }
+            if self.load_module_state_value(module_id, &format!("revoked:{tid}")).as_deref() == Some("true") {
+                continue;
+            }
+
+            if let Some(req_schema) = required_schema {
+                let token_schema = self.load_module_state_value(module_id, &format!("schema:{tid}"));
+                if token_schema.as_deref() != Some(req_schema) {
+                    continue;
+                }
+            }
+
+            let token_tier: u64 = self
+                .load_module_state_value(module_id, &format!("tier:{tid}"))
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(0);
+            if token_tier < required_tier {
+                continue;
+            }
+
+            if let Some(height) = current_height {
+                if let Some(expiry_str) = self.load_module_state_value(module_id, &format!("expiry:{tid}")) {
+                    if let Ok(expiry) = expiry_str.parse::<u64>() {
+                        if height >= expiry {
+                            continue;
+                        }
+                    }
+                }
+            }
+
+            return Ok(());
+        }
+
+        Err(ProtocolError::ValidationFailed(format!(
+            "ctzn_citizenship_policy: author {} has no qualifying active CTZN token (required_schema={:?}, required_tier={})",
+            entry.author, required_schema, required_tier
+        )))
     }
 
     pub fn validate_entry_submission(&self, entry: &LedgerEntry) -> Result<()> {
@@ -3865,5 +3960,178 @@ mod tests {
         assert!(result.is_err(), "should fail at max depth");
         let err = result.unwrap_err().to_string();
         assert!(err.contains("depth"), "expected depth error: {err}");
+    }
+
+    fn store_ctzn_state(ledger: &Ledger<MemoryStorage>, module_id: &str, key: &str, value: &str) {
+        use citizen_execution::WasmHost;
+        let storage = ledger.storage();
+        let host = super::LedgerWasmHost {
+            storage,
+            engine: None,
+            call_depth: 0,
+            max_call_depth: 8,
+            cross_call_gas_limit: 500_000,
+            module_id: Some(module_id.into()),
+        };
+        WasmHost::store_state(&host, module_id, key, value).unwrap();
+    }
+
+    fn ctzn_namespace_with_citizenship_rule() -> NamespaceRuleset {
+        namespace_with_rules(
+            "civic.services",
+            vec![NamespaceRule {
+                name: "ctzn_citizenship_policy".into(),
+                config: json!({
+                    "ctzn_module_id": "ctzn-token.v1",
+                    "required_schema": "citizenship",
+                    "required_tier": 1,
+                    "current_block_height": 500
+                }),
+            }],
+        )
+    }
+
+    #[test]
+    fn ctzn_citizenship_policy_grants_active_token_holder() {
+        let ledger = Ledger::in_memory();
+        ledger.bootstrap_namespaces(vec![ctzn_namespace_with_citizenship_rule()]);
+        store_ctzn_state(&ledger, "ctzn-token.v1", "held:did:citizen:alice", "ctzn-001");
+        store_ctzn_state(&ledger, "ctzn-token.v1", "owner:ctzn-001", "did:citizen:alice");
+        store_ctzn_state(&ledger, "ctzn-token.v1", "schema:ctzn-001", "citizenship");
+        store_ctzn_state(&ledger, "ctzn-token.v1", "tier:ctzn-001", "2");
+
+        let mut entry = test_entry("civic.services");
+        entry.author = "did:citizen:alice".into();
+
+        ledger.apply_entry(entry).expect("active citizen should pass");
+    }
+
+    #[test]
+    fn ctzn_citizenship_policy_rejects_non_holder() {
+        let ledger = Ledger::in_memory();
+        ledger.bootstrap_namespaces(vec![ctzn_namespace_with_citizenship_rule()]);
+
+        let mut entry = test_entry("civic.services");
+        entry.author = "did:citizen:nobody".into();
+
+        let err = ledger.apply_entry(entry).unwrap_err();
+        assert!(err.to_string().contains("holds no CTZN tokens"));
+    }
+
+    #[test]
+    fn ctzn_citizenship_policy_rejects_revoked_token() {
+        let ledger = Ledger::in_memory();
+        ledger.bootstrap_namespaces(vec![ctzn_namespace_with_citizenship_rule()]);
+        store_ctzn_state(&ledger, "ctzn-token.v1", "held:did:citizen:bob", "ctzn-002");
+        store_ctzn_state(&ledger, "ctzn-token.v1", "schema:ctzn-002", "citizenship");
+        store_ctzn_state(&ledger, "ctzn-token.v1", "tier:ctzn-002", "2");
+        store_ctzn_state(&ledger, "ctzn-token.v1", "revoked:ctzn-002", "true");
+
+        let mut entry = test_entry("civic.services");
+        entry.author = "did:citizen:bob".into();
+
+        let err = ledger.apply_entry(entry).unwrap_err();
+        assert!(err.to_string().contains("no qualifying active CTZN token"));
+    }
+
+    #[test]
+    fn ctzn_citizenship_policy_rejects_burned_token() {
+        let ledger = Ledger::in_memory();
+        ledger.bootstrap_namespaces(vec![ctzn_namespace_with_citizenship_rule()]);
+        store_ctzn_state(&ledger, "ctzn-token.v1", "held:did:citizen:carol", "ctzn-003");
+        store_ctzn_state(&ledger, "ctzn-token.v1", "schema:ctzn-003", "citizenship");
+        store_ctzn_state(&ledger, "ctzn-token.v1", "tier:ctzn-003", "2");
+        store_ctzn_state(&ledger, "ctzn-token.v1", "burned:ctzn-003", "true");
+
+        let mut entry = test_entry("civic.services");
+        entry.author = "did:citizen:carol".into();
+
+        let err = ledger.apply_entry(entry).unwrap_err();
+        assert!(err.to_string().contains("no qualifying active CTZN token"));
+    }
+
+    #[test]
+    fn ctzn_citizenship_policy_rejects_insufficient_tier() {
+        let ledger = Ledger::in_memory();
+        ledger.bootstrap_namespaces(vec![ctzn_namespace_with_citizenship_rule()]);
+        store_ctzn_state(&ledger, "ctzn-token.v1", "held:did:citizen:dave", "ctzn-004");
+        store_ctzn_state(&ledger, "ctzn-token.v1", "schema:ctzn-004", "citizenship");
+        store_ctzn_state(&ledger, "ctzn-token.v1", "tier:ctzn-004", "0");
+
+        let mut entry = test_entry("civic.services");
+        entry.author = "did:citizen:dave".into();
+
+        let err = ledger.apply_entry(entry).unwrap_err();
+        assert!(err.to_string().contains("no qualifying active CTZN token"));
+    }
+
+    #[test]
+    fn ctzn_citizenship_policy_rejects_schema_mismatch() {
+        let ledger = Ledger::in_memory();
+        ledger.bootstrap_namespaces(vec![ctzn_namespace_with_citizenship_rule()]);
+        store_ctzn_state(&ledger, "ctzn-token.v1", "held:did:citizen:eve", "ctzn-005");
+        store_ctzn_state(&ledger, "ctzn-token.v1", "schema:ctzn-005", "professional-license");
+        store_ctzn_state(&ledger, "ctzn-token.v1", "tier:ctzn-005", "2");
+
+        let mut entry = test_entry("civic.services");
+        entry.author = "did:citizen:eve".into();
+
+        let err = ledger.apply_entry(entry).unwrap_err();
+        assert!(err.to_string().contains("no qualifying active CTZN token"));
+    }
+
+    #[test]
+    fn ctzn_citizenship_policy_rejects_expired_token() {
+        let ledger = Ledger::in_memory();
+        ledger.bootstrap_namespaces(vec![ctzn_namespace_with_citizenship_rule()]);
+        store_ctzn_state(&ledger, "ctzn-token.v1", "held:did:citizen:frank", "ctzn-006");
+        store_ctzn_state(&ledger, "ctzn-token.v1", "schema:ctzn-006", "citizenship");
+        store_ctzn_state(&ledger, "ctzn-token.v1", "tier:ctzn-006", "2");
+        store_ctzn_state(&ledger, "ctzn-token.v1", "expiry:ctzn-006", "400");
+
+        let mut entry = test_entry("civic.services");
+        entry.author = "did:citizen:frank".into();
+
+        let err = ledger.apply_entry(entry).unwrap_err();
+        assert!(err.to_string().contains("no qualifying active CTZN token"));
+    }
+
+    #[test]
+    fn ctzn_citizenship_policy_accepts_any_schema_when_unspecified() {
+        let ledger = Ledger::in_memory();
+        ledger.bootstrap_namespaces(vec![namespace_with_rules(
+            "civic.open",
+            vec![NamespaceRule {
+                name: "ctzn_citizenship_policy".into(),
+                config: json!({
+                    "ctzn_module_id": "ctzn-token.v1",
+                    "required_tier": 0
+                }),
+            }],
+        )]);
+        store_ctzn_state(&ledger, "ctzn-token.v1", "held:did:citizen:grace", "ctzn-007");
+        store_ctzn_state(&ledger, "ctzn-token.v1", "schema:ctzn-007", "reputation");
+        store_ctzn_state(&ledger, "ctzn-token.v1", "tier:ctzn-007", "0");
+
+        let mut entry = test_entry("civic.open");
+        entry.author = "did:citizen:grace".into();
+
+        ledger.apply_entry(entry).expect("any active token should pass when schema is unspecified");
+    }
+
+    #[test]
+    fn ctzn_citizenship_policy_skips_invalid_finds_valid_among_multiple() {
+        let ledger = Ledger::in_memory();
+        ledger.bootstrap_namespaces(vec![ctzn_namespace_with_citizenship_rule()]);
+        store_ctzn_state(&ledger, "ctzn-token.v1", "held:did:citizen:henry", "ctzn-008,ctzn-009");
+        store_ctzn_state(&ledger, "ctzn-token.v1", "schema:ctzn-008", "professional-license");
+        store_ctzn_state(&ledger, "ctzn-token.v1", "tier:ctzn-008", "0");
+        store_ctzn_state(&ledger, "ctzn-token.v1", "schema:ctzn-009", "citizenship");
+        store_ctzn_state(&ledger, "ctzn-token.v1", "tier:ctzn-009", "2");
+
+        let mut entry = test_entry("civic.services");
+        entry.author = "did:citizen:henry".into();
+
+        ledger.apply_entry(entry).expect("should find the qualifying token among multiple");
     }
 }

@@ -78,6 +78,7 @@ nav:
       - Architecture: protocol/architecture.md
       - Consensus: protocol/consensus.md
       - Governance: protocol/governance.md
+      - Digital Citizenship: protocol/citizenship.md
       - Namespaces: protocol/namespaces.md
       - Networks: protocol/networks.md
   - Wallets:
