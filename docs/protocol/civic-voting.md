@@ -183,9 +183,9 @@ POST /api/v1/entries/submit
 
 The civic voting system is accessible through two client-facing applications:
 
-### Web dApp
+### Web App (Vite + React)
 
-Located at `dapp/apps/web/app/civic-voting/` - a Next.js page providing:
+Located at `civic-voting/` - a standalone Vite + React SPA providing:
 
 - Proposal list with open/closed status badges
 - Proposal detail view with description and metadata
@@ -193,7 +193,7 @@ Located at `dapp/apps/web/app/civic-voting/` - a Next.js page providing:
 - Wallet-connected ballot casting (yes/no/abstain)
 - Real-time tally refresh after each ballot submission
 
-Navigate to `/civic-voting` from the dApp home page.
+Run `npm run dev` from the `civic-voting/` directory (starts on port 5174 with API proxy to the local node on 8081).
 
 ### Mobile Wallet (Flutter)
 
@@ -210,7 +210,7 @@ The vote screen (`vote_screen.dart`) integrates with the existing wallet infrast
 ### API Integration Flow
 
 ```
-1. Citizen opens Vote tab (mobile) or /civic-voting (web)
+1. Citizen opens Vote tab (mobile) or the civic-voting web app
 2. App fetches: GET /api/v1/civic/proposals
 3. Citizen selects a proposal
 4. App fetches: GET /api/v1/civic/proposals/:id/tally

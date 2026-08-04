@@ -133,9 +133,6 @@ export default async function Home() {
             <a className="button ghost" href="#workflows">
               View workflows
             </a>
-            <a className="button ghost" href="/civic-voting">
-              Vote on Proposals
-            </a>
           </div>
         </div>
         <div className="hero-card">

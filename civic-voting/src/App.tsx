@@ -1,11 +1,6 @@
-"use client";
-
 import { useState, useEffect, useCallback } from "react";
 
-const API_BASE =
-  process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:4000";
-const NODE_BASE =
-  process.env.NEXT_PUBLIC_NODE_RUNTIME_URL ?? "http://127.0.0.1:8081";
+const NODE_BASE = import.meta.env.VITE_NODE_URL ?? "";
 
 interface Proposal {
   proposal_id: string;
@@ -23,10 +18,10 @@ interface Tally {
   voters: string[];
 }
 
-export default function CivicVoting() {
+export default function App() {
   const [proposals, setProposals] = useState<Proposal[]>([]);
   const [selectedProposal, setSelectedProposal] = useState<Proposal | null>(
-    null
+    null,
   );
   const [tally, setTally] = useState<Tally | null>(null);
   const [loading, setLoading] = useState(false);
@@ -54,7 +49,7 @@ export default function CivicVoting() {
   const fetchTally = useCallback(async (proposalId: string) => {
     try {
       const res = await fetch(
-        `${NODE_BASE}/api/v1/civic/proposals/${proposalId}/tally`
+        `${NODE_BASE}/api/v1/civic/proposals/${proposalId}/tally`,
       );
       if (!res.ok) throw new Error("Failed to fetch tally");
       const data = await res.json();
@@ -78,7 +73,9 @@ export default function CivicVoting() {
   const connectWallet = async () => {
     const provider = (window as any).citizen ?? (window as any).ethereum;
     if (!provider) {
-      setError("No wallet provider found. Install the Citizen wallet extension.");
+      setError(
+        "No wallet provider found. Install the Citizen wallet extension.",
+      );
       return;
     }
     try {
@@ -178,8 +175,8 @@ export default function CivicVoting() {
     : 1;
 
   return (
-    <div className="civic-voting">
-      <div className="civic-header">
+    <div className="app">
+      <header className="app-header">
         <div>
           <p className="eyebrow">Civic Participation</p>
           <h1>Proposal Voting</h1>
@@ -189,7 +186,7 @@ export default function CivicVoting() {
           </p>
         </div>
         <button
-          className={`button ${walletConnected ? "ghost" : "primary"}`}
+          className={`btn ${walletConnected ? "btn-ghost" : "btn-primary"}`}
           onClick={connectWallet}
           disabled={walletConnected}
         >
@@ -197,10 +194,10 @@ export default function CivicVoting() {
             ? `${signerDid.slice(0, 16)}...`
             : "Connect Wallet"}
         </button>
-      </div>
+      </header>
 
       {error && (
-        <div className="error-banner">
+        <div className="banner banner-error">
           <strong>Error:</strong> {error}
           <button className="dismiss" onClick={() => setError(null)}>
             Dismiss
@@ -209,7 +206,7 @@ export default function CivicVoting() {
       )}
 
       {submitResult && (
-        <div className="success-banner">
+        <div className="banner banner-success">
           {submitResult}
           <button className="dismiss" onClick={() => setSubmitResult(null)}>
             Dismiss
@@ -222,7 +219,7 @@ export default function CivicVoting() {
           <div className="panel-header">
             <h2>Open Proposals</h2>
             <button
-              className="button ghost small"
+              className="btn btn-ghost btn-sm"
               onClick={fetchProposals}
               disabled={loading}
             >
@@ -237,7 +234,11 @@ export default function CivicVoting() {
           {proposals.map((p) => (
             <div
               key={p.proposal_id}
-              className={`proposal-card ${selectedProposal?.proposal_id === p.proposal_id ? "selected" : ""}`}
+              className={`proposal-card ${
+                selectedProposal?.proposal_id === p.proposal_id
+                  ? "selected"
+                  : ""
+              }`}
               onClick={() => selectProposal(p)}
             >
               <div className="proposal-card-header">
@@ -266,7 +267,9 @@ export default function CivicVoting() {
           {selectedProposal && (
             <>
               <div className="detail-header">
-                <h2>{selectedProposal.title ?? selectedProposal.proposal_id}</h2>
+                <h2>
+                  {selectedProposal.title ?? selectedProposal.proposal_id}
+                </h2>
                 <span className="proposal-meta">
                   {selectedProposal.proposal_id} - Opened by{" "}
                   {selectedProposal.opened_by.slice(0, 20)}...
@@ -318,21 +321,21 @@ export default function CivicVoting() {
                 )}
                 <div className="ballot-buttons">
                   <button
-                    className="vote-button yes"
+                    className="vote-btn yes"
                     onClick={() => castBallot("yes")}
                     disabled={!walletConnected || submitting}
                   >
                     {submitting ? "Submitting..." : "Vote Yes"}
                   </button>
                   <button
-                    className="vote-button no"
+                    className="vote-btn no"
                     onClick={() => castBallot("no")}
                     disabled={!walletConnected || submitting}
                   >
                     {submitting ? "Submitting..." : "Vote No"}
                   </button>
                   <button
-                    className="vote-button abstain"
+                    className="vote-btn abstain"
                     onClick={() => castBallot("abstain")}
                     disabled={!walletConnected || submitting}
                   >
