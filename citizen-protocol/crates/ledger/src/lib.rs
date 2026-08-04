@@ -181,6 +181,7 @@ impl<S: LedgerStorage + 'static> Ledger<S> {
             "asset_control_policy" => self.asset_control_policy(entry, config),
             "ctzn_citizenship_policy" => self.ctzn_citizenship_policy(entry, config),
             "civic_voting_policy" => self.civic_voting_policy(entry, config),
+            "election_ballot_policy" => self.election_ballot_policy(entry, config),
             "wasm_runtime_policy" => self.wasm_runtime_policy(entry, config),
             "interop_adapter_policy" => self.interop_adapter_policy(entry, config),
             _ => {
@@ -1868,6 +1869,166 @@ impl<S: LedgerStorage + 'static> Ledger<S> {
             return Err(ProtocolError::ValidationFailed(format!(
                 "civic_voting_policy: author {} has already cast a ballot for proposal '{}'",
                 entry.author, proposal_id
+            )));
+        }
+
+        Ok(())
+    }
+
+    fn election_ballot_policy(&self, entry: &LedgerEntry, config: &Value) -> Result<()> {
+        let election_ns = config
+            .get("election_namespace")
+            .and_then(Value::as_str)
+            .unwrap_or("civic.election");
+
+        if entry.action != "CAST_BALLOT" {
+            return Err(ProtocolError::ValidationFailed(format!(
+                "election_ballot_policy: unsupported action '{}' (expected CAST_BALLOT)",
+                entry.action
+            )));
+        }
+
+        let election_id = entry
+            .payload
+            .get("election_id")
+            .and_then(Value::as_str)
+            .ok_or_else(|| {
+                ProtocolError::ValidationFailed(
+                    "election_ballot_policy: payload.election_id is required".into(),
+                )
+            })?;
+
+        let selections = entry
+            .payload
+            .get("selections")
+            .and_then(Value::as_array)
+            .ok_or_else(|| {
+                ProtocolError::ValidationFailed(
+                    "election_ballot_policy: payload.selections array is required".into(),
+                )
+            })?;
+
+        let election_entries = self
+            .storage
+            .namespace_entries(&election_ns.to_string())
+            .map_err(|e| ProtocolError::ValidationFailed(e.to_string()))?;
+
+        let election_entry = election_entries
+            .iter()
+            .find(|e| e.action == "OPEN_ELECTION" && e.object_id == election_id)
+            .ok_or_else(|| {
+                ProtocolError::ValidationFailed(format!(
+                    "election_ballot_policy: election '{}' is not open or does not exist",
+                    election_id
+                ))
+            })?;
+
+        let is_closed = election_entries
+            .iter()
+            .any(|e| e.action == "CLOSE_ELECTION" && e.object_id == election_id);
+        if is_closed {
+            return Err(ProtocolError::ValidationFailed(format!(
+                "election_ballot_policy: election '{}' has been closed",
+                election_id
+            )));
+        }
+
+        let races = election_entry
+            .payload
+            .get("races")
+            .and_then(Value::as_array)
+            .ok_or_else(|| {
+                ProtocolError::ValidationFailed(
+                    "election_ballot_policy: election payload missing races array".into(),
+                )
+            })?;
+
+        for selection in selections {
+            let race_id = selection
+                .get("race_id")
+                .and_then(Value::as_str)
+                .ok_or_else(|| {
+                    ProtocolError::ValidationFailed(
+                        "election_ballot_policy: each selection requires a race_id".into(),
+                    )
+                })?;
+
+            let race = races.iter().find(|r| {
+                r.get("race_id").and_then(Value::as_str) == Some(race_id)
+            });
+            let race = race.ok_or_else(|| {
+                ProtocolError::ValidationFailed(format!(
+                    "election_ballot_policy: race '{}' not found in election '{}'",
+                    race_id, election_id
+                ))
+            })?;
+
+            let candidate_ids: Vec<String> = selection
+                .get("candidate_ids")
+                .and_then(Value::as_array)
+                .map(|arr| {
+                    arr.iter()
+                        .filter_map(|v| v.as_str().map(String::from))
+                        .collect()
+                })
+                .unwrap_or_default();
+
+            let max_selections = race
+                .get("max_selections")
+                .and_then(Value::as_u64)
+                .unwrap_or(1) as usize;
+
+            if candidate_ids.len() > max_selections {
+                return Err(ProtocolError::ValidationFailed(format!(
+                    "election_ballot_policy: race '{}' allows {} selections but {} were given",
+                    race_id, max_selections, candidate_ids.len()
+                )));
+            }
+
+            let valid_candidate_ids: std::collections::HashSet<&str> = race
+                .get("candidates")
+                .and_then(Value::as_array)
+                .map(|arr| {
+                    arr.iter()
+                        .filter_map(|c| c.get("candidate_id").and_then(Value::as_str))
+                        .collect()
+                })
+                .unwrap_or_default();
+
+            let mut seen: std::collections::HashSet<&str> = std::collections::HashSet::new();
+            for cid in &candidate_ids {
+                if !valid_candidate_ids.contains(cid.as_str()) {
+                    return Err(ProtocolError::ValidationFailed(format!(
+                        "election_ballot_policy: candidate '{}' not valid for race '{}'",
+                        cid, race_id
+                    )));
+                }
+                if !seen.insert(cid.as_str()) {
+                    return Err(ProtocolError::ValidationFailed(format!(
+                        "election_ballot_policy: duplicate candidate '{}' in race '{}'",
+                        cid, race_id
+                    )));
+                }
+            }
+        }
+
+        let ballot_ns = entry.namespace.clone();
+        let ballot_entries = self
+            .storage
+            .namespace_entries(&ballot_ns)
+            .map_err(|e| ProtocolError::ValidationFailed(e.to_string()))?;
+        let already_voted = ballot_entries.iter().any(|e| {
+            e.action == "CAST_BALLOT"
+                && e.author == entry.author
+                && e.payload
+                    .get("election_id")
+                    .and_then(Value::as_str)
+                    == Some(election_id)
+        });
+        if already_voted {
+            return Err(ProtocolError::ValidationFailed(format!(
+                "election_ballot_policy: author {} has already cast a ballot for election '{}'",
+                entry.author, election_id
             )));
         }
 
@@ -4383,5 +4544,325 @@ mod tests {
         entry.payload = json!({"choice": "yes"});
         let err = ledger.apply_entry(entry).unwrap_err();
         assert!(err.to_string().contains("proposal_id is required"));
+    }
+
+    // ── Election ballot tests ──────────────────────────────────────────
+
+    fn election_namespaces() -> Vec<NamespaceRuleset> {
+        vec![
+            namespace_with_rules(
+                "civic.election",
+                vec![NamespaceRule {
+                    name: "allowed_actions".into(),
+                    config: json!({"actions":["OPEN_ELECTION","CLOSE_ELECTION"]}),
+                }],
+            ),
+            namespace_with_rules(
+                "civic.election.ballot",
+                vec![NamespaceRule {
+                    name: "election_ballot_policy".into(),
+                    config: json!({
+                        "election_namespace": "civic.election"
+                    }),
+                }],
+            ),
+        ]
+    }
+
+    fn open_election_entry(election_id: &str, author: &str) -> LedgerEntry {
+        let mut entry = test_entry("civic.election");
+        entry.action = "OPEN_ELECTION".into();
+        entry.object_id = election_id.into();
+        entry.author = author.into();
+        entry.payload = json!({
+            "title": "2026 National Elections",
+            "election_id": election_id,
+            "races": [
+                {
+                    "race_id": "president",
+                    "title": "President",
+                    "seat_type": "single",
+                    "max_selections": 1,
+                    "candidates": [
+                        {"candidate_id": "p1", "name": "Alice Reyes", "party": "Party A"},
+                        {"candidate_id": "p2", "name": "Bob Santos", "party": "Party B"}
+                    ]
+                },
+                {
+                    "race_id": "senator",
+                    "title": "Senator (Top 12)",
+                    "seat_type": "multi",
+                    "max_selections": 12,
+                    "candidates": [
+                        {"candidate_id": "s1", "name": "Carol Cruz", "party": "Party A"},
+                        {"candidate_id": "s2", "name": "Dave Lim", "party": "Party B"},
+                        {"candidate_id": "s3", "name": "Eve Tan", "party": "Party C"}
+                    ]
+                },
+                {
+                    "race_id": "congressman-d3",
+                    "title": "Congressman, District 3",
+                    "seat_type": "single",
+                    "max_selections": 1,
+                    "candidates": [
+                        {"candidate_id": "c1", "name": "Frank Wu", "party": "Party A"},
+                        {"candidate_id": "c2", "name": "Grace Ngo", "party": "Party B"}
+                    ]
+                }
+            ]
+        });
+        entry
+    }
+
+    fn election_ballot_entry(
+        election_id: &str,
+        selections: serde_json::Value,
+        author: &str,
+    ) -> LedgerEntry {
+        let mut entry = test_entry("civic.election.ballot");
+        entry.action = "CAST_BALLOT".into();
+        entry.object_id = format!("ballot-{author}-{election_id}");
+        entry.author = author.into();
+        entry.payload = json!({
+            "election_id": election_id,
+            "selections": selections
+        });
+        entry
+    }
+
+    #[test]
+    fn election_ballot_accepts_valid_multi_race_ballot() {
+        let ledger = Ledger::in_memory();
+        ledger.bootstrap_namespaces(election_namespaces());
+        ledger
+            .apply_entry(open_election_entry("elec-2026", "governance:vote"))
+            .unwrap();
+
+        let ballot = election_ballot_entry(
+            "elec-2026",
+            json!([
+                {"race_id": "president", "candidate_ids": ["p1"]},
+                {"race_id": "senator", "candidate_ids": ["s1", "s2", "s3"]},
+                {"race_id": "congressman-d3", "candidate_ids": ["c2"]}
+            ]),
+            "did:citizen:alice",
+        );
+        ledger.apply_entry(ballot).expect("valid multi-race ballot");
+    }
+
+    #[test]
+    fn election_ballot_accepts_partial_race_selections() {
+        let ledger = Ledger::in_memory();
+        ledger.bootstrap_namespaces(election_namespaces());
+        ledger
+            .apply_entry(open_election_entry("elec-partial", "governance:vote"))
+            .unwrap();
+
+        let ballot = election_ballot_entry(
+            "elec-partial",
+            json!([
+                {"race_id": "president", "candidate_ids": ["p2"]}
+            ]),
+            "did:citizen:bob",
+        );
+        ledger
+            .apply_entry(ballot)
+            .expect("voting only in some races is fine");
+    }
+
+    #[test]
+    fn election_ballot_rejects_nonexistent_election() {
+        let ledger = Ledger::in_memory();
+        ledger.bootstrap_namespaces(election_namespaces());
+
+        let ballot = election_ballot_entry(
+            "elec-nope",
+            json!([{"race_id": "president", "candidate_ids": ["p1"]}]),
+            "did:citizen:carol",
+        );
+        let err = ledger.apply_entry(ballot).unwrap_err();
+        assert!(err.to_string().contains("not open or does not exist"));
+    }
+
+    #[test]
+    fn election_ballot_rejects_closed_election() {
+        let ledger = Ledger::in_memory();
+        ledger.bootstrap_namespaces(election_namespaces());
+        ledger
+            .apply_entry(open_election_entry("elec-closed", "governance:vote"))
+            .unwrap();
+
+        let mut close = test_entry("civic.election");
+        close.action = "CLOSE_ELECTION".into();
+        close.object_id = "elec-closed".into();
+        close.author = "governance:vote".into();
+        ledger.apply_entry(close).unwrap();
+
+        let ballot = election_ballot_entry(
+            "elec-closed",
+            json!([{"race_id": "president", "candidate_ids": ["p1"]}]),
+            "did:citizen:dave",
+        );
+        let err = ledger.apply_entry(ballot).unwrap_err();
+        assert!(err.to_string().contains("been closed"));
+    }
+
+    #[test]
+    fn election_ballot_rejects_double_voting() {
+        let ledger = Ledger::in_memory();
+        ledger.bootstrap_namespaces(election_namespaces());
+        ledger
+            .apply_entry(open_election_entry("elec-double", "governance:vote"))
+            .unwrap();
+
+        let b1 = election_ballot_entry(
+            "elec-double",
+            json!([{"race_id": "president", "candidate_ids": ["p1"]}]),
+            "did:citizen:eve",
+        );
+        ledger.apply_entry(b1).unwrap();
+
+        let b2 = election_ballot_entry(
+            "elec-double",
+            json!([{"race_id": "president", "candidate_ids": ["p2"]}]),
+            "did:citizen:eve",
+        );
+        let err = ledger.apply_entry(b2).unwrap_err();
+        assert!(err.to_string().contains("already cast a ballot"));
+    }
+
+    #[test]
+    fn election_ballot_rejects_invalid_candidate() {
+        let ledger = Ledger::in_memory();
+        ledger.bootstrap_namespaces(election_namespaces());
+        ledger
+            .apply_entry(open_election_entry("elec-cand", "governance:vote"))
+            .unwrap();
+
+        let ballot = election_ballot_entry(
+            "elec-cand",
+            json!([{"race_id": "president", "candidate_ids": ["hacker"]}]),
+            "did:citizen:frank",
+        );
+        let err = ledger.apply_entry(ballot).unwrap_err();
+        assert!(err.to_string().contains("not valid for race"));
+    }
+
+    #[test]
+    fn election_ballot_rejects_excess_selections() {
+        let ledger = Ledger::in_memory();
+        ledger.bootstrap_namespaces(election_namespaces());
+        ledger
+            .apply_entry(open_election_entry("elec-excess", "governance:vote"))
+            .unwrap();
+
+        let ballot = election_ballot_entry(
+            "elec-excess",
+            json!([{"race_id": "president", "candidate_ids": ["p1", "p2"]}]),
+            "did:citizen:grace",
+        );
+        let err = ledger.apply_entry(ballot).unwrap_err();
+        assert!(err.to_string().contains("allows 1 selections"));
+    }
+
+    #[test]
+    fn election_ballot_rejects_duplicate_candidate_in_race() {
+        let ledger = Ledger::in_memory();
+        ledger.bootstrap_namespaces(election_namespaces());
+        ledger
+            .apply_entry(open_election_entry("elec-dup", "governance:vote"))
+            .unwrap();
+
+        let ballot = election_ballot_entry(
+            "elec-dup",
+            json!([{"race_id": "senator", "candidate_ids": ["s1", "s1"]}]),
+            "did:citizen:heidi",
+        );
+        let err = ledger.apply_entry(ballot).unwrap_err();
+        assert!(err.to_string().contains("duplicate candidate"));
+    }
+
+    #[test]
+    fn election_ballot_rejects_invalid_race_id() {
+        let ledger = Ledger::in_memory();
+        ledger.bootstrap_namespaces(election_namespaces());
+        ledger
+            .apply_entry(open_election_entry("elec-race", "governance:vote"))
+            .unwrap();
+
+        let ballot = election_ballot_entry(
+            "elec-race",
+            json!([{"race_id": "governor", "candidate_ids": ["g1"]}]),
+            "did:citizen:ivan",
+        );
+        let err = ledger.apply_entry(ballot).unwrap_err();
+        assert!(err.to_string().contains("not found in election"));
+    }
+
+    #[test]
+    fn election_ballot_rejects_wrong_action() {
+        let ledger = Ledger::in_memory();
+        ledger.bootstrap_namespaces(election_namespaces());
+        ledger
+            .apply_entry(open_election_entry("elec-action", "governance:vote"))
+            .unwrap();
+
+        let mut entry = test_entry("civic.election.ballot");
+        entry.action = "VOTE_HARDER".into();
+        entry.author = "did:citizen:judy".into();
+        entry.payload = json!({"election_id": "elec-action", "selections": []});
+        let err = ledger.apply_entry(entry).unwrap_err();
+        assert!(err.to_string().contains("unsupported action"));
+    }
+
+    #[test]
+    fn election_ballot_rejects_missing_election_id() {
+        let ledger = Ledger::in_memory();
+        ledger.bootstrap_namespaces(election_namespaces());
+
+        let mut entry = test_entry("civic.election.ballot");
+        entry.action = "CAST_BALLOT".into();
+        entry.author = "did:citizen:karl".into();
+        entry.payload = json!({"selections": []});
+        let err = ledger.apply_entry(entry).unwrap_err();
+        assert!(err.to_string().contains("election_id is required"));
+    }
+
+    #[test]
+    fn election_ballot_different_citizens_can_vote() {
+        let ledger = Ledger::in_memory();
+        ledger.bootstrap_namespaces(election_namespaces());
+        ledger
+            .apply_entry(open_election_entry("elec-multi", "governance:vote"))
+            .unwrap();
+
+        ledger
+            .apply_entry(election_ballot_entry(
+                "elec-multi",
+                json!([
+                    {"race_id": "president", "candidate_ids": ["p1"]},
+                    {"race_id": "senator", "candidate_ids": ["s1", "s3"]}
+                ]),
+                "did:citizen:alice",
+            ))
+            .unwrap();
+        ledger
+            .apply_entry(election_ballot_entry(
+                "elec-multi",
+                json!([
+                    {"race_id": "president", "candidate_ids": ["p2"]},
+                    {"race_id": "senator", "candidate_ids": ["s2"]},
+                    {"race_id": "congressman-d3", "candidate_ids": ["c1"]}
+                ]),
+                "did:citizen:bob",
+            ))
+            .unwrap();
+        ledger
+            .apply_entry(election_ballot_entry(
+                "elec-multi",
+                json!([{"race_id": "congressman-d3", "candidate_ids": ["c2"]}]),
+                "did:citizen:carol",
+            ))
+            .expect("third distinct citizen should be able to vote");
     }
 }
