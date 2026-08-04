@@ -500,6 +500,9 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
         let civic_elections_ledger = Arc::clone(&self.ledger);
         let civic_election_detail_ledger = Arc::clone(&self.ledger);
         let civic_election_tally_ledger = Arc::clone(&self.ledger);
+        let ctzn_token_status_ledger = Arc::clone(&self.ledger);
+        let ctzn_token_holders_ledger = Arc::clone(&self.ledger);
+        let ctzn_token_check_ledger = Arc::clone(&self.ledger);
         Router::new()
             .route("/health", get(Self::health))
             .route(
@@ -745,6 +748,27 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
                 get(move |Path(election_id): Path<String>| {
                     let ledger = Arc::clone(&civic_election_tally_ledger);
                     async move { Self::handle_get_civic_election_tally(ledger, election_id).await }
+                }),
+            )
+            .route(
+                "/api/v1/ctzn/:module_id/status",
+                get(move |Path(module_id): Path<String>| {
+                    let ledger = Arc::clone(&ctzn_token_status_ledger);
+                    async move { Self::handle_ctzn_status(ledger, module_id).await }
+                }),
+            )
+            .route(
+                "/api/v1/ctzn/:module_id/holders",
+                get(move |Path(module_id): Path<String>| {
+                    let ledger = Arc::clone(&ctzn_token_holders_ledger);
+                    async move { Self::handle_ctzn_holders(ledger, module_id).await }
+                }),
+            )
+            .route(
+                "/api/v1/ctzn/:module_id/check/:did",
+                get(move |Path((module_id, did)): Path<(String, String)>| {
+                    let ledger = Arc::clone(&ctzn_token_check_ledger);
+                    async move { Self::handle_ctzn_check(ledger, module_id, did).await }
                 }),
             )
             .layer(DefaultBodyLimit::max(50 * 1024 * 1024))
@@ -3612,6 +3636,263 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
                 "total_ballots": ballots.len(),
                 "races": race_tallies,
                 "voters": voters,
+            })),
+        )
+    }
+
+    async fn handle_ctzn_status(
+        ledger: Arc<Ledger<S>>,
+        module_id: String,
+    ) -> (StatusCode, Json<serde_json::Value>) {
+        let entries = ledger
+            .storage()
+            .namespace_entries(&"execution.module".to_string())
+            .unwrap_or_default();
+        let module_entries: Vec<&LedgerEntry> = entries
+            .iter()
+            .filter(|e| e.object_id == module_id)
+            .collect();
+        if module_entries.is_empty() {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(serde_json::json!({"error": "module not found"})),
+            );
+        }
+
+        let registered = module_entries.iter().any(|e| e.action == "REGISTER_MODULE");
+        let activated = module_entries.iter().any(|e| e.action == "ACTIVATE_MODULE");
+
+        let mut holders = 0u64;
+        let mut active_holders = 0u64;
+        let mut revoked = 0u64;
+        let mut burned = 0u64;
+        for e in &module_entries {
+            if e.action == "STATE_WRITE" {
+                if let Some(key) = e.payload.get("state_key").and_then(|v| v.as_str()) {
+                    if key.starts_with("owner:") {
+                        holders += 1;
+                        let tid = &key[6..];
+                        let is_revoked = module_entries.iter().any(|e2| {
+                            e2.action == "STATE_WRITE"
+                                && e2.payload.get("state_key").and_then(|v| v.as_str())
+                                    == Some(&format!("revoked:{tid}"))
+                                && e2.payload.get("state_value").and_then(|v| v.as_str())
+                                    == Some("true")
+                        });
+                        let is_burned = module_entries.iter().any(|e2| {
+                            e2.action == "STATE_WRITE"
+                                && e2.payload.get("state_key").and_then(|v| v.as_str())
+                                    == Some(&format!("burned:{tid}"))
+                                && e2.payload.get("state_value").and_then(|v| v.as_str())
+                                    == Some("true")
+                        });
+                        if is_revoked {
+                            revoked += 1;
+                        } else if is_burned {
+                            burned += 1;
+                        } else {
+                            active_holders += 1;
+                        }
+                    }
+                }
+            }
+        }
+
+        (
+            StatusCode::OK,
+            Json(serde_json::json!({
+                "module_id": module_id,
+                "registered": registered,
+                "active": activated,
+                "total_holders": holders,
+                "active_holders": active_holders,
+                "revoked": revoked,
+                "burned": burned,
+            })),
+        )
+    }
+
+    async fn handle_ctzn_holders(
+        ledger: Arc<Ledger<S>>,
+        module_id: String,
+    ) -> (StatusCode, Json<serde_json::Value>) {
+        let entries = ledger
+            .storage()
+            .namespace_entries(&"execution.module".to_string())
+            .unwrap_or_default();
+
+        let mut holders: Vec<serde_json::Value> = Vec::new();
+        for e in &entries {
+            if e.action != "STATE_WRITE" || e.object_id != module_id {
+                continue;
+            }
+            let key = e.payload.get("state_key").and_then(|v| v.as_str());
+            let value = e.payload.get("state_value").and_then(|v| v.as_str());
+            if let (Some(k), Some(v)) = (key, value) {
+                if let Some(tid) = k.strip_prefix("owner:") {
+                    let schema = entries
+                        .iter()
+                        .rev()
+                        .find(|e2| {
+                            e2.object_id == module_id
+                                && e2.action == "STATE_WRITE"
+                                && e2.payload.get("state_key").and_then(|v2| v2.as_str())
+                                    == Some(&format!("schema:{tid}"))
+                        })
+                        .and_then(|e2| {
+                            e2.payload.get("state_value").and_then(|v2| v2.as_str())
+                        })
+                        .unwrap_or("");
+                    let tier = entries
+                        .iter()
+                        .rev()
+                        .find(|e2| {
+                            e2.object_id == module_id
+                                && e2.action == "STATE_WRITE"
+                                && e2.payload.get("state_key").and_then(|v2| v2.as_str())
+                                    == Some(&format!("tier:{tid}"))
+                        })
+                        .and_then(|e2| {
+                            e2.payload.get("state_value").and_then(|v2| v2.as_str())
+                        })
+                        .unwrap_or("0");
+                    let is_revoked = entries.iter().any(|e2| {
+                        e2.object_id == module_id
+                            && e2.action == "STATE_WRITE"
+                            && e2.payload.get("state_key").and_then(|v2| v2.as_str())
+                                == Some(&format!("revoked:{tid}"))
+                            && e2.payload.get("state_value").and_then(|v2| v2.as_str())
+                                == Some("true")
+                    });
+                    let is_burned = entries.iter().any(|e2| {
+                        e2.object_id == module_id
+                            && e2.action == "STATE_WRITE"
+                            && e2.payload.get("state_key").and_then(|v2| v2.as_str())
+                                == Some(&format!("burned:{tid}"))
+                            && e2.payload.get("state_value").and_then(|v2| v2.as_str())
+                                == Some("true")
+                    });
+                    let status = if is_revoked {
+                        "revoked"
+                    } else if is_burned {
+                        "burned"
+                    } else {
+                        "active"
+                    };
+                    holders.push(serde_json::json!({
+                        "token_id": tid,
+                        "owner": v,
+                        "schema": schema,
+                        "tier": tier,
+                        "status": status,
+                    }));
+                }
+            }
+        }
+
+        (
+            StatusCode::OK,
+            Json(serde_json::json!({
+                "module_id": module_id,
+                "holders": holders,
+            })),
+        )
+    }
+
+    async fn handle_ctzn_check(
+        ledger: Arc<Ledger<S>>,
+        module_id: String,
+        did: String,
+    ) -> (StatusCode, Json<serde_json::Value>) {
+        let entries = ledger
+            .storage()
+            .namespace_entries(&"execution.module".to_string())
+            .unwrap_or_default();
+
+        let token_ids: Vec<String> = entries
+            .iter()
+            .filter(|e| {
+                e.object_id == module_id
+                    && e.action == "STATE_WRITE"
+                    && e.payload.get("state_key").and_then(|v| v.as_str())
+                        == Some(&format!("owner_lookup:{did}"))
+            })
+            .filter_map(|e| {
+                e.payload
+                    .get("state_value")
+                    .and_then(|v| v.as_str())
+                    .map(String::from)
+            })
+            .collect();
+
+        let mut tokens: Vec<serde_json::Value> = Vec::new();
+        for tid in &token_ids {
+            let owner = entries.iter().rev().find(|e| {
+                e.object_id == module_id
+                    && e.action == "STATE_WRITE"
+                    && e.payload.get("state_key").and_then(|v| v.as_str())
+                        == Some(&format!("owner:{tid}"))
+            }).and_then(|e| {
+                e.payload.get("state_value").and_then(|v| v.as_str())
+            });
+            let is_revoked = entries.iter().any(|e| {
+                e.object_id == module_id
+                    && e.action == "STATE_WRITE"
+                    && e.payload.get("state_key").and_then(|v| v.as_str())
+                        == Some(&format!("revoked:{tid}"))
+                    && e.payload.get("state_value").and_then(|v| v.as_str())
+                        == Some("true")
+            });
+            let is_burned = entries.iter().any(|e| {
+                e.object_id == module_id
+                    && e.action == "STATE_WRITE"
+                    && e.payload.get("state_key").and_then(|v| v.as_str())
+                        == Some(&format!("burned:{tid}"))
+                    && e.payload.get("state_value").and_then(|v| v.as_str())
+                        == Some("true")
+            });
+            let tier = entries.iter().rev().find(|e| {
+                e.object_id == module_id
+                    && e.action == "STATE_WRITE"
+                    && e.payload.get("state_key").and_then(|v| v.as_str())
+                        == Some(&format!("tier:{tid}"))
+            }).and_then(|e| {
+                e.payload.get("state_value").and_then(|v| v.as_str())
+            }).unwrap_or("0");
+            let schema = entries.iter().rev().find(|e| {
+                e.object_id == module_id
+                    && e.action == "STATE_WRITE"
+                    && e.payload.get("state_key").and_then(|v| v.as_str())
+                        == Some(&format!("schema:{tid}"))
+            }).and_then(|e| {
+                e.payload.get("state_value").and_then(|v| v.as_str())
+            }).unwrap_or("");
+
+            let status = if is_revoked {
+                "revoked"
+            } else if is_burned {
+                "burned"
+            } else {
+                "active"
+            };
+            tokens.push(serde_json::json!({
+                "token_id": tid,
+                "owner": owner,
+                "schema": schema,
+                "tier": tier,
+                "status": status,
+            }));
+        }
+
+        let has_active = tokens.iter().any(|t| t["status"] == "active");
+
+        (
+            StatusCode::OK,
+            Json(serde_json::json!({
+                "did": did,
+                "module_id": module_id,
+                "has_citizenship": has_active,
+                "tokens": tokens,
             })),
         )
     }
