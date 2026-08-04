@@ -836,6 +836,34 @@ fn default_namespaces() -> Vec<NamespaceRuleset> {
                 }),
             }],
         },
+        NamespaceRuleset {
+            descriptor: citizen_types::NamespaceDescriptor {
+                namespace: "civic.election".into(),
+                version: 1,
+                rules_hash: "sha256:civic-election-v1".into(),
+                governed_by: "governance.vote".into(),
+            },
+            writers: BTreeSet::new(),
+            validators: vec![citizen_types::NamespaceRule {
+                name: "allowed_actions".into(),
+                config: json!({"actions":["OPEN_ELECTION","CLOSE_ELECTION"]}),
+            }],
+        },
+        NamespaceRuleset {
+            descriptor: citizen_types::NamespaceDescriptor {
+                namespace: "civic.election.ballot".into(),
+                version: 1,
+                rules_hash: "sha256:civic-election-ballot-v1".into(),
+                governed_by: "governance.vote".into(),
+            },
+            writers: BTreeSet::new(),
+            validators: vec![citizen_types::NamespaceRule {
+                name: "election_ballot_policy".into(),
+                config: json!({
+                    "election_namespace": "civic.election"
+                }),
+            }],
+        },
     ]
 }
 

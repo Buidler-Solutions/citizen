@@ -497,6 +497,9 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
         let civic_proposals_ledger = Arc::clone(&self.ledger);
         let civic_proposal_detail_ledger = Arc::clone(&self.ledger);
         let civic_tally_ledger = Arc::clone(&self.ledger);
+        let civic_elections_ledger = Arc::clone(&self.ledger);
+        let civic_election_detail_ledger = Arc::clone(&self.ledger);
+        let civic_election_tally_ledger = Arc::clone(&self.ledger);
         Router::new()
             .route("/health", get(Self::health))
             .route(
@@ -721,6 +724,27 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
                 get(move |Path(proposal_id): Path<String>| {
                     let ledger = Arc::clone(&civic_tally_ledger);
                     async move { Self::handle_get_civic_tally(ledger, proposal_id).await }
+                }),
+            )
+            .route(
+                "/api/v1/civic/elections",
+                get(move || {
+                    let ledger = Arc::clone(&civic_elections_ledger);
+                    async move { Self::handle_list_civic_elections(ledger).await }
+                }),
+            )
+            .route(
+                "/api/v1/civic/elections/:election_id",
+                get(move |Path(election_id): Path<String>| {
+                    let ledger = Arc::clone(&civic_election_detail_ledger);
+                    async move { Self::handle_get_civic_election(ledger, election_id).await }
+                }),
+            )
+            .route(
+                "/api/v1/civic/elections/:election_id/tally",
+                get(move |Path(election_id): Path<String>| {
+                    let ledger = Arc::clone(&civic_election_tally_ledger);
+                    async move { Self::handle_get_civic_election_tally(ledger, election_id).await }
                 }),
             )
             .layer(DefaultBodyLimit::max(50 * 1024 * 1024))
@@ -3404,6 +3428,194 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
         )
     }
 
+    async fn handle_list_civic_elections(
+        ledger: Arc<Ledger<S>>,
+    ) -> (StatusCode, Json<serde_json::Value>) {
+        let ns = "civic.election".to_string();
+        let entries = ledger.storage().namespace_entries(&ns).unwrap_or_default();
+        let elections: Vec<serde_json::Value> = entries
+            .iter()
+            .filter(|e| e.action == "OPEN_ELECTION")
+            .map(|e| {
+                let closed = entries.iter().any(|c| {
+                    c.action == "CLOSE_ELECTION" && c.object_id == e.object_id
+                });
+                let race_count = e
+                    .payload
+                    .get("races")
+                    .and_then(serde_json::Value::as_array)
+                    .map(|a| a.len())
+                    .unwrap_or(0);
+                serde_json::json!({
+                    "election_id": e.object_id,
+                    "title": e.payload.get("title").and_then(|v| v.as_str()),
+                    "opened_at": e.timestamp,
+                    "opened_by": e.author,
+                    "status": if closed { "closed" } else { "open" },
+                    "race_count": race_count,
+                })
+            })
+            .collect();
+        (
+            StatusCode::OK,
+            Json(serde_json::json!({ "elections": elections })),
+        )
+    }
+
+    async fn handle_get_civic_election(
+        ledger: Arc<Ledger<S>>,
+        election_id: String,
+    ) -> (StatusCode, Json<serde_json::Value>) {
+        let ns = "civic.election".to_string();
+        let entries = ledger.storage().namespace_entries(&ns).unwrap_or_default();
+        let election = entries
+            .iter()
+            .find(|e| e.action == "OPEN_ELECTION" && e.object_id == election_id);
+        match election {
+            Some(e) => {
+                let closed = entries.iter().any(|e| {
+                    e.action == "CLOSE_ELECTION" && e.object_id == election_id
+                });
+                (
+                    StatusCode::OK,
+                    Json(serde_json::json!({
+                        "election_id": e.object_id,
+                        "title": e.payload.get("title").and_then(|v| v.as_str()),
+                        "opened_at": e.timestamp,
+                        "opened_by": e.author,
+                        "status": if closed { "closed" } else { "open" },
+                        "races": e.payload.get("races").cloned().unwrap_or(serde_json::Value::Array(vec![])),
+                    })),
+                )
+            }
+            None => (
+                StatusCode::NOT_FOUND,
+                Json(serde_json::json!({"error": "election not found"})),
+            ),
+        }
+    }
+
+    async fn handle_get_civic_election_tally(
+        ledger: Arc<Ledger<S>>,
+        election_id: String,
+    ) -> (StatusCode, Json<serde_json::Value>) {
+        let election_ns = "civic.election".to_string();
+        let election_entries = ledger
+            .storage()
+            .namespace_entries(&election_ns)
+            .unwrap_or_default();
+        let election = election_entries.iter().find(|e| {
+            e.action == "OPEN_ELECTION" && e.object_id == election_id
+        });
+        if election.is_none() {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(serde_json::json!({"error": "election not found"})),
+            );
+        }
+        let election = election.unwrap();
+        let races = election
+            .payload
+            .get("races")
+            .and_then(serde_json::Value::as_array)
+            .cloned()
+            .unwrap_or_default();
+
+        let ballot_ns = "civic.election.ballot".to_string();
+        let all_ballots = ledger
+            .storage()
+            .namespace_entries(&ballot_ns)
+            .unwrap_or_default();
+        let ballots: Vec<&LedgerEntry> = all_ballots
+            .iter()
+            .filter(|e| {
+                e.action == "CAST_BALLOT"
+                    && e.payload
+                        .get("election_id")
+                        .and_then(serde_json::Value::as_str)
+                        == Some(&election_id)
+            })
+            .collect();
+
+        let mut race_tallies: Vec<serde_json::Value> = Vec::new();
+        for race in &races {
+            let race_id = race
+                .get("race_id")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or("unknown");
+            let race_title = race
+                .get("title")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or("");
+            let seat_type = race
+                .get("seat_type")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or("single");
+            let max_selections = race
+                .get("max_selections")
+                .and_then(serde_json::Value::as_u64)
+                .unwrap_or(1);
+
+            let mut candidate_tally: std::collections::BTreeMap<String, u64> =
+                std::collections::BTreeMap::new();
+            let empty_cands: Vec<serde_json::Value> = vec![];
+            let candidates = race
+                .get("candidates")
+                .and_then(serde_json::Value::as_array)
+                .unwrap_or(&empty_cands);
+            for candidate in candidates {
+                if let Some(cid) = candidate.get("candidate_id").and_then(serde_json::Value::as_str) {
+                    candidate_tally.insert(cid.to_string(), 0);
+                }
+            }
+
+            for ballot in &ballots {
+                let selections = ballot
+                    .payload
+                    .get("selections")
+                    .and_then(serde_json::Value::as_array);
+                if let Some(sel) = selections {
+                    for s in sel {
+                        if s.get("race_id").and_then(serde_json::Value::as_str) == Some(race_id) {
+                            if let Some(cids) =
+                                s.get("candidate_ids").and_then(serde_json::Value::as_array)
+                            {
+                                for cid in cids {
+                                    if let Some(id) = cid.as_str() {
+                                        *candidate_tally
+                                            .entry(id.to_string())
+                                            .or_insert(0) += 1;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            let total_ballots = ballots.len();
+            race_tallies.push(serde_json::json!({
+                "race_id": race_id,
+                "title": race_title,
+                "seat_type": seat_type,
+                "max_selections": max_selections,
+                "tally": candidate_tally,
+                "total_ballots": total_ballots,
+            }));
+        }
+
+        let voters: Vec<String> = ballots.iter().map(|b| b.author.clone()).collect();
+        (
+            StatusCode::OK,
+            Json(serde_json::json!({
+                "election_id": election_id,
+                "total_ballots": ballots.len(),
+                "races": race_tallies,
+                "voters": voters,
+            })),
+        )
+    }
+
     fn build_did_document(did: &str, entries: &[LedgerEntry]) -> Option<DidDocument> {
         let mut latest: Option<&LedgerEntry> = None;
         for entry in entries {
@@ -3877,6 +4089,34 @@ mod tests {
                 config: json!({
                     "proposal_namespace": "civic.proposal",
                     "valid_choices": ["yes", "no", "abstain"]
+                }),
+            }],
+        }]);
+        ledger.bootstrap_namespaces(vec![NamespaceRuleset {
+            descriptor: NamespaceDescriptor {
+                namespace: "civic.election".to_string(),
+                version: 1,
+                rules_hash: "civic-election-v1".to_string(),
+                governed_by: "governance".to_string(),
+            },
+            writers: BTreeSet::new(),
+            validators: vec![NamespaceRule {
+                name: "allowed_actions".to_string(),
+                config: json!({"actions":["OPEN_ELECTION","CLOSE_ELECTION"]}),
+            }],
+        }]);
+        ledger.bootstrap_namespaces(vec![NamespaceRuleset {
+            descriptor: NamespaceDescriptor {
+                namespace: "civic.election.ballot".to_string(),
+                version: 1,
+                rules_hash: "civic-election-ballot-v1".to_string(),
+                governed_by: "governance".to_string(),
+            },
+            writers: BTreeSet::new(),
+            validators: vec![NamespaceRule {
+                name: "election_ballot_policy".to_string(),
+                config: json!({
+                    "election_namespace": "civic.election"
                 }),
             }],
         }]);
@@ -11149,6 +11389,219 @@ mod tests {
                 Request::builder()
                     .method("GET")
                     .uri("/api/v1/civic/proposals/nonexistent")
+                    .body(Body::empty())
+                    .expect("detail request"),
+            )
+            .await
+            .expect("detail response");
+        assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn election_lifecycle_and_tally() {
+        let app = build_server().router();
+
+        let open = LedgerEntry {
+            entry_id: Uuid::new_v4(),
+            namespace: "civic.election".to_string(),
+            action: "OPEN_ELECTION".to_string(),
+            object_id: "elec-2026-national".to_string(),
+            payload: json!({
+                "title": "2026 National Elections",
+                "races": [
+                    {
+                        "race_id": "president",
+                        "title": "President",
+                        "seat_type": "single",
+                        "max_selections": 1,
+                        "candidates": [
+                            {"candidate_id": "p1", "name": "Alice Reyes", "party": "Party A"},
+                            {"candidate_id": "p2", "name": "Bob Santos", "party": "Party B"}
+                        ]
+                    },
+                    {
+                        "race_id": "senator",
+                        "title": "Senator (Top 12)",
+                        "seat_type": "multi",
+                        "max_selections": 12,
+                        "candidates": [
+                            {"candidate_id": "s1", "name": "Carol Cruz", "party": "Party A"},
+                            {"candidate_id": "s2", "name": "Dave Lim", "party": "Party B"},
+                            {"candidate_id": "s3", "name": "Eve Tan", "party": "Party C"}
+                        ]
+                    }
+                ]
+            }),
+            privacy_flag: false,
+            privacy_mode: citizen_types::PrivacyMode::None,
+            payload_commitment: None,
+            ciphertext_hex: None,
+            nonce_hex: None,
+            salt_hex: None,
+            kdf_params: None,
+            consent_receipt: None,
+            authorized_readers: vec![],
+            custodian_policy_id: None,
+            field_reader_acls: BTreeMap::new(),
+            key_wrapped_secrets: vec![],
+            revocation_events: vec![],
+            author: "governance:vote".to_string(),
+            signature: "sig".to_string(),
+            timestamp: 1_736_600_100,
+        };
+        let resp = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/entries/submit")
+                    .header("content-type", "application/json")
+                    .body(Body::from(serde_json::to_vec(&open).expect("open body")))
+                    .expect("open request"),
+            )
+            .await
+            .expect("open submit");
+        assert!(resp.status().is_success());
+
+        let ballot1 = LedgerEntry {
+            entry_id: Uuid::new_v4(),
+            namespace: "civic.election.ballot".to_string(),
+            action: "CAST_BALLOT".to_string(),
+            object_id: "ballot-alice-elec-2026-national".to_string(),
+            payload: json!({
+                "election_id": "elec-2026-national",
+                "selections": [
+                    {"race_id": "president", "candidate_ids": ["p1"]},
+                    {"race_id": "senator", "candidate_ids": ["s1", "s3"]}
+                ]
+            }),
+            privacy_flag: false,
+            privacy_mode: citizen_types::PrivacyMode::None,
+            payload_commitment: None,
+            ciphertext_hex: None,
+            nonce_hex: None,
+            salt_hex: None,
+            kdf_params: None,
+            consent_receipt: None,
+            authorized_readers: vec![],
+            custodian_policy_id: None,
+            field_reader_acls: BTreeMap::new(),
+            key_wrapped_secrets: vec![],
+            revocation_events: vec![],
+            author: "did:citizen:alice".to_string(),
+            signature: "sig".to_string(),
+            timestamp: 1_736_600_200,
+        };
+        let ballot2 = LedgerEntry {
+            author: "did:citizen:bob".to_string(),
+            object_id: "ballot-bob-elec-2026-national".to_string(),
+            payload: json!({
+                "election_id": "elec-2026-national",
+                "selections": [
+                    {"race_id": "president", "candidate_ids": ["p2"]},
+                    {"race_id": "senator", "candidate_ids": ["s2", "s3"]}
+                ]
+            }),
+            timestamp: 1_736_600_210,
+            ..ballot1.clone()
+        };
+
+        for ballot in [&ballot1, &ballot2] {
+            let resp = app
+                .clone()
+                .oneshot(
+                    Request::builder()
+                        .method("POST")
+                        .uri("/api/v1/entries/submit")
+                        .header("content-type", "application/json")
+                        .body(Body::from(
+                            serde_json::to_vec(ballot).expect("ballot body"),
+                        ))
+                        .expect("ballot request"),
+                )
+                .await
+                .expect("ballot submit");
+            assert!(resp.status().is_success());
+        }
+
+        let list_resp = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri("/api/v1/civic/elections")
+                    .body(Body::empty())
+                    .expect("list request"),
+            )
+            .await
+            .expect("list response");
+        assert_eq!(list_resp.status(), StatusCode::OK);
+        let body = axum::body::to_bytes(list_resp.into_body(), usize::MAX)
+            .await
+            .expect("list body");
+        let payload: Value = serde_json::from_slice(&body).expect("list payload");
+        assert_eq!(payload["elections"][0]["election_id"], "elec-2026-national");
+        assert_eq!(payload["elections"][0]["status"], "open");
+        assert_eq!(payload["elections"][0]["race_count"], 2);
+
+        let detail_resp = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri("/api/v1/civic/elections/elec-2026-national")
+                    .body(Body::empty())
+                    .expect("detail request"),
+            )
+            .await
+            .expect("detail response");
+        assert_eq!(detail_resp.status(), StatusCode::OK);
+
+        let tally_resp = app
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri("/api/v1/civic/elections/elec-2026-national/tally")
+                    .body(Body::empty())
+                    .expect("tally request"),
+            )
+            .await
+            .expect("tally response");
+        assert_eq!(tally_resp.status(), StatusCode::OK);
+        let body = axum::body::to_bytes(tally_resp.into_body(), usize::MAX)
+            .await
+            .expect("tally body");
+        let payload: Value = serde_json::from_slice(&body).expect("tally payload");
+        assert_eq!(payload["total_ballots"], 2);
+
+        let pres = &payload["races"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|r| r["race_id"] == "president")
+            .unwrap();
+        assert_eq!(pres["tally"]["p1"], 1);
+        assert_eq!(pres["tally"]["p2"], 1);
+
+        let sen = &payload["races"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|r| r["race_id"] == "senator")
+            .unwrap();
+        assert_eq!(sen["tally"]["s1"], 1);
+        assert_eq!(sen["tally"]["s2"], 1);
+        assert_eq!(sen["tally"]["s3"], 2);
+    }
+
+    #[tokio::test]
+    async fn election_detail_returns_404_for_missing() {
+        let app = build_server().router();
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri("/api/v1/civic/elections/nonexistent")
                     .body(Body::empty())
                     .expect("detail request"),
             )

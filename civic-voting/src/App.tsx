@@ -2,43 +2,72 @@ import { useState, useEffect, useCallback } from "react";
 
 const NODE_BASE = import.meta.env.VITE_NODE_URL ?? "";
 
-interface Proposal {
-  proposal_id: string;
+interface ElectionSummary {
+  election_id: string;
   title: string | null;
-  description: string | null;
   opened_at: number;
   opened_by: string;
   status: string;
+  race_count: number;
 }
 
-interface Tally {
-  proposal_id: string;
-  total_ballots: number;
+interface Candidate {
+  candidate_id: string;
+  name: string;
+  party: string;
+}
+
+interface Race {
+  race_id: string;
+  title: string;
+  seat_type: string;
+  max_selections: number;
+  candidates: Candidate[];
+}
+
+interface ElectionDetail extends ElectionSummary {
+  races: Race[];
+}
+
+interface RaceTally {
+  race_id: string;
+  title: string;
+  seat_type: string;
+  max_selections: number;
   tally: Record<string, number>;
+  total_ballots: number;
+}
+
+interface ElectionTally {
+  election_id: string;
+  total_ballots: number;
+  races: RaceTally[];
   voters: string[];
 }
 
+type Selections = Record<string, string[]>;
+
 export default function App() {
-  const [proposals, setProposals] = useState<Proposal[]>([]);
-  const [selectedProposal, setSelectedProposal] = useState<Proposal | null>(
-    null,
-  );
-  const [tally, setTally] = useState<Tally | null>(null);
+  const [elections, setElections] = useState<ElectionSummary[]>([]);
+  const [selectedElection, setSelectedElection] = useState<ElectionDetail | null>(null);
+  const [tally, setTally] = useState<ElectionTally | null>(null);
+  const [selections, setSelections] = useState<Selections>({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [submitResult, setSubmitResult] = useState<string | null>(null);
   const [walletConnected, setWalletConnected] = useState(false);
   const [signerDid, setSignerDid] = useState<string>("");
+  const [showResults, setShowResults] = useState(false);
 
-  const fetchProposals = useCallback(async () => {
+  const fetchElections = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`${NODE_BASE}/api/v1/civic/proposals`);
-      if (!res.ok) throw new Error("Failed to fetch proposals");
+      const res = await fetch(`${NODE_BASE}/api/v1/civic/elections`);
+      if (!res.ok) throw new Error("Failed to fetch elections");
       const data = await res.json();
-      setProposals(data.proposals ?? []);
+      setElections(data.elections ?? []);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unknown error");
     } finally {
@@ -46,13 +75,27 @@ export default function App() {
     }
   }, []);
 
-  const fetchTally = useCallback(async (proposalId: string) => {
+  const fetchElectionDetail = useCallback(async (electionId: string) => {
     try {
-      const res = await fetch(
-        `${NODE_BASE}/api/v1/civic/proposals/${proposalId}/tally`,
-      );
+      const res = await fetch(`${NODE_BASE}/api/v1/civic/elections/${electionId}`);
+      if (!res.ok) throw new Error("Failed to fetch election");
+      const data: ElectionDetail = await res.json();
+      setSelectedElection(data);
+      const init: Selections = {};
+      for (const r of data.races) {
+        init[r.race_id] = [];
+      }
+      setSelections(init);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unknown error");
+    }
+  }, []);
+
+  const fetchTally = useCallback(async (electionId: string) => {
+    try {
+      const res = await fetch(`${NODE_BASE}/api/v1/civic/elections/${electionId}/tally`);
       if (!res.ok) throw new Error("Failed to fetch tally");
-      const data = await res.json();
+      const data: ElectionTally = await res.json();
       setTally(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unknown error");
@@ -60,38 +103,45 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    fetchProposals();
-  }, [fetchProposals]);
+    fetchElections();
+  }, [fetchElections]);
 
-  const selectProposal = (proposal: Proposal) => {
-    setSelectedProposal(proposal);
+  const selectElection = (e: ElectionSummary) => {
+    setSelectedElection(null);
     setTally(null);
     setSubmitResult(null);
-    fetchTally(proposal.proposal_id);
+    setShowResults(false);
+    fetchElectionDetail(e.election_id);
+    fetchTally(e.election_id);
+  };
+
+  const toggleCandidate = (raceId: string, candidateId: string, max: number) => {
+    setSelections((prev) => {
+      const current = prev[raceId] ?? [];
+      if (current.includes(candidateId)) {
+        return { ...prev, [raceId]: current.filter((c) => c !== candidateId) };
+      }
+      if (current.length >= max) return prev;
+      return { ...prev, [raceId]: [...current, candidateId] };
+    });
   };
 
   const connectWallet = async () => {
     const provider = (window as any).citizen ?? (window as any).ethereum;
     if (!provider) {
-      setError(
-        "No wallet provider found. Install the Citizen wallet extension.",
-      );
+      setError("No wallet provider found. Install the Citizen wallet extension.");
       return;
     }
     try {
-      const accounts = await provider.request({
-        method: "citizen_requestAccounts",
-      });
-      if (accounts && accounts.length > 0) {
+      const accounts = await provider.request({ method: "citizen_requestAccounts" });
+      if (accounts?.length) {
         setSignerDid(accounts[0]);
         setWalletConnected(true);
       }
     } catch {
       try {
-        const accounts = await provider.request({
-          method: "eth_requestAccounts",
-        });
-        if (accounts && accounts.length > 0) {
+        const accounts = await provider.request({ method: "eth_requestAccounts" });
+        if (accounts?.length) {
           setSignerDid(accounts[0]);
           setWalletConnected(true);
         }
@@ -101,29 +151,34 @@ export default function App() {
     }
   };
 
-  const castBallot = async (choice: string) => {
-    if (!selectedProposal || !walletConnected) return;
+  const castBallot = async () => {
+    if (!selectedElection || !walletConnected) return;
     setSubmitting(true);
     setSubmitResult(null);
     setError(null);
 
-    try {
-      const entry = {
-        entry_id: crypto.randomUUID(),
-        namespace: "civic.ballot",
-        action: "CAST_BALLOT",
-        object_id: `ballot-${signerDid}-${selectedProposal.proposal_id}`,
-        payload: {
-          proposal_id: selectedProposal.proposal_id,
-          choice,
-        },
-        author: signerDid,
-        signature: "",
-        timestamp: Math.floor(Date.now() / 1000),
-        privacy_flag: false,
-        privacy_mode: "none",
-      };
+    const entry = {
+      entry_id: crypto.randomUUID(),
+      namespace: "civic.election.ballot",
+      action: "CAST_BALLOT",
+      object_id: `ballot-${signerDid}-${selectedElection.election_id}`,
+      payload: {
+        election_id: selectedElection.election_id,
+        selections: selectedElection.races
+          .filter((r) => (selections[r.race_id] ?? []).length > 0)
+          .map((r) => ({
+            race_id: r.race_id,
+            candidate_ids: selections[r.race_id],
+          })),
+      },
+      author: signerDid,
+      signature: "",
+      timestamp: Math.floor(Date.now() / 1000),
+      privacy_flag: false,
+      privacy_mode: "none",
+    };
 
+    try {
       const signingPayload = JSON.stringify({
         entry_id: entry.entry_id,
         namespace: entry.namespace,
@@ -135,10 +190,8 @@ export default function App() {
       });
 
       const provider = (window as any).citizen ?? (window as any).ethereum;
-      let signature = "";
-
       try {
-        signature = await provider.request({
+        entry.signature = await provider.request({
           method: "personal_sign",
           params: [signingPayload, signerDid],
         });
@@ -147,8 +200,6 @@ export default function App() {
         setSubmitting(false);
         return;
       }
-
-      entry.signature = signature;
 
       const res = await fetch(`${NODE_BASE}/api/v1/entries/submit`, {
         method: "POST",
@@ -161,8 +212,10 @@ export default function App() {
         throw new Error(`Submission failed (${res.status}): ${body}`);
       }
 
-      setSubmitResult(`Ballot cast successfully: "${choice}"`);
-      await fetchTally(selectedProposal.proposal_id);
+      const racesVoted = Object.values(selections).filter((a) => a.length > 0).length;
+      setSubmitResult(`Ballot cast successfully across ${racesVoted} race${racesVoted !== 1 ? "s" : ""}.`);
+      await fetchTally(selectedElection.election_id);
+      setShowResults(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unknown error");
     } finally {
@@ -170,19 +223,18 @@ export default function App() {
     }
   };
 
-  const maxTally = tally
-    ? Math.max(...Object.values(tally.tally), 1)
-    : 1;
+  const totalSelections = Object.values(selections).reduce((sum, a) => sum + a.length, 0);
+  const racesWithSelections = Object.values(selections).filter((a) => a.length > 0).length;
 
   return (
     <div className="app">
       <header className="app-header">
         <div>
           <p className="eyebrow">Civic Participation</p>
-          <h1>Proposal Voting</h1>
+          <h1>Election Ballot</h1>
           <p className="lead">
-            Cast your ballot on governance proposals. Every vote is verifiable,
-            tamper-proof, and secured by your citizenship credential.
+            Cast your ballot across all races in a single submission. President,
+            senators, congressmen, mayors — every position, one atomic ballot.
           </p>
         </div>
         <button
@@ -190,159 +242,197 @@ export default function App() {
           onClick={connectWallet}
           disabled={walletConnected}
         >
-          {walletConnected
-            ? `${signerDid.slice(0, 16)}...`
-            : "Connect Wallet"}
+          {walletConnected ? `${signerDid.slice(0, 16)}...` : "Connect Wallet"}
         </button>
       </header>
 
       {error && (
         <div className="banner banner-error">
           <strong>Error:</strong> {error}
-          <button className="dismiss" onClick={() => setError(null)}>
-            Dismiss
-          </button>
+          <button className="dismiss" onClick={() => setError(null)}>Dismiss</button>
         </div>
       )}
 
       {submitResult && (
         <div className="banner banner-success">
           {submitResult}
-          <button className="dismiss" onClick={() => setSubmitResult(null)}>
-            Dismiss
-          </button>
+          <button className="dismiss" onClick={() => setSubmitResult(null)}>Dismiss</button>
         </div>
       )}
 
       <div className="voting-layout">
-        <div className="proposals-panel">
+        <div className="elections-panel">
           <div className="panel-header">
-            <h2>Open Proposals</h2>
-            <button
-              className="btn btn-ghost btn-sm"
-              onClick={fetchProposals}
-              disabled={loading}
-            >
+            <h2>Open Elections</h2>
+            <button className="btn btn-ghost btn-sm" onClick={fetchElections} disabled={loading}>
               {loading ? "Loading..." : "Refresh"}
             </button>
           </div>
-
-          {proposals.length === 0 && !loading && (
-            <p className="empty-state">No proposals are currently open.</p>
+          {elections.length === 0 && !loading && (
+            <p className="empty-state">No elections are currently open.</p>
           )}
-
-          {proposals.map((p) => (
+          {elections.map((e) => (
             <div
-              key={p.proposal_id}
-              className={`proposal-card ${
-                selectedProposal?.proposal_id === p.proposal_id
-                  ? "selected"
-                  : ""
-              }`}
-              onClick={() => selectProposal(p)}
+              key={e.election_id}
+              className={`election-card ${selectedElection?.election_id === e.election_id ? "selected" : ""}`}
+              onClick={() => selectElection(e)}
             >
-              <div className="proposal-card-header">
-                <span
-                  className={`status-badge ${p.status === "open" ? "open" : "closed"}`}
-                >
-                  {p.status}
+              <div className="election-card-header">
+                <span className={`status-badge ${e.status === "open" ? "open" : "closed"}`}>
+                  {e.status}
                 </span>
-                <span className="proposal-id">{p.proposal_id}</span>
+                <span className="race-count-badge">{e.race_count} races</span>
               </div>
-              <h3>{p.title ?? p.proposal_id}</h3>
-              {p.description && (
-                <p className="proposal-desc">{p.description}</p>
-              )}
+              <h3>{e.title ?? e.election_id}</h3>
+              <span className="election-id">{e.election_id}</span>
             </div>
           ))}
         </div>
 
         <div className="detail-panel">
-          {!selectedProposal && (
+          {!selectedElection && (
             <div className="empty-detail">
-              <p>Select a proposal to view details and cast your ballot.</p>
+              <p>Select an election to view races and cast your ballot.</p>
             </div>
           )}
 
-          {selectedProposal && (
+          {selectedElection && (
             <>
               <div className="detail-header">
-                <h2>
-                  {selectedProposal.title ?? selectedProposal.proposal_id}
-                </h2>
-                <span className="proposal-meta">
-                  {selectedProposal.proposal_id} - Opened by{" "}
-                  {selectedProposal.opened_by.slice(0, 20)}...
-                </span>
-              </div>
-
-              {selectedProposal.description && (
-                <p className="detail-description">
-                  {selectedProposal.description}
-                </p>
-              )}
-
-              {tally && (
-                <div className="tally-section">
-                  <h3>Live Tally</h3>
-                  <p className="total-ballots">
-                    {tally.total_ballots} ballot
-                    {tally.total_ballots !== 1 ? "s" : ""} cast
-                  </p>
-                  <div className="tally-bars">
-                    {Object.entries(tally.tally)
-                      .sort((a, b) => b[1] - a[1])
-                      .map(([choice, count]) => (
-                        <div key={choice} className="tally-row">
-                          <span className="tally-label">
-                            {choice.charAt(0).toUpperCase() + choice.slice(1)}
-                          </span>
-                          <div className="tally-bar-container">
-                            <div
-                              className={`tally-bar ${choice}`}
-                              style={{
-                                width: `${(count / maxTally) * 100}%`,
-                              }}
-                            />
-                            <span className="tally-count">{count}</span>
-                          </div>
-                        </div>
-                      ))}
+                <div className="detail-header-row">
+                  <div>
+                    <h2>{selectedElection.title ?? selectedElection.election_id}</h2>
+                    <span className="election-meta">
+                      {selectedElection.election_id} · {selectedElection.races.length} races
+                    </span>
+                  </div>
+                  <div className="view-toggle">
+                    <button
+                      className={`btn btn-sm ${!showResults ? "btn-primary" : "btn-ghost"}`}
+                      onClick={() => setShowResults(false)}
+                    >
+                      Ballot
+                    </button>
+                    <button
+                      className={`btn btn-sm ${showResults ? "btn-primary" : "btn-ghost"}`}
+                      onClick={() => {
+                        setShowResults(true);
+                        fetchTally(selectedElection.election_id);
+                      }}
+                    >
+                      Live Results
+                    </button>
                   </div>
                 </div>
+              </div>
+
+              {showResults && tally && (
+                <div className="results-section">
+                  <p className="total-ballots">
+                    {tally.total_ballots} ballot{tally.total_ballots !== 1 ? "s" : ""} cast
+                  </p>
+                  {tally.races.map((race) => {
+                    const raceDef = selectedElection.races.find((r) => r.race_id === race.race_id);
+                    const max = Math.max(...Object.values(race.tally), 1);
+                    return (
+                      <div key={race.race_id} className="race-tally">
+                        <div className="race-tally-header">
+                          <h3>{race.title}</h3>
+                          <span className="race-meta">
+                            {race.seat_type === "multi" ? `Top ${race.max_selections}` : "Single seat"}
+                          </span>
+                        </div>
+                        <div className="tally-bars">
+                          {raceDef?.candidates
+                            .map((c) => ({
+                              ...c,
+                              count: race.tally[c.candidate_id] ?? 0,
+                            }))
+                            .sort((a, b) => b.count - a.count)
+                            .map((c) => (
+                              <div key={c.candidate_id} className="tally-row">
+                                <span className="tally-label">{c.name}</span>
+                                <span className="tally-party">{c.party}</span>
+                                <div className="tally-bar-container">
+                                  <div
+                                    className="tally-bar"
+                                    style={{ width: `${(c.count / max) * 100}%` }}
+                                  />
+                                  <span className="tally-count">{c.count}</span>
+                                </div>
+                              </div>
+                            ))}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               )}
 
-              <div className="ballot-section">
-                <h3>Cast Your Ballot</h3>
-                {!walletConnected && (
-                  <p className="wallet-prompt">
-                    Connect your wallet to cast a ballot.
-                  </p>
-                )}
-                <div className="ballot-buttons">
-                  <button
-                    className="vote-btn yes"
-                    onClick={() => castBallot("yes")}
-                    disabled={!walletConnected || submitting}
-                  >
-                    {submitting ? "Submitting..." : "Vote Yes"}
-                  </button>
-                  <button
-                    className="vote-btn no"
-                    onClick={() => castBallot("no")}
-                    disabled={!walletConnected || submitting}
-                  >
-                    {submitting ? "Submitting..." : "Vote No"}
-                  </button>
-                  <button
-                    className="vote-btn abstain"
-                    onClick={() => castBallot("abstain")}
-                    disabled={!walletConnected || submitting}
-                  >
-                    {submitting ? "Submitting..." : "Abstain"}
-                  </button>
-                </div>
-              </div>
+              {!showResults && (
+                <>
+                  {selectedElection.races.map((race) => {
+                    const sel = selections[race.race_id] ?? [];
+                    const isMulti = race.max_selections > 1;
+                    return (
+                      <div key={race.race_id} className="race-card">
+                        <div className="race-header">
+                          <h3>{race.title}</h3>
+                          <span className="race-instructions">
+                            {isMulti
+                              ? `Select up to ${race.max_selections}`
+                              : "Select one"}
+                          </span>
+                        </div>
+                        <div className={`candidates-grid ${isMulti ? "multi" : "single"}`}>
+                          {race.candidates.map((c) => {
+                            const isSelected = sel.includes(c.candidate_id);
+                            const atMax = !isSelected && sel.length >= race.max_selections;
+                            return (
+                              <button
+                                key={c.candidate_id}
+                                className={`candidate-card ${isSelected ? "selected" : ""} ${atMax ? "disabled" : ""}`}
+                                onClick={() => toggleCandidate(race.race_id, c.candidate_id, race.max_selections)}
+                                disabled={atMax}
+                              >
+                                <div className="candidate-indicator">
+                                  {isSelected ? (
+                                    <span className="check">&#10003;</span>
+                                  ) : (
+                                    <span className={`box ${isMulti ? "checkbox" : "radio"}`} />
+                                  )}
+                                </div>
+                                <div className="candidate-info">
+                                  <span className="candidate-name">{c.name}</span>
+                                  <span className="candidate-party">{c.party}</span>
+                                </div>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })}
+
+                  <div className="ballot-footer">
+                    <div className="ballot-summary">
+                      {racesWithSelections} of {selectedElection.races.length} races selected
+                      {totalSelections > 0 && ` · ${totalSelections} total pick${totalSelections !== 1 ? "s" : ""}`}
+                    </div>
+                    <button
+                      className="btn btn-primary btn-lg"
+                      onClick={castBallot}
+                      disabled={!walletConnected || submitting || totalSelections === 0}
+                    >
+                      {submitting
+                        ? "Submitting..."
+                        : walletConnected
+                          ? `Cast Ballot${totalSelections > 0 ? ` (${totalSelections})` : ""}`
+                          : "Connect Wallet to Vote"}
+                    </button>
+                  </div>
+                </>
+              )}
             </>
           )}
         </div>
