@@ -127,27 +127,22 @@ export default function App() {
   };
 
   const connectWallet = async () => {
-    const provider = (window as any).citizen ?? (window as any).ethereum;
+    const provider = (window as any).ctzn ?? (window as any).citizen;
     if (!provider) {
-      setError("No wallet provider found. Install the Citizen wallet extension.");
+      setError("No Citizen wallet found. Install the browser extension.");
       return;
     }
     try {
-      const accounts = await provider.request({ method: "citizen_requestAccounts" });
-      if (accounts?.length) {
-        setSignerDid(accounts[0]);
+      const signer = await provider.request({ method: "ctzn_getCitizenSigner" });
+      if (signer?.did || signer?.signer) {
+        const did = signer.did ?? signer.signer;
+        setSignerDid(did);
         setWalletConnected(true);
+      } else {
+        setError("Wallet returned no signer identity.");
       }
     } catch {
-      try {
-        const accounts = await provider.request({ method: "eth_requestAccounts" });
-        if (accounts?.length) {
-          setSignerDid(accounts[0]);
-          setWalletConnected(true);
-        }
-      } catch {
-        setError("Wallet connection rejected");
-      }
+      setError("Wallet connection rejected.");
     }
   };
 
@@ -189,12 +184,13 @@ export default function App() {
         timestamp: entry.timestamp,
       });
 
-      const provider = (window as any).citizen ?? (window as any).ethereum;
+      const provider = (window as any).ctzn ?? (window as any).citizen;
       try {
-        entry.signature = await provider.request({
-          method: "personal_sign",
-          params: [signingPayload, signerDid],
+        const result = await provider.request({
+          method: "ctzn_signCitizenTx",
+          params: [{ payload: signingPayload, author: signerDid }],
         });
+        entry.signature = result?.signature ?? "placeholder";
       } catch {
         setError("Signing rejected");
         setSubmitting(false);
