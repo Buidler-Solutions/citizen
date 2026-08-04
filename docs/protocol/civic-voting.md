@@ -178,3 +178,46 @@ POST /api/v1/entries/submit
 - **Budget approvals** - participatory budgeting where citizens vote on spending
 - **Board elections** - organizational governance for institutions and cooperatives
 - **Constitutional amendments** - high-stakes governance changes requiring citizen approval
+
+## Client Surfaces
+
+The civic voting system is accessible through two client-facing applications:
+
+### Web dApp
+
+Located at `dapp/apps/web/app/civic-voting/` - a Next.js page providing:
+
+- Proposal list with open/closed status badges
+- Proposal detail view with description and metadata
+- Live tally visualization with per-choice bar charts
+- Wallet-connected ballot casting (yes/no/abstain)
+- Real-time tally refresh after each ballot submission
+
+Navigate to `/civic-voting` from the dApp home page.
+
+### Mobile Wallet (Flutter)
+
+The mobile wallet includes a dedicated **Vote** tab in the bottom navigation bar. Features:
+
+- Browse open proposals fetched from the connected network node
+- View live tally with visual bar chart breakdown
+- Cast signed ballots using the wallet's Ed25519 key
+- Automatic signer DID derivation from the active wallet
+- Network-aware (works across mainnet, testnet, local node)
+
+The vote screen (`vote_screen.dart`) integrates with the existing wallet infrastructure - it uses the same `CryptoService` for signing, `CitizenApiService` for API calls, and `WalletProvider` for the active wallet, requiring no additional key management.
+
+### API Integration Flow
+
+```
+1. Citizen opens Vote tab (mobile) or /civic-voting (web)
+2. App fetches: GET /api/v1/civic/proposals
+3. Citizen selects a proposal
+4. App fetches: GET /api/v1/civic/proposals/:id/tally
+5. Citizen taps "Vote Yes"
+6. App constructs ballot entry with proposal_id + choice
+7. App signs the canonical JSON payload with wallet's Ed25519 key
+8. App submits: POST /api/v1/entries/submit (CAST_BALLOT)
+9. Ledger validates: civic_voting_policy + optional ctzn_citizenship_policy
+10. App refreshes tally to show updated counts
+```
