@@ -1,0 +1,362 @@
+:root {
+  font-family: "Inter", "Segoe UI", sans-serif;
+  --bg: #f7f7fb;
+  --text: #0c1120;
+  --muted: #50556b;
+  --card: #ffffff;
+  --accent: #2d5bff;
+  --accent-weak: rgba(45, 91, 255, 0.12);
+  --border: rgba(12, 17, 32, 0.08);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+}
+
+.app {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 40px clamp(16px, 4vw, 48px);
+}
+
+.app-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 24px;
+  margin-bottom: 32px;
+}
+
+.app-header h1 {
+  margin: 0 0 8px;
+}
+
+.eyebrow {
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-size: 0.75rem;
+  color: var(--muted);
+  margin-bottom: 12px;
+}
+
+.lead {
+  color: var(--muted);
+  max-width: 520px;
+}
+
+.btn {
+  border-radius: 999px;
+  padding: 10px 20px;
+  font-weight: 600;
+  font-family: inherit;
+  font-size: inherit;
+  cursor: pointer;
+  border: none;
+  display: inline-flex;
+  transition: opacity 0.15s;
+}
+
+.btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.btn-primary {
+  background: var(--accent);
+  color: white;
+}
+
+.btn-ghost {
+  background: var(--accent-weak);
+  color: var(--accent);
+}
+
+.btn-sm {
+  padding: 6px 14px;
+  font-size: 0.85rem;
+}
+
+.voting-layout {
+  display: grid;
+  grid-template-columns: 380px 1fr;
+  gap: 24px;
+  min-height: 500px;
+}
+
+@media (max-width: 900px) {
+  .voting-layout {
+    grid-template-columns: 1fr;
+  }
+  .app-header {
+    flex-direction: column;
+  }
+}
+
+.proposals-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.panel-header h2 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+.empty-state {
+  color: var(--muted);
+  padding: 24px 0;
+  text-align: center;
+}
+
+.proposal-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 16px;
+  cursor: pointer;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.proposal-card:hover {
+  border-color: var(--accent);
+}
+
+.proposal-card.selected {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-weak);
+}
+
+.proposal-card-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.status-badge {
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.status-badge.open {
+  background: rgba(34, 197, 94, 0.12);
+  color: rgb(22, 163, 74);
+}
+
+.status-badge.closed {
+  background: rgba(239, 68, 68, 0.12);
+  color: rgb(220, 38, 38);
+}
+
+.proposal-id {
+  font-size: 0.8rem;
+  color: var(--muted);
+  font-family: "JetBrains Mono", monospace;
+}
+
+.proposal-card h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.proposal-desc {
+  margin: 6px 0 0;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.detail-panel {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.empty-detail {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  color: var(--muted);
+}
+
+.detail-header h2 {
+  margin: 0 0 4px;
+}
+
+.proposal-meta {
+  font-size: 0.82rem;
+  color: var(--muted);
+  font-family: "JetBrains Mono", monospace;
+}
+
+.detail-description {
+  color: var(--muted);
+  line-height: 1.6;
+  margin: 0;
+}
+
+.tally-section h3,
+.ballot-section h3 {
+  margin: 0 0 12px;
+  font-size: 1rem;
+}
+
+.total-ballots {
+  font-size: 0.85rem;
+  color: var(--muted);
+  margin: 0 0 16px;
+}
+
+.tally-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.tally-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.tally-label {
+  width: 80px;
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.tally-bar-container {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tally-bar {
+  height: 28px;
+  border-radius: 6px;
+  min-width: 4px;
+  transition: width 0.3s ease;
+}
+
+.tally-bar.yes {
+  background: linear-gradient(90deg, #22c55e, #16a34a);
+}
+
+.tally-bar.no {
+  background: linear-gradient(90deg, #ef4444, #dc2626);
+}
+
+.tally-bar.abstain {
+  background: linear-gradient(90deg, #a3a3a3, #737373);
+}
+
+.tally-count {
+  font-weight: 700;
+  font-size: 0.95rem;
+  min-width: 32px;
+}
+
+.ballot-section {
+  border-top: 1px solid var(--border);
+  padding-top: 24px;
+}
+
+.wallet-prompt {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.ballot-buttons {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.vote-btn {
+  flex: 1;
+  min-width: 120px;
+  padding: 14px 20px;
+  border: none;
+  border-radius: 12px;
+  font-weight: 700;
+  font-size: 0.95rem;
+  font-family: inherit;
+  cursor: pointer;
+  transition: transform 0.1s, opacity 0.15s;
+}
+
+.vote-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.vote-btn:not(:disabled):hover {
+  transform: translateY(-1px);
+}
+
+.vote-btn.yes {
+  background: rgba(34, 197, 94, 0.12);
+  color: rgb(22, 163, 74);
+}
+
+.vote-btn.no {
+  background: rgba(239, 68, 68, 0.12);
+  color: rgb(220, 38, 38);
+}
+
+.vote-btn.abstain {
+  background: rgba(115, 115, 115, 0.12);
+  color: rgb(82, 82, 82);
+}
+
+.banner {
+  border-radius: 12px;
+  padding: 14px 18px;
+  margin-bottom: 24px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.banner-error {
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  color: rgb(185, 28, 28);
+}
+
+.banner-success {
+  background: rgba(34, 197, 94, 0.1);
+  border: 1px solid rgba(34, 197, 94, 0.3);
+  color: rgb(22, 163, 74);
+}
+
+.dismiss {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 0.85rem;
+  color: inherit;
+  font-family: inherit;
+  text-decoration: underline;
+}
