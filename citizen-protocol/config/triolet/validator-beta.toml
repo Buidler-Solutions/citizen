@@ -146,3 +146,44 @@ writers = ["consent.receipt"]
 [[namespaces.validators]]
 name = "require_signature"
 config = {}
+
+[[namespaces]]
+descriptor.namespace = "civic.proposal"
+descriptor.version = 1
+descriptor.rules_hash = "sha256:civic-proposal-v1"
+descriptor.governed_by = "governance.vote"
+writers = []
+[[namespaces.validators]]
+name = "allowed_actions"
+config.actions = ["OPEN_PROPOSAL", "CLOSE_PROPOSAL"]
+
+[[namespaces]]
+descriptor.namespace = "civic.ballot"
+descriptor.version = 1
+descriptor.rules_hash = "sha256:civic-ballot-v1"
+descriptor.governed_by = "governance.vote"
+writers = []
+[[namespaces.validators]]
+name = "civic_voting_policy"
+config.proposal_namespace = "civic.proposal"
+config.valid_choices = ["yes", "no", "abstain"]
+
+[[namespaces]]
+descriptor.namespace = "civic.election"
+descriptor.version = 1
+descriptor.rules_hash = "sha256:civic-election-v1"
+descriptor.governed_by = "governance.vote"
+writers = []
+[[namespaces.validators]]
+name = "allowed_actions"
+config.actions = ["OPEN_ELECTION", "CLOSE_ELECTION"]
+
+[[namespaces]]
+descriptor.namespace = "civic.election.ballot"
+descriptor.version = 1
+descriptor.rules_hash = "sha256:civic-election-ballot-v1"
+descriptor.governed_by = "governance.vote"
+writers = []
+[[namespaces.validators]]
+name = "election_ballot_policy"
+config.election_namespace = "civic.election"
