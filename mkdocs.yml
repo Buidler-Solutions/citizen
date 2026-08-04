@@ -79,6 +79,7 @@ nav:
       - Consensus: protocol/consensus.md
       - Governance: protocol/governance.md
       - Digital Citizenship: protocol/citizenship.md
+      - Civic Voting: protocol/civic-voting.md
       - Namespaces: protocol/namespaces.md
       - Networks: protocol/networks.md
   - Wallets:

@@ -180,6 +180,7 @@ impl<S: LedgerStorage + 'static> Ledger<S> {
             "privacy_policy" => self.privacy_policy(entry, config),
             "asset_control_policy" => self.asset_control_policy(entry, config),
             "ctzn_citizenship_policy" => self.ctzn_citizenship_policy(entry, config),
+            "civic_voting_policy" => self.civic_voting_policy(entry, config),
             "wasm_runtime_policy" => self.wasm_runtime_policy(entry, config),
             "interop_adapter_policy" => self.interop_adapter_policy(entry, config),
             _ => {
@@ -1779,6 +1780,98 @@ impl<S: LedgerStorage + 'static> Ledger<S> {
             "ctzn_citizenship_policy: author {} has no qualifying active CTZN token (required_schema={:?}, required_tier={})",
             entry.author, required_schema, required_tier
         )))
+    }
+
+    fn civic_voting_policy(&self, entry: &LedgerEntry, config: &Value) -> Result<()> {
+        let proposal_ns = config
+            .get("proposal_namespace")
+            .and_then(Value::as_str)
+            .unwrap_or("civic.proposal");
+        let proposal_id = entry
+            .payload
+            .get("proposal_id")
+            .and_then(Value::as_str)
+            .ok_or_else(|| {
+                ProtocolError::ValidationFailed(
+                    "civic_voting_policy: payload.proposal_id is required".into(),
+                )
+            })?;
+
+        if entry.action != "CAST_BALLOT" {
+            return Err(ProtocolError::ValidationFailed(format!(
+                "civic_voting_policy: unsupported action '{}' (expected CAST_BALLOT)",
+                entry.action
+            )));
+        }
+
+        let choice = entry
+            .payload
+            .get("choice")
+            .and_then(Value::as_str)
+            .ok_or_else(|| {
+                ProtocolError::ValidationFailed(
+                    "civic_voting_policy: payload.choice is required".into(),
+                )
+            })?;
+        let valid_choices: Vec<&str> = config
+            .get("valid_choices")
+            .and_then(Value::as_array)
+            .map(|items| items.iter().filter_map(Value::as_str).collect())
+            .unwrap_or_else(|| vec!["yes", "no", "abstain"]);
+        if !valid_choices.contains(&choice) {
+            return Err(ProtocolError::ValidationFailed(format!(
+                "civic_voting_policy: choice '{}' not in valid choices {:?}",
+                choice, valid_choices
+            )));
+        }
+
+        let proposal_entries = self
+            .storage
+            .namespace_entries(&proposal_ns.to_string())
+            .map_err(|e| ProtocolError::ValidationFailed(e.to_string()))?;
+
+        let proposal_exists = proposal_entries.iter().any(|e| {
+            e.action == "OPEN_PROPOSAL"
+                && e.object_id == proposal_id
+        });
+        if !proposal_exists {
+            return Err(ProtocolError::ValidationFailed(format!(
+                "civic_voting_policy: proposal '{}' is not open or does not exist in namespace '{}'",
+                proposal_id, proposal_ns
+            )));
+        }
+
+        let is_closed = proposal_entries.iter().any(|e| {
+            e.action == "CLOSE_PROPOSAL" && e.object_id == proposal_id
+        });
+        if is_closed {
+            return Err(ProtocolError::ValidationFailed(format!(
+                "civic_voting_policy: proposal '{}' has been closed", proposal_id
+            )));
+        }
+
+        let ballot_ns = entry.namespace.clone();
+        let ballot_entries = self
+            .storage
+            .namespace_entries(&ballot_ns)
+            .map_err(|e| ProtocolError::ValidationFailed(e.to_string()))?;
+
+        let already_voted = ballot_entries.iter().any(|e| {
+            e.action == "CAST_BALLOT"
+                && e.author == entry.author
+                && e.payload
+                    .get("proposal_id")
+                    .and_then(Value::as_str)
+                    == Some(proposal_id)
+        });
+        if already_voted {
+            return Err(ProtocolError::ValidationFailed(format!(
+                "civic_voting_policy: author {} has already cast a ballot for proposal '{}'",
+                entry.author, proposal_id
+            )));
+        }
+
+        Ok(())
     }
 
     pub fn validate_entry_submission(&self, entry: &LedgerEntry) -> Result<()> {
@@ -4133,5 +4226,162 @@ mod tests {
         entry.author = "did:citizen:henry".into();
 
         ledger.apply_entry(entry).expect("should find the qualifying token among multiple");
+    }
+
+    fn civic_namespaces() -> Vec<NamespaceRuleset> {
+        vec![
+            namespace_with_rules(
+                "civic.proposal",
+                vec![NamespaceRule {
+                    name: "allowed_actions".into(),
+                    config: json!({"actions":["OPEN_PROPOSAL","CLOSE_PROPOSAL"]}),
+                }],
+            ),
+            namespace_with_rules(
+                "civic.ballot",
+                vec![
+                    NamespaceRule {
+                        name: "civic_voting_policy".into(),
+                        config: json!({
+                            "proposal_namespace": "civic.proposal",
+                            "valid_choices": ["yes", "no", "abstain"]
+                        }),
+                    },
+                ],
+            ),
+        ]
+    }
+
+    fn open_proposal_entry(proposal_id: &str, author: &str) -> LedgerEntry {
+        let mut entry = test_entry("civic.proposal");
+        entry.action = "OPEN_PROPOSAL".into();
+        entry.object_id = proposal_id.into();
+        entry.author = author.into();
+        entry.payload = json!({
+            "title": "Budget Approval 2026",
+            "description": "Approve the national budget for fiscal year 2026"
+        });
+        entry
+    }
+
+    fn ballot_entry(proposal_id: &str, choice: &str, author: &str) -> LedgerEntry {
+        let mut entry = test_entry("civic.ballot");
+        entry.action = "CAST_BALLOT".into();
+        entry.object_id = format!("ballot-{author}-{proposal_id}");
+        entry.author = author.into();
+        entry.payload = json!({
+            "proposal_id": proposal_id,
+            "choice": choice
+        });
+        entry
+    }
+
+    #[test]
+    fn civic_voting_accepts_valid_ballot() {
+        let ledger = Ledger::in_memory();
+        ledger.bootstrap_namespaces(civic_namespaces());
+        ledger.apply_entry(open_proposal_entry("prop-001", "governance:vote"))
+            .unwrap();
+
+        let ballot = ballot_entry("prop-001", "yes", "did:citizen:alice");
+        ledger.apply_entry(ballot).expect("valid ballot should pass");
+    }
+
+    #[test]
+    fn civic_voting_rejects_ballot_for_nonexistent_proposal() {
+        let ledger = Ledger::in_memory();
+        ledger.bootstrap_namespaces(civic_namespaces());
+
+        let ballot = ballot_entry("prop-nonexistent", "yes", "did:citizen:alice");
+        let err = ledger.apply_entry(ballot).unwrap_err();
+        assert!(err.to_string().contains("not open or does not exist"));
+    }
+
+    #[test]
+    fn civic_voting_rejects_ballot_for_closed_proposal() {
+        let ledger = Ledger::in_memory();
+        ledger.bootstrap_namespaces(civic_namespaces());
+        ledger.apply_entry(open_proposal_entry("prop-002", "governance:vote"))
+            .unwrap();
+
+        let mut close = test_entry("civic.proposal");
+        close.action = "CLOSE_PROPOSAL".into();
+        close.object_id = "prop-002".into();
+        close.author = "governance:vote".into();
+        ledger.apply_entry(close).unwrap();
+
+        let ballot = ballot_entry("prop-002", "no", "did:citizen:bob");
+        let err = ledger.apply_entry(ballot).unwrap_err();
+        assert!(err.to_string().contains("been closed"));
+    }
+
+    #[test]
+    fn civic_voting_rejects_double_voting() {
+        let ledger = Ledger::in_memory();
+        ledger.bootstrap_namespaces(civic_namespaces());
+        ledger.apply_entry(open_proposal_entry("prop-003", "governance:vote"))
+            .unwrap();
+
+        let ballot1 = ballot_entry("prop-003", "yes", "did:citizen:carol");
+        ledger.apply_entry(ballot1).unwrap();
+
+        let ballot2 = ballot_entry("prop-003", "no", "did:citizen:carol");
+        let err = ledger.apply_entry(ballot2).unwrap_err();
+        assert!(err.to_string().contains("already cast a ballot"));
+    }
+
+    #[test]
+    fn civic_voting_rejects_invalid_choice() {
+        let ledger = Ledger::in_memory();
+        ledger.bootstrap_namespaces(civic_namespaces());
+        ledger.apply_entry(open_proposal_entry("prop-004", "governance:vote"))
+            .unwrap();
+
+        let ballot = ballot_entry("prop-004", "maybe", "did:citizen:dave");
+        let err = ledger.apply_entry(ballot).unwrap_err();
+        assert!(err.to_string().contains("not in valid choices"));
+    }
+
+    #[test]
+    fn civic_voting_rejects_wrong_action() {
+        let ledger = Ledger::in_memory();
+        ledger.bootstrap_namespaces(civic_namespaces());
+        ledger.apply_entry(open_proposal_entry("prop-005", "governance:vote"))
+            .unwrap();
+
+        let mut entry = test_entry("civic.ballot");
+        entry.action = "SOMETHING_ELSE".into();
+        entry.author = "did:citizen:eve".into();
+        entry.payload = json!({"proposal_id": "prop-005", "choice": "yes"});
+        let err = ledger.apply_entry(entry).unwrap_err();
+        assert!(err.to_string().contains("unsupported action"));
+    }
+
+    #[test]
+    fn civic_voting_different_citizens_can_vote_on_same_proposal() {
+        let ledger = Ledger::in_memory();
+        ledger.bootstrap_namespaces(civic_namespaces());
+        ledger.apply_entry(open_proposal_entry("prop-006", "governance:vote"))
+            .unwrap();
+
+        ledger.apply_entry(ballot_entry("prop-006", "yes", "did:citizen:alice"))
+            .unwrap();
+        ledger.apply_entry(ballot_entry("prop-006", "no", "did:citizen:bob"))
+            .unwrap();
+        ledger.apply_entry(ballot_entry("prop-006", "abstain", "did:citizen:carol"))
+            .expect("third distinct citizen should be able to vote");
+    }
+
+    #[test]
+    fn civic_voting_rejects_missing_proposal_id() {
+        let ledger = Ledger::in_memory();
+        ledger.bootstrap_namespaces(civic_namespaces());
+
+        let mut entry = test_entry("civic.ballot");
+        entry.action = "CAST_BALLOT".into();
+        entry.author = "did:citizen:frank".into();
+        entry.payload = json!({"choice": "yes"});
+        let err = ledger.apply_entry(entry).unwrap_err();
+        assert!(err.to_string().contains("proposal_id is required"));
     }
 }

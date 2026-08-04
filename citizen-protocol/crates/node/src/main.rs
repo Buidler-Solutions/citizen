@@ -807,6 +807,35 @@ fn default_namespaces() -> Vec<NamespaceRuleset> {
                 },
             ],
         },
+        NamespaceRuleset {
+            descriptor: citizen_types::NamespaceDescriptor {
+                namespace: "civic.proposal".into(),
+                version: 1,
+                rules_hash: "sha256:civic-proposal-v1".into(),
+                governed_by: "governance.vote".into(),
+            },
+            writers: BTreeSet::new(),
+            validators: vec![citizen_types::NamespaceRule {
+                name: "allowed_actions".into(),
+                config: json!({"actions":["OPEN_PROPOSAL","CLOSE_PROPOSAL"]}),
+            }],
+        },
+        NamespaceRuleset {
+            descriptor: citizen_types::NamespaceDescriptor {
+                namespace: "civic.ballot".into(),
+                version: 1,
+                rules_hash: "sha256:civic-ballot-v1".into(),
+                governed_by: "governance.vote".into(),
+            },
+            writers: BTreeSet::new(),
+            validators: vec![citizen_types::NamespaceRule {
+                name: "civic_voting_policy".into(),
+                config: json!({
+                    "proposal_namespace": "civic.proposal",
+                    "valid_choices": ["yes", "no", "abstain"]
+                }),
+            }],
+        },
     ]
 }
 

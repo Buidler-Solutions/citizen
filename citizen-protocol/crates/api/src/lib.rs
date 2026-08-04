@@ -494,6 +494,9 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
         let module_runtime_ledger = Arc::clone(&self.ledger);
         let interop_status_ledger = Arc::clone(&self.ledger);
         let governance_proposals_ledger = Arc::clone(&self.ledger);
+        let civic_proposals_ledger = Arc::clone(&self.ledger);
+        let civic_proposal_detail_ledger = Arc::clone(&self.ledger);
+        let civic_tally_ledger = Arc::clone(&self.ledger);
         Router::new()
             .route("/health", get(Self::health))
             .route(
@@ -697,6 +700,27 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
                 get(move || {
                     let ledger = Arc::clone(&governance_proposals_ledger);
                     async move { Self::handle_get_governance_proposals(ledger).await }
+                }),
+            )
+            .route(
+                "/api/v1/civic/proposals",
+                get(move || {
+                    let ledger = Arc::clone(&civic_proposals_ledger);
+                    async move { Self::handle_list_civic_proposals(ledger).await }
+                }),
+            )
+            .route(
+                "/api/v1/civic/proposals/:proposal_id",
+                get(move |Path(proposal_id): Path<String>| {
+                    let ledger = Arc::clone(&civic_proposal_detail_ledger);
+                    async move { Self::handle_get_civic_proposal(ledger, proposal_id).await }
+                }),
+            )
+            .route(
+                "/api/v1/civic/proposals/:proposal_id/tally",
+                get(move |Path(proposal_id): Path<String>| {
+                    let ledger = Arc::clone(&civic_tally_ledger);
+                    async move { Self::handle_get_civic_tally(ledger, proposal_id).await }
                 }),
             )
             .layer(DefaultBodyLimit::max(50 * 1024 * 1024))
@@ -3263,6 +3287,123 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
         Json(serde_json::json!({ "proposals": proposals }))
     }
 
+    async fn handle_list_civic_proposals(
+        ledger: Arc<Ledger<S>>,
+    ) -> (StatusCode, Json<serde_json::Value>) {
+        let ns = "civic.proposal".to_string();
+        let entries = ledger.storage().namespace_entries(&ns).unwrap_or_default();
+        let proposals: Vec<serde_json::Value> = entries
+            .iter()
+            .filter(|e| e.action == "OPEN_PROPOSAL")
+            .map(|e| {
+                let closed = entries.iter().any(|c| {
+                    c.action == "CLOSE_PROPOSAL" && c.object_id == e.object_id
+                });
+                serde_json::json!({
+                    "proposal_id": e.object_id,
+                    "title": e.payload.get("title").and_then(|v| v.as_str()),
+                    "description": e.payload.get("description").and_then(|v| v.as_str()),
+                    "opened_at": e.timestamp,
+                    "opened_by": e.author,
+                    "status": if closed { "closed" } else { "open" },
+                })
+            })
+            .collect();
+        (
+            StatusCode::OK,
+            Json(serde_json::json!({ "proposals": proposals })),
+        )
+    }
+
+    async fn handle_get_civic_proposal(
+        ledger: Arc<Ledger<S>>,
+        proposal_id: String,
+    ) -> (StatusCode, Json<serde_json::Value>) {
+        let ns = "civic.proposal".to_string();
+        let entries = ledger.storage().namespace_entries(&ns).unwrap_or_default();
+        let proposal = entries
+            .iter()
+            .find(|e| e.action == "OPEN_PROPOSAL" && e.object_id == proposal_id);
+        match proposal {
+            Some(p) => {
+                let closed = entries.iter().any(|e| {
+                    e.action == "CLOSE_PROPOSAL" && e.object_id == proposal_id
+                });
+                (
+                    StatusCode::OK,
+                    Json(serde_json::json!({
+                        "proposal_id": p.object_id,
+                        "title": p.payload.get("title").and_then(|v| v.as_str()),
+                        "description": p.payload.get("description").and_then(|v| v.as_str()),
+                        "opened_at": p.timestamp,
+                        "opened_by": p.author,
+                        "status": if closed { "closed" } else { "open" },
+                    })),
+                )
+            }
+            None => (
+                StatusCode::NOT_FOUND,
+                Json(serde_json::json!({"error": "proposal not found"})),
+            ),
+        }
+    }
+
+    async fn handle_get_civic_tally(
+        ledger: Arc<Ledger<S>>,
+        proposal_id: String,
+    ) -> (StatusCode, Json<serde_json::Value>) {
+        let proposal_ns = "civic.proposal".to_string();
+        let proposal_entries = ledger
+            .storage()
+            .namespace_entries(&proposal_ns)
+            .unwrap_or_default();
+        let exists = proposal_entries.iter().any(|e| {
+            e.action == "OPEN_PROPOSAL" && e.object_id == proposal_id
+        });
+        if !exists {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(serde_json::json!({"error": "proposal not found"})),
+            );
+        }
+
+        let ballot_ns = "civic.ballot".to_string();
+        let ballots = ledger
+            .storage()
+            .namespace_entries(&ballot_ns)
+            .unwrap_or_default();
+        let relevant: Vec<&LedgerEntry> = ballots
+            .iter()
+            .filter(|e| {
+                e.action == "CAST_BALLOT"
+                    && e.payload.get("proposal_id").and_then(|v| v.as_str())
+                        == Some(&proposal_id)
+            })
+            .collect();
+
+        let mut tally: std::collections::BTreeMap<String, u64> = std::collections::BTreeMap::new();
+        let mut voters: Vec<String> = Vec::new();
+        for ballot in &relevant {
+            let choice = ballot
+                .payload
+                .get("choice")
+                .and_then(|v| v.as_str())
+                .unwrap_or("invalid");
+            *tally.entry(choice.to_string()).or_insert(0) += 1;
+            voters.push(ballot.author.clone());
+        }
+
+        (
+            StatusCode::OK,
+            Json(serde_json::json!({
+                "proposal_id": proposal_id,
+                "total_ballots": relevant.len(),
+                "tally": tally,
+                "voters": voters,
+            })),
+        )
+    }
+
     fn build_did_document(did: &str, entries: &[LedgerEntry]) -> Option<DidDocument> {
         let mut latest: Option<&LedgerEntry> = None;
         for entry in entries {
@@ -3708,6 +3849,35 @@ mod tests {
             validators: vec![NamespaceRule {
                 name: "interop_adapter_policy".to_string(),
                 config: json!({"allowed_standards": ["did-core", "vc-data-model"]}),
+            }],
+        }]);
+        ledger.bootstrap_namespaces(vec![NamespaceRuleset {
+            descriptor: NamespaceDescriptor {
+                namespace: "civic.proposal".to_string(),
+                version: 1,
+                rules_hash: "civic-proposal-v1".to_string(),
+                governed_by: "governance".to_string(),
+            },
+            writers: BTreeSet::new(),
+            validators: vec![NamespaceRule {
+                name: "allowed_actions".to_string(),
+                config: json!({"actions":["OPEN_PROPOSAL","CLOSE_PROPOSAL"]}),
+            }],
+        }]);
+        ledger.bootstrap_namespaces(vec![NamespaceRuleset {
+            descriptor: NamespaceDescriptor {
+                namespace: "civic.ballot".to_string(),
+                version: 1,
+                rules_hash: "civic-ballot-v1".to_string(),
+                governed_by: "governance".to_string(),
+            },
+            writers: BTreeSet::new(),
+            validators: vec![NamespaceRule {
+                name: "civic_voting_policy".to_string(),
+                config: json!({
+                    "proposal_namespace": "civic.proposal",
+                    "valid_choices": ["yes", "no", "abstain"]
+                }),
             }],
         }]);
         ApiServer::with_edge_config(
@@ -10769,6 +10939,222 @@ mod tests {
         assert!(!ApiServer::<MemoryStorage>::is_valid_sha256_digest(
             "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
         ));
+    }
+
+    #[tokio::test]
+    async fn civic_proposal_lifecycle_and_tally() {
+        let app = build_server().router();
+
+        let open = LedgerEntry {
+            entry_id: Uuid::new_v4(),
+            namespace: "civic.proposal".to_string(),
+            action: "OPEN_PROPOSAL".to_string(),
+            object_id: "prop-budget-2026".to_string(),
+            payload: json!({
+                "title": "Budget Approval 2026",
+                "description": "Approve national budget"
+            }),
+            privacy_flag: false,
+            privacy_mode: citizen_types::PrivacyMode::None,
+            payload_commitment: None,
+            ciphertext_hex: None,
+            nonce_hex: None,
+            salt_hex: None,
+            kdf_params: None,
+            consent_receipt: None,
+            authorized_readers: vec![],
+            custodian_policy_id: None,
+            field_reader_acls: BTreeMap::new(),
+            key_wrapped_secrets: vec![],
+            revocation_events: vec![],
+            author: "governance:vote".to_string(),
+            signature: "sig".to_string(),
+            timestamp: 1_736_500_200,
+        };
+        let submit = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/entries/submit")
+                    .header("content-type", "application/json")
+                    .body(Body::from(serde_json::to_vec(&open).expect("open body")))
+                    .expect("open request"),
+            )
+            .await
+            .expect("open submit");
+        assert!(submit.status().is_success());
+
+        let ballot1 = LedgerEntry {
+            entry_id: Uuid::new_v4(),
+            namespace: "civic.ballot".to_string(),
+            action: "CAST_BALLOT".to_string(),
+            object_id: "ballot-alice-prop-budget-2026".to_string(),
+            payload: json!({"proposal_id": "prop-budget-2026", "choice": "yes"}),
+            privacy_flag: false,
+            privacy_mode: citizen_types::PrivacyMode::None,
+            payload_commitment: None,
+            ciphertext_hex: None,
+            nonce_hex: None,
+            salt_hex: None,
+            kdf_params: None,
+            consent_receipt: None,
+            authorized_readers: vec![],
+            custodian_policy_id: None,
+            field_reader_acls: BTreeMap::new(),
+            key_wrapped_secrets: vec![],
+            revocation_events: vec![],
+            author: "did:citizen:alice".to_string(),
+            signature: "sig".to_string(),
+            timestamp: 1_736_500_210,
+        };
+        let ballot2 = LedgerEntry {
+            author: "did:citizen:bob".to_string(),
+            object_id: "ballot-bob-prop-budget-2026".to_string(),
+            payload: json!({"proposal_id": "prop-budget-2026", "choice": "no"}),
+            timestamp: 1_736_500_220,
+            ..ballot1.clone()
+        };
+        let ballot3 = LedgerEntry {
+            author: "did:citizen:carol".to_string(),
+            object_id: "ballot-carol-prop-budget-2026".to_string(),
+            payload: json!({"proposal_id": "prop-budget-2026", "choice": "yes"}),
+            timestamp: 1_736_500_230,
+            ..ballot1.clone()
+        };
+
+        for ballot in [&ballot1, &ballot2, &ballot3] {
+            let resp = app
+                .clone()
+                .oneshot(
+                    Request::builder()
+                        .method("POST")
+                        .uri("/api/v1/entries/submit")
+                        .header("content-type", "application/json")
+                        .body(Body::from(
+                            serde_json::to_vec(ballot).expect("ballot body"),
+                        ))
+                        .expect("ballot request"),
+                )
+                .await
+                .expect("ballot submit");
+            assert!(resp.status().is_success());
+        }
+
+        let double_vote = LedgerEntry {
+            author: "did:citizen:alice".to_string(),
+            object_id: "ballot-alice-retry".to_string(),
+            timestamp: 1_736_500_999,
+            ..ballot1.clone()
+        };
+        let double_resp = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/entries/submit")
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        serde_json::to_vec(&double_vote).expect("double body"),
+                    ))
+                    .expect("double request"),
+            )
+            .await
+            .expect("double submit");
+        assert_eq!(double_resp.status(), StatusCode::BAD_REQUEST);
+
+        let tally_resp = app
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri("/api/v1/civic/proposals/prop-budget-2026/tally")
+                    .body(Body::empty())
+                    .expect("tally request"),
+            )
+            .await
+            .expect("tally response");
+        assert_eq!(tally_resp.status(), StatusCode::OK);
+        let body = axum::body::to_bytes(tally_resp.into_body(), usize::MAX)
+            .await
+            .expect("tally body");
+        let payload: Value = serde_json::from_slice(&body).expect("tally payload");
+        assert_eq!(payload["total_ballots"], 3);
+        assert_eq!(payload["tally"]["yes"], 2);
+        assert_eq!(payload["tally"]["no"], 1);
+    }
+
+    #[tokio::test]
+    async fn civic_proposals_list_returns_open_proposals() {
+        let app = build_server().router();
+
+        let open = LedgerEntry {
+            entry_id: Uuid::new_v4(),
+            namespace: "civic.proposal".to_string(),
+            action: "OPEN_PROPOSAL".to_string(),
+            object_id: "prop-roads-001".to_string(),
+            payload: json!({"title": "Road Infrastructure", "description": "Highway expansion"}),
+            privacy_flag: false,
+            privacy_mode: citizen_types::PrivacyMode::None,
+            payload_commitment: None,
+            ciphertext_hex: None,
+            nonce_hex: None,
+            salt_hex: None,
+            kdf_params: None,
+            consent_receipt: None,
+            authorized_readers: vec![],
+            custodian_policy_id: None,
+            field_reader_acls: BTreeMap::new(),
+            key_wrapped_secrets: vec![],
+            revocation_events: vec![],
+            author: "governance:vote".to_string(),
+            signature: "sig".to_string(),
+            timestamp: 1_736_500_300,
+        };
+        app.clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/entries/submit")
+                    .header("content-type", "application/json")
+                    .body(Body::from(serde_json::to_vec(&open).expect("body")))
+                    .expect("submit"),
+            )
+            .await
+            .expect("submit response");
+
+        let list_resp = app
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri("/api/v1/civic/proposals")
+                    .body(Body::empty())
+                    .expect("list request"),
+            )
+            .await
+            .expect("list response");
+        assert_eq!(list_resp.status(), StatusCode::OK);
+        let body = axum::body::to_bytes(list_resp.into_body(), usize::MAX)
+            .await
+            .expect("list body");
+        let payload: Value = serde_json::from_slice(&body).expect("list payload");
+        assert_eq!(payload["proposals"][0]["proposal_id"], "prop-roads-001");
+        assert_eq!(payload["proposals"][0]["status"], "open");
+    }
+
+    #[tokio::test]
+    async fn civic_proposal_detail_returns_404_for_missing() {
+        let app = build_server().router();
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri("/api/v1/civic/proposals/nonexistent")
+                    .body(Body::empty())
+                    .expect("detail request"),
+            )
+            .await
+            .expect("detail response");
+        assert_eq!(resp.status(), StatusCode::NOT_FOUND);
     }
 }
 fn canonical_envelope_preimage(
