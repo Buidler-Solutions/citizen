@@ -102,6 +102,8 @@ nav:
       - Running a Node: node-operators/running-a-node.md
       - Validator Guide: node-operators/validator.md
       - Localnet: node-operators/localnet.md
+      - Runbooks:
+          - Civic Voting Operator Runbook: node-operators/civic-voting-runbook.md
   - Compliance:
       - GDPR: compliance/gdpr.md
       - Security Policies: compliance/security.md
