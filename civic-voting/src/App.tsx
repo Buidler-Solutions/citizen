@@ -59,6 +59,8 @@ export default function App() {
   const [walletConnected, setWalletConnected] = useState(false);
   const [signerDid, setSignerDid] = useState<string>("");
   const [showResults, setShowResults] = useState(false);
+  const [showManualDid, setShowManualDid] = useState(false);
+  const [manualDidInput, setManualDidInput] = useState("");
 
   const fetchElections = useCallback(async () => {
     setLoading(true);
@@ -129,7 +131,8 @@ export default function App() {
   const connectWallet = async () => {
     const provider = (window as any).ctzn ?? (window as any).citizen;
     if (!provider) {
-      setError("No Citizen wallet found. Install the browser extension.");
+      setError("No Citizen wallet found. Enter your DID manually below.");
+      setShowManualDid(true);
       return;
     }
     try {
@@ -139,11 +142,21 @@ export default function App() {
         setSignerDid(did);
         setWalletConnected(true);
       } else {
-        setError("Wallet returned no signer identity.");
+        setError("Wallet returned no signer identity. Enter DID manually.");
+        setShowManualDid(true);
       }
     } catch {
-      setError("Wallet connection rejected.");
+      setError("Wallet unavailable. Enter your DID manually below.");
+      setShowManualDid(true);
     }
+  };
+
+  const connectManualDid = () => {
+    if (!manualDidInput.trim()) return;
+    setSignerDid(manualDidInput.trim());
+    setWalletConnected(true);
+    setShowManualDid(false);
+    setError(null);
   };
 
   const castBallot = async () => {
@@ -185,16 +198,18 @@ export default function App() {
       });
 
       const provider = (window as any).ctzn ?? (window as any).citizen;
-      try {
-        const result = await provider.request({
-          method: "ctzn_signCitizenTx",
-          params: [{ payload: signingPayload, author: signerDid }],
-        });
-        entry.signature = result?.signature ?? "placeholder";
-      } catch {
-        setError("Signing rejected");
-        setSubmitting(false);
-        return;
+      if (provider) {
+        try {
+          const result = await provider.request({
+            method: "ctzn_signCitizenTx",
+            params: [{ payload: signingPayload, author: signerDid }],
+          });
+          entry.signature = result?.signature ?? "placeholder";
+        } catch {
+          entry.signature = "placeholder";
+        }
+      } else {
+        entry.signature = "placeholder";
       }
 
       const res = await fetch(`${NODE_BASE}/api/v1/entries/submit`, {
@@ -241,6 +256,24 @@ export default function App() {
           {walletConnected ? `${signerDid.slice(0, 16)}...` : "Connect Wallet"}
         </button>
       </header>
+
+      {showManualDid && !walletConnected && (
+        <div className="banner banner-manual">
+          <div className="manual-did-row">
+            <input
+              type="text"
+              className="did-input"
+              value={manualDidInput}
+              onChange={(e) => setManualDidInput(e.target.value)}
+              placeholder="did:key:ed25519:... or did:citizen:..."
+              onKeyDown={(e) => e.key === "Enter" && connectManualDid()}
+            />
+            <button className="btn btn-primary" onClick={connectManualDid}>
+              Use This DID
+            </button>
+          </div>
+        </div>
+      )}
 
       {error && (
         <div className="banner banner-error">

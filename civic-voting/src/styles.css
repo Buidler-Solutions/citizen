@@ -506,3 +506,31 @@ body {
   font-family: inherit;
   text-decoration: underline;
 }
+
+.banner-manual {
+  background: var(--accent-weak);
+  border: 1px solid rgba(45, 91, 255, 0.3);
+  color: var(--accent);
+}
+
+.manual-did-row {
+  display: flex;
+  gap: 10px;
+  width: 100%;
+}
+
+.did-input {
+  flex: 1;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.88rem;
+  background: var(--card);
+  color: var(--text);
+  outline: none;
+}
+
+.did-input:focus {
+  border-color: var(--accent);
+}
