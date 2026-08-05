@@ -1,11 +1,17 @@
-import { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { generateElectionKeyPair, importElectionPrivateKey, decryptBallot } from "./ballotCrypto";
-import { generateKycKeyPair, importKycPrivateKey, decryptKyc } from "./kycCrypto";
+import { generateKycKeyPair, kycReaderDid, decryptKycHybrid, type KycWrappedSecret } from "./kycCrypto";
 
 const NODE_BASE = import.meta.env.VITE_NODE_URL ?? "";
 
 const ELECTION_KEY_PREFIX = "citizen.election.tallykey.";
 const KYC_KEY_STORAGE = "citizen.kyc.encryptionkey";
+const EXPLORER_BASE = "http://localhost:8885";
+
+function explorerDataHashHref(hash: string): string {
+  const normalized = hash.startsWith("sha256:") ? hash : `sha256:${hash}`;
+  return `${EXPLORER_BASE}/data-hash?q=${encodeURIComponent(normalized)}`;
+}
 
 interface AdminStatus {
   is_admin: boolean;
@@ -49,7 +55,7 @@ export default function App() {
   const [elections, setElections] = useState<ElectionSummary[]>([]);
   const [page, setPage] = useState(1);
   const PAGE_SIZE = 25;
-  const [success, setSuccess] = useState<string | null>(null);
+  const [success, setSuccess] = useState<React.ReactNode | null>(null);
 
   // Voter registration state
   const [voterDid, setVoterDid] = useState("");
@@ -60,6 +66,8 @@ export default function App() {
   const [kycSubmissions, setKycSubmissions] = useState<any[]>([]);
   const [kycJurisdictionInput, setKycJurisdictionInput] = useState("");
   const [approvingDid, setApprovingDid] = useState<string | null>(null);
+  const [decryptedKyc, setDecryptedKyc] = useState<Record<string, { full_name: string; address: string }>>({});
+  const [decryptingDid, setDecryptingDid] = useState<string | null>(null);
 
   // Tally state
   const [tallyElectionId, setTallyElectionId] = useState("");
@@ -222,7 +230,7 @@ export default function App() {
 
   // ── Sign entry with wallet private key ───────────────────────
 
-  const signEntry = async (entryData: Record<string, any>): Promise<string> => {
+  const signEntry = async (entryData: Record<string, any>, authorOverride?: string): Promise<string> => {
     const provider = (window as any).ctzn ?? (window as any).citizen;
     if (!provider) throw new Error("Wallet not connected");
     const signingPayload = {
@@ -231,7 +239,7 @@ export default function App() {
       action: entryData.action,
       object_id: entryData.object_id,
       payload: entryData.payload,
-      author: walletDid,
+      author: authorOverride ?? walletDid,
       timestamp: entryData.timestamp,
     };
     const result = await provider.request({
@@ -429,9 +437,16 @@ export default function App() {
   const ensureKycEncryptionKey = useCallback(async (did: string) => {
     try {
       const stored = localStorage.getItem(KYC_KEY_STORAGE);
-      let keyPair: { publicKeyBase64: string; privateKeyJwk: JsonWebKey };
+      let keyPair: { publicKeyHex: string; privateKeyHex: string };
       if (stored) {
-        keyPair = JSON.parse(stored);
+        const parsed = JSON.parse(stored);
+        if (parsed.publicKeyHex && parsed.privateKeyHex) {
+          keyPair = parsed;
+        } else {
+          localStorage.removeItem(KYC_KEY_STORAGE);
+          keyPair = await generateKycKeyPair();
+          localStorage.setItem(KYC_KEY_STORAGE, JSON.stringify(keyPair));
+        }
       } else {
         keyPair = await generateKycKeyPair();
         localStorage.setItem(KYC_KEY_STORAGE, JSON.stringify(keyPair));
@@ -441,30 +456,66 @@ export default function App() {
         namespace: "civic.admin",
         action: "SET_KYC_PUBLIC_KEY",
         object_id: "kyc-encryption-key",
-        payload: { kyc_encryption_public_key: keyPair.publicKeyBase64 },
+        payload: { kyc_encryption_public_key: keyPair.publicKeyHex, key_algorithm: "x25519" },
         author: did,
         timestamp: Math.floor(Date.now() / 1000),
       };
-      const signature = await signEntry(entry);
-      await fetch(`${NODE_BASE}/api/v1/entries/submit`, {
+      const signature = await signEntry(entry, did);
+      const resp = await fetch(`${NODE_BASE}/api/v1/entries/submit`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ...entry, signature }),
       });
-    } catch {
-      // Non-fatal
+      if (!resp.ok) {
+        const body = await resp.text();
+        setError(`Failed to publish KYC encryption key (${resp.status}): ${body}`);
+      }
+    } catch (err) {
+      setError(`KYC encryption key setup failed: ${err instanceof Error ? err.message : "unknown"}`);
     }
   }, []);
 
-  const decryptKycEntry = useCallback(async (encryptedData: { ciphertext_hex?: string; nonce_hex?: string } | null, epk?: string): Promise<{ full_name: string; address: string } | null> => {
-    if (!encryptedData?.ciphertext_hex || !encryptedData?.nonce_hex || !epk) return null;
+  const decryptKycEntry = useCallback(async (encryptedData: {
+    ciphertext_hex?: string; nonce_hex?: string;
+    hybrid_author_x25519_public_key?: string;
+    key_wrapped_secrets?: KycWrappedSecret[];
+  } | null): Promise<{ full_name: string; address: string } | null> => {
+    if (!encryptedData?.ciphertext_hex || !encryptedData?.nonce_hex
+        || !encryptedData?.hybrid_author_x25519_public_key
+        || !encryptedData?.key_wrapped_secrets) {
+      console.error('[decryptKycEntry] missing fields:', {
+        has_ct: !!encryptedData?.ciphertext_hex,
+        has_nonce: !!encryptedData?.nonce_hex,
+        has_author_key: !!encryptedData?.hybrid_author_x25519_public_key,
+        has_wrapped: !!encryptedData?.key_wrapped_secrets,
+      });
+      return null;
+    }
     const stored = localStorage.getItem(KYC_KEY_STORAGE);
-    if (!stored) return null;
+    if (!stored) {
+      console.error('[decryptKycEntry] no key in localStorage');
+      return null;
+    }
     try {
       const keyData = JSON.parse(stored);
-      if (!keyData.privateKeyJwk) return null;
-      const privateKey = await importKycPrivateKey(keyData.privateKeyJwk);
-      return await decryptKyc(encryptedData.ciphertext_hex, encryptedData.nonce_hex, epk, privateKey);
+      if (!keyData.privateKeyHex || !keyData.publicKeyHex) {
+        console.error('[decryptKycEntry] old key format in localStorage, missing publicKeyHex/privateKeyHex');
+        return null;
+      }
+      const adminReaderDid = kycReaderDid(keyData.publicKeyHex);
+      const matching = encryptedData.key_wrapped_secrets.find((s) => s.reader_id === adminReaderDid);
+      if (!matching) {
+        console.error('[decryptKycEntry] no wrapped secret for admin reader DID:', adminReaderDid,
+          'available readers:', encryptedData.key_wrapped_secrets.map((s) => s.reader_id));
+      }
+      return await decryptKycHybrid(
+        encryptedData.ciphertext_hex,
+        encryptedData.nonce_hex,
+        encryptedData.hybrid_author_x25519_public_key,
+        encryptedData.key_wrapped_secrets,
+        adminReaderDid,
+        keyData.privateKeyHex,
+      );
     } catch {
       return null;
     }
@@ -478,29 +529,47 @@ export default function App() {
       if (!res.ok) throw new Error("Failed to fetch KYC");
       const data = await res.json();
       const submissions = data.submissions ?? [];
-
-      const decrypted = await Promise.all(
-        submissions.map(async (s: any) => {
-          if (s.encrypted && s.encrypted.ciphertext_hex) {
-            const epk = s.encrypted.epk;
-            if (epk) {
-              const result = await decryptKycEntry(s.encrypted, epk);
-              if (result) {
-                return { ...s, full_name: result.full_name, address: result.address };
-              }
-            }
-            return { ...s, full_name: "🔒 Encrypted", address: "🔒 Encrypted" };
-          }
-          return s;
-        }),
-      );
-      setKycSubmissions(decrypted);
+      const carryOver: Record<string, { full_name: string; address: string }> = {};
+      for (const s of submissions) {
+        if (decryptedKyc[s.did]) {
+          carryOver[s.did] = decryptedKyc[s.did];
+        }
+      }
+      setDecryptedKyc(carryOver);
+      setKycSubmissions(submissions);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unknown error");
     }
+  }, [decryptedKyc]);
+
+  const handleDecryptKyc = useCallback(async (did: string, encryptedData: {
+    ciphertext_hex?: string; nonce_hex?: string;
+    hybrid_author_x25519_public_key?: string;
+    key_wrapped_secrets?: KycWrappedSecret[];
+  } | null) => {
+    if (!encryptedData?.ciphertext_hex || !encryptedData?.nonce_hex
+        || !encryptedData?.hybrid_author_x25519_public_key
+        || !encryptedData?.key_wrapped_secrets) {
+      setError("No encrypted payload available for this submission.");
+      return;
+    }
+    setDecryptingDid(did);
+    setError(null);
+    try {
+      const result = await decryptKycEntry(encryptedData);
+      if (result) {
+        setDecryptedKyc((prev) => ({ ...prev, [did]: result }));
+      } else {
+        setError(`Failed to decrypt KYC for ${did.slice(0, 30)}… — check that the admin encryption key matches.`);
+      }
+    } catch {
+      setError(`Decryption error for ${did.slice(0, 30)}…`);
+    } finally {
+      setDecryptingDid(null);
+    }
   }, [decryptKycEntry]);
 
-  const approveKyc = async (did: string, jurisdictionPath: string, holderFields?: { holder_ciphertext_hex?: string; holder_nonce_hex?: string; holder_epk?: string }) => {
+  const approveKyc = async (did: string, jurisdictionPath: string) => {
     setError(null);
     setSuccess(null);
     setApprovingDid(did);
@@ -508,11 +577,6 @@ export default function App() {
     const payload: Record<string, unknown> = {
       jurisdiction_path: jurisdictionPath.split("/").map((s) => s.trim()).filter(Boolean),
     };
-    if (holderFields?.holder_ciphertext_hex) {
-      payload.holder_ciphertext_hex = holderFields.holder_ciphertext_hex;
-      payload.holder_nonce_hex = holderFields.holder_nonce_hex;
-      payload.holder_epk = holderFields.holder_epk;
-    }
     const entry = {
       entry_id: entryId,
       namespace: "identity.kyc",
@@ -533,13 +597,27 @@ export default function App() {
       if (!resp.ok) throw new Error(`Approval failed (${resp.status}): ${JSON.stringify(body)}`);
 
       const blockHeight = body?.receipt?.finality?.block_height;
+      const blockHash = body?.receipt?.finality?.block_hash;
       const receiptId = body?.receipt?.receipt_id;
-      const details = [
-        `Entry ID: ${entryId}`,
-        receiptId ? `Receipt: ${receiptId}` : null,
-        blockHeight ? `Block #${blockHeight}` : null,
-      ].filter(Boolean).join(' | ');
-      setSuccess(`KYC approved for ${did}. ${details}`);
+      const explorerHref = blockHash ? explorerDataHashHref(blockHash) : null;
+      setSuccess(
+        <div>
+          <div style={{ fontWeight: 600, marginBottom: 4 }}>✅ KYC approved for {did}</div>
+          <div style={{ fontSize: "0.8rem", lineHeight: 1.6 }}>
+            {receiptId && <div>Receipt: <code>{receiptId}</code></div>}
+            <div>Entry ID: <code>{entryId}</code></div>
+            {blockHeight != null && <div>Block #{blockHeight}</div>}
+            {blockHash && <div>Tx Hash: <code>{blockHash}</code></div>}
+            {explorerHref && (
+              <div>
+                <a href={explorerHref} target="_blank" rel="noreferrer" style={{ color: "inherit", fontWeight: 600 }}>
+                  View on Explorer →
+                </a>
+              </div>
+            )}
+          </div>
+        </div>
+      );
       setKycJurisdictionInput("");
       await fetchKycSubmissions();
     } catch (err) {
@@ -1117,18 +1195,41 @@ export default function App() {
                 {paged.map((k) => (
             <div key={k.did} className="card election-row">
               <div className="election-row-info">
-                <h3>{k.full_name ?? "Unknown"}</h3>
+                <h3>{(() => {
+                  const dc = decryptedKyc[k.did];
+                  if (dc) return dc.full_name;
+                  if (k.encrypted?.ciphertext_hex) return "🔒 Encrypted";
+                  return k.full_name ?? "Unknown";
+                })()}</h3>
                 <div className="election-row-meta">
                   <span className="mono" title={k.did}>{k.did.slice(0, 40)}...</span>
                   <span className={`status-badge ${k.status === "approved" ? "open" : k.status === "submitted" ? "open" : "closed"}`} style={k.status === "submitted" ? {background: "var(--accent-weak)", color: "var(--accent)"} : {}}>
                     {k.status}
                   </span>
+                  {k.encrypted?.ciphertext_hex && !decryptedKyc[k.did] && (
+                    <button
+                      className="btn btn-ghost btn-sm"
+                      onClick={() => handleDecryptKyc(k.did, k.encrypted)}
+                      disabled={decryptingDid === k.did}
+                      style={{ marginLeft: 4, fontSize: "0.72rem", padding: "2px 10px" }}
+                    >
+                      {decryptingDid === k.did ? "Decrypting…" : "Decrypt"}
+                    </button>
+                  )}
                 </div>
-                {k.address && (
-                  <div className="meta-text" style={{ marginTop: 4 }}>
-                    Physical address: {k.address}
-                  </div>
-                )}
+                {(() => {
+                  const dc = decryptedKyc[k.did];
+                  if (dc) {
+                    return (
+                      <>
+                        <div className="meta-text" style={{ marginTop: 4 }}>
+                          Physical address: {dc.address}
+                        </div>
+                      </>
+                    );
+                  }
+                  return null;
+                })()}
                 {k.jurisdiction_path && (
                   <div className="meta-text">
                     Jurisdiction: {k.jurisdiction_path.join(" / ")}
@@ -1156,15 +1257,13 @@ export default function App() {
                       placeholder="PH/NCR/City/District"
                       className="input"
                       style={{ width: 200, fontSize: "0.78rem" }}
+                      disabled={!decryptedKyc[k.did]}
                     />
                     <button
                       className="btn btn-primary btn-sm"
-                      onClick={() => approveKyc(k.did, kycJurisdictionInput, {
-                        holder_ciphertext_hex: k.encrypted?.holder_ciphertext_hex,
-                        holder_nonce_hex: k.encrypted?.holder_nonce_hex,
-                        holder_epk: k.encrypted?.holder_epk,
-                      })}
-                      disabled={approvingDid === k.did && !kycJurisdictionInput.trim()}
+                      onClick={() => approveKyc(k.did, kycJurisdictionInput)}
+                      disabled={(approvingDid === k.did && !kycJurisdictionInput.trim()) || !decryptedKyc[k.did]}
+                      title={!decryptedKyc[k.did] ? "Decrypt the KYC payload first" : undefined}
                     >
                       {approvingDid === k.did ? "Confirm" : "Approve"}
                     </button>

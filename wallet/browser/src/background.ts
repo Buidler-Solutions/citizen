@@ -1,5 +1,4 @@
 import { HDNodeWallet, Mnemonic, Wallet } from 'ethers';
-import { x25519 } from '@noble/curves/ed25519';
 import { chacha20Poly1305Decrypt } from './chacha20poly1305';
 import { normalizePassphrase, validateDistinctPassphrases } from './backupPassphrasePolicy';
 import {
@@ -32,7 +31,7 @@ import {
   type SignedSubmissionArtifact,
 } from './directSubmitClient';
 import { canonicalJson } from './canonical';
-import { encryptKycDataDual } from './kycCrypto';
+import { encryptKycDataHybrid, decryptKycAsHolderHybrid } from './kycCrypto';
 
 type WalletRequest = {
   method: string;
@@ -987,6 +986,41 @@ function toHex(bytes: ArrayBuffer | Uint8Array): string {
     .join('');
 }
 
+const X25519_PKCS8_PREFIX = new Uint8Array([
+  0x30, 0x2e, 0x02, 0x01, 0x00,
+  0x30, 0x05, 0x06, 0x03, 0x2b, 0x65, 0x6e,
+  0x04, 0x22, 0x04, 0x20,
+]);
+
+const X25519_SPKI_PREFIX = new Uint8Array([
+  0x30, 0x2a, 0x30, 0x05, 0x06, 0x03, 0x2b, 0x65, 0x6e,
+  0x03, 0x21, 0x00,
+]);
+
+async function x25519DeriveBits(
+  privateKeyBytes: Uint8Array,
+  publicKeyBytes: Uint8Array,
+): Promise<Uint8Array> {
+  const pkcs8 = new Uint8Array(X25519_PKCS8_PREFIX.length + privateKeyBytes.length);
+  pkcs8.set(X25519_PKCS8_PREFIX, 0);
+  pkcs8.set(privateKeyBytes, X25519_PKCS8_PREFIX.length);
+
+  const spki = new Uint8Array(X25519_SPKI_PREFIX.length + publicKeyBytes.length);
+  spki.set(X25519_SPKI_PREFIX, 0);
+  spki.set(publicKeyBytes, X25519_SPKI_PREFIX.length);
+
+  const privKey = await crypto.subtle.importKey(
+    'pkcs8', pkcs8, { name: 'X25519' }, false, ['deriveBits'],
+  );
+  const pubKey = await crypto.subtle.importKey(
+    'spki', spki, { name: 'X25519' }, false, [],
+  );
+  const shared = await crypto.subtle.deriveBits(
+    { name: 'X25519', public: pubKey }, privKey, 256,
+  );
+  return new Uint8Array(shared);
+}
+
 function fromHex(value: string): Uint8Array {
   const normalized = value.startsWith('0x') ? value.slice(2) : value;
   if (!/^[a-f0-9]+$/i.test(normalized) || normalized.length % 2 !== 0) {
@@ -1302,7 +1336,7 @@ async function decryptOwnedTransactionCiphertext(payload: unknown): Promise<Wall
       return walletError('ERR_DECRYPT_FAILED', 'authorPublicKeyHex must be 32 bytes.');
     }
 
-    const sharedSecret = x25519.getSharedSecret(readerSecret, authorPublicKey);
+    const sharedSecret = await x25519DeriveBits(readerSecret, authorPublicKey);
     const wrapKeyBytes = await crypto.subtle.digest('SHA-256', sharedSecret);
     const wrapKey = new Uint8Array(wrapKeyBytes);
 
@@ -1961,28 +1995,54 @@ async function submitKycOnChain(walletRecord: StoredWallet, fullName: string, ad
 
   const apiBase = networkId === 'localnode' ? 'http://localhost:8091' : `https://${networkId}.ctzn.space`;
 
-  let encrypted: {
-    ciphertextHex: string; nonceHex: string; epk: string;
-    payloadCommitment: string;
-    holderCiphertextHex: string; holderNonceHex: string; holderEpk: string;
-  } | null = null;
-
+  let adminPublicKey: string | null = null;
   try {
     const keyResp = await fetch(`${apiBase}/api/v1/civic/admin/kyc-public-key`);
     if (keyResp.ok) {
       const keyData = await keyResp.json();
-      if (keyData.public_key) {
-        encrypted = await encryptKycDataDual({ full_name: fullName, address }, keyData.public_key);
-      }
+      adminPublicKey = keyData.public_key ?? null;
     }
   } catch (err) {
-    console.error('[submitKycOnChain] encryption failed, falling back to cleartext:', err);
+    console.error('[submitKycOnChain] failed to fetch admin KYC public key:', err);
   }
 
+  if (!adminPublicKey) {
+    return walletError('ERR_KYC_NO_ADMIN_KEY',
+      'No KYC encryption key found. An election admin must connect and publish their KYC public key before submissions are accepted.');
+  }
+
+  const readerKey = await getOrCreateEncryptionReaderKey(walletRecord);
+  const authorSecret = await resolveProtocolSecretForWallet(walletRecord);
+  const adminReaderDid = `did:key:x25519:${adminPublicKey}`;
   const entryId = crypto.randomUUID();
+
+  let envelope: {
+    ciphertextHex: string; nonceHex: string; authorPublicKeyHex: string;
+    keyWrappedSecrets: Array<{ reader_id: string; wrapped_dek: string }>;
+    payloadCommitment: string;
+  };
+
+  try {
+    envelope = await encryptKycDataHybrid(
+      { full_name: fullName, address },
+      adminPublicKey,
+      authorSecret,
+      readerKey.publicKeyHex,
+      readerKey.did,
+      adminReaderDid,
+      entryId,
+    );
+  } catch (err) {
+    return walletError('ERR_KYC_ENCRYPTION_FAILED',
+      err instanceof Error ? err.message : 'KYC encryption failed');
+  }
+
   const timestamp = Math.floor(Date.now() / 1000);
 
-  const payload: Record<string, unknown> = encrypted ? { epk: encrypted.epk, holder_ciphertext_hex: encrypted.holderCiphertextHex, holder_nonce_hex: encrypted.holderNonceHex, holder_epk: encrypted.holderEpk } : { full_name: fullName, address };
+  const payload: Record<string, unknown> = {
+    hybrid_author_x25519_public_key: envelope.authorPublicKeyHex,
+    key_wrapped_secrets: envelope.keyWrappedSecrets,
+  };
 
   const signingPayload = {
     entry_id: entryId,
@@ -2024,14 +2084,11 @@ async function submitKycOnChain(walletRecord: StoredWallet, fullName: string, ad
     author: did,
     signature: signatureHex,
     timestamp,
-    privacy_flag: !!encrypted,
-    privacy_mode: encrypted ? 'hybrid' : 'none',
+    privacy_flag: true,
+    privacy_mode: 'hybrid',
+    ciphertext_hex: envelope.ciphertextHex,
+    nonce_hex: envelope.nonceHex,
   };
-
-  if (encrypted) {
-    entry.ciphertext_hex = encrypted.ciphertextHex;
-    entry.nonce_hex = encrypted.nonceHex;
-  }
 
   try {
     const apiBase = networkId === 'localnode' ? 'http://localhost:8091' : `https://${networkId}.ctzn.space`;
@@ -2095,17 +2152,24 @@ async function fetchKycStatus(did: string): Promise<WalletResponse> {
         if (listResp.ok) {
           const listData = await listResp.json();
           const self = (listData.submissions || []).find((s: any) => s.did === did);
-          if (self?.encrypted?.holder_ciphertext_hex) {
+          if (self?.encrypted?.hybrid_author_x25519_public_key && self?.encrypted?.key_wrapped_secrets) {
             try {
-              const { decryptKycAsHolder } = await import('./kycCrypto');
-              const decrypted = await decryptKycAsHolder(
-                self.encrypted.holder_ciphertext_hex,
-                self.encrypted.holder_nonce_hex,
-                self.encrypted.holder_epk,
-              );
-              if (decrypted) {
-                result.decrypted_full_name = decrypted.full_name;
-                result.decrypted_address = decrypted.address;
+              const activeWallet = await getActiveWalletRecord();
+              if (activeWallet) {
+                const holderSecret = await resolveProtocolSecretForWallet(activeWallet);
+                const holderReaderKey = await getOrCreateEncryptionReaderKey(activeWallet);
+                const decrypted = await decryptKycAsHolderHybrid(
+                  self.encrypted.ciphertext_hex,
+                  self.encrypted.nonce_hex,
+                  self.encrypted.hybrid_author_x25519_public_key,
+                  self.encrypted.key_wrapped_secrets,
+                  holderReaderKey.did,
+                  holderSecret,
+                );
+                if (decrypted) {
+                  result.decrypted_full_name = decrypted.full_name;
+                  result.decrypted_address = decrypted.address;
+                }
               }
             } catch { /* holder decryption optional */ }
           }

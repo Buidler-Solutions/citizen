@@ -161,6 +161,25 @@ function timingSafeEqual(left: Uint8Array, right: Uint8Array): boolean {
   return mismatch === 0;
 }
 
+export function chacha20Poly1305Encrypt(
+  key: Uint8Array,
+  nonce12: Uint8Array,
+  plaintext: Uint8Array,
+  aad: Uint8Array = new Uint8Array(0),
+): Uint8Array {
+  if (key.length !== 32 || nonce12.length !== 12) {
+    throw new Error('chacha20Poly1305Encrypt: key must be 32 bytes and nonce must be 12 bytes');
+  }
+  const oneTimeKey = chacha20Block(key, 0, nonce12).slice(0, 32);
+  const ciphertext = chacha20Xor(key, nonce12, 1, plaintext);
+  const macData = buildAeadMacData(aad, ciphertext);
+  const tag = poly1305Mac(macData, oneTimeKey);
+  const result = new Uint8Array(ciphertext.length + 16);
+  result.set(ciphertext, 0);
+  result.set(tag, ciphertext.length);
+  return result;
+}
+
 export function chacha20Poly1305Decrypt(
   key: Uint8Array,
   nonce12: Uint8Array,
