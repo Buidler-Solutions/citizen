@@ -41,7 +41,7 @@ const MAX_PAGE_LIMIT = 1000;
 @Injectable()
 export class IndexerMetricsService {
   private readonly logger = new Logger(IndexerMetricsService.name);
-  private readonly baseUrl = process.env.CITIZEN_NODE_URL ?? 'http://127.0.0.1:8081';
+  private readonly baseUrl = process.env.CITIZEN_NODE_URL ?? 'http://127.0.0.1:8091';
   private readonly pollMs = Number(process.env.INDEXER_POLL_MS ?? '4000');
   private readonly backoffMs = [250, 500, 1000];
   private pollTimer: NodeJS.Timeout | null = null;
@@ -709,9 +709,13 @@ export class IndexerMetricsService {
     }
     if (!this.initializePromise) {
       this.initializePromise = (async () => {
-        const snapshot = await this.storageService.loadSnapshot();
-        if (snapshot) {
-          this.restoreSnapshot(snapshot);
+        try {
+          const snapshot = await this.storageService?.loadSnapshot();
+          if (snapshot) {
+            this.restoreSnapshot(snapshot);
+          }
+        } catch {
+          // Ignore snapshot load failures; indexer will start from scratch
         }
         this.initialized = true;
       })();
@@ -754,7 +758,7 @@ export class IndexerMetricsService {
   }
 
   private async persistSnapshot(): Promise<void> {
-    await this.storageService.writeSnapshot(this.buildSnapshot());
+    await this.storageService?.writeSnapshot(this.buildSnapshot());
   }
 
   private buildSnapshot(): IndexerMetricsSnapshot {

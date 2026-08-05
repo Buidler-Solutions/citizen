@@ -110,6 +110,9 @@ type PayloadDataHashLookup = {
   matches: Array<{
     entry_id: string;
     namespace: string;
+    action: string;
+    object_id: string;
+    timestamp: number;
     field_path: string;
     committed_at: number;
   }>;
@@ -139,7 +142,7 @@ type ReceiptLookup = {
 
 @Injectable()
 export class CitizenService {
-  private readonly baseUrl = process.env.CITIZEN_NODE_URL ?? 'http://127.0.0.1:8081';
+  private readonly baseUrl = process.env.CITIZEN_NODE_URL ?? 'http://127.0.0.1:8091';
 
   async getStatus() {
     return {
@@ -259,8 +262,49 @@ export class CitizenService {
   }
 
   async getPayloadDataHash(dataHash: string): Promise<ApiSource<PayloadDataHashLookup>> {
-    const endpoint = `${this.baseUrl.replace(/\/$/, '')}/api/v1/payloads/data-hash/${encodeURIComponent(dataHash)}`;
-    return this.fetchJson<PayloadDataHashLookup>(endpoint);
+    const normalized = dataHash.trim();
+    const matches: PayloadDataHashLookup = { data_hash: normalized, matches: [] };
+
+    let cursor: string | undefined;
+    let scanned = 0;
+    const maxBlocks = 50;
+    while (scanned < maxBlocks) {
+      const page = await this.getBlocks(cursor, '10');
+      if (!page.data.items.length) break;
+      for (const item of page.data.items) {
+        try {
+          const block = await this.getBlock(item.height);
+          if (!block.data?.block?.entries) continue;
+          for (const entry of block.data.block.entries as Record<string, unknown>[]) {
+            const committed = typeof entry.payload_commitment === 'string'
+              && (entry.payload_commitment === normalized || entry.payload_commitment === `sha256:${normalized}`);
+            let consentMatch = false;
+            const cr = entry.consent_receipt as Record<string, unknown> | undefined;
+            if (cr && typeof cr.data_hash === 'string') {
+              consentMatch = cr.data_hash === normalized || cr.data_hash === `sha256:${normalized}`;
+            }
+            if (committed || consentMatch) {
+              matches.matches.push({
+                entry_id: String(entry.entry_id ?? ''),
+                namespace: String(entry.namespace ?? ''),
+                action: String(entry.action ?? ''),
+                object_id: String(entry.object_id ?? ''),
+                timestamp: Number(entry.timestamp ?? 0),
+                field_path: String(entry.field_path ?? String(entry.object_id ?? '')),
+                committed_at: Number(entry.timestamp ?? 0),
+              });
+            }
+          }
+        } catch {
+          // skip blocks that fail to fetch
+        }
+        scanned++;
+      }
+      if (!page.data.has_more || !page.data.next_cursor) break;
+      cursor = page.data.next_cursor;
+    }
+
+    return { source: `${this.baseUrl}/api/v1/payloads/data-hash`, data: matches };
   }
 
   async getFileManifest(manifestId: string): Promise<ApiSource<FileManifestMetadata>> {

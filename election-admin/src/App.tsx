@@ -1,6 +1,17 @@
 import { useState, useEffect, useCallback } from "react";
+import { generateElectionKeyPair, importElectionPrivateKey, decryptBallot } from "./ballotCrypto";
+import { generateKycKeyPair, importKycPrivateKey, decryptKyc } from "./kycCrypto";
 
 const NODE_BASE = import.meta.env.VITE_NODE_URL ?? "";
+
+const ELECTION_KEY_PREFIX = "citizen.election.tallykey.";
+const KYC_KEY_STORAGE = "citizen.kyc.encryptionkey";
+
+interface AdminStatus {
+  is_admin: boolean;
+  role: string | null;
+  scope: string | null;
+}
 
 interface Candidate {
   candidate_id: string;
@@ -25,19 +36,96 @@ interface ElectionSummary {
   race_count: number;
 }
 
-type View = "builder" | "elections";
+type View = "builder" | "elections" | "voters" | "kyc" | "tally";
+type AuthState = "disconnected" | "connecting" | "checking" | "authorized" | "denied";
 
 export default function App() {
+  const [authState, setAuthState] = useState<AuthState>("disconnected");
+  const [walletDid, setWalletDid] = useState<string>("");
+  const [adminStatus, setAdminStatus] = useState<AdminStatus | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
   const [view, setView] = useState<View>("builder");
   const [elections, setElections] = useState<ElectionSummary[]>([]);
-  const [error, setError] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 25;
   const [success, setSuccess] = useState<string | null>(null);
+
+  // Voter registration state
+  const [voterDid, setVoterDid] = useState("");
+  const [voterJurisdiction, setVoterJurisdiction] = useState("");
+  const [registering, setRegistering] = useState(false);
+
+  // KYC state
+  const [kycSubmissions, setKycSubmissions] = useState<any[]>([]);
+  const [kycJurisdictionInput, setKycJurisdictionInput] = useState("");
+  const [approvingDid, setApprovingDid] = useState<string | null>(null);
+
+  // Tally state
+  const [tallyElectionId, setTallyElectionId] = useState("");
+  const [tallyResult, setTallyResult] = useState<any>(null);
+  const [tallying, setTallying] = useState(false);
 
   // Builder state
   const [electionId, setElectionId] = useState("");
   const [electionTitle, setElectionTitle] = useState("");
   const [races, setRaces] = useState<Race[]>([]);
   const [submitting, setSubmitting] = useState(false);
+
+  const isAdmin = authState === "authorized" && adminStatus?.is_admin === true;
+
+  // ── Wallet connection + admin verification ───────────────────
+
+  const connectWallet = useCallback(async () => {
+    setAuthState("connecting");
+    setError(null);
+    const provider = (window as any).ctzn ?? (window as any).citizen;
+    if (!provider) {
+      setError("Citizen wallet extension not found. Install the Citizen wallet and try again.");
+      setAuthState("disconnected");
+      return;
+    }
+    try {
+      const signer = await Promise.race([
+        provider.request({ method: "ctzn_getCitizenSigner" }),
+        new Promise<null>((_, reject) => setTimeout(() => reject(new Error("timeout")), 8000)),
+      ]);
+      if (!signer) {
+        setError("Wallet returned no signer identity.");
+        setAuthState("disconnected");
+        return;
+      }
+      const did = signer.did ?? signer.signer ?? signer.address;
+      if (!did) {
+        setError("Wallet returned no DID.");
+        setAuthState("disconnected");
+        return;
+      }
+      setWalletDid(did);
+      setAuthState("checking");
+
+      const res = await fetch(`${NODE_BASE}/api/v1/civic/admin/check/${encodeURIComponent(did)}`);
+      if (!res.ok) {
+        setError(`Admin verification failed (${res.status}).`);
+        setAuthState("denied");
+        return;
+      }
+      const status: AdminStatus = await res.json();
+      setAdminStatus(status);
+      if (status.is_admin) {
+        setAuthState("authorized");
+        await fetchElections();
+        await ensureKycEncryptionKey(did);
+      } else {
+        setAuthState("denied");
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to connect wallet.");
+      setAuthState("disconnected");
+    }
+  }, []);
+
+  // ── Fetch elections ──────────────────────────────────────────
 
   const fetchElections = useCallback(async () => {
     try {
@@ -51,21 +139,15 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    fetchElections();
-  }, [fetchElections]);
+    if (isAdmin) fetchElections();
+  }, [isAdmin, fetchElections]);
 
-  // ── Race builder helpers ──────────────────────────────────
+  // ── Race builder helpers ─────────────────────────────────────
 
   const addRace = () => {
     setRaces((prev) => [
       ...prev,
-      {
-        race_id: "",
-        title: "",
-        seat_type: "single",
-        max_selections: 1,
-        candidates: [],
-      },
+      { race_id: "", title: "", seat_type: "single", max_selections: 1, candidates: [] },
     ]);
   };
 
@@ -116,7 +198,7 @@ export default function App() {
     );
   };
 
-  // ── Validation ────────────────────────────────────────────
+  // ── Validation ───────────────────────────────────────────────
 
   const validateElection = (): string | null => {
     if (!electionId.trim()) return "Election ID is required";
@@ -138,54 +220,132 @@ export default function App() {
     return null;
   };
 
-  // ── Submit election ───────────────────────────────────────
+  // ── Sign entry with wallet private key ───────────────────────
+
+  const signEntry = async (entryData: Record<string, any>): Promise<string> => {
+    const provider = (window as any).ctzn ?? (window as any).citizen;
+    if (!provider) throw new Error("Wallet not connected");
+    const signingPayload = {
+      entry_id: entryData.entry_id,
+      namespace: entryData.namespace,
+      action: entryData.action,
+      object_id: entryData.object_id,
+      payload: entryData.payload,
+      author: walletDid,
+      timestamp: entryData.timestamp,
+    };
+    const result = await provider.request({
+      method: "ctzn_signCitizenTx",
+      params: [signingPayload],
+    });
+    return result?.signature ?? result ?? "unsigned";
+  };
+
+  // ── Submit entry helper ─────────────────────────────────────
+  const submitEntry = async (entryData: Record<string, any>): Promise<void> => {
+    const signature = await signEntry(entryData);
+    const res = await fetch(`${NODE_BASE}/api/v1/entries/submit`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...entryData, signature }),
+    });
+    if (!res.ok) {
+      const body = await res.text();
+      throw new Error(`Submission failed (${res.status}): ${body}`);
+    }
+  };
+
+  const buildEncryptedEntry = (
+    action: string,
+    objectId: string,
+    payload: Record<string, any>,
+  ) => ({
+    entry_id: crypto.randomUUID(),
+    namespace: "civic.election",
+    action,
+    object_id: objectId,
+    payload,
+    author: walletDid,
+    timestamp: Math.floor(Date.now() / 1000),
+    privacy_flag: true,
+    privacy_mode: "passphrase",
+    payload_commitment: crypto.randomUUID(),
+  });
+
+  // ── Submit election ──────────────────────────────────────────
+  // Opens the election shell, then submits each race and candidate
+  // as individual encrypted on-chain transactions.
 
   const submitElection = async () => {
     const err = validateElection();
-    if (err) {
-      setError(err);
-      return;
-    }
+    if (err) { setError(err); return; }
     setSubmitting(true);
     setError(null);
     setSuccess(null);
 
-    const payload = {
-      title: electionTitle.trim(),
-      races: races.map((r) => ({
-        ...r,
-        candidates: r.candidates.map((c) => ({
-          candidate_id: c.candidate_id.trim(),
-          name: c.name.trim(),
-          party: c.party.trim(),
-        })),
-      })),
-    };
-
-    const entry = {
-      entry_id: crypto.randomUUID(),
-      namespace: "civic.election",
-      action: "OPEN_ELECTION",
-      object_id: electionId.trim(),
-      payload,
-      author: "governance:vote",
-      signature: "placeholder",
-      timestamp: Math.floor(Date.now() / 1000),
-      privacy_flag: false,
-      privacy_mode: "none",
-    };
-
     try {
-      const res = await fetch(`${NODE_BASE}/api/v1/entries/submit`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(entry),
-      });
-      if (!res.ok) {
-        const body = await res.text();
-        throw new Error(`Submission failed (${res.status}): ${body}`);
+      // 0. Generate election tally keypair for ballot encryption
+      const keyPair = await generateElectionKeyPair();
+      localStorage.setItem(
+        ELECTION_KEY_PREFIX + electionId.trim(),
+        JSON.stringify({ privateKeyJwk: keyPair.privateKeyJwk }),
+      );
+
+      // 1. OPEN_ELECTION with empty races + tally public key
+      const openEntry = buildEncryptedEntry(
+        "OPEN_ELECTION",
+        electionId.trim(),
+        {
+          title: electionTitle.trim(),
+          races: [],
+          tally_public_key: keyPair.publicKeyBase64,
+        },
+      );
+      await submitEntry(openEntry);
+
+      // 2. Submit each race as ADD_RACE
+      for (const race of races) {
+        const racePayload = {
+          election_id: electionId.trim(),
+          race: {
+            race_id: race.race_id.trim(),
+            title: race.title.trim(),
+            seat_type: race.seat_type,
+            max_selections: race.max_selections,
+            candidates: [],
+          },
+        };
+        const raceEntry = buildEncryptedEntry(
+          "ADD_RACE",
+          electionId.trim(),
+          racePayload,
+        );
+        await submitEntry(raceEntry);
+
+        // 3. Submit each candidate as ADD_CANDIDATE
+        for (const cand of race.candidates) {
+          const candPayload = {
+            election_id: electionId.trim(),
+            race_id: race.race_id.trim(),
+            candidate: {
+              candidate_id: cand.candidate_id.trim(),
+              name: cand.name.trim(),
+              party: cand.party.trim(),
+            },
+          };
+          const candEntry = buildEncryptedEntry(
+            "ADD_CANDIDATE",
+            electionId.trim(),
+            candPayload,
+          );
+          await submitEntry(candEntry);
+        }
       }
-      setSuccess(`Election "${electionId}" opened with ${races.length} race${races.length !== 1 ? "s" : ""}.`);
+
+      const totalCandidates = races.reduce((s, r) => s + r.candidates.length, 0);
+      setSuccess(
+        `Election "${electionId}" opened. ${races.length} race${races.length !== 1 ? "s" : ""} and ${totalCandidates} candidate${totalCandidates !== 1 ? "s" : ""} recorded on-chain.`,
+      );
       setElectionId("");
       setElectionTitle("");
       setRaces([]);
@@ -197,30 +357,14 @@ export default function App() {
     }
   };
 
-  // ── Close election ────────────────────────────────────────
+  // ── Close election ───────────────────────────────────────────
 
   const closeElection = async (id: string) => {
     setError(null);
     setSuccess(null);
-    const entry = {
-      entry_id: crypto.randomUUID(),
-      namespace: "civic.election",
-      action: "CLOSE_ELECTION",
-      object_id: id,
-      payload: {},
-      author: "governance:vote",
-      signature: "placeholder",
-      timestamp: Math.floor(Date.now() / 1000),
-      privacy_flag: false,
-      privacy_mode: "none",
-    };
+    const entry = buildEncryptedEntry("CLOSE_ELECTION", id, {});
     try {
-      const res = await fetch(`${NODE_BASE}/api/v1/entries/submit`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(entry),
-      });
-      if (!res.ok) throw new Error(`Failed (${res.status})`);
+      await submitEntry(entry);
       setSuccess(`Election "${id}" closed.`);
       await fetchElections();
     } catch (err) {
@@ -228,7 +372,285 @@ export default function App() {
     }
   };
 
-  // ── Load template ─────────────────────────────────────────
+  // ── Register voter ──────────────────────────────────────────
+
+  const registerVoter = async () => {
+    if (!voterDid.trim() || !voterJurisdiction.trim()) return;
+    setRegistering(true);
+    setError(null);
+    setSuccess(null);
+
+    const jurisdictionPath = voterJurisdiction.split("/").map((s) => s.trim()).filter(Boolean);
+    if (jurisdictionPath.length === 0) {
+      setError("Jurisdiction path cannot be empty");
+      setRegistering(false);
+      return;
+    }
+
+    const entry = {
+      entry_id: crypto.randomUUID(),
+      namespace: "civic.registry",
+      action: "REGISTER_VOTER",
+      object_id: voterDid.trim(),
+      payload: {
+        voter_did: voterDid.trim(),
+        jurisdiction_path: jurisdictionPath,
+        verified_by: walletDid,
+        registered_at: new Date().toISOString(),
+      },
+      author: walletDid,
+      timestamp: Math.floor(Date.now() / 1000),
+      privacy_flag: true,
+      privacy_mode: "passphrase",
+      payload_commitment: crypto.randomUUID(),
+    };
+
+    try {
+      const signature = await signEntry(entry);
+      await fetch(`${NODE_BASE}/api/v1/entries/submit`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...entry, signature }),
+      }).then(async (res) => {
+        if (!res.ok) throw new Error(`Registration failed (${res.status}): ${await res.text()}`);
+      });
+      setSuccess(`Voter ${voterDid} registered at ${jurisdictionPath.join(" / ")}.`);
+      setVoterDid("");
+      setVoterJurisdiction("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unknown error");
+    } finally {
+      setRegistering(false);
+    }
+  };
+
+  // ── KYC encryption key management ─────────────────────────────
+
+  const ensureKycEncryptionKey = useCallback(async (did: string) => {
+    try {
+      const stored = localStorage.getItem(KYC_KEY_STORAGE);
+      let keyPair: { publicKeyBase64: string; privateKeyJwk: JsonWebKey };
+      if (stored) {
+        keyPair = JSON.parse(stored);
+      } else {
+        keyPair = await generateKycKeyPair();
+        localStorage.setItem(KYC_KEY_STORAGE, JSON.stringify(keyPair));
+      }
+      const entry = {
+        entry_id: crypto.randomUUID(),
+        namespace: "civic.admin",
+        action: "SET_KYC_PUBLIC_KEY",
+        object_id: "kyc-encryption-key",
+        payload: { kyc_encryption_public_key: keyPair.publicKeyBase64 },
+        author: did,
+        timestamp: Math.floor(Date.now() / 1000),
+      };
+      const signature = await signEntry(entry);
+      await fetch(`${NODE_BASE}/api/v1/entries/submit`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...entry, signature }),
+      });
+    } catch {
+      // Non-fatal
+    }
+  }, []);
+
+  const decryptKycEntry = useCallback(async (encryptedData: { ciphertext_hex?: string; nonce_hex?: string } | null, epk?: string): Promise<{ full_name: string; address: string } | null> => {
+    if (!encryptedData?.ciphertext_hex || !encryptedData?.nonce_hex || !epk) return null;
+    const stored = localStorage.getItem(KYC_KEY_STORAGE);
+    if (!stored) return null;
+    try {
+      const keyData = JSON.parse(stored);
+      if (!keyData.privateKeyJwk) return null;
+      const privateKey = await importKycPrivateKey(keyData.privateKeyJwk);
+      return await decryptKyc(encryptedData.ciphertext_hex, encryptedData.nonce_hex, epk, privateKey);
+    } catch {
+      return null;
+    }
+  }, []);
+
+  // ── KYC management ──────────────────────────────────────────
+
+  const fetchKycSubmissions = useCallback(async () => {
+    try {
+      const res = await fetch(`${NODE_BASE}/api/v1/identity/kyc`);
+      if (!res.ok) throw new Error("Failed to fetch KYC");
+      const data = await res.json();
+      const submissions = data.submissions ?? [];
+
+      const decrypted = await Promise.all(
+        submissions.map(async (s: any) => {
+          if (s.encrypted && s.encrypted.ciphertext_hex) {
+            const epk = s.encrypted.epk;
+            if (epk) {
+              const result = await decryptKycEntry(s.encrypted, epk);
+              if (result) {
+                return { ...s, full_name: result.full_name, address: result.address };
+              }
+            }
+            return { ...s, full_name: "🔒 Encrypted", address: "🔒 Encrypted" };
+          }
+          return s;
+        }),
+      );
+      setKycSubmissions(decrypted);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unknown error");
+    }
+  }, [decryptKycEntry]);
+
+  const approveKyc = async (did: string, jurisdictionPath: string, holderFields?: { holder_ciphertext_hex?: string; holder_nonce_hex?: string; holder_epk?: string }) => {
+    setError(null);
+    setSuccess(null);
+    setApprovingDid(did);
+    const entryId = crypto.randomUUID();
+    const payload: Record<string, unknown> = {
+      jurisdiction_path: jurisdictionPath.split("/").map((s) => s.trim()).filter(Boolean),
+    };
+    if (holderFields?.holder_ciphertext_hex) {
+      payload.holder_ciphertext_hex = holderFields.holder_ciphertext_hex;
+      payload.holder_nonce_hex = holderFields.holder_nonce_hex;
+      payload.holder_epk = holderFields.holder_epk;
+    }
+    const entry = {
+      entry_id: entryId,
+      namespace: "identity.kyc",
+      action: "APPROVE_KYC",
+      object_id: did,
+      payload,
+      author: walletDid,
+      timestamp: Math.floor(Date.now() / 1000),
+    };
+    try {
+      const signature = await signEntry(entry);
+      const resp = await fetch(`${NODE_BASE}/api/v1/entries/submit`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...entry, signature }),
+      });
+      const body = await resp.json();
+      if (!resp.ok) throw new Error(`Approval failed (${resp.status}): ${JSON.stringify(body)}`);
+
+      const blockHeight = body?.receipt?.finality?.block_height;
+      const receiptId = body?.receipt?.receipt_id;
+      const details = [
+        `Entry ID: ${entryId}`,
+        receiptId ? `Receipt: ${receiptId}` : null,
+        blockHeight ? `Block #${blockHeight}` : null,
+      ].filter(Boolean).join(' | ');
+      setSuccess(`KYC approved for ${did}. ${details}`);
+      setKycJurisdictionInput("");
+      await fetchKycSubmissions();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unknown error");
+    } finally {
+      setApprovingDid(null);
+    }
+  };
+
+  const revokeKyc = async (did: string) => {
+    setError(null);
+    setSuccess(null);
+    const entry = {
+      entry_id: crypto.randomUUID(),
+      namespace: "identity.kyc",
+      action: "REVOKE_KYC",
+      object_id: did,
+      payload: {},
+      author: walletDid,
+      timestamp: Math.floor(Date.now() / 1000),
+    };
+    try {
+      const signature = await signEntry(entry);
+      await fetch(`${NODE_BASE}/api/v1/entries/submit`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...entry, signature }),
+      }).then(async (res) => {
+        if (!res.ok) throw new Error(`Revocation failed (${res.status}): ${await res.text()}`);
+      });
+      setSuccess(`KYC revoked for ${did}.`);
+      await fetchKycSubmissions();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unknown error");
+    }
+  };
+
+  // ── Encrypted tally decryption ──────────────────────────────
+
+  const decryptTally = async () => {
+    if (!tallyElectionId.trim()) return;
+    setTallying(true);
+    setError(null);
+    setTallyResult(null);
+
+    try {
+      const res = await fetch(`${NODE_BASE}/api/v1/civic/elections/${encodeURIComponent(tallyElectionId.trim())}/ballots`);
+      if (!res.ok) throw new Error(`Failed to fetch ballots (${res.status})`);
+      const data = await res.json();
+      const ballots = data.ballots ?? [];
+
+      const keyStorage = localStorage.getItem(ELECTION_KEY_PREFIX + tallyElectionId.trim());
+      if (!keyStorage) {
+        throw new Error("No tally private key found for this election. You may not be the election admin who created it.");
+      }
+      const { privateKeyJwk } = JSON.parse(keyStorage);
+      const privateKey = await importElectionPrivateKey(privateKeyJwk);
+
+      const tallyByRace: Record<string, Record<string, number>> = {};
+      let decryptedCount = 0;
+      let failedCount = 0;
+
+      for (const ballot of ballots) {
+        const p = ballot.payload;
+        if (p.enc_ballot && p.epk && p.nonce) {
+          try {
+            const selections = await decryptBallot(
+              {
+                ciphertextBase64: p.enc_ballot,
+                ephemeralPublicKeyBase64: p.epk,
+                nonceBase64: p.nonce,
+              },
+              privateKey,
+            ) as Array<{ race_id: string; candidate_ids: string[] }>;
+
+            for (const sel of selections) {
+              if (!tallyByRace[sel.race_id]) tallyByRace[sel.race_id] = {};
+              for (const cid of sel.candidate_ids) {
+                tallyByRace[sel.race_id][cid] = (tallyByRace[sel.race_id][cid] ?? 0) + 1;
+              }
+            }
+            decryptedCount++;
+          } catch {
+            failedCount++;
+          }
+        } else if (p.selections) {
+          for (const sel of p.selections) {
+            if (!tallyByRace[sel.race_id]) tallyByRace[sel.race_id] = {};
+            for (const cid of sel.candidate_ids) {
+              tallyByRace[sel.race_id][cid] = (tallyByRace[sel.race_id][cid] ?? 0) + 1;
+            }
+          }
+          decryptedCount++;
+        }
+      }
+
+      setTallyResult({
+        election_id: tallyElectionId.trim(),
+        total_ballots: ballots.length,
+        decrypted: decryptedCount,
+        failed: failedCount,
+        tally: tallyByRace,
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Tally failed");
+    } finally {
+      setTallying(false);
+    }
+  };
+
+  // ── Templates ────────────────────────────────────────────────
 
   const loadNationalTemplate = () => {
     setElectionId("elec-2028-national");
@@ -287,6 +709,69 @@ export default function App() {
     ]);
   };
 
+  // ══════════════════════════════════════════════════════════════
+  // GATE: Not authorized — wallet not connected or not admin
+  // ══════════════════════════════════════════════════════════════
+
+  if (authState === "disconnected" || authState === "connecting" || authState === "checking") {
+    return (
+      <div className="app">
+        <div className="auth-gate">
+          <div className="auth-card">
+            <p className="eyebrow">Governance Administration</p>
+            <h1>Election Admin Console</h1>
+            <p className="lead">
+              This console is restricted to authorized election administrators.
+              Connect your Citizen wallet to verify your credentials.
+            </p>
+            {error && <div className="banner banner-error">{error}</div>}
+            <button
+              className="btn btn-primary btn-lg"
+              onClick={connectWallet}
+              disabled={authState !== "disconnected"}
+            >
+              {authState === "connecting"
+                ? "Connecting to wallet..."
+                : authState === "checking"
+                  ? "Verifying admin credentials..."
+                  : "Connect Citizen Wallet"}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (authState === "denied") {
+    return (
+      <div className="app">
+        <div className="auth-gate">
+          <div className="auth-card auth-denied-card">
+            <p className="eyebrow">Access Denied</p>
+            <h1>Not Authorized</h1>
+            <p className="lead">
+              The connected wallet <span className="mono">{walletDid}</span> is not
+              registered as an election admin.
+            </p>
+            <p className="muted">
+              Only wallets assigned through the civic.admin namespace can access
+              this console. Contact your governance administrator if you believe
+              this is an error.
+            </p>
+            {error && <div className="banner banner-error">{error}</div>}
+            <button className="btn btn-ghost" onClick={() => { setAuthState("disconnected"); setError(null); }}>
+              Try Different Wallet
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ══════════════════════════════════════════════════════════════
+  // AUTHORIZED: Full admin console
+  // ══════════════════════════════════════════════════════════════
+
   return (
     <div className="app">
       <header className="app-header">
@@ -294,23 +779,47 @@ export default function App() {
           <p className="eyebrow">Governance Administration</p>
           <h1>Election Admin Console</h1>
           <p className="lead">
-            Configure elections with custom races and candidates. Define any
-            position — president, senators, congressmen, mayors, councilors.
+            Configure elections with custom races and candidates.
           </p>
         </div>
-        <div className="view-toggle">
-          <button
-            className={`btn btn-sm ${view === "builder" ? "btn-primary" : "btn-ghost"}`}
-            onClick={() => setView("builder")}
-          >
-            Builder
-          </button>
-          <button
-            className={`btn btn-sm ${view === "elections" ? "btn-primary" : "btn-ghost"}`}
-            onClick={() => { setView("elections"); fetchElections(); }}
-          >
-            Active Elections ({elections.filter(e => e.status === "open").length})
-          </button>
+        <div className="header-right">
+          <div className="admin-info">
+            <span className="status-badge open">ADMIN</span>
+            <span className="admin-role">{adminStatus?.role}</span>
+            <span className="admin-did mono">{walletDid}</span>
+          </div>
+          <div className="view-toggle">
+            <button
+              className={`btn btn-sm ${view === "builder" ? "btn-primary" : "btn-ghost"}`}
+              onClick={() => { setView("builder"); setPage(1); }}
+            >
+              Builder
+            </button>
+            <button
+              className={`btn btn-sm ${view === "elections" ? "btn-primary" : "btn-ghost"}`}
+              onClick={() => { setView("elections"); fetchElections(); setPage(1); }}
+            >
+              Active Elections ({elections.filter(e => e.status === "open").length})
+            </button>
+            <button
+              className={`btn btn-sm ${view === "voters" ? "btn-primary" : "btn-ghost"}`}
+              onClick={() => { setView("voters"); setPage(1); }}
+            >
+              Voters
+            </button>
+            <button
+              className={`btn btn-sm ${view === "kyc" ? "btn-primary" : "btn-ghost"}`}
+              onClick={() => { setView("kyc"); fetchKycSubmissions(); setPage(1); }}
+            >
+              KYC ({kycSubmissions.filter(k => k.status === "submitted").length})
+            </button>
+            <button
+              className={`btn btn-sm ${view === "tally" ? "btn-primary" : "btn-ghost"}`}
+              onClick={() => { setView("tally"); setPage(1); }}
+            >
+              Tally
+            </button>
+          </div>
         </div>
       </header>
 
@@ -330,7 +839,6 @@ export default function App() {
 
       {view === "builder" && (
         <div className="builder">
-          {/* Templates */}
           <div className="templates">
             <span className="template-label">Quick Start:</span>
             <button className="btn btn-ghost btn-sm" onClick={loadNationalTemplate}>
@@ -344,7 +852,6 @@ export default function App() {
             </button>
           </div>
 
-          {/* Election metadata */}
           <div className="card">
             <h3>Election Details</h3>
             <div className="form-row">
@@ -371,7 +878,6 @@ export default function App() {
             </div>
           </div>
 
-          {/* Races */}
           {races.map((race, ri) => (
             <div key={ri} className="card race-builder">
               <div className="race-builder-header">
@@ -425,7 +931,6 @@ export default function App() {
                 </label>
               </div>
 
-              {/* Candidates */}
               <div className="candidates-section">
                 <div className="candidates-header">
                   <span className="field-label">Candidates ({race.candidates.length})</span>
@@ -457,7 +962,7 @@ export default function App() {
                       className="input cand-party"
                     />
                     <button className="btn btn-danger btn-sm" onClick={() => removeCandidate(ri, ci)}>
-                      ✕
+                      X
                     </button>
                   </div>
                 ))}
@@ -478,7 +983,6 @@ export default function App() {
             </button>
           </div>
 
-          {/* JSON preview */}
           {races.length > 0 && electionId && (
             <details className="json-preview">
               <summary>Submission JSON Preview</summary>
@@ -486,10 +990,7 @@ export default function App() {
                 namespace: "civic.election",
                 action: "OPEN_ELECTION",
                 object_id: electionId,
-                payload: {
-                  title: electionTitle,
-                  races,
-                },
+                payload: { title: electionTitle, races },
               }, null, 2)}</pre>
             </details>
           )}
@@ -503,7 +1004,7 @@ export default function App() {
               <p>No elections created yet.</p>
             </div>
           )}
-          {elections.map((e) => (
+          {elections.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE).map((e) => (
             <div key={e.election_id} className="card election-row">
               <div className="election-row-info">
                 <h3>{e.title ?? e.election_id}</h3>
@@ -522,6 +1023,255 @@ export default function App() {
               </div>
             </div>
           ))}
+          {elections.length > PAGE_SIZE && (
+            <div style={{ display: "flex", justifyContent: "center", gap: 8, marginTop: 16 }}>
+              <button className="btn btn-ghost btn-sm" disabled={page <= 1} onClick={() => setPage(page - 1)}>« Prev</button>
+              <span className="meta-text">Page {page} of {Math.ceil(elections.length / PAGE_SIZE)}</span>
+              <button className="btn btn-ghost btn-sm" disabled={page >= Math.ceil(elections.length / PAGE_SIZE)} onClick={() => setPage(page + 1)}>Next »</button>
+            </div>
+          )}
+        </div>
+      )}
+      {view === "voters" && (
+        <div className="builder">
+          <div className="card">
+            <h3>Register Voter</h3>
+            <p className="muted" style={{ marginBottom: 16 }}>
+              Register a voter with their DID and jurisdiction path.
+              The voter must hold a CTZN citizenship token and be registered here
+              before they can cast a ballot. Jurisdiction path is slash-separated,
+              e.g. <code className="mono">PH/NCR/Quezon City/District 1</code>
+            </p>
+            <div className="form-row">
+              <label className="field">
+                <span className="field-label">Voter DID</span>
+                <input
+                  type="text"
+                  value={voterDid}
+                  onChange={(e) => setVoterDid(e.target.value)}
+                  placeholder="did:key:ed25519:..."
+                  className="input mono"
+                />
+              </label>
+            </div>
+            <div className="form-row">
+              <label className="field field-grow">
+                <span className="field-label">Jurisdiction Path (slash-separated)</span>
+                <input
+                  type="text"
+                  value={voterJurisdiction}
+                  onChange={(e) => setVoterJurisdiction(e.target.value)}
+                  placeholder="PH/NCR/Quezon City/District 1"
+                  className="input"
+                />
+              </label>
+            </div>
+            <div className="builder-actions">
+              <button
+                className="btn btn-primary btn-lg"
+                onClick={registerVoter}
+                disabled={registering || !voterDid.trim() || !voterJurisdiction.trim()}
+              >
+                {registering ? "Registering..." : "Register Voter"}
+              </button>
+            </div>
+          </div>
+
+          <div className="card">
+            <h4>Quick-fill locations</h4>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
+              {[
+                { label: "PH / NCR / Quezon City / D1", value: "PH/NCR/Quezon City/District 1" },
+                { label: "PH / NCR / Manila / D2", value: "PH/NCR/Manila/District 2" },
+                { label: "PH / NCR / Makati", value: "PH/NCR/Makati" },
+                { label: "PH / IV-A / Cavite", value: "PH/Region IV-A/Cavite" },
+              ].map((loc) => (
+                <button
+                  key={loc.value}
+                  className="btn btn-ghost btn-sm"
+                  onClick={() => setVoterJurisdiction(loc.value)}
+                >
+                  {loc.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {view === "kyc" && (
+        <div className="elections-list">
+          {kycSubmissions.length === 0 && (
+            <div className="empty-state"><p>No KYC submissions yet.</p></div>
+          )}
+          {(() => {
+            const filtered = kycSubmissions
+              .filter((k) => k.status === "submitted" || k.status === "approved")
+              .sort((a, b) => (a.status === "submitted" ? -1 : 1) - (b.status === "submitted" ? -1 : 1));
+            if (filtered.length === 0 && kycSubmissions.length > 0) {
+              return <div className="empty-state"><p>No pending or approved KYC submissions.</p></div>;
+            }
+            const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+            return (
+              <>
+                {paged.map((k) => (
+            <div key={k.did} className="card election-row">
+              <div className="election-row-info">
+                <h3>{k.full_name ?? "Unknown"}</h3>
+                <div className="election-row-meta">
+                  <span className="mono" title={k.did}>{k.did.slice(0, 40)}...</span>
+                  <span className={`status-badge ${k.status === "approved" ? "open" : k.status === "submitted" ? "open" : "closed"}`} style={k.status === "submitted" ? {background: "var(--accent-weak)", color: "var(--accent)"} : {}}>
+                    {k.status}
+                  </span>
+                </div>
+                {k.address && (
+                  <div className="meta-text" style={{ marginTop: 4 }}>
+                    Physical address: {k.address}
+                  </div>
+                )}
+                {k.jurisdiction_path && (
+                  <div className="meta-text">
+                    Jurisdiction: {k.jurisdiction_path.join(" / ")}
+                  </div>
+                )}
+                {k.author && (
+                  <div className="meta-text">
+                    Voter DID: <span className="mono">{k.author.slice(0, 48)}...</span>
+                  </div>
+                )}
+                {k.verified_by && (
+                  <div className="meta-text">
+                    Approved by: <span className="mono">{k.verified_by.slice(0, 40)}...</span>
+                  </div>
+                )}
+              </div>
+              <div className="election-row-actions">
+                {k.status === "submitted" && (
+                  <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                    <input
+                      type="text"
+                      value={approvingDid === k.did ? kycJurisdictionInput : ""}
+                      onChange={(e) => setKycJurisdictionInput(e.target.value)}
+                      onClick={() => { setApprovingDid(k.did); setKycJurisdictionInput(""); }}
+                      placeholder="PH/NCR/City/District"
+                      className="input"
+                      style={{ width: 200, fontSize: "0.78rem" }}
+                    />
+                    <button
+                      className="btn btn-primary btn-sm"
+                      onClick={() => approveKyc(k.did, kycJurisdictionInput, {
+                        holder_ciphertext_hex: k.encrypted?.holder_ciphertext_hex,
+                        holder_nonce_hex: k.encrypted?.holder_nonce_hex,
+                        holder_epk: k.encrypted?.holder_epk,
+                      })}
+                      disabled={approvingDid === k.did && !kycJurisdictionInput.trim()}
+                    >
+                      {approvingDid === k.did ? "Confirm" : "Approve"}
+                    </button>
+                  </div>
+                )}
+                {k.status === "approved" && (
+                  <button className="btn btn-danger btn-sm" onClick={() => revokeKyc(k.did)}>
+                    Revoke
+                  </button>
+                )}
+              </div>
+            </div>
+                ))}
+                {filtered.length > PAGE_SIZE && (
+                  <div style={{ display: "flex", justifyContent: "center", gap: 8, marginTop: 16 }}>
+                    <button className="btn btn-ghost btn-sm" disabled={page <= 1} onClick={() => setPage(page - 1)}>« Prev</button>
+                    <span className="meta-text">Page {page} of {Math.ceil(filtered.length / PAGE_SIZE)}</span>
+                    <button className="btn btn-ghost btn-sm" disabled={page >= Math.ceil(filtered.length / PAGE_SIZE)} onClick={() => setPage(page + 1)}>Next »</button>
+                  </div>
+                )}
+              </>
+            );
+          })()}
+        </div>
+      )}
+
+      {view === "tally" && (
+        <div className="builder">
+          <div className="card">
+            <h3>Decrypt &amp; Tally Ballots</h3>
+            <p className="muted" style={{ marginBottom: 16 }}>
+              Fetch encrypted ballots from the chain and decrypt them locally using
+              the election's private key. Only the admin who created the election
+              can decrypt the ballots.
+            </p>
+            <div className="form-row">
+              <label className="field field-grow">
+                <span className="field-label">Election ID</span>
+                <input
+                  type="text"
+                  value={tallyElectionId}
+                  onChange={(e) => setTallyElectionId(e.target.value)}
+                  placeholder="elec-2028-national"
+                  className="input mono"
+                />
+              </label>
+            </div>
+            <div className="builder-actions">
+              <button
+                className="btn btn-primary btn-lg"
+                onClick={decryptTally}
+                disabled={tallying || !tallyElectionId.trim()}
+              >
+                {tallying ? "Decrypting..." : "Decrypt & Tally"}
+              </button>
+            </div>
+          </div>
+
+          {tallyResult && (
+            <div className="card">
+              <h3>Results — {tallyResult.election_id}</h3>
+              <div className="election-row-meta" style={{ marginBottom: 16 }}>
+                <span className="badge-info">{tallyResult.total_ballots} total ballots</span>
+                <span className="badge-info">{tallyResult.decrypted} decrypted</span>
+                {tallyResult.failed > 0 && (
+                  <span className="status-badge closed">{tallyResult.failed} failed</span>
+                )}
+              </div>
+              {Object.entries(tallyResult.tally).map(([raceId, candidates]) => (
+                <div key={raceId} className="race-tally" style={{ marginBottom: 20 }}>
+                  <h4 style={{ textTransform: "capitalize" }}>{raceId}</h4>
+                  <div className="tally-bars">
+                    {Object.entries(candidates as Record<string, number>)
+                      .sort(([, a], [, b]) => (b as number) - (a as number))
+                      .map(([cid, count]) => {
+                        const max = Math.max(...Object.values(candidates as Record<string, number>), 1);
+                        return (
+                          <div key={cid} className="tally-row" style={{
+                            display: "flex", alignItems: "center", gap: 8, marginBottom: 4,
+                          }}>
+                            <span className="tally-label" style={{ width: 150 }}>{cid}</span>
+                            <div style={{
+                              flex: 1, height: 24, background: "var(--bg)", borderRadius: 4,
+                              overflow: "hidden",
+                            }}>
+                              <div style={{
+                                width: `${((count as number) / max) * 100}%`,
+                                height: "100%",
+                                background: "var(--accent)",
+                                borderRadius: 4,
+                                display: "flex",
+                                alignItems: "center",
+                                paddingLeft: 8,
+                                color: "white",
+                                fontSize: "0.8rem",
+                              }}>
+                                {count as number}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>

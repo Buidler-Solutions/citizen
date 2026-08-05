@@ -128,3 +128,135 @@ writers = ["consent.receipt"]
 [[namespaces.validators]]
 name = "require_signature"
 config = {}
+
+[[namespaces]]
+descriptor.namespace = "identity.kyc"
+descriptor.version = 1
+descriptor.rules_hash = "sha256:identity-kyc-v1"
+descriptor.governed_by = "governance.vote"
+writers = []
+[[namespaces.validators]]
+name = "require_signature"
+config = {}
+[[namespaces.validators]]
+name = "allowed_actions"
+config.actions = ["SUBMIT_KYC", "APPROVE_KYC", "REVOKE_KYC"]
+[[namespaces.validators]]
+name = "kyc_verification_policy"
+config.admin_namespace = "civic.admin"
+[[namespaces.validators]]
+name = "election_race_policy"
+config = {}
+
+[[namespaces]]
+descriptor.namespace = "civic.proposal"
+descriptor.version = 1
+descriptor.rules_hash = "sha256:civic-proposal-v1"
+descriptor.governed_by = "governance.vote"
+writers = []
+[[namespaces.validators]]
+name = "require_signature"
+config = {}
+[[namespaces.validators]]
+name = "allowed_actions"
+config.actions = ["OPEN_PROPOSAL", "CLOSE_PROPOSAL"]
+
+[[namespaces]]
+descriptor.namespace = "civic.ballot"
+descriptor.version = 1
+descriptor.rules_hash = "sha256:civic-ballot-v1"
+descriptor.governed_by = "governance.vote"
+writers = []
+[[namespaces.validators]]
+name = "require_signature"
+config = {}
+[[namespaces.validators]]
+name = "civic_voting_policy"
+config.proposal_namespace = "civic.proposal"
+config.valid_choices = ["yes", "no", "abstain"]
+
+[[namespaces]]
+descriptor.namespace = "civic.admin"
+descriptor.version = 1
+descriptor.rules_hash = "sha256:civic-admin-v1"
+descriptor.governed_by = "governance.vote"
+writers = []
+[[namespaces.validators]]
+name = "require_signature"
+config = {}
+[[namespaces.validators]]
+name = "allowed_actions"
+config.actions = ["ASSIGN_ADMIN", "REVOKE_ADMIN"]
+[[namespaces.validators]]
+name = "admin_assignment_policy"
+config = {}
+
+[[namespaces]]
+descriptor.namespace = "civic.election"
+descriptor.version = 1
+descriptor.rules_hash = "sha256:civic-election-v1"
+descriptor.governed_by = "governance.vote"
+writers = []
+[[namespaces.validators]]
+name = "require_signature"
+config = {}
+[[namespaces.validators]]
+name = "allowed_actions"
+config.actions = ["OPEN_ELECTION", "CLOSE_ELECTION", "ADD_RACE", "REMOVE_RACE", "ADD_CANDIDATE", "REMOVE_CANDIDATE", "UPDATE_RACE"]
+[[namespaces.validators]]
+name = "civic_admin_gate"
+config.admin_namespace = "civic.admin"
+[[namespaces.validators]]
+name = "election_race_policy"
+config = {}
+
+[[namespaces]]
+descriptor.namespace = "civic.election.ballot"
+descriptor.version = 1
+descriptor.rules_hash = "sha256:civic-election-ballot-v1"
+descriptor.governed_by = "governance.vote"
+writers = []
+[[namespaces.validators]]
+name = "require_signature"
+config = {}
+[[namespaces.validators]]
+name = "election_ballot_policy"
+config.election_namespace = "civic.election"
+[[namespaces.validators]]
+name = "ctzn_citizenship_policy"
+config.ctzn_module_id = "ctzn-token.v1"
+config.required_schema = "citizenship"
+[[namespaces.validators]]
+name = "voter_jurisdiction_policy"
+config.registry_namespace = "civic.registry"
+config.election_namespace = "civic.election"
+
+[[namespaces]]
+descriptor.namespace = "civic.registry"
+descriptor.version = 1
+descriptor.rules_hash = "sha256:civic-registry-v1"
+descriptor.governed_by = "governance.vote"
+writers = []
+[[namespaces.validators]]
+name = "require_signature"
+config = {}
+[[namespaces.validators]]
+name = "allowed_actions"
+config.actions = ["REGISTER_VOTER", "UPDATE_JURISDICTION"]
+[[namespaces.validators]]
+name = "voter_registration_policy"
+config.admin_namespace = "civic.admin"
+[[namespaces.validators]]
+name = "election_race_policy"
+config = {}
+config.kyc_namespace = "identity.kyc"
+
+[[namespaces]]
+descriptor.namespace = "execution.module"
+descriptor.version = 1
+descriptor.rules_hash = "sha256:execution-module-localnet-v1"
+descriptor.governed_by = "governance.vote"
+writers = []
+[[namespaces.validators]]
+name = "allowed_actions"
+config.actions = ["REGISTER_MODULE", "ACTIVATE_MODULE", "EXECUTE_MODULE", "STATE_WRITE"]

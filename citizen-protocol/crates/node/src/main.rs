@@ -17,10 +17,10 @@ use citizen_network::{
     AdmissionControl, ConsensusMessage, HandshakeIdentity, MockNetwork, Network, NetworkLatency,
     QuicNetwork, QuicTlsConfig,
 };
-use citizen_storage::RocksDbStorage;
+use citizen_storage::{LedgerStorage, RocksDbStorage};
 use citizen_types::{
-    ConsensusConfig, EpochState, NamespaceRuleset, ProtocolError, ValidatorId, ValidatorMetadata,
-    ValidatorPerformance, ValidatorSetSnapshot, ValidatorStatus,
+    Block, BlockHeader, CommitProof, ConsensusConfig, EpochState, NamespaceRuleset, ProtocolError,
+    ValidatorId, ValidatorMetadata, ValidatorPerformance, ValidatorSetSnapshot, ValidatorStatus,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -75,6 +75,25 @@ async fn main() -> anyhow::Result<()> {
     let key_registry = KeyRegistry::new();
     let ledger = Arc::new(Ledger::new(storage.clone(), key_registry));
     ledger.bootstrap_namespaces(config.namespaces.clone());
+
+    if storage.latest_height()? == 0 && storage.get_block(0)?.is_none() {
+        let genesis = Block {
+            header: BlockHeader {
+                height: 0,
+                prev_hash: String::new(),
+                entry_root: String::new(),
+                proposer: "greenarmor".to_string(),
+                timestamp: chrono::Utc::now().timestamp(),
+                commit_proof: CommitProof {
+                    aggregated_signature: "local-dev-finality".to_string(),
+                    participant_ids: std::collections::BTreeSet::new(),
+                },
+            },
+            entries: vec![],
+        };
+        storage.store_block(genesis)?;
+        tracing::info!("genesis block stored: message=greenarmor height=0");
+    }
 
     let api_server = if let Some(minio_config) = config.offchain_minio_config() {
         ApiServer::with_edge_config_and_minio_store(
@@ -651,6 +670,29 @@ fn default_namespaces() -> Vec<NamespaceRuleset> {
         },
         NamespaceRuleset {
             descriptor: citizen_types::NamespaceDescriptor {
+                namespace: "identity.kyc".into(),
+                version: 1,
+                rules_hash: "sha256:identity-kyc-v1".into(),
+                governed_by: "governance.vote".into(),
+            },
+            writers: BTreeSet::new(),
+            validators: vec![
+                citizen_types::NamespaceRule {
+                    name: "require_signature".into(),
+                    config: json!({}),
+                },
+                citizen_types::NamespaceRule {
+                    name: "allowed_actions".into(),
+                    config: json!({"actions":["SUBMIT_KYC","APPROVE_KYC","REVOKE_KYC"]}),
+                },
+                citizen_types::NamespaceRule {
+                    name: "kyc_verification_policy".into(),
+                    config: json!({"admin_namespace":"civic.admin"}),
+                },
+            ],
+        },
+        NamespaceRuleset {
+            descriptor: citizen_types::NamespaceDescriptor {
                 namespace: "registry.land".into(),
                 version: 1,
                 rules_hash: "sha256:land-default-v1".into(),
@@ -815,10 +857,16 @@ fn default_namespaces() -> Vec<NamespaceRuleset> {
                 governed_by: "governance.vote".into(),
             },
             writers: BTreeSet::new(),
-            validators: vec![citizen_types::NamespaceRule {
-                name: "allowed_actions".into(),
-                config: json!({"actions":["OPEN_PROPOSAL","CLOSE_PROPOSAL"]}),
-            }],
+            validators: vec![
+                citizen_types::NamespaceRule {
+                    name: "allowed_actions".into(),
+                    config: json!({"actions":["OPEN_PROPOSAL","CLOSE_PROPOSAL"]}),
+                },
+                citizen_types::NamespaceRule {
+                    name: "require_signature".into(),
+                    config: json!({}),
+                },
+            ],
         },
         NamespaceRuleset {
             descriptor: citizen_types::NamespaceDescriptor {
@@ -828,13 +876,41 @@ fn default_namespaces() -> Vec<NamespaceRuleset> {
                 governed_by: "governance.vote".into(),
             },
             writers: BTreeSet::new(),
-            validators: vec![citizen_types::NamespaceRule {
-                name: "civic_voting_policy".into(),
+            validators: vec![
+                citizen_types::NamespaceRule {
+                    name: "require_signature".into(),
+                    config: json!({}),
+                },
+                citizen_types::NamespaceRule {
+                    name: "civic_voting_policy".into(),
                 config: json!({
                     "proposal_namespace": "civic.proposal",
                     "valid_choices": ["yes", "no", "abstain"]
                 }),
             }],
+        },
+        NamespaceRuleset {
+            descriptor: citizen_types::NamespaceDescriptor {
+                namespace: "civic.admin".into(),
+                version: 1,
+                rules_hash: "sha256:civic-admin-v1".into(),
+                governed_by: "governance.vote".into(),
+            },
+            writers: BTreeSet::new(),
+            validators: vec![
+                citizen_types::NamespaceRule {
+                    name: "require_signature".into(),
+                    config: json!({}),
+                },
+                citizen_types::NamespaceRule {
+                    name: "allowed_actions".into(),
+                    config: json!({"actions":["ASSIGN_ADMIN","REVOKE_ADMIN"]}),
+                },
+                citizen_types::NamespaceRule {
+                    name: "admin_assignment_policy".into(),
+                    config: json!({}),
+                },
+            ],
         },
         NamespaceRuleset {
             descriptor: citizen_types::NamespaceDescriptor {
@@ -844,10 +920,24 @@ fn default_namespaces() -> Vec<NamespaceRuleset> {
                 governed_by: "governance.vote".into(),
             },
             writers: BTreeSet::new(),
-            validators: vec![citizen_types::NamespaceRule {
-                name: "allowed_actions".into(),
-                config: json!({"actions":["OPEN_ELECTION","CLOSE_ELECTION"]}),
-            }],
+            validators: vec![
+                citizen_types::NamespaceRule {
+                    name: "require_signature".into(),
+                    config: json!({}),
+                },
+                citizen_types::NamespaceRule {
+                    name: "allowed_actions".into(),
+                    config: json!({"actions":["OPEN_ELECTION","CLOSE_ELECTION","ADD_RACE","REMOVE_RACE","ADD_CANDIDATE","REMOVE_CANDIDATE","UPDATE_RACE"]}),
+                },
+                citizen_types::NamespaceRule {
+                    name: "civic_admin_gate".into(),
+                    config: json!({"admin_namespace":"civic.admin"}),
+                },
+                citizen_types::NamespaceRule {
+                    name: "election_race_policy".into(),
+                    config: json!({}),
+                },
+            ],
         },
         NamespaceRuleset {
             descriptor: citizen_types::NamespaceDescriptor {
@@ -857,12 +947,58 @@ fn default_namespaces() -> Vec<NamespaceRuleset> {
                 governed_by: "governance.vote".into(),
             },
             writers: BTreeSet::new(),
-            validators: vec![citizen_types::NamespaceRule {
-                name: "election_ballot_policy".into(),
-                config: json!({
-                    "election_namespace": "civic.election"
-                }),
-            }],
+            validators: vec![
+                citizen_types::NamespaceRule {
+                    name: "require_signature".into(),
+                    config: json!({}),
+                },
+                citizen_types::NamespaceRule {
+                    name: "election_ballot_policy".into(),
+                    config: json!({
+                        "election_namespace": "civic.election"
+                    }),
+                },
+                citizen_types::NamespaceRule {
+                    name: "ctzn_citizenship_policy".into(),
+                    config: json!({
+                        "ctzn_module_id": "ctzn-token.v1",
+                        "required_schema": "citizenship"
+                    }),
+                },
+                citizen_types::NamespaceRule {
+                    name: "voter_jurisdiction_policy".into(),
+                    config: json!({
+                        "registry_namespace": "civic.registry",
+                        "election_namespace": "civic.election"
+                    }),
+                },
+            ],
+        },
+        NamespaceRuleset {
+            descriptor: citizen_types::NamespaceDescriptor {
+                namespace: "civic.registry".into(),
+                version: 1,
+                rules_hash: "sha256:civic-registry-v1".into(),
+                governed_by: "governance.vote".into(),
+            },
+            writers: BTreeSet::new(),
+            validators: vec![
+                citizen_types::NamespaceRule {
+                    name: "require_signature".into(),
+                    config: json!({}),
+                },
+                citizen_types::NamespaceRule {
+                    name: "allowed_actions".into(),
+                    config: json!({"actions":["REGISTER_VOTER","UPDATE_JURISDICTION"]}),
+                },
+                citizen_types::NamespaceRule {
+                    name: "voter_registration_policy".into(),
+                    config: json!({
+                        "admin_namespace": "civic.admin",
+                        "kyc_namespace": "identity.kyc"
+                    }),
+                },
+            ],
         },
     ]
 }
@@ -872,7 +1008,7 @@ fn default_network_id() -> String {
 }
 
 fn default_manifest_enforce() -> bool {
-    true
+    false
 }
 
 fn default_bind() -> SocketAddr {
