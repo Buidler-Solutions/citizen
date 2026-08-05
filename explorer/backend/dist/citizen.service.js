@@ -5,12 +5,17 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
     else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
     return c > 3 && r && Object.defineProperty(target, key, r), r;
 };
+var __metadata = (this && this.__metadata) || function (k, v) {
+    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.CitizenService = void 0;
 const common_1 = require("@nestjs/common");
+const indexer_metrics_service_1 = require("./indexer/indexer-metrics.service");
 let CitizenService = class CitizenService {
-    constructor() {
-        this.baseUrl = process.env.CITIZEN_NODE_URL ?? 'http://127.0.0.1:8081';
+    constructor(indexer) {
+        this.indexer = indexer;
+        this.baseUrl = process.env.CITIZEN_NODE_URL ?? 'http://127.0.0.1:8091';
     }
     async getStatus() {
         return {
@@ -111,8 +116,71 @@ let CitizenService = class CitizenService {
         return this.fetchJson(endpoint);
     }
     async getPayloadDataHash(dataHash) {
-        const endpoint = `${this.baseUrl.replace(/\/$/, '')}/api/v1/payloads/data-hash/${encodeURIComponent(dataHash)}`;
-        return this.fetchJson(endpoint);
+        const normalized = dataHash.trim();
+        const matches = { data_hash: normalized, matches: [] };
+        try {
+            const indexed = await this.indexer.findEntriesByPayloadCommitment(normalized);
+            for (const entry of indexed) {
+                matches.matches.push({
+                    entry_id: entry.entry_id,
+                    namespace: entry.namespace,
+                    action: entry.action,
+                    object_id: '',
+                    timestamp: entry.committed_at,
+                    field_path: entry.entry_id,
+                    committed_at: entry.committed_at,
+                });
+            }
+            if (matches.matches.length > 0) {
+                return { source: `${this.baseUrl}/api/v1/payloads/data-hash`, data: matches };
+            }
+        }
+        catch {
+            // fallback to block scanning
+        }
+        let cursor;
+        let scanned = 0;
+        const maxBlocks = 500;
+        while (scanned < maxBlocks) {
+            const page = await this.getBlocks(cursor, '10');
+            if (!page.data.items.length)
+                break;
+            for (const item of page.data.items) {
+                try {
+                    const block = await this.getBlock(item.height);
+                    if (!block.data?.block?.entries)
+                        continue;
+                    for (const entry of block.data.block.entries) {
+                        const committed = typeof entry.payload_commitment === 'string'
+                            && (entry.payload_commitment === normalized || entry.payload_commitment === `sha256:${normalized}`);
+                        let consentMatch = false;
+                        const cr = entry.consent_receipt;
+                        if (cr && typeof cr.data_hash === 'string') {
+                            consentMatch = cr.data_hash === normalized || cr.data_hash === `sha256:${normalized}`;
+                        }
+                        if (committed || consentMatch) {
+                            matches.matches.push({
+                                entry_id: String(entry.entry_id ?? ''),
+                                namespace: String(entry.namespace ?? ''),
+                                action: String(entry.action ?? ''),
+                                object_id: String(entry.object_id ?? ''),
+                                timestamp: Number(entry.timestamp ?? 0),
+                                field_path: String(entry.field_path ?? String(entry.object_id ?? '')),
+                                committed_at: Number(entry.timestamp ?? 0),
+                            });
+                        }
+                    }
+                }
+                catch {
+                    // skip blocks that fail to fetch
+                }
+                scanned++;
+            }
+            if (!page.data.has_more || !page.data.next_cursor)
+                break;
+            cursor = page.data.next_cursor;
+        }
+        return { source: `${this.baseUrl}/api/v1/payloads/data-hash`, data: matches };
     }
     async getFileManifest(manifestId) {
         const endpoint = `${this.baseUrl.replace(/\/$/, '')}/api/v1/files/manifests/${manifestId}`;
@@ -285,5 +353,6 @@ let CitizenService = class CitizenService {
 };
 exports.CitizenService = CitizenService;
 exports.CitizenService = CitizenService = __decorate([
-    (0, common_1.Injectable)()
+    (0, common_1.Injectable)(),
+    __metadata("design:paramtypes", [indexer_metrics_service_1.IndexerMetricsService])
 ], CitizenService);

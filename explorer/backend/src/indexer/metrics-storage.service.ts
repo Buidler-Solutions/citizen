@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
-import { dirname } from 'node:path';
+import { mkdir, readFile, rename, writeFile, unlink } from 'node:fs/promises';
+import { dirname, resolve } from 'node:path';
 import { IndexerMetricsSnapshot } from './metrics.types';
 
 @Injectable()
@@ -28,9 +28,16 @@ export class IndexerMetricsStorageService {
   }
 
   async writeSnapshot(snapshot: IndexerMetricsSnapshot): Promise<void> {
-    const tempPath = `${this.stateFile}.tmp`;
-    await mkdir(dirname(this.stateFile), { recursive: true });
+    const resolvedStateFile = resolve(this.stateFile);
+    const tempPath = `${resolvedStateFile}.tmp`;
+    await mkdir(dirname(resolvedStateFile), { recursive: true });
     await writeFile(tempPath, `${JSON.stringify(snapshot)}\n`, 'utf8');
-    await rename(tempPath, this.stateFile);
+    try {
+      await rename(tempPath, resolvedStateFile);
+    } catch {
+      // Fallback for environments where atomic rename fails with relative paths
+      await writeFile(resolvedStateFile, `${JSON.stringify(snapshot)}\n`, 'utf8');
+      await unlink(tempPath).catch(() => {});
+    }
   }
 }

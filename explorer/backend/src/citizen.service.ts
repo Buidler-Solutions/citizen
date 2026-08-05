@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
+import { IndexerMetricsService } from './indexer/indexer-metrics.service';
 
 type ApiSource<T> = {
   source: string;
@@ -144,6 +145,8 @@ type ReceiptLookup = {
 export class CitizenService {
   private readonly baseUrl = process.env.CITIZEN_NODE_URL ?? 'http://127.0.0.1:8091';
 
+  constructor(private readonly indexer: IndexerMetricsService) {}
+
   async getStatus() {
     return {
       node: this.baseUrl,
@@ -265,9 +268,29 @@ export class CitizenService {
     const normalized = dataHash.trim();
     const matches: PayloadDataHashLookup = { data_hash: normalized, matches: [] };
 
+    try {
+      const indexed = await this.indexer.findEntriesByPayloadCommitment(normalized);
+      for (const entry of indexed) {
+        matches.matches.push({
+          entry_id: entry.entry_id,
+          namespace: entry.namespace,
+          action: entry.action,
+          object_id: '',
+          timestamp: entry.committed_at,
+          field_path: entry.entry_id,
+          committed_at: entry.committed_at,
+        });
+      }
+      if (matches.matches.length > 0) {
+        return { source: `${this.baseUrl}/api/v1/payloads/data-hash`, data: matches };
+      }
+    } catch {
+      // fallback to block scanning
+    }
+
     let cursor: string | undefined;
     let scanned = 0;
-    const maxBlocks = 50;
+    const maxBlocks = 500;
     while (scanned < maxBlocks) {
       const page = await this.getBlocks(cursor, '10');
       if (!page.data.items.length) break;
