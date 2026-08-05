@@ -27,3 +27,4 @@ hex = { workspace = true }
 toml = "0.8"
 blake3 = { workspace = true }
 ed25519-dalek = { workspace = true }
+uuid = { version = "1", features = ["v4"] }

@@ -9,6 +9,7 @@ use std::sync::Arc;
 
 use anyhow::Context;
 use chrono::Utc;
+use uuid::Uuid;
 use citizen_api::{ApiClientProfile, ApiEdgeConfig, ApiServer, MinioOffchainObjectStoreConfig};
 use citizen_consensus::ConsensusEngine;
 use citizen_crypto::{verifying_key_to_string, KeyRegistry, ValidatorKeypair};
@@ -19,8 +20,9 @@ use citizen_network::{
 };
 use citizen_storage::{LedgerStorage, RocksDbStorage};
 use citizen_types::{
-    Block, BlockHeader, CommitProof, ConsensusConfig, EpochState, NamespaceRuleset, ProtocolError,
-    ValidatorId, ValidatorMetadata, ValidatorPerformance, ValidatorSetSnapshot, ValidatorStatus,
+    Block, BlockHeader, CommitProof, ConsensusConfig, EpochState, LedgerEntry, NamespaceRuleset,
+    PrivacyMode, ProtocolError, ValidatorId, ValidatorMetadata, ValidatorPerformance,
+    ValidatorSetSnapshot, ValidatorStatus,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -77,6 +79,31 @@ async fn main() -> anyhow::Result<()> {
     ledger.bootstrap_namespaces(config.namespaces.clone());
 
     if storage.latest_height()? == 0 && storage.get_block(0)?.is_none() {
+        let genesis_entry = LedgerEntry {
+            entry_id: Uuid::new_v4(),
+            namespace: "genesis.declaration".to_string(),
+            action: "DECLARE".to_string(),
+            object_id: "genesis:0".to_string(),
+            payload: json!({
+                "message": "You don't fight corruption with anger. You defeat it with awareness. Be the Change!",
+            }),
+            author: "greenarmor".to_string(),
+            signature: "genesis".to_string(),
+            timestamp: chrono::Utc::now().timestamp(),
+            privacy_flag: false,
+            privacy_mode: PrivacyMode::None,
+            payload_commitment: None,
+            ciphertext_hex: None,
+            nonce_hex: None,
+            salt_hex: None,
+            kdf_params: None,
+            consent_receipt: None,
+            authorized_readers: Vec::new(),
+            custodian_policy_id: None,
+            field_reader_acls: BTreeMap::new(),
+            key_wrapped_secrets: Vec::new(),
+            revocation_events: Vec::new(),
+        };
         let genesis = Block {
             header: BlockHeader {
                 height: 0,
@@ -89,10 +116,10 @@ async fn main() -> anyhow::Result<()> {
                     participant_ids: std::collections::BTreeSet::new(),
                 },
             },
-            entries: vec![],
+            entries: vec![genesis_entry],
         };
         storage.store_block(genesis)?;
-        tracing::info!("genesis block stored: message=greenarmor height=0");
+        tracing::info!("genesis block stored: proposer=greenarmor message=\"You don't fight corruption with anger. You defeat it with awareness. Be the Change!\" height=0");
     }
 
     let api_server = if let Some(minio_config) = config.offchain_minio_config() {
