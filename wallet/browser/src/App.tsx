@@ -91,6 +91,7 @@ type DirectSubmitReceipt = {
   receiptId: string | null;
   receiptHash: string | null;
   blockHeight: number | null;
+  entryId: string | null;
   submittedAt: string;
 };
 
@@ -165,7 +166,7 @@ type ComposeMultisigDraft = {
   collected_signatures: ComposeDraftCollectedSignature[];
 };
 
-type TabId = 'activity' | 'decrypt' | 'compose' | 'vault' | 'security' | 'profile';
+type TabId = 'activity' | 'decrypt' | 'compose' | 'vault' | 'security' | 'profile' | 'cards';
 
 type NetworkId = 'mainnet' | 'futurenet' | 'testnet' | 'localnode';
 type MnemonicWordCount = 12 | 24;
@@ -212,6 +213,7 @@ const NAV_ITEMS: { id: TabId; label: string }[] = [
   { id: 'vault', label: 'Vault' },
   { id: 'security', label: 'Security' },
   { id: 'profile', label: 'Profile' },
+  { id: 'cards', label: 'Cards' },
 ];
 
 type WalletResponse = {
@@ -288,6 +290,271 @@ async function callWallet(method: string, params?: unknown[]): Promise<WalletRes
   }
 }
 
+function KycPanel() {
+  const [fullName, setFullName] = useState('');
+  const [address, setAddress] = useState('');
+  const [kycStatus, setKycStatus] = useState<'unknown' | 'submitted' | 'approved' | 'revoked'>('unknown');
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+  const [kycPayloadHash, setKycPayloadHash] = useState<string | null>(null);
+  const [kycDecryptedName, setKycDecryptedName] = useState<string | null>(null);
+  const [kycDecryptedAddress, setKycDecryptedAddress] = useState<string | null>(null);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const storedProfile = await chrome.storage.local.get('citizen.browser.wallet.profile.v1');
+        const p = storedProfile['citizen.browser.wallet.profile.v1'] as Partial<ProfileDetails> | undefined;
+        if (p) {
+          setFullName(p.fullName ?? '');
+          setAddress(p.address ?? '');
+        }
+        const resp = await chrome.runtime.sendMessage({ method: 'ctzn_getKycStatus', params: [] });
+        if (resp?.ok && resp.result?.kyc_status) {
+          setKycStatus(resp.result.kyc_status);
+          if (resp.result.decrypted_full_name) {
+            setKycDecryptedName(resp.result.decrypted_full_name);
+            setKycDecryptedAddress(resp.result.decrypted_address);
+          }
+        }
+      } catch { /* wallet may not be initialized */ }
+    })();
+  }, []);
+
+  const submitKyc = async () => {
+    if (!fullName.trim() || !address.trim()) {
+      setError('Full name and address are required.');
+      return;
+    }
+    setSubmitting(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      const resp = await chrome.runtime.sendMessage({
+        method: 'ctzn_submitKyc',
+        params: [{ fullName: fullName.trim(), address: address.trim() }],
+      });
+      if (resp?.ok) {
+        await chrome.storage.local.set({
+          'citizen.browser.wallet.profile.v1': { fullName: fullName.trim(), address: address.trim() },
+        });
+        setKycStatus('submitted');
+        setKycPayloadHash(resp.result?.payload_hash ?? null);
+        setSuccess('KYC submitted to blockchain. Awaiting admin approval.');
+      } else {
+        setError(resp?.error ?? 'Submission failed.');
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unknown error.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const statusLabel = kycStatus === 'approved' ? 'Verified — you are eligible to vote'
+    : kycStatus === 'submitted' ? 'Pending admin review'
+    : kycStatus === 'revoked' ? 'KYC has been revoked'
+    : 'Not submitted';
+
+  const statusColor = kycStatus === 'approved' ? 'var(--green)' :
+    kycStatus === 'submitted' ? 'var(--accent)' :
+    kycStatus === 'revoked' ? 'var(--red)' : 'var(--muted)';
+
+  return (
+    <div className="form-grid">
+      <input
+        value={fullName}
+        onChange={(e) => setFullName(e.target.value)}
+        placeholder="Full legal name"
+        disabled={submitting || kycStatus === 'approved'}
+      />
+      <input
+        value={address}
+        onChange={(e) => setAddress(e.target.value)}
+        placeholder="Physical address"
+        disabled={submitting || kycStatus === 'approved'}
+      />
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <span style={{
+          display: 'inline-block', width: 10, height: 10, borderRadius: '50%',
+          background: statusColor, flexShrink: 0,
+        }} />
+        <span style={{ fontSize: '0.85rem', color: statusColor }}>{statusLabel}</span>
+      </div>
+      {kycDecryptedName && kycStatus === 'approved' && (
+        <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8, padding: 8, marginTop: 8 }}>
+          <p className="meta-text" style={{ margin: 0 }}>✓ Admin-confirmed KYC:</p>
+          <p className="meta-text" style={{ margin: '2px 0 0', fontWeight: 600 }}>{kycDecryptedName}</p>
+          <p className="meta-text" style={{ margin: 0 }}>{kycDecryptedAddress}</p>
+        </div>
+      )}
+      {error && <p className="meta-text" style={{ color: 'var(--red)' }}>{error}</p>}
+      {success && <p className="meta-text" style={{ color: 'var(--green)' }}>{success}</p>}
+      {kycPayloadHash && (
+        <p className="meta-text">
+          <a
+            href={buildExplorerDataHashSearchHref('localnode', kycPayloadHash)}
+            target="_blank"
+            rel="noreferrer"
+            style={{ color: 'var(--accent)', fontSize: '0.78rem' }}
+          >
+            View on Explorer →
+          </a>
+        </p>
+      )}
+      <button
+        className="primary"
+        onClick={submitKyc}
+        disabled={submitting || kycStatus === 'approved' || !fullName.trim() || !address.trim()}
+      >
+        {submitting ? 'Submitting...' : kycStatus === 'approved' ? 'KYC Approved' : 'Submit KYC'}
+      </button>
+    </div>
+  );
+}
+
+type CitizenToken = {
+  token_id: string;
+  owner: string;
+  schema: string;
+  tier: number;
+  status: string;
+};
+
+function CitizenCard() {
+  const [tokens, setTokens] = useState<CitizenToken[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    (async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const resp = await chrome.runtime.sendMessage({
+          method: 'ctzn_getCitizenTokens',
+        });
+        if (resp?.ok && resp.result) {
+          setTokens(resp.result.tokens ?? []);
+        } else {
+          setError(resp?.error ?? 'Failed to load tokens');
+        }
+      } catch {
+        setError('Wallet not configured or network unavailable.');
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, []);
+
+  const tierColors: Record<number, { bg: string; text: string; label: string }> = {
+    0: { bg: 'var(--bg)', text: 'var(--muted)', label: 'Registered' },
+    1: { bg: '#e8e0d4', text: '#7a6e4f', label: 'Silver' },
+    2: { bg: '#f0e6c8', text: '#8a6d2b', label: 'Gold' },
+    3: { bg: '#e0e0f0', text: '#4a4a8a', label: 'Platinum' },
+  };
+
+  const statusColors: Record<string, string> = {
+    active: 'var(--green)',
+    revoked: 'var(--red)',
+    burned: 'var(--red)',
+    expired: 'var(--accent)',
+  };
+
+  const tierInfo = (t: number) => tierColors[t] ?? tierColors[0];
+
+  return (
+    <div>
+      <h2>Soulbound Cards</h2>
+      <p className="meta-text" style={{ marginBottom: 16 }}>
+        Your non-transferable citizenship tokens are displayed below.
+        Each card represents a verified identity credential on the Citizen network.
+      </p>
+      {loading && <p className="meta-text">Loading tokens...</p>}
+      {error && <div className="banner banner-error" style={{ marginBottom: 12 }}>{error}</div>}
+      {!loading && !error && tokens.length === 0 && (
+        <div className="empty-state" style={{
+          padding: 32, textAlign: 'center', border: '1px dashed var(--border)',
+          borderRadius: 12, background: 'var(--bg)',
+        }}>
+          <p style={{ fontSize: 48, marginBottom: 8 }}>🆔</p>
+          <p className="meta-text">
+            No soulbound tokens found. Complete KYC verification in the Profile tab
+            and register as a citizen to receive your token.
+          </p>
+        </div>
+      )}
+      <div style={{ display: 'grid', gap: 16 }}>
+        {tokens.map((token) => {
+          const ti = tierInfo(token.tier);
+          const statusColor = statusColors[token.status] ?? 'var(--muted)';
+          return (
+            <div
+              key={token.token_id}
+              style={{
+                border: '1px solid var(--border)',
+                borderRadius: 12,
+                padding: 20,
+                background: ti.bg,
+                transition: 'box-shadow 0.2s',
+                boxShadow: '0 1px 4px rgba(0,0,0,0.05)',
+              }}
+            >
+              <div style={{
+                display: 'flex', justifyContent: 'space-between',
+                alignItems: 'flex-start', marginBottom: 12,
+              }}>
+                <div>
+                  <div style={{
+                    fontSize: 14, fontWeight: 700, color: ti.text,
+                    textTransform: 'uppercase', letterSpacing: '0.05em',
+                    marginBottom: 4,
+                  }}>
+                    {ti.label} Citizen
+                  </div>
+                  <div className="mono" style={{ fontSize: 11, color: ti.text, opacity: 0.8 }}>
+                    {token.token_id.length > 28
+                      ? token.token_id.slice(0, 28) + '…'
+                      : token.token_id}
+                  </div>
+                </div>
+                <div style={{
+                  display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4,
+                }}>
+                  <span style={{
+                    fontSize: 11, fontWeight: 600, color: ti.text,
+                    padding: '2px 8px', borderRadius: 6,
+                    background: 'rgba(255,255,255,0.5)',
+                  }}>
+                    {token.schema}
+                  </span>
+                  <span style={{
+                    fontSize: 11, color: statusColor,
+                    display: 'flex', alignItems: 'center', gap: 4,
+                  }}>
+                    <span style={{
+                      width: 6, height: 6, borderRadius: '50%',
+                      background: statusColor, display: 'inline-block',
+                    }} />
+                    {token.status}
+                  </span>
+                </div>
+              </div>
+              <div style={{
+                fontSize: 11, color: ti.text, opacity: 0.7,
+                fontFamily: 'monospace', wordBreak: 'break-all',
+              }}>
+                Owner: {token.owner.length > 36 ? token.owner.slice(0, 36) + '…' : token.owner}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 export function App() {
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<TabId>('activity');
@@ -311,6 +578,8 @@ export function App() {
   const [backupPayload, setBackupPayload] = useState('');
   const [backupRole, setBackupRole] = useState<'decoy' | 'critical'>('critical');
   const [backupConflictResolution, setBackupConflictResolution] = useState<'replace' | 'skip-existing'>('replace');
+  const [renamingWalletId, setRenamingWalletId] = useState<string | null>(null);
+  const [renameInput, setRenameInput] = useState('');
   const [profile, setProfile] = useState<ProfileDetails>({
     fullName: '',
     email: '',
@@ -763,6 +1032,25 @@ export function App() {
     }
     setStatus('Active wallet switched.');
     await refreshState();
+  };
+
+  const handleRenameWallet = async (walletId: string) => {
+    if (!renameInput.trim()) return;
+    const resp = await callWallet('wallet_renameVaultWallet', [walletId, renameInput.trim()]);
+    if (resp.ok) {
+      setVaultWallets((prev) => prev.map((w) =>
+        w.id === walletId ? { ...w, name: renameInput.trim() } : w,
+      ));
+    } else {
+      setStatus(resp.error ?? 'Rename failed');
+    }
+    setRenamingWalletId(null);
+    setRenameInput('');
+  };
+
+  const startRename = (walletId: string, currentName: string) => {
+    setRenamingWalletId(walletId);
+    setRenameInput(currentName);
   };
 
   const handleSignComposed = async () => {
@@ -1595,7 +1883,7 @@ export function App() {
                                   <strong>{mask(committedHash ?? '')}</strong>
                                 </a>
                               ) : (
-                                <strong>{mask(entry.payload.hash)}</strong>
+                                <strong style={{ wordBreak: 'break-all', fontSize: '0.78rem' }}>{entry.payload.hash}</strong>
                               )}
                               <p className="meta-text">{new Date(entry.createdAt).toLocaleString()}</p>
                               <p className="meta-text">{entry.origin.origin}</p>
@@ -1613,30 +1901,51 @@ export function App() {
                 )}
                 {visibleDirectSubmitReceipts.length > 0 ? (
                   <>
-                    <h3>Commitment receipt hash lookups</h3>
-                    <p className="meta-text">
-                      Open matching blocks in Citizen Explorer using the hashed commitment receipt.
-                    </p>
+                    <h3>Signed transactions</h3>
                     <ul>
                       {visibleDirectSubmitReceipts.map((receipt) => {
                         const receiptHash = receipt.receiptHash;
+                        const explorerBase = EXPLORER_BASE_URL_BY_NETWORK[state.network] ?? EXPLORER_BASE_URL_BY_NETWORK.localnode;
                         const explorerHref = receiptHash
                           ? buildExplorerDataHashSearchHref(state.network, receiptHash)
+                          : null;
+                        const blockHref = receipt.blockHeight != null
+                          ? `${explorerBase.replace(/\/$/, '')}/blocks/${receipt.blockHeight}`
                           : null;
                         return (
                           <li key={`${receipt.traceId}-${receipt.submittedAt}`} className="activity-item">
                             <div>
-                              <strong>{receipt.receiptId ?? mask(receipt.requestId)}</strong>
+                              {receipt.entryId ? (
+                                <strong>{receipt.entryId}</strong>
+                              ) : (
+                                <strong>{receipt.receiptId ?? mask(receipt.requestId)}</strong>
+                              )}
                               <p className="meta-text">{new Date(receipt.submittedAt).toLocaleString()}</p>
-                              {receipt.blockHeight != null && (
-                                <p className="meta-text" style={{fontWeight:'bold',color:'#2d6cdf'}}>Block #{receipt.blockHeight}</p>
+                              {receipt.blockHeight != null ? (
+                                blockHref ? (
+                                  <a href={blockHref} target="_blank" rel="noreferrer"
+                                    className="meta-text" style={{color:'#2d6cdf',fontWeight:'bold'}}>
+                                    Block #{receipt.blockHeight}
+                                  </a>
+                                ) : (
+                                  <p className="meta-text" style={{fontWeight:'bold',color:'#2d6cdf'}}>Block #{receipt.blockHeight}</p>
+                                )
+                              ) : null}
+                              {receipt.receiptId && (
+                                <p className="meta-text">Receipt: {mask(receipt.receiptId)}</p>
                               )}
                               {explorerHref ? (
-                                <a href={explorerHref} target="_blank" rel="noreferrer" className="meta-text">
-                                  {mask(receiptHash ?? '')}
+                                <a
+                                  href={explorerHref}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="meta-text"
+                                  style={{ wordBreak: 'break-all', color: 'var(--accent)' }}
+                                >
+                                  View on Explorer →
                                 </a>
                               ) : (
-                                <p className="meta-text">Pending hash</p>
+                                <p className="meta-text">Pending confirmation</p>
                               )}
                             </div>
                           </li>
@@ -1885,7 +2194,31 @@ export function App() {
                 {vaultWallets.map((wallet) => (
                   <div key={wallet.id} className="vault-row">
                     <div>
-                      <strong>{wallet.name}</strong>
+                      {renamingWalletId === wallet.id ? (
+                        <div style={{ display: 'flex', gap: 4, alignItems: 'center', marginBottom: 4 }}>
+                          <input
+                            type="text"
+                            className="input"
+                            value={renameInput}
+                            onChange={(e) => setRenameInput(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') void handleRenameWallet(wallet.id);
+                              if (e.key === 'Escape') setRenamingWalletId(null);
+                            }}
+                            onBlur={() => void handleRenameWallet(wallet.id)}
+                            autoFocus
+                            style={{ fontSize: '0.85rem', padding: '2px 6px', width: 180 }}
+                          />
+                        </div>
+                      ) : (
+                        <strong
+                          onClick={() => startRename(wallet.id, wallet.name)}
+                          style={{ cursor: 'pointer' }}
+                          title="Click to rename"
+                        >
+                          {wallet.name}
+                        </strong>
+                      )}
                       <p className="meta-text">{mask(wallet.signerDid)}</p>
                       {wallet.mnemonicWordCount ? (
                         <p className="meta-text">Seed: {wallet.mnemonicWordCount} words</p>
@@ -2015,22 +2348,14 @@ export function App() {
           {activeTab === 'profile' ? (
             <article className="request-card">
               <h2>Profile settings</h2>
-              <p className="meta-text">User-controlled details for optional KYC-oriented flows.</p>
-              <div className="form-grid">
-                <input value={profile.fullName} onChange={(event) => setProfile((current) => ({ ...current, fullName: event.target.value }))} placeholder="Full name" />
-                <input value={profile.email} onChange={(event) => setProfile((current) => ({ ...current, email: event.target.value }))} placeholder="Email address" />
-                <input value={profile.address} onChange={(event) => setProfile((current) => ({ ...current, address: event.target.value }))} placeholder="Address" />
-                <input value={profile.profession} onChange={(event) => setProfile((current) => ({ ...current, profession: event.target.value }))} placeholder="Profession" />
-                <label className="checkbox-row">
-                  <input
-                    type="checkbox"
-                    checked={profile.kycVerified}
-                    onChange={(event) => setProfile((current) => ({ ...current, kycVerified: event.target.checked }))}
-                  />
-                  <span>Verify KYC</span>
-                </label>
-                <button className="primary" onClick={saveProfile}>Save profile</button>
-              </div>
+              <p className="meta-text">KYC identity verification for voting eligibility.</p>
+              <KycPanel />
+            </article>
+          ) : null}
+
+          {activeTab === 'cards' ? (
+            <article className="request-card">
+              <CitizenCard />
             </article>
           ) : null}
 

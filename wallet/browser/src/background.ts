@@ -31,6 +31,8 @@ import {
   type SignedEnvelope,
   type SignedSubmissionArtifact,
 } from './directSubmitClient';
+import { canonicalJson } from './canonical';
+import { encryptKycDataDual } from './kycCrypto';
 
 type WalletRequest = {
   method: string;
@@ -177,6 +179,7 @@ type DirectSubmitReceipt = {
   receiptId: string | null;
   receiptHash: string | null;
   blockHeight: number | null;
+  entryId: string | null;
   submittedAt: string;
 };
 
@@ -487,6 +490,7 @@ async function confirmSubmittedRequestFromBuilderApp(
     receiptId: null,
     receiptHash: receiptHash.trim(),
     blockHeight: null,
+    entryId: null,
     submittedAt: new Date().toISOString(),
   });
 
@@ -772,6 +776,12 @@ async function getActiveWalletRecord(): Promise<StoredWallet | null> {
 async function getWalletRecordById(walletId: string): Promise<StoredWallet | null> {
   const vault = await ensureVaultInitialized();
   return vault.find((wallet) => wallet.id === walletId) ?? null;
+}
+
+async function getActiveWalletId(): Promise<string | null> {
+  const stored = await chrome.storage.local.get(ACTIVE_WALLET_ID_KEY);
+  const activeId = stored[ACTIVE_WALLET_ID_KEY];
+  return typeof activeId === 'string' ? activeId : null;
 }
 
 async function getStoredWallet(): Promise<WalletSigner> {
@@ -1446,6 +1456,7 @@ async function directSubmitLatestSignedArtifact(
       receiptId: response.receiptId,
       receiptHash: response.receiptHash,
       blockHeight: response.blockHeight,
+      entryId: null,
       submittedAt: new Date().toISOString(),
     });
     return { ok: true, result: response };
@@ -1585,6 +1596,7 @@ async function directSubmitSignedBatchToCitizenNetwork(
         receiptId: receipt.receiptId,
         receiptHash: receipt.receiptHash,
         blockHeight: null,
+        entryId: receipt.entryId ?? null,
         submittedAt,
       });
     }
@@ -1938,6 +1950,189 @@ async function generateMnemonicWallet(
   };
 }
 
+async function submitKycOnChain(walletRecord: StoredWallet, fullName: string, address: string): Promise<WalletResponse> {
+  const signer = await getOrCreateProtocolSigner(walletRecord);
+  const did = signer.did;
+  const networkId = await getSelectedNetwork();
+  const activeNetwork = NETWORKS[networkId];
+  if (!activeNetwork) {
+    return walletError('ERR_NETWORK_UNKNOWN', 'Unknown network.');
+  }
+
+  const apiBase = networkId === 'localnode' ? 'http://localhost:8091' : `https://${networkId}.ctzn.space`;
+
+  let encrypted: {
+    ciphertextHex: string; nonceHex: string; epk: string;
+    payloadCommitment: string;
+    holderCiphertextHex: string; holderNonceHex: string; holderEpk: string;
+  } | null = null;
+
+  try {
+    const keyResp = await fetch(`${apiBase}/api/v1/civic/admin/kyc-public-key`);
+    if (keyResp.ok) {
+      const keyData = await keyResp.json();
+      if (keyData.public_key) {
+        encrypted = await encryptKycDataDual({ full_name: fullName, address }, keyData.public_key);
+      }
+    }
+  } catch (err) {
+    console.error('[submitKycOnChain] encryption failed, falling back to cleartext:', err);
+  }
+
+  const entryId = crypto.randomUUID();
+  const timestamp = Math.floor(Date.now() / 1000);
+
+  const payload: Record<string, unknown> = encrypted ? { epk: encrypted.epk, holder_ciphertext_hex: encrypted.holderCiphertextHex, holder_nonce_hex: encrypted.holderNonceHex, holder_epk: encrypted.holderEpk } : { full_name: fullName, address };
+
+  const signingPayload = {
+    entry_id: entryId,
+    namespace: 'identity.kyc',
+    action: 'SUBMIT_KYC',
+    object_id: did,
+    payload,
+    author: did,
+    timestamp,
+  };
+
+  const canonical = canonicalJson(signingPayload);
+
+  const privateKey = await crypto.subtle.importKey(
+    'pkcs8',
+    base64ToBytes(signer.pkcs8Base64),
+    { name: 'Ed25519' },
+    false,
+    ['sign'],
+  );
+  const signatureBytes = await crypto.subtle.sign(
+    { name: 'Ed25519' },
+    privateKey,
+    new TextEncoder().encode(canonical),
+  );
+  const signatureHex = toHex(new Uint8Array(signatureBytes));
+
+  const payloadBytes = new TextEncoder().encode(canonical);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', payloadBytes);
+  const payloadCommitment = `sha256:${toHex(new Uint8Array(hashBuffer))}`;
+
+  const entry: Record<string, unknown> = {
+    entry_id: entryId,
+    namespace: 'identity.kyc',
+    action: 'SUBMIT_KYC',
+    object_id: did,
+    payload,
+    payload_commitment: payloadCommitment,
+    author: did,
+    signature: signatureHex,
+    timestamp,
+    privacy_flag: !!encrypted,
+    privacy_mode: encrypted ? 'hybrid' : 'none',
+  };
+
+  if (encrypted) {
+    entry.ciphertext_hex = encrypted.ciphertextHex;
+    entry.nonce_hex = encrypted.nonceHex;
+  }
+
+  try {
+    const apiBase = networkId === 'localnode' ? 'http://localhost:8091' : `https://${networkId}.ctzn.space`;
+    const startTime = performance.now();
+    const resp = await fetch(`${apiBase}/api/v1/entries/submit`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(entry),
+    });
+    const latencyMs = Math.round(performance.now() - startTime);
+    const body = await resp.json();
+    if (resp.ok) {
+      // Store a receipt so the explorer link appears in the wallet Activity tab
+      const receiptId = body?.receipt?.receipt_id ?? null;
+      const blockHeight = body?.receipt?.finality?.block_height ?? null;
+      const payloadBytes = new TextEncoder().encode(canonical);
+      const hashBuffer = await crypto.subtle.digest('SHA-256', payloadBytes);
+      const payloadHash = `sha256:${toHex(new Uint8Array(hashBuffer))}`;
+      const receiptHash = body?.receipt?.payload_commitment
+        ? `sha256:${body.receipt.payload_commitment}`
+        : payloadHash;
+      await appendDirectSubmitReceipt({
+        requestId: entryId,
+        payloadHash,
+        walletId: walletRecord.id,
+        signerDid: did,
+        networkId,
+        destinationUrl: `${apiBase}/api/v1/entries/submit`,
+        traceId: crypto.randomUUID(),
+        status: resp.status,
+        latencyMs,
+        receiptId,
+        receiptHash,
+        blockHeight,
+        entryId,
+        submittedAt: new Date().toISOString(),
+      });
+      return { ok: true, result: { ...body, entry_id: entryId, status: 'submitted', payload_hash: payloadHash } };
+    }
+    return { ok: false, error: typeof body.error === 'string' ? body.error : 'KYC submission failed' };
+  } catch (err) {
+    return walletError('ERR_DIRECT_SUBMIT_UNAVAILABLE',
+      err instanceof Error ? err.message : 'KYC submission failed');
+  }
+}
+
+async function fetchKycStatus(did: string): Promise<WalletResponse> {
+  const networkId = await getSelectedNetwork();
+  const apiBase = networkId === 'localnode' ? 'http://localhost:8091' : `https://${networkId}.ctzn.space`;
+  try {
+    const resp = await fetch(`${apiBase}/api/v1/identity/kyc/${encodeURIComponent(did)}`);
+    if (!resp.ok) {
+      return { ok: true, result: { did, kyc_status: 'unknown', message: 'Status unavailable' } };
+    }
+    const data = await resp.json();
+    const result: Record<string, unknown> = { did, ...data };
+
+    if (data.kyc_status === 'approved') {
+      try {
+        const listResp = await fetch(`${apiBase}/api/v1/identity/kyc`);
+        if (listResp.ok) {
+          const listData = await listResp.json();
+          const self = (listData.submissions || []).find((s: any) => s.did === did);
+          if (self?.encrypted?.holder_ciphertext_hex) {
+            try {
+              const { decryptKycAsHolder } = await import('./kycCrypto');
+              const decrypted = await decryptKycAsHolder(
+                self.encrypted.holder_ciphertext_hex,
+                self.encrypted.holder_nonce_hex,
+                self.encrypted.holder_epk,
+              );
+              if (decrypted) {
+                result.decrypted_full_name = decrypted.full_name;
+                result.decrypted_address = decrypted.address;
+              }
+            } catch { /* holder decryption optional */ }
+          }
+        }
+      } catch { /* best-effort */ }
+    }
+    return { ok: true, result };
+  } catch {
+    return { ok: true, result: { did, kyc_status: 'unknown', message: 'Could not reach network' } };
+  }
+}
+
+async function fetchCitizenTokens(did: string): Promise<WalletResponse> {
+  const networkId = await getSelectedNetwork();
+  try {
+    const apiBase = networkId === 'localnode' ? 'http://localhost:8091' : `https://${networkId}.ctzn.space`;
+    const resp = await fetch(`${apiBase}/api/v1/ctzn/ctzn-token.v1/check/${encodeURIComponent(did)}`);
+    if (!resp.ok) {
+      return { ok: true, result: { did, has_citizenship: false, tokens: [] } };
+    }
+    const data = await resp.json();
+    return { ok: true, result: data };
+  } catch {
+    return { ok: true, result: { did, has_citizenship: false, tokens: [], message: 'Could not reach network' } };
+  }
+}
+
 async function handleWalletRequest(
   request: WalletRequest,
   sender: chrome.runtime.MessageSender,
@@ -1982,6 +2177,25 @@ async function handleWalletRequest(
         isActive: wallet.id === activeWallet?.id,
       })),
     };
+  }
+
+  if (request.method === 'wallet_renameVaultWallet') {
+    if (!isUiRequest) {
+      return walletError('ERR_UNAUTHORIZED', 'Unauthorized wallet method.');
+    }
+    const [walletId, newName] = request.params ?? [];
+    if (typeof walletId !== 'string' || typeof newName !== 'string' || !newName.trim()) {
+      return walletError('ERR_MALFORMED_REQUEST', 'wallet_renameVaultWallet requires walletId and a non-empty name.');
+    }
+    const vault = await getWalletVault();
+    const index = vault.findIndex((w) => w.id === walletId);
+    if (index === -1) {
+      return walletError('ERR_NOT_FOUND', 'Wallet not found.');
+    }
+    vault[index].name = newName.trim();
+    const activeId = await getActiveWalletId();
+    await saveWalletVault(vault, activeId ?? undefined);
+    return { ok: true, result: { id: walletId, name: vault[index].name } };
   }
 
   if (request.method === 'wallet_getPendingDappRequests') {
@@ -2488,6 +2702,37 @@ async function handleWalletRequest(
       }
       const [payload] = request.params ?? [];
       return decryptOwnedTransactionCiphertext(payload);
+    }
+    case 'ctzn_submitKyc': {
+      if (!activeWalletRecord) {
+        return walletError('ERR_WALLET_NOT_CONFIGURED', 'No active wallet is configured.');
+      }
+      const [params] = request.params ?? [];
+      if (typeof params !== 'object' || params === null) {
+        return walletError('ERR_MALFORMED_REQUEST', 'ctzn_submitKyc requires { fullName, address }.');
+      }
+      const { fullName, address } = params as { fullName?: string; address?: string };
+      if (typeof fullName !== 'string' || fullName.trim().length === 0) {
+        return walletError('ERR_MALFORMED_REQUEST', 'ctzn_submitKyc requires a non-empty fullName.');
+      }
+      if (typeof address !== 'string' || address.trim().length === 0) {
+        return walletError('ERR_MALFORMED_REQUEST', 'ctzn_submitKyc requires a non-empty address.');
+      }
+      return submitKycOnChain(activeWalletRecord, fullName.trim(), address.trim());
+    }
+    case 'ctzn_getKycStatus': {
+      if (!activeWalletRecord) {
+        return walletError('ERR_WALLET_NOT_CONFIGURED', 'No active wallet is configured.');
+      }
+      const signerDid = (await getOrCreateProtocolSigner(activeWalletRecord)).did;
+      return fetchKycStatus(signerDid);
+    }
+    case 'ctzn_getCitizenTokens': {
+      if (!activeWalletRecord) {
+        return walletError('ERR_WALLET_NOT_CONFIGURED', 'No active wallet is configured.');
+      }
+      const signerDid = (await getOrCreateProtocolSigner(activeWalletRecord)).did;
+      return fetchCitizenTokens(signerDid);
     }
     default:
       return walletError('ERR_UNSUPPORTED_METHOD', `Unsupported method: ${request.method}`);

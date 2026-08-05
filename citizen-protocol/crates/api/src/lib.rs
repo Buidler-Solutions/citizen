@@ -25,6 +25,7 @@ use std::sync::Arc;
 use tokio::net::TcpListener;
 use tokio::sync::Mutex;
 use tokio::task::JoinHandle;
+use tower_http::cors::{Any, CorsLayer};
 use tracing::info;
 use uuid::Uuid;
 
@@ -500,9 +501,16 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
         let civic_elections_ledger = Arc::clone(&self.ledger);
         let civic_election_detail_ledger = Arc::clone(&self.ledger);
         let civic_election_tally_ledger = Arc::clone(&self.ledger);
+        let civic_election_ballots_ledger = Arc::clone(&self.ledger);
         let ctzn_token_status_ledger = Arc::clone(&self.ledger);
         let ctzn_token_holders_ledger = Arc::clone(&self.ledger);
         let ctzn_token_check_ledger = Arc::clone(&self.ledger);
+        let civic_admin_check_ledger = Arc::clone(&self.ledger);
+        let civic_kyc_pk_ledger = Arc::clone(&self.ledger);
+        let civic_registry_ledger = Arc::clone(&self.ledger);
+        let civic_eligibility_ledger = Arc::clone(&self.ledger);
+        let identity_kyc_ledger = Arc::clone(&self.ledger);
+        let identity_kyc_list_ledger = Arc::clone(&self.ledger);
         Router::new()
             .route("/health", get(Self::health))
             .route(
@@ -751,6 +759,13 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
                 }),
             )
             .route(
+                "/api/v1/civic/elections/:election_id/ballots",
+                get(move |Path(election_id): Path<String>| {
+                    let ledger = Arc::clone(&civic_election_ballots_ledger);
+                    async move { Self::handle_get_civic_election_ballots(ledger, election_id).await }
+                }),
+            )
+            .route(
                 "/api/v1/ctzn/:module_id/status",
                 get(move |Path(module_id): Path<String>| {
                     let ledger = Arc::clone(&ctzn_token_status_ledger);
@@ -771,7 +786,55 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
                     async move { Self::handle_ctzn_check(ledger, module_id, did).await }
                 }),
             )
+            .route(
+                "/api/v1/civic/admin/check/:did",
+                get(move |Path(did): Path<String>| {
+                    let ledger = Arc::clone(&civic_admin_check_ledger);
+                    async move { Self::handle_civic_admin_check(ledger, did).await }
+                }),
+            )
+            .route(
+                "/api/v1/civic/admin/kyc-public-key",
+                get(move || {
+                    let ledger = Arc::clone(&civic_kyc_pk_ledger);
+                    async move { Self::handle_kyc_public_key(ledger).await }
+                }),
+            )
+            .route(
+                "/api/v1/civic/registry/:did",
+                get(move |Path(did): Path<String>| {
+                    let ledger = Arc::clone(&civic_registry_ledger);
+                    async move { Self::handle_civic_registry_check(ledger, did).await }
+                }),
+            )
+            .route(
+                "/api/v1/civic/elections/:election_id/eligibility/:did",
+                get(move |Path((election_id, did)): Path<(String, String)>| {
+                    let ledger = Arc::clone(&civic_eligibility_ledger);
+                    async move { Self::handle_voter_eligibility(ledger, election_id, did).await }
+                }),
+            )
+            .route(
+                "/api/v1/identity/kyc/:did",
+                get(move |Path(did): Path<String>| {
+                    let ledger = Arc::clone(&identity_kyc_ledger);
+                    async move { Self::handle_kyc_status(ledger, did).await }
+                }),
+            )
+            .route(
+                "/api/v1/identity/kyc",
+                get(move || {
+                    let ledger = Arc::clone(&identity_kyc_list_ledger);
+                    async move { Self::handle_kyc_list(ledger).await }
+                }),
+            )
             .layer(DefaultBodyLimit::max(50 * 1024 * 1024))
+            .layer(
+                CorsLayer::new()
+                    .allow_origin(Any)
+                    .allow_methods(Any)
+                    .allow_headers(Any),
+            )
     }
 
     async fn health() -> Json<serde_json::Value> {
@@ -3464,12 +3527,15 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
                 let closed = entries.iter().any(|c| {
                     c.action == "CLOSE_ELECTION" && c.object_id == e.object_id
                 });
-                let race_count = e
-                    .payload
-                    .get("races")
-                    .and_then(serde_json::Value::as_array)
-                    .map(|a| a.len())
-                    .unwrap_or(0);
+                let race_count = match ledger.reconstruct_election(&e.object_id) {
+                    Ok((_, races)) => races.len(),
+                    Err(_) => e
+                        .payload
+                        .get("races")
+                        .and_then(serde_json::Value::as_array)
+                        .map(|a| a.len())
+                        .unwrap_or(0),
+                };
                 serde_json::json!({
                     "election_id": e.object_id,
                     "title": e.payload.get("title").and_then(|v| v.as_str()),
@@ -3500,15 +3566,28 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
                 let closed = entries.iter().any(|e| {
                     e.action == "CLOSE_ELECTION" && e.object_id == election_id
                 });
+                let (title, races) = ledger
+                    .reconstruct_election(&election_id)
+                    .unwrap_or_else(|_| {
+                        (
+                            serde_json::json!(e.payload.get("title").and_then(|v| v.as_str())),
+                            e.payload
+                                .get("races")
+                                .and_then(serde_json::Value::as_array)
+                                .cloned()
+                                .unwrap_or_default(),
+                        )
+                    });
                 (
                     StatusCode::OK,
                     Json(serde_json::json!({
                         "election_id": e.object_id,
-                        "title": e.payload.get("title").and_then(|v| v.as_str()),
+                        "title": title,
                         "opened_at": e.timestamp,
                         "opened_by": e.author,
                         "status": if closed { "closed" } else { "open" },
-                        "races": e.payload.get("races").cloned().unwrap_or(serde_json::Value::Array(vec![])),
+                        "races": races,
+                        "tally_public_key": e.payload.get("tally_public_key").and_then(|v| v.as_str()),
                     })),
                 )
             }
@@ -3538,12 +3617,15 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
             );
         }
         let election = election.unwrap();
-        let races = election
-            .payload
-            .get("races")
-            .and_then(serde_json::Value::as_array)
-            .cloned()
-            .unwrap_or_default();
+        let races = match ledger.reconstruct_election(&election_id) {
+            Ok((_, r)) => r,
+            Err(_) => election
+                .payload
+                .get("races")
+                .and_then(serde_json::Value::as_array)
+                .cloned()
+                .unwrap_or_default(),
+        };
 
         let ballot_ns = "civic.election.ballot".to_string();
         let all_ballots = ledger
@@ -3636,6 +3718,43 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
                 "total_ballots": ballots.len(),
                 "races": race_tallies,
                 "voters": voters,
+            })),
+        )
+    }
+
+    /// Returns raw ballot entries for an election. Encrypted ballots include
+    /// the ciphertext, ephemeral public key, and nonce so the tally authority
+    /// can decrypt client-side. Plaintext ballots include selections directly.
+    async fn handle_get_civic_election_ballots(
+        ledger: Arc<Ledger<S>>,
+        election_id: String,
+    ) -> (StatusCode, Json<serde_json::Value>) {
+        let ns = "civic.election.ballot".to_string();
+        let entries = ledger.storage().namespace_entries(&ns).unwrap_or_default();
+        let ballots: Vec<serde_json::Value> = entries
+            .iter()
+            .filter(|e| {
+                e.action == "CAST_BALLOT"
+                    && e.payload
+                        .get("election_id")
+                        .and_then(serde_json::Value::as_str)
+                        == Some(&election_id)
+            })
+            .map(|e| {
+                serde_json::json!({
+                    "entry_id": e.entry_id,
+                    "author": e.author,
+                    "timestamp": e.timestamp,
+                    "payload": e.payload,
+                })
+            })
+            .collect();
+        (
+            StatusCode::OK,
+            Json(serde_json::json!({
+                "election_id": election_id,
+                "total_ballots": ballots.len(),
+                "ballots": ballots,
             })),
         )
     }
@@ -3893,6 +4012,445 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
                 "module_id": module_id,
                 "has_citizenship": has_active,
                 "tokens": tokens,
+            })),
+        )
+    }
+
+    async fn handle_civic_admin_check(
+        ledger: Arc<Ledger<S>>,
+        did: String,
+    ) -> (StatusCode, Json<serde_json::Value>) {
+        let entries = ledger
+            .storage()
+            .namespace_entries(&"civic.admin".to_string())
+            .unwrap_or_default();
+
+        let assigned: Vec<&LedgerEntry> = entries.iter()
+            .filter(|e| {
+                e.action == "ASSIGN_ADMIN"
+                    && e.payload.get("admin_did").and_then(|v| v.as_str()) == Some(&did)
+            })
+            .collect();
+
+        let is_revoked = entries.iter().any(|e| {
+            e.action == "REVOKE_ADMIN"
+                && e.payload.get("admin_did").and_then(|v| v.as_str()) == Some(&did)
+        });
+
+        if assigned.is_empty() {
+            return (
+                StatusCode::OK,
+                Json(serde_json::json!({
+                    "did": did,
+                    "is_admin": false,
+                    "role": null,
+                    "scope": null,
+                    "message": "not an admin",
+                })),
+            );
+        }
+
+        let latest = assigned.last().unwrap();
+        let role = latest.payload.get("role").and_then(|v| v.as_str()).unwrap_or("admin");
+        let scope = latest.payload.get("scope").and_then(|v| v.as_str()).unwrap_or("national");
+        let assigned_by = latest.payload.get("assigned_by").and_then(|v| v.as_str()).unwrap_or("");
+        let valid_until = latest.payload.get("valid_until").and_then(|v| v.as_str());
+
+        (
+            StatusCode::OK,
+            Json(serde_json::json!({
+                "did": did,
+                "is_admin": !is_revoked,
+                "role": if is_revoked { serde_json::Value::Null } else { serde_json::json!(role) },
+                "scope": if is_revoked { serde_json::Value::Null } else { serde_json::json!(scope) },
+                "assigned_by": assigned_by,
+                "assigned_at": latest.payload.get("assigned_at").and_then(|v| v.as_str()),
+                "valid_until": valid_until,
+                "revoked": is_revoked,
+            })),
+        )
+    }
+
+    async fn handle_kyc_public_key(
+        ledger: Arc<Ledger<S>>,
+    ) -> (StatusCode, Json<serde_json::Value>) {
+        let entries = ledger
+            .storage()
+            .namespace_entries(&"civic.admin".to_string())
+            .unwrap_or_default();
+
+        let key_entry = entries.iter().rev()
+            .find(|e| e.action == "SET_KYC_PUBLIC_KEY");
+
+        match key_entry {
+            Some(entry) => {
+                let pk = entry.payload.get("kyc_encryption_public_key")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("");
+                (
+                    StatusCode::OK,
+                    Json(serde_json::json!({
+                        "public_key": pk,
+                        "set_by": entry.author,
+                    })),
+                )
+            }
+            None => (
+                StatusCode::NOT_FOUND,
+                Json(serde_json::json!({
+                    "public_key": null,
+                    "message": "No KYC encryption public key has been set",
+                })),
+            ),
+        }
+    }
+
+    async fn handle_civic_registry_check(
+        ledger: Arc<Ledger<S>>,
+        did: String,
+    ) -> (StatusCode, Json<serde_json::Value>) {
+        let entries = ledger
+            .storage()
+            .namespace_entries(&"civic.registry".to_string())
+            .unwrap_or_default();
+
+        let registration = entries.iter().rev()
+            .filter(|e| {
+                (e.action == "REGISTER_VOTER" || e.action == "UPDATE_JURISDICTION")
+                    && e.payload.get("voter_did").and_then(|v| v.as_str()) == Some(&did)
+            })
+            .last();
+
+        match registration {
+            Some(entry) => {
+                let (path_key, action_label) = if entry.action == "UPDATE_JURISDICTION" {
+                    ("new_jurisdiction_path", "updated")
+                } else {
+                    ("jurisdiction_path", "registered")
+                };
+
+                let jurisdiction: Vec<String> = entry.payload.get(path_key)
+                    .and_then(|v| v.as_array())
+                    .map(|arr| arr.iter()
+                        .filter_map(|v| v.as_str().map(String::from))
+                        .collect())
+                    .unwrap_or_default();
+
+                (
+                    StatusCode::OK,
+                    Json(serde_json::json!({
+                        "did": did,
+                        "registered": true,
+                        "status": action_label,
+                        "jurisdiction_path": jurisdiction,
+                        "registered_by": entry.payload.get("verified_by")
+                            .or_else(|| entry.payload.get("registered_by"))
+                            .and_then(|v| v.as_str()),
+                        "registered_at": entry.payload.get("registered_at")
+                            .and_then(|v| v.as_str()),
+                    })),
+                )
+            }
+            None => (
+                StatusCode::OK,
+                Json(serde_json::json!({
+                    "did": did,
+                    "registered": false,
+                    "message": "voter not registered in civic.registry",
+                })),
+            ),
+        }
+    }
+
+    async fn handle_voter_eligibility(
+        ledger: Arc<Ledger<S>>,
+        election_id: String,
+        did: String,
+    ) -> (StatusCode, Json<serde_json::Value>) {
+        let kyc_entries = ledger
+            .storage()
+            .namespace_entries(&"identity.kyc".to_string())
+            .unwrap_or_default();
+
+        let voter_path: Vec<String> = kyc_entries.iter().rev()
+            .filter(|e| {
+                e.action == "APPROVE_KYC" && e.object_id == did
+            })
+            .find(|_| true)
+            .and_then(|e| {
+                e.payload.get("jurisdiction_path").and_then(|v| v.as_array())
+            })
+            .map(|arr| arr.iter()
+                .filter_map(|v| v.as_str().map(String::from))
+                .collect())
+            .unwrap_or_default();
+
+        let is_registered = !voter_path.is_empty();
+
+        let election_entries = ledger
+            .storage()
+            .namespace_entries(&"civic.election".to_string())
+            .unwrap_or_default();
+
+        let election = election_entries.iter()
+            .find(|e| e.action == "OPEN_ELECTION" && e.object_id == election_id);
+
+        let is_open = election.is_some() && !election_entries.iter()
+            .any(|e| e.action == "CLOSE_ELECTION" && e.object_id == election_id);
+
+        let races = match ledger.reconstruct_election(&election_id) {
+            Ok((_, r)) if !r.is_empty() => r,
+            _ => election
+                .and_then(|e| e.payload.get("races").and_then(|v| v.as_array()))
+                .map(|arr| arr.clone())
+                .unwrap_or_default(),
+        };
+
+        let mut eligible_races: Vec<serde_json::Value> = Vec::new();
+        let mut ineligible_races: Vec<serde_json::Value> = Vec::new();
+
+        for race in &races {
+            let race_id = race.get("race_id").and_then(|v| v.as_str()).unwrap_or("");
+            let title = race.get("title").and_then(|v| v.as_str()).unwrap_or("");
+
+            if !is_registered {
+                ineligible_races.push(serde_json::json!({
+                    "race_id": race_id,
+                    "title": title,
+                    "reason": "voter not registered"
+                }));
+                continue;
+            }
+
+            if let Some(race_juris) = race.get("jurisdiction").and_then(|v| v.as_array()) {
+                let race_path: Vec<String> = race_juris.iter()
+                    .filter_map(|v| v.as_str().map(String::from))
+                    .collect();
+
+                if race_path.len() <= voter_path.len() {
+                    let matches = race_path.iter()
+                        .zip(voter_path.iter())
+                        .all(|(e, v)| e.eq_ignore_ascii_case(v));
+                    if matches {
+                        eligible_races.push(serde_json::json!({"race_id": race_id, "title": title}));
+                    } else {
+                        ineligible_races.push(serde_json::json!({
+                            "race_id": race_id, "title": title, "reason": "jurisdiction mismatch"
+                        }));
+                    }
+                } else {
+                    ineligible_races.push(serde_json::json!({
+                        "race_id": race_id, "title": title, "reason": "jurisdiction mismatch"
+                    }));
+                }
+            } else {
+                eligible_races.push(serde_json::json!({"race_id": race_id, "title": title}));
+            }
+        }
+
+        (
+            StatusCode::OK,
+            Json(serde_json::json!({
+                "election_id": election_id,
+                "voter_did": did,
+                "is_registered": is_registered,
+                "jurisdiction_path": voter_path,
+                "election_open": is_open,
+                "eligible_races": eligible_races,
+                "ineligible_races": ineligible_races,
+            })),
+        )
+    }
+
+    async fn handle_kyc_list(
+        ledger: Arc<Ledger<S>>,
+    ) -> (StatusCode, Json<serde_json::Value>) {
+        let entries = ledger
+            .storage()
+            .namespace_entries(&"identity.kyc".to_string())
+            .unwrap_or_default();
+
+        let mut submissions: Vec<serde_json::Value> = Vec::new();
+        let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
+
+        for entry in entries.iter().rev() {
+            if entry.action != "SUBMIT_KYC" {
+                continue;
+            }
+            let did = entry.object_id.clone();
+            if seen.contains(&did) {
+                continue;
+            }
+            seen.insert(did.clone());
+
+            // Collect all entries for this DID and sort by timestamp
+            let mut did_entries: Vec<&LedgerEntry> = entries.iter()
+                .filter(|e| e.object_id == did)
+                .collect();
+            did_entries.sort_by_key(|e| e.timestamp);
+
+            let last_submit = did_entries.iter().rev()
+                .find(|e| e.action == "SUBMIT_KYC");
+            let last_approve = did_entries.iter().rev()
+                .find(|e| e.action == "APPROVE_KYC");
+            let last_revoke = did_entries.iter().rev()
+                .find(|e| e.action == "REVOKE_KYC");
+
+            let status = match (last_submit, last_approve, last_revoke) {
+                (Some(s), None, None) => "submitted",
+                (Some(_), Some(a), None) => "approved",
+                (None, _, _) => "unknown",
+                (Some(_), _, Some(r)) if r.timestamp >= last_approve.map_or(0, |a| a.timestamp) => "revoked",
+                (Some(_), Some(_), Some(_)) => "approved",
+                _ => "unknown",
+            };
+
+            let approval = did_entries.iter().rev()
+                .find(|e| e.action == "APPROVE_KYC");
+
+            let (full_name, address, encrypted) = if entry.privacy_flag {
+                let holder_ct = entry.payload.get("holder_ciphertext_hex")
+                    .and_then(|v| v.as_str())
+                    .filter(|s| !s.is_empty());
+                (None, None, serde_json::json!({
+                    "ciphertext_hex": entry.ciphertext_hex,
+                    "nonce_hex": entry.nonce_hex,
+                    "payload_commitment": entry.payload_commitment,
+                    "epk": entry.payload.get("epk").and_then(|v| v.as_str()),
+                    "holder_ciphertext_hex": holder_ct,
+                    "holder_nonce_hex": entry.payload.get("holder_nonce_hex").and_then(|v| v.as_str()),
+                    "holder_epk": entry.payload.get("holder_epk").and_then(|v| v.as_str()),
+                }))
+            } else {
+                (
+                    entry.payload.get("full_name").and_then(|v| v.as_str()),
+                    entry.payload.get("address").and_then(|v| v.as_str()),
+                    serde_json::Value::Null,
+                )
+            };
+
+            submissions.push(serde_json::json!({
+                "did": did,
+                "status": status,
+                "full_name": full_name,
+                "address": address,
+                "encrypted": encrypted,
+                "jurisdiction_path": approval.and_then(|e| e.payload.get("jurisdiction_path").and_then(|v| v.as_array()))
+                    .map(|arr| arr.iter().filter_map(|v| v.as_str().map(String::from)).collect::<Vec<_>>()),
+                "verified_by": approval.map(|e| e.author.clone()),
+                "author": entry.author.clone(),
+            }));
+        }
+
+        (
+            StatusCode::OK,
+            Json(serde_json::json!({
+                "submissions": submissions,
+                "total": submissions.len(),
+            })),
+        )
+    }
+
+    async fn handle_kyc_status(
+        ledger: Arc<Ledger<S>>,
+        did: String,
+    ) -> (StatusCode, Json<serde_json::Value>) {
+        let entries = ledger
+            .storage()
+            .namespace_entries(&"identity.kyc".to_string())
+            .unwrap_or_default();
+
+        let submitted = entries.iter().any(|e| {
+            e.action == "SUBMIT_KYC" && e.object_id == did
+        });
+
+        if !submitted {
+            return (
+                StatusCode::OK,
+                Json(serde_json::json!({
+                    "did": did,
+                    "kyc_status": "not_submitted",
+                    "message": "No KYC submission found",
+                })),
+            );
+        }
+
+        // Use timestamp-based recency to determine the real current status.
+        let mut did_entries: Vec<&LedgerEntry> = entries.iter()
+            .filter(|e| e.object_id == did)
+            .collect();
+        did_entries.sort_by_key(|e| e.timestamp);
+
+        let last_submit = did_entries.iter().rev()
+            .find(|e| e.action == "SUBMIT_KYC");
+        let last_approve = did_entries.iter().rev()
+            .find(|e| e.action == "APPROVE_KYC");
+        let last_revoke = did_entries.iter().rev()
+            .find(|e| e.action == "REVOKE_KYC");
+
+        let status = match (last_submit, last_approve, last_revoke) {
+            (Some(s), None, None) => "submitted",
+            (Some(_), Some(_), None) => "approved",
+            (None, _, _) => "not_submitted",
+            (Some(_), _, Some(r)) if r.timestamp >= last_approve.map_or(0, |a| a.timestamp) => "revoked",
+            (Some(_), Some(_), Some(_)) => "approved",
+            _ => "unknown",
+        };
+
+        let submission = did_entries.iter().rev()
+            .find(|e| e.action == "SUBMIT_KYC");
+
+        let approval = did_entries.iter().rev()
+            .find(|e| e.action == "APPROVE_KYC");
+
+        if status == "not_submitted" || last_submit.is_none() {
+            return (
+                StatusCode::OK,
+                Json(serde_json::json!({
+                    "did": did,
+                    "kyc_status": "not_submitted",
+                    "message": "No KYC submission found",
+                })),
+            );
+        }
+
+        let (full_name, address, encrypted) = if let Some(ref sub) = submission {
+            if sub.privacy_flag {
+                let holder_ct = sub.payload.get("holder_ciphertext_hex")
+                    .and_then(|v| v.as_str())
+                    .filter(|s| !s.is_empty());
+                (None, None, serde_json::json!({
+                    "ciphertext_hex": &sub.ciphertext_hex,
+                    "nonce_hex": &sub.nonce_hex,
+                    "payload_commitment": &sub.payload_commitment,
+                    "epk": sub.payload.get("epk").and_then(|v| v.as_str()),
+                    "holder_ciphertext_hex": holder_ct,
+                    "holder_nonce_hex": sub.payload.get("holder_nonce_hex").and_then(|v| v.as_str()),
+                    "holder_epk": sub.payload.get("holder_epk").and_then(|v| v.as_str()),
+                }))
+            } else {
+                (
+                    sub.payload.get("full_name").and_then(|v| v.as_str()),
+                    sub.payload.get("address").and_then(|v| v.as_str()),
+                    serde_json::Value::Null,
+                )
+            }
+        } else {
+            (None, None, serde_json::Value::Null)
+        };
+
+        (
+            StatusCode::OK,
+            Json(serde_json::json!({
+                "did": did,
+                "kyc_status": status,
+                "submitted_at": submission.and_then(|e| e.payload.get("submitted_at").and_then(|v| v.as_str())),
+                "full_name": full_name,
+                "address": address,
+                "encrypted": encrypted,
+                "verified_by": approval.map(|e| e.author.clone()),
+                "jurisdiction_path": approval.and_then(|e| e.payload.get("jurisdiction_path").and_then(|v| v.as_array()))
+                    .map(|arr| arr.iter().filter_map(|v| v.as_str().map(String::from)).collect::<Vec<_>>()),
             })),
         )
     }

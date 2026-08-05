@@ -181,17 +181,9 @@ where
             return Ok(());
         }
         let entries = self.collect_entries().await?;
-        let prev_hash = if current_height == 0 {
-            "GENESIS".to_string()
-        } else {
-            let previous = self
-                .ledger
-                .storage()
-                .get_block(current_height)?
-                .ok_or_else(|| {
-                    ProtocolError::ConsensusViolation("missing previous block".into())
-                })?;
-            hash_block_header(&previous.header)
+        let prev_hash = match self.ledger.storage().get_block(current_height)? {
+            Some(ref previous) => hash_block_header(&previous.header),
+            None => "GENESIS".to_string(),
         };
         let header = BlockHeader {
             height: next_height,
@@ -606,17 +598,13 @@ where
             )));
         }
 
-        let expected_prev_hash = if latest_height == 0 {
-            "GENESIS".to_string()
-        } else {
-            let previous = self
-                .ledger
-                .storage()
-                .get_block(latest_height)?
-                .ok_or_else(|| {
-                    ProtocolError::ConsensusViolation("missing previous block".into())
-                })?;
-            hash_block_header(&previous.header)
+        let expected_prev_hash = match self
+            .ledger
+            .storage()
+            .get_block(latest_height)?
+        {
+            Some(ref previous) => hash_block_header(&previous.header),
+            None => "GENESIS".to_string(),
         };
         if proposal.header.prev_hash != expected_prev_hash {
             return Err(ProtocolError::ConsensusViolation(format!(

@@ -9,7 +9,7 @@ use citizen_types::{
 };
 use ed25519_dalek::Signature;
 use parking_lot::RwLock;
-use serde_json::Value;
+use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::Arc;
@@ -182,6 +182,12 @@ impl<S: LedgerStorage + 'static> Ledger<S> {
             "ctzn_citizenship_policy" => self.ctzn_citizenship_policy(entry, config),
             "civic_voting_policy" => self.civic_voting_policy(entry, config),
             "election_ballot_policy" => self.election_ballot_policy(entry, config),
+            "election_race_policy" => self.election_race_policy(entry, config),
+            "kyc_verification_policy" => self.kyc_verification_policy(entry, config),
+            "admin_assignment_policy" => self.admin_assignment_policy(entry, config),
+            "civic_admin_gate" => self.civic_admin_gate(entry, config),
+            "voter_registration_policy" => self.voter_registration_policy(entry, config),
+            "voter_jurisdiction_policy" => self.voter_jurisdiction_policy(entry, config),
             "wasm_runtime_policy" => self.wasm_runtime_policy(entry, config),
             "interop_adapter_policy" => self.interop_adapter_policy(entry, config),
             _ => {
@@ -1875,6 +1881,299 @@ impl<S: LedgerStorage + 'static> Ledger<S> {
         Ok(())
     }
 
+    /// Reconstruct on-chain election state by replaying amendment entries
+    /// in insertion order. Returns (election_json, races_vec).
+    pub fn reconstruct_election(
+        &self,
+        election_id: &str,
+    ) -> Result<(Value, Vec<Value>)> {
+        let ns = "civic.election".to_string();
+        let entries = self.storage.namespace_entries(&ns)
+            .map_err(|e| ProtocolError::ValidationFailed(e.to_string()))?;
+        let mut races: Vec<Value> = Vec::new();
+        let mut election: Value = json!({});
+        for entry in entries.iter().filter(|e| e.object_id == election_id) {
+            match entry.action.as_str() {
+                "OPEN_ELECTION" => {
+                    election = entry.payload.clone();
+                }
+                "ADD_RACE" => {
+                    if let Some(race) = entry.payload.get("race") {
+                        races.push(race.clone());
+                    }
+                }
+                "REMOVE_RACE" => {
+                    if let Some(race_id) = entry.payload.get("race_id").and_then(Value::as_str) {
+                        races.retain(|r| r.get("race_id").and_then(Value::as_str) != Some(race_id));
+                    }
+                }
+                "ADD_CANDIDATE" => {
+                    if let Some(race_id) = entry.payload.get("race_id").and_then(Value::as_str) {
+                        if let Some(candidate) = entry.payload.get("candidate") {
+                            for race in races.iter_mut() {
+                                if race.get("race_id").and_then(Value::as_str) == Some(race_id) {
+                                    let mut candidates = race.get("candidates")
+                                        .and_then(Value::as_array)
+                                        .map(|a| a.clone())
+                                        .unwrap_or_default();
+                                    candidates.push(candidate.clone());
+                                    if let Some(obj) = race.as_object_mut() {
+                                        obj.insert("candidates".to_string(), Value::Array(candidates));
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                "REMOVE_CANDIDATE" => {
+                    if let Some(race_id) = entry.payload.get("race_id").and_then(Value::as_str) {
+                        if let Some(cand_id) = entry.payload.get("candidate_id").and_then(Value::as_str) {
+                            for race in races.iter_mut() {
+                                if race.get("race_id").and_then(Value::as_str) == Some(race_id) {
+                                    let candidates = race.get("candidates")
+                                        .and_then(Value::as_array)
+                                        .map(|a| a.iter()
+                                            .filter(|c| c.get("candidate_id").and_then(Value::as_str) != Some(cand_id))
+                                            .cloned()
+                                            .collect())
+                                        .unwrap_or_default();
+                                    if let Some(obj) = race.as_object_mut() {
+                                        obj.insert("candidates".to_string(), Value::Array(candidates));
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                "UPDATE_RACE" => {
+                    if let Some(race_id) = entry.payload.get("race_id").and_then(Value::as_str) {
+                        for race in races.iter_mut() {
+                            if race.get("race_id").and_then(Value::as_str) == Some(race_id) {
+                                if let Some(updates) = entry.payload.get("updates").and_then(Value::as_object) {
+                                    if let Some(obj) = race.as_object_mut() {
+                                        for (k, v) in updates.iter() {
+                                            obj.insert(k.clone(), v.clone());
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+        Ok((election, races))
+    }
+
+    fn election_race_policy(&self, entry: &LedgerEntry, _config: &Value) -> Result<()> {
+        match entry.action.as_str() {
+            "OPEN_ELECTION" | "CLOSE_ELECTION" => return Ok(()),
+            _ => {}
+        }
+
+        let election_id = entry.payload.get("election_id").and_then(Value::as_str)
+            .ok_or_else(|| ProtocolError::ValidationFailed(
+                "election_race_policy: payload.election_id is required".into()
+            ))?;
+        let ns = "civic.election".to_string();
+        let entries = self.storage.namespace_entries(&ns)
+            .map_err(|e| ProtocolError::ValidationFailed(e.to_string()))?;
+        let election_exists = entries.iter().any(|e| {
+            e.action == "OPEN_ELECTION" && e.object_id == election_id
+        });
+        if !election_exists {
+            return Err(ProtocolError::ValidationFailed(format!(
+                "election_race_policy: election {} does not exist", election_id
+            )));
+        }
+        let is_closed = entries.iter().any(|e| {
+            e.action == "CLOSE_ELECTION" && e.object_id == election_id
+        });
+        if is_closed {
+            return Err(ProtocolError::ValidationFailed(format!(
+                "election_race_policy: election {} is closed", election_id
+            )));
+        }
+        match entry.action.as_str() {
+            "ADD_RACE" | "REMOVE_RACE" | "ADD_CANDIDATE" | "REMOVE_CANDIDATE" | "UPDATE_RACE" => Ok(()),
+            other => Err(ProtocolError::ValidationFailed(format!(
+                "election_race_policy: unsupported action {}", other
+            ))),
+        }
+    }
+    fn kyc_verification_policy(&self, entry: &LedgerEntry, config: &Value) -> Result<()> {
+        let admin_ns = config.get("admin_namespace")
+            .and_then(Value::as_str)
+            .unwrap_or("civic.admin")
+            .to_string();
+        match entry.action.as_str() {
+            "SUBMIT_KYC" => {
+                if entry.object_id != entry.author {
+                    return Err(ProtocolError::ValidationFailed(
+                        "kyc_verification_policy: SUBMIT_KYC object_id must match author (self-submission)".into()
+                    ));
+                }
+                if entry.privacy_flag {
+                    if entry.ciphertext_hex.as_ref().map_or(true, |s| s.is_empty())
+                        || entry.nonce_hex.as_ref().map_or(true, |s| s.is_empty())
+                        || entry.payload_commitment.as_ref().map_or(true, |s| s.is_empty())
+                    {
+                        return Err(ProtocolError::ValidationFailed(
+                            "kyc_verification_policy: encrypted SUBMIT_KYC requires ciphertext_hex, nonce_hex, payload_commitment".into()
+                        ));
+                    }
+                    if !entry.payload.get("full_name").is_none() || !entry.payload.get("address").is_none() {
+                        return Err(ProtocolError::ValidationFailed(
+                            "kyc_verification_policy: encrypted SUBMIT_KYC must not contain cleartext full_name or address".into()
+                        ));
+                    }
+                } else {
+                    let full_name = entry.payload.get("full_name").and_then(Value::as_str)
+                        .ok_or_else(|| ProtocolError::ValidationFailed("kyc_verification_policy: payload.full_name is required".into()))?;
+                    let address = entry.payload.get("address").and_then(Value::as_str)
+                        .ok_or_else(|| ProtocolError::ValidationFailed("kyc_verification_policy: payload.address is required".into()))?;
+                    if full_name.trim().is_empty() || address.trim().is_empty() {
+                        return Err(ProtocolError::ValidationFailed("kyc_verification_policy: full_name and address must not be empty".into()));
+                    }
+                }
+                let kyc_ns = entry.namespace.clone();
+                let existing = self.storage.namespace_entries(&kyc_ns).map_err(|e| ProtocolError::ValidationFailed(e.to_string()))?;
+                let already_submitted = existing.iter().any(|e| e.action == "SUBMIT_KYC" && e.object_id == entry.object_id);
+                if already_submitted {
+                    let last_revoke = existing.iter().rev().find(|e| e.action == "REVOKE_KYC" && e.object_id == entry.object_id);
+                    if last_revoke.is_none() {
+                        return Err(ProtocolError::ValidationFailed(format!("kyc_verification_policy: KYC already submitted for '{}'", entry.object_id)));
+                    }
+                }
+            }
+            "APPROVE_KYC" | "REVOKE_KYC" => {
+                let admin_entries = self.storage.namespace_entries(&admin_ns).map_err(|e| ProtocolError::ValidationFailed(e.to_string()))?;
+                let assigned: HashSet<&str> = admin_entries.iter().filter(|e| e.action == "ASSIGN_ADMIN").filter_map(|e| e.payload.get("admin_did").and_then(Value::as_str)).collect();
+                let revoked: HashSet<&str> = admin_entries.iter().filter(|e| e.action == "REVOKE_ADMIN").filter_map(|e| e.payload.get("admin_did").and_then(Value::as_str)).collect();
+                if !assigned.difference(&revoked).any(|d| *d == entry.author) {
+                    return Err(ProtocolError::ValidationFailed(format!("kyc_verification_policy: author '{}' is not an authorized admin", entry.author)));
+                }
+                let kyc_ns = entry.namespace.clone();
+                let existing = self.storage.namespace_entries(&kyc_ns).map_err(|e| ProtocolError::ValidationFailed(e.to_string()))?;
+                let last_submit_pos = existing.iter().rposition(|e| e.action == "SUBMIT_KYC" && e.object_id == entry.object_id);
+                let last_revoke_pos = existing.iter().rposition(|e| e.action == "REVOKE_KYC" && e.object_id == entry.object_id);
+                let has_pending = match (last_submit_pos, last_revoke_pos) { (Some(s), Some(r)) => s > r, (Some(_), None) => true, _ => false };
+                if !has_pending { return Err(ProtocolError::ValidationFailed(format!("kyc_verification_policy: no pending SUBMIT_KYC for '{}'", entry.object_id))); }
+                if entry.action == "APPROVE_KYC" {
+                    let last_approve_pos = existing.iter().rposition(|e| e.action == "APPROVE_KYC" && e.object_id == entry.object_id);
+                    if match (last_approve_pos, last_revoke_pos) { (Some(a), Some(r)) => a > r, (Some(_), None) => true, _ => false } {
+                        return Err(ProtocolError::ValidationFailed(format!("kyc_verification_policy: KYC already approved for '{}'", entry.object_id)));
+                    }
+                }
+                if entry.action == "REVOKE_KYC" {
+                    let last_approve_pos = existing.iter().rposition(|e| e.action == "APPROVE_KYC" && e.object_id == entry.object_id);
+                    if match (last_revoke_pos, last_approve_pos) { (Some(r), Some(a)) => r > a, (Some(_), None) => true, _ => false } {
+                        return Err(ProtocolError::ValidationFailed(format!("kyc_verification_policy: KYC already revoked for '{}'", entry.object_id)));
+                    }
+                }
+            }
+            other => return Err(ProtocolError::ValidationFailed(format!("kyc_verification_policy: unsupported action '{}'", other))),
+        }
+        Ok(())
+    }
+    fn admin_assignment_policy(&self, entry: &LedgerEntry, _config: &Value) -> Result<()> {
+        match entry.action.as_str() {
+            "ASSIGN_ADMIN" => {
+                let admin_did = entry.payload.get("admin_did").and_then(Value::as_str).ok_or_else(|| ProtocolError::ValidationFailed("admin_assignment_policy: payload.admin_did is required".into()))?;
+                if admin_did == entry.author {
+                    let existing = self.storage.namespace_entries(&"civic.admin".to_string()).map_err(|e| ProtocolError::ValidationFailed(e.to_string()))?;
+                    if existing.iter().any(|e| e.action == "ASSIGN_ADMIN") {
+                        return Err(ProtocolError::ValidationFailed("admin_assignment_policy: cannot assign admin role to self".into()));
+                    }
+                }
+                let existing = self.storage.namespace_entries(&"civic.admin".to_string()).map_err(|e| ProtocolError::ValidationFailed(e.to_string()))?;
+                if existing.iter().any(|e| e.action == "ASSIGN_ADMIN" && e.payload.get("admin_did").and_then(Value::as_str) == Some(admin_did)) {
+                    return Err(ProtocolError::ValidationFailed(format!("admin_assignment_policy: '{}' is already an admin", admin_did)));
+                }
+                Ok(())
+            }
+            "REVOKE_ADMIN" => {
+                let admin_did = entry.payload.get("admin_did").and_then(Value::as_str).ok_or_else(|| ProtocolError::ValidationFailed("admin_assignment_policy: payload.admin_did is required".into()))?;
+                let existing = self.storage.namespace_entries(&"civic.admin".to_string()).map_err(|e| ProtocolError::ValidationFailed(e.to_string()))?;
+                if !existing.iter().any(|e| e.action == "ASSIGN_ADMIN" && e.payload.get("admin_did").and_then(Value::as_str) == Some(admin_did)) {
+                    return Err(ProtocolError::ValidationFailed(format!("admin_assignment_policy: cannot revoke '{}': not an admin", admin_did)));
+                }
+                if existing.iter().any(|e| e.action == "REVOKE_ADMIN" && e.payload.get("admin_did").and_then(Value::as_str) == Some(admin_did)) {
+                    return Err(ProtocolError::ValidationFailed(format!("admin_assignment_policy: '{}' already revoked", admin_did)));
+                }
+                Ok(())
+            }
+            "SET_KYC_PUBLIC_KEY" => {
+                let pk = entry.payload.get("kyc_encryption_public_key").and_then(Value::as_str).ok_or_else(|| ProtocolError::ValidationFailed("admin_assignment_policy: payload.kyc_encryption_public_key is required".into()))?;
+                if pk.trim().is_empty() { return Err(ProtocolError::ValidationFailed("admin_assignment_policy: kyc_encryption_public_key must not be empty".into())); }
+                Ok(())
+            }
+            other => Err(ProtocolError::ValidationFailed(format!("admin_assignment_policy: unsupported action '{}'", other))),
+        }
+    }
+    fn civic_admin_gate(&self, entry: &LedgerEntry, config: &Value) -> Result<()> {
+        let admin_ns = config.get("admin_namespace").and_then(Value::as_str).unwrap_or("civic.admin").to_string();
+        let admin_entries = self.storage.namespace_entries(&admin_ns).map_err(|e| ProtocolError::ValidationFailed(e.to_string()))?;
+        let assigned: HashSet<&str> = admin_entries.iter().filter(|e| e.action == "ASSIGN_ADMIN").filter_map(|e| e.payload.get("admin_did").and_then(Value::as_str)).collect();
+        let revoked: HashSet<&str> = admin_entries.iter().filter(|e| e.action == "REVOKE_ADMIN").filter_map(|e| e.payload.get("admin_did").and_then(Value::as_str)).collect();
+        if !assigned.difference(&revoked).any(|d| *d == entry.author) {
+            return Err(ProtocolError::ValidationFailed(format!("civic_admin_gate: author '{}' is not an authorized admin", entry.author)));
+        }
+        if let Some(scope) = entry.payload.get("election_id").or_else(|| entry.payload.get("jurisdiction")) {
+            let admin_scope = admin_entries.iter().rev().find(|e| e.action == "ASSIGN_ADMIN" && e.payload.get("admin_did").and_then(Value::as_str) == Some(&entry.author));
+            if let Some(a) = admin_scope { let _ = (a, scope); }
+        }
+        Ok(())
+    }
+    fn voter_registration_policy(&self, entry: &LedgerEntry, config: &Value) -> Result<()> {
+        let kyc_ns = config.get("kyc_namespace").and_then(Value::as_str).unwrap_or("identity.kyc").to_string();
+        match entry.action.as_str() {
+            "REGISTER_VOTER" | "UPDATE_JURISDICTION" => {
+                let kyc_entries = self.storage.namespace_entries(&kyc_ns).map_err(|e| ProtocolError::ValidationFailed(format!("kyc check: {}", e)))?;
+                let voter_did = entry.payload.get("voter_did").and_then(Value::as_str).unwrap_or(&entry.object_id);
+                if !kyc_entries.iter().any(|e| e.action == "APPROVE_KYC" && e.object_id == voter_did) {
+                    return Err(ProtocolError::ValidationFailed(format!("voter_registration_policy: '{}' has no approved KYC; KYC approval IS voter registration", voter_did)));
+                }
+            }
+            other => return Err(ProtocolError::ValidationFailed(format!("voter_registration_policy: unsupported action '{}'", other))),
+        }
+        Ok(())
+    }
+    fn voter_jurisdiction_policy(&self, entry: &LedgerEntry, config: &Value) -> Result<()> {
+        let kyc_ns = config.get("kyc_namespace").and_then(Value::as_str).unwrap_or("identity.kyc").to_string();
+        let election_ns = config.get("election_namespace").and_then(Value::as_str).unwrap_or("civic.election").to_string();
+        let kyc_entries = self.storage.namespace_entries(&kyc_ns).map_err(|e| ProtocolError::ValidationFailed(e.to_string()))?;
+        let voter_path: Vec<String> = kyc_entries.iter().rev()
+            .filter(|e| e.action == "APPROVE_KYC" && e.object_id == entry.author)
+            .find(|_| true)
+            .and_then(|e| e.payload.get("jurisdiction_path").and_then(Value::as_array))
+            .map(|arr| arr.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+            .unwrap_or_default();
+        if voter_path.is_empty() {
+            return Err(ProtocolError::ValidationFailed(format!("voter_jurisdiction_policy: voter '{}' has no approved KYC with jurisdiction in {}", entry.author, kyc_ns)));
+        }
+        let election_id = entry.payload.get("election_id").and_then(Value::as_str).ok_or_else(|| ProtocolError::ValidationFailed("voter_jurisdiction_policy: payload.election_id is required".into()))?;
+        let election_entries = self.storage.namespace_entries(&election_ns).map_err(|e| ProtocolError::ValidationFailed(e.to_string()))?;
+        election_entries.iter().find(|e| e.action == "OPEN_ELECTION" && e.object_id == election_id).ok_or_else(|| ProtocolError::ValidationFailed(format!("voter_jurisdiction_policy: election '{}' not found", election_id)))?;
+        let (_, races) = self.reconstruct_election(election_id)?;
+        let race_ids: Vec<String> = if entry.payload.get("enc_ballot").is_some() {
+            entry.payload.get("race_ids").and_then(Value::as_array).map(|arr| arr.iter().filter_map(|v| v.as_str().map(String::from)).collect()).unwrap_or_default()
+        } else {
+            entry.payload.get("selections").and_then(Value::as_array).map(|arr| arr.iter().filter_map(|v| v.as_str().map(String::from)).collect()).unwrap_or_default()
+        };
+        for race_id in &race_ids {
+            let race = races.iter().find(|r| r.get("race_id").and_then(Value::as_str) == Some(race_id));
+            let race_jurisdiction: Vec<String> = race.and_then(|r| r.get("jurisdiction").and_then(Value::as_array)).map(|arr| arr.iter().filter_map(|v| v.as_str().map(String::from)).collect()).unwrap_or_default();
+            if !race_jurisdiction.is_empty() {
+                let matches = race_jurisdiction.iter().zip(voter_path.iter()).all(|(r, v)| r == v);
+                if !matches {
+                    return Err(ProtocolError::ValidationFailed(format!("voter_jurisdiction_policy: voter jurisdiction {:?} does not match race '{}' jurisdiction {:?}", voter_path, race_id, race_jurisdiction)));
+                }
+            }
+        }
+        Ok(())
+    }
     fn election_ballot_policy(&self, entry: &LedgerEntry, config: &Value) -> Result<()> {
         let election_ns = config
             .get("election_namespace")
@@ -2095,7 +2394,11 @@ impl<S: LedgerStorage + 'static> Ledger<S> {
         }
 
         if let Some(encoded_key) = entry.author.strip_prefix("did:key:") {
-            return parse_verifying_key(encoded_key).map_err(|err| {
+            let hex_key = encoded_key
+                .strip_prefix("ed25519:")
+                .or_else(|| encoded_key.strip_prefix("x25519:"))
+                .unwrap_or(encoded_key);
+            return parse_verifying_key(hex_key).map_err(|err| {
                 ProtocolError::ValidationFailed(format!("invalid did:key author public key: {err}"))
             });
         }

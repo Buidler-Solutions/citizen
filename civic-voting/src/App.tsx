@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { encryptBallot } from "./ballotCrypto";
 
 const NODE_BASE = import.meta.env.VITE_NODE_URL ?? "";
 
@@ -27,6 +28,7 @@ interface Race {
 
 interface ElectionDetail extends ElectionSummary {
   races: Race[];
+  tally_public_key?: string;
 }
 
 interface RaceTally {
@@ -45,6 +47,13 @@ interface ElectionTally {
   voters: string[];
 }
 
+interface EligibilityResult {
+  is_registered: boolean;
+  jurisdiction_path: string[];
+  eligible_races: { race_id: string; title: string }[];
+  ineligible_races: { race_id: string; title: string; reason: string }[];
+}
+
 type Selections = Record<string, string[]>;
 
 export default function App() {
@@ -61,6 +70,7 @@ export default function App() {
   const [showResults, setShowResults] = useState(false);
   const [showManualDid, setShowManualDid] = useState(false);
   const [manualDidInput, setManualDidInput] = useState("");
+  const [_eligibility, setEligibility] = useState<EligibilityResult | null>(null);
 
   const fetchElections = useCallback(async () => {
     setLoading(true);
@@ -88,10 +98,20 @@ export default function App() {
         init[r.race_id] = [];
       }
       setSelections(init);
+
+      if (signerDid) {
+        try {
+          const eligRes = await fetch(`${NODE_BASE}/api/v1/civic/elections/${electionId}/eligibility/${encodeURIComponent(signerDid)}`);
+          if (eligRes.ok) {
+            const eligData: EligibilityResult = await eligRes.json();
+            setEligibility(eligData);
+          }
+        } catch { /* eligibility check optional */ }
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unknown error");
     }
-  }, []);
+  }, [signerDid]);
 
   const fetchTally = useCallback(async (electionId: string) => {
     try {
@@ -165,52 +185,67 @@ export default function App() {
     setSubmitResult(null);
     setError(null);
 
-    const entry = {
-      entry_id: crypto.randomUUID(),
-      namespace: "civic.election.ballot",
-      action: "CAST_BALLOT",
-      object_id: `ballot-${signerDid}-${selectedElection.election_id}`,
-      payload: {
-        election_id: selectedElection.election_id,
-        selections: selectedElection.races
-          .filter((r) => (selections[r.race_id] ?? []).length > 0)
-          .map((r) => ({
-            race_id: r.race_id,
-            candidate_ids: selections[r.race_id],
-          })),
-      },
-      author: signerDid,
-      signature: "",
-      timestamp: Math.floor(Date.now() / 1000),
-      privacy_flag: false,
-      privacy_mode: "none",
-    };
+    const raceSelections = selectedElection.races
+      .filter((r) => (selections[r.race_id] ?? []).length > 0)
+      .map((r) => ({
+        race_id: r.race_id,
+        candidate_ids: selections[r.race_id],
+      }));
+
+    const raceIds = raceSelections.map((s) => s.race_id);
 
     try {
-      const signingPayload = JSON.stringify({
-        entry_id: entry.entry_id,
-        namespace: entry.namespace,
-        action: entry.action,
-        object_id: entry.object_id,
-        payload: entry.payload,
-        author: entry.author,
-        timestamp: entry.timestamp,
-      });
+      // Encrypt ballot selections if election has a tally public key
+      let encryptedBallot: { ciphertextBase64: string; ephemeralPublicKeyBase64: string; nonceBase64: string } | null = null;
+      if (selectedElection.tally_public_key) {
+        encryptedBallot = await encryptBallot(raceSelections, selectedElection.tally_public_key);
+      }
+
+      const entry = {
+        entry_id: crypto.randomUUID(),
+        namespace: "civic.election.ballot",
+        action: "CAST_BALLOT",
+        object_id: `ballot-${signerDid}-${selectedElection.election_id}`,
+        payload: encryptedBallot
+          ? {
+              election_id: selectedElection.election_id,
+              race_ids: raceIds,
+              enc_ballot: encryptedBallot.ciphertextBase64,
+              epk: encryptedBallot.ephemeralPublicKeyBase64,
+              nonce: encryptedBallot.nonceBase64,
+            }
+          : {
+              election_id: selectedElection.election_id,
+              selections: raceSelections,
+            },
+        author: signerDid,
+        signature: "",
+        timestamp: Math.floor(Date.now() / 1000),
+        privacy_flag: false,
+        privacy_mode: "none" as const,
+      };
 
       const provider = (window as any).ctzn ?? (window as any).citizen;
-      if (provider) {
-        try {
-          const result = await provider.request({
-            method: "ctzn_signCitizenTx",
-            params: [{ payload: signingPayload, author: signerDid }],
-          });
-          entry.signature = result?.signature ?? "placeholder";
-        } catch {
-          entry.signature = "placeholder";
-        }
-      } else {
-        entry.signature = "placeholder";
+      if (!provider) {
+        throw new Error("Citizen wallet is required to cast a ballot. Connect your wallet first.");
       }
+      const signResult = await provider.request({
+        method: "ctzn_signCitizenTx",
+        params: [{
+          entry_id: entry.entry_id,
+          namespace: entry.namespace,
+          action: entry.action,
+          object_id: entry.object_id,
+          payload: entry.payload,
+          author: entry.author,
+          timestamp: entry.timestamp,
+        }],
+      });
+      const signature = signResult?.signature ?? signResult;
+      if (!signature || signature === "unsigned") {
+        throw new Error("Wallet did not produce a valid signature. Ballot rejected.");
+      }
+      entry.signature = signature;
 
       const res = await fetch(`${NODE_BASE}/api/v1/entries/submit`, {
         method: "POST",
