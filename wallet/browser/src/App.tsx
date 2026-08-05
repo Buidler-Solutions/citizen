@@ -1309,7 +1309,9 @@ export function App() {
         : {};
       const wrappedSecrets = Array.isArray(parsed.key_wrapped_secrets)
         ? parsed.key_wrapped_secrets as Array<Record<string, unknown>>
-        : [];
+        : Array.isArray(payload.key_wrapped_secrets)
+          ? payload.key_wrapped_secrets as Array<Record<string, unknown>>
+          : [];
       const activeReaderDid = protocolKeyMaterial?.reader.readerDid;
       const matchingWrap = wrappedSecrets.find((entry) => typeof entry.reader_id === 'string' && entry.reader_id === activeReaderDid)
         ?? wrappedSecrets.find((entry) => typeof entry.wrapped_dek === 'string');

@@ -4309,17 +4309,12 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
                 .find(|e| e.action == "APPROVE_KYC");
 
             let (full_name, address, encrypted) = if entry.privacy_flag {
-                let holder_ct = entry.payload.get("holder_ciphertext_hex")
-                    .and_then(|v| v.as_str())
-                    .filter(|s| !s.is_empty());
                 (None, None, serde_json::json!({
                     "ciphertext_hex": entry.ciphertext_hex,
                     "nonce_hex": entry.nonce_hex,
                     "payload_commitment": entry.payload_commitment,
-                    "epk": entry.payload.get("epk").and_then(|v| v.as_str()),
-                    "holder_ciphertext_hex": holder_ct,
-                    "holder_nonce_hex": entry.payload.get("holder_nonce_hex").and_then(|v| v.as_str()),
-                    "holder_epk": entry.payload.get("holder_epk").and_then(|v| v.as_str()),
+                    "hybrid_author_x25519_public_key": entry.payload.get("hybrid_author_x25519_public_key").and_then(|v| v.as_str()),
+                    "key_wrapped_secrets": entry.payload.get("key_wrapped_secrets").unwrap_or(&serde_json::Value::Null),
                 }))
             } else {
                 (
@@ -4416,17 +4411,12 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
 
         let (full_name, address, encrypted) = if let Some(ref sub) = submission {
             if sub.privacy_flag {
-                let holder_ct = sub.payload.get("holder_ciphertext_hex")
-                    .and_then(|v| v.as_str())
-                    .filter(|s| !s.is_empty());
                 (None, None, serde_json::json!({
                     "ciphertext_hex": &sub.ciphertext_hex,
                     "nonce_hex": &sub.nonce_hex,
                     "payload_commitment": &sub.payload_commitment,
-                    "epk": sub.payload.get("epk").and_then(|v| v.as_str()),
-                    "holder_ciphertext_hex": holder_ct,
-                    "holder_nonce_hex": sub.payload.get("holder_nonce_hex").and_then(|v| v.as_str()),
-                    "holder_epk": sub.payload.get("holder_epk").and_then(|v| v.as_str()),
+                    "hybrid_author_x25519_public_key": sub.payload.get("hybrid_author_x25519_public_key").and_then(|v| v.as_str()),
+                    "key_wrapped_secrets": sub.payload.get("key_wrapped_secrets").unwrap_or(&serde_json::Value::Null),
                 }))
             } else {
                 (
