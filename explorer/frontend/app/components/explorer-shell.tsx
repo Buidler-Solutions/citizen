@@ -184,6 +184,8 @@ export function ExplorerShell({ children }: ExplorerShellProps) {
     const dataHashMatch = /^(data_hash|datahash):(.+)$/i.exec(normalizedQuery);
     const rawSha256Match = /^([a-f0-9]{64})$/i.exec(normalizedQuery);
     const legacySha256PrefixedMatch = /^sha256:([a-f0-9]{64})$/i.exec(normalizedQuery);
+    const entryIdMatch = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.exec(normalizedQuery);
+    const blocksMatch = /^blocks:(\d+)$/i.exec(normalizedQuery);
     if (dataHashMatch) {
       const value = dataHashMatch[2].trim();
       if (/^[a-f0-9]{64}$/i.test(value)) {
@@ -203,6 +205,14 @@ export function ExplorerShell({ children }: ExplorerShellProps) {
     if (legacySha256PrefixedMatch) {
       query.set('q', `sha256:${legacySha256PrefixedMatch[1]}`);
       router.push(`/data-hash?${query.toString()}`);
+      return;
+    }
+    if (entryIdMatch) {
+      router.push(`/entry/${encodeURIComponent(entryIdMatch[0])}`);
+      return;
+    }
+    if (blocksMatch) {
+      router.push(`/blocks/${blocksMatch[1]}`);
       return;
     }
     query.set('q', normalizedQuery);
@@ -262,7 +272,7 @@ export function ExplorerShell({ children }: ExplorerShellProps) {
                 type="search"
                 value={searchValue}
                 onChange={(event) => setSearchValue(event.target.value)}
-                placeholder="Search e.g. <64-char hex> blocks:42 or data_hash:<64-char hex>..."
+                placeholder="Search entry IDs, hex hashes, blocks:42, or data_hash:<hex>..."
               />
               <button type="submit" className="header-search-button">
                 Search

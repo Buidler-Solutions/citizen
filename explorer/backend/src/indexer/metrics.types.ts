@@ -42,6 +42,7 @@ export type IndexedEntry = {
   committed_at: number;
   entry_weight_bytes: number;
   signer: string | null;
+  payload_commitment: string | null;
   first_seen_at: number;
   updated_at: number;
 };

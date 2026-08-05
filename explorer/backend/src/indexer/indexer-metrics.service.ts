@@ -206,6 +206,14 @@ export class IndexerMetricsService {
     return this.paginate(filtered, limit, (row) => this.entryCursorToken(row));
   }
 
+  async findEntriesByPayloadCommitment(dataHash: string): Promise<IndexedEntry[]> {
+    await this.catchUpToLatest();
+    return Array.from(this.indexedEntries.values()).filter((row) => {
+      if (!row.payload_commitment) return false;
+      return row.payload_commitment === dataHash || row.payload_commitment === `sha256:${dataHash}`;
+    });
+  }
+
   async queryTps(
     windowName: MetricWindowName,
     from?: number,
@@ -624,6 +632,7 @@ export class IndexerMetricsService {
       committed_at: entry.timestamp,
       entry_weight_bytes: computeCanonicalWeight(entry),
       signer: typeof entry.author === 'string' ? entry.author : null,
+      payload_commitment: typeof entry.payload_commitment === 'string' ? entry.payload_commitment : null,
       first_seen_at: now,
       updated_at: now,
     }));
