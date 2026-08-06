@@ -10,7 +10,7 @@ use citizen_crypto::{
 use citizen_ledger::Ledger;
 use citizen_storage::LedgerStorage;
 use citizen_types::{
-    Block, BlockHeader, BlockHeight, CommitProof, ConsentPolicyCheck, ConsentReceipt,
+    BlockchainMode, Block, BlockHeader, BlockHeight, CommitProof, ConsentPolicyCheck, ConsentReceipt,
     DeterministicReceipt, DidDocument, DidStatus, FinalityProof, LedgerEntry,
     MultisigValidationSummary, NamespaceRuleset, OffchainCommitmentSummary,
     PayloadFieldCommitmentSummary, ProtocolError, ReceiptStatus, SignedEnvelope, ValidationSummary,
@@ -47,6 +47,7 @@ pub struct ApiEdgeConfig {
     pub offchain_encrypted_files_v1_enabled: bool,
     pub enforce_manifest_payload_binding: bool,
     pub require_builder_credit_for_all_writes: bool,
+    pub blockchain_mode: BlockchainMode,
     pub clients: BTreeMap<String, ApiClientProfile>,
 }
 
@@ -86,6 +87,7 @@ impl Default for ApiEdgeConfig {
             offchain_encrypted_files_v1_enabled: false,
             enforce_manifest_payload_binding: false,
             require_builder_credit_for_all_writes: false,
+            blockchain_mode: BlockchainMode::default(),
             clients: BTreeMap::new(),
         }
     }
@@ -4602,6 +4604,17 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
             .get(&entry.namespace)
             .copied();
         if let Some(max) = max_bytes {
+            // In governance-first mode, encrypted entries (hybrid privacy mode
+            // with ciphertext) are exempt from per-namespace size caps — they
+            // are pre-authorized by the governance gate. Only the global 50MB
+            // envelope limit applies.
+            let is_encrypted = matches!(
+                entry.privacy_mode,
+                citizen_types::PrivacyMode::Hybrid
+            ) && entry.ciphertext_hex.is_some();
+            if edge.config.blockchain_mode == BlockchainMode::GovernanceFirst && is_encrypted {
+                return Ok(());
+            }
             let size = serde_json::to_vec(entry).map(|v| v.len()).unwrap_or(0);
             if size > max {
                 return Err((

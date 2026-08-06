@@ -488,6 +488,7 @@ impl NodeConfig {
             offchain_encrypted_files_v1_enabled: self.api_offchain_encrypted_files_v1_enabled,
             enforce_manifest_payload_binding: false,
             require_builder_credit_for_all_writes: require_builder_credit,
+            blockchain_mode: self.blockchain_mode.clone(),
             clients,
         }
     }
