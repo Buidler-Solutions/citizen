@@ -42,7 +42,7 @@ interface ElectionSummary {
   race_count: number;
 }
 
-type View = "builder" | "elections" | "voters" | "kyc" | "tally";
+type View = "builder" | "elections" | "voters" | "kyc" | "tally" | "admins";
 type AuthState = "disconnected" | "connecting" | "checking" | "authorized" | "denied";
 
 export default function App() {
@@ -79,6 +79,13 @@ export default function App() {
   const [electionTitle, setElectionTitle] = useState("");
   const [races, setRaces] = useState<Race[]>([]);
   const [submitting, setSubmitting] = useState(false);
+
+  // Admin management state (smart contract powered)
+  const [adminList, setAdminList] = useState<any[]>([]);
+  const [newAdminDid, setNewAdminDid] = useState("");
+  const [newAdminRole, setNewAdminRole] = useState("election-commissioner");
+  const [newAdminScope, setNewAdminScope] = useState("national");
+  const [adminActionPending, setAdminActionPending] = useState(false);
 
   const isAdmin = authState === "authorized" && adminStatus?.is_admin === true;
 
@@ -260,6 +267,106 @@ export default function App() {
     if (!res.ok) {
       const body = await res.text();
       throw new Error(`Submission failed (${res.status}): ${body}`);
+    }
+  };
+
+  // ── Smart contract admin management ──────────────────────────
+
+  const signAuthMessage = async (message: string): Promise<string> => {
+    const provider = (window as any).ctzn ?? (window as any).citizen;
+    if (!provider) throw new Error("Wallet not connected");
+    const result = await provider.request({
+      method: "ctzn_signAuthChallenge",
+      params: [message],
+    });
+    const sigB64url = result?.signature ?? result?.result?.signature;
+    if (!sigB64url) throw new Error("Wallet did not return a signature");
+    const b64 = sigB64url.replace(/-/g, "+").replace(/_/g, "/");
+    const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+    return Array.from(bytes).map((b) => b.toString(16).padStart(2, "0")).join("");
+  };
+
+  const executeAdminContract = async (params: Record<string, any>): Promise<any> => {
+    const res = await fetch(`${NODE_BASE}/api/v1/modules/admin-registry/execute`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(params),
+    });
+    if (!res.ok) {
+      const body = await res.text();
+      throw new Error(`Contract execution failed (${res.status}): ${body}`);
+    }
+    return res.json();
+  };
+
+  const fetchAdmins = useCallback(async () => {
+    try {
+      const data = await executeAdminContract({ operation: "list_admins" });
+      const result = data?.result ?? data;
+      setAdminList(result?.admins ?? []);
+    } catch {
+      setAdminList([]);
+    }
+  }, []);
+
+  const assignAdmin = async () => {
+    if (!newAdminDid.trim()) {
+      setError("Enter a DID to assign");
+      return;
+    }
+    setAdminActionPending(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      const message = `assign_admin:${newAdminDid}:${newAdminRole}:${newAdminScope}`;
+      const sigHex = await signAuthMessage(message);
+      const data = await executeAdminContract({
+        operation: "assign_admin",
+        admin_did: walletDid,
+        admin_sig: sigHex,
+        target_did: newAdminDid,
+        role: newAdminRole,
+        scope: newAdminScope,
+      });
+      const result = data?.result ?? data;
+      if (result?.ok) {
+        setSuccess(`Admin assigned: ${newAdminDid}`);
+        setNewAdminDid("");
+        await fetchAdmins();
+      } else {
+        setError(result?.error || "Failed to assign admin");
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to assign admin");
+    } finally {
+      setAdminActionPending(false);
+    }
+  };
+
+  const revokeAdmin = async (targetDid: string) => {
+    setAdminActionPending(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      const message = `revoke_admin:${targetDid}`;
+      const sigHex = await signAuthMessage(message);
+      const data = await executeAdminContract({
+        operation: "revoke_admin",
+        admin_did: walletDid,
+        admin_sig: sigHex,
+        target_did: targetDid,
+      });
+      const result = data?.result ?? data;
+      if (result?.ok) {
+        setSuccess(`Admin revoked: ${targetDid}`);
+        await fetchAdmins();
+      } else {
+        setError(result?.error || "Failed to revoke admin");
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to revoke admin");
+    } finally {
+      setAdminActionPending(false);
     }
   };
 
@@ -897,6 +1004,12 @@ export default function App() {
             >
               Tally
             </button>
+            <button
+              className={`btn btn-sm ${view === "admins" ? "btn-primary" : "btn-ghost"}`}
+              onClick={() => { setView("admins"); fetchAdmins(); }}
+            >
+              Admins
+            </button>
           </div>
         </div>
       </header>
@@ -1371,6 +1484,115 @@ export default function App() {
               ))}
             </div>
           )}
+        </div>
+      )}
+
+      {view === "admins" && (
+        <div className="builder">
+          <div className="card">
+            <h3>Admin Management — Smart Contract</h3>
+            <p className="muted" style={{ marginBottom: 16 }}>
+              Admin assignments are powered by the <code>admin-registry</code> WASM smart contract.
+              All operations require a wallet signature verified on-chain by the contract.
+            </p>
+            <div style={{ marginBottom: 24 }}>
+              <h4 style={{ marginBottom: 12 }}>Assign New Admin</h4>
+              <div className="form-row">
+                <label className="field field-grow">
+                  <span className="field-label">Admin DID</span>
+                  <input
+                    type="text"
+                    value={newAdminDid}
+                    onChange={(e) => setNewAdminDid(e.target.value)}
+                    placeholder="did:key:ed25519:..."
+                    className="input mono"
+                  />
+                </label>
+              </div>
+              <div className="form-row">
+                <label className="field">
+                  <span className="field-label">Role</span>
+                  <select
+                    value={newAdminRole}
+                    onChange={(e) => setNewAdminRole(e.target.value)}
+                    className="input"
+                  >
+                    <option value="election-commissioner">Election Commissioner</option>
+                    <option value="governance-body">Governance Body</option>
+                    <option value="admin">Admin</option>
+                  </select>
+                </label>
+                <label className="field">
+                  <span className="field-label">Scope</span>
+                  <select
+                    value={newAdminScope}
+                    onChange={(e) => setNewAdminScope(e.target.value)}
+                    className="input"
+                  >
+                    <option value="national">National</option>
+                    <option value="regional">Regional</option>
+                    <option value="local">Local</option>
+                  </select>
+                </label>
+              </div>
+              <div className="builder-actions">
+                <button
+                  className="btn btn-primary btn-lg"
+                  onClick={assignAdmin}
+                  disabled={adminActionPending || !newAdminDid.trim()}
+                >
+                  {adminActionPending ? "Signing..." : "Assign Admin (Sign)"}
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div className="card">
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+              <h4>Active Admins</h4>
+              <button className="btn btn-sm btn-ghost" onClick={fetchAdmins}>Refresh</button>
+            </div>
+            {adminList.length === 0 ? (
+              <p className="muted">No admins loaded. Click Refresh or deploy the admin-registry contract first.</p>
+            ) : (
+              <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                <thead>
+                  <tr style={{ textAlign: "left", borderBottom: "1px solid var(--border)" }}>
+                    <th style={{ padding: "8px" }}>DID</th>
+                    <th style={{ padding: "8px" }}>Role</th>
+                    <th style={{ padding: "8px" }}>Scope</th>
+                    <th style={{ padding: "8px" }}></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {adminList.map((admin) => (
+                    <tr key={admin.did} style={{ borderBottom: "1px solid var(--border)" }}>
+                      <td style={{ padding: "8px" }} className="mono" title={admin.did}>
+                        {admin.did.length > 40 ? `${admin.did.slice(0, 20)}...${admin.did.slice(-12)}` : admin.did}
+                      </td>
+                      <td style={{ padding: "8px" }}>{admin.role}</td>
+                      <td style={{ padding: "8px" }}>{admin.scope}</td>
+                      <td style={{ padding: "8px" }}>
+                        {admin.did !== walletDid && (
+                          <button
+                            className="btn btn-sm"
+                            style={{ color: "var(--danger)" }}
+                            onClick={() => revokeAdmin(admin.did)}
+                            disabled={adminActionPending}
+                          >
+                            Revoke
+                          </button>
+                        )}
+                        {admin.did === walletDid && (
+                          <span className="muted" style={{ fontSize: "0.8rem" }}>(you)</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
         </div>
       )}
     </div>

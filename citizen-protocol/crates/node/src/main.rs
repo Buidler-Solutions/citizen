@@ -14,6 +14,7 @@ use citizen_api::{ApiClientProfile, ApiEdgeConfig, ApiServer, MinioOffchainObjec
 use citizen_consensus::ConsensusEngine;
 use citizen_crypto::{verifying_key_to_string, KeyRegistry, ValidatorKeypair};
 use citizen_ledger::Ledger;
+use citizen_execution::ExecutionConfig;
 use citizen_network::{
     AdmissionControl, ConsensusMessage, HandshakeIdentity, MockNetwork, Network, NetworkLatency,
     QuicNetwork, QuicTlsConfig,
@@ -75,8 +76,18 @@ async fn main() -> anyhow::Result<()> {
         "admission preflight passed"
     );
     let key_registry = KeyRegistry::new();
-    let ledger = Arc::new(Ledger::new(storage.clone(), key_registry));
-    ledger.bootstrap_namespaces(config.namespaces.clone());
+    let mut ledger_obj = Ledger::new(storage.clone(), key_registry);
+    ledger_obj.bootstrap_namespaces(config.namespaces.clone());
+    let _ = ledger_obj.enable_wasm_execution(ExecutionConfig {
+        allowed_module_classes: vec![
+            "governance".into(),
+            "policy-guard".into(),
+            "deterministic-indexer".into(),
+            "receipt-verifier".into(),
+        ],
+        ..Default::default()
+    });
+    let ledger = Arc::new(ledger_obj);
 
     let genesis_exists = storage.get_block(0)?.is_some();
 
