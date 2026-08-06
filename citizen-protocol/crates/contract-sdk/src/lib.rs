@@ -1,6 +1,6 @@
-//! Civitas SDK — runtime library for WASM smart contracts on Citizen Protocol.
+//! Citizen Contract SDK — runtime library for WASM smart contracts.
 //!
-//! Provides Solidity-like ergonomics for writing Civitas smart contracts
+//! Provides Solidity-like ergonomics for writing Citizen Protocol smart contracts
 //! that compile to `wasm32-unknown-unknown`. Eliminates the need for manual
 //! memory management, JSON parsing, and host function FFI.
 //!

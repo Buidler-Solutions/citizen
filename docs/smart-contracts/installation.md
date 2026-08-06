@@ -46,7 +46,7 @@ pip3 install pynacl   # For signing deployment transactions
 
 ## SDK crates
 
-The Civitas SDK consists of two crates inside the protocol workspace:
+The Citizen Contract SDK consists of two crates inside the protocol workspace:
 
 | Crate | Path | Purpose |
 |-------|------|---------|
