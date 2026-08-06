@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This runbook explains **how to use encrypted backup in the Bahandi browser extension**.
+This runbook explains **how to use encrypted backup in the Citizen wallet browser extension**.
 
 It is implementation-aligned with:
 

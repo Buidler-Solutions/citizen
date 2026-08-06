@@ -1,6 +1,6 @@
-# Bahandi Mobile
+# Citizen Wallet Mobile
 
-Flutter-based mobile wallet for the Citizen Protocol. Client-facing wallet app for iOS and Android — signing, decryption, vault management, WalletConnect dApp integration, and secure platform key storage.
+Flutter-based mobile wallet for the Citizen Protocol. Client-facing wallet app for iOS and Android replicating the browser extension functionality with native mobile UX, WalletConnect dApp integration, and secure platform key storage.
 
 ## Features
 

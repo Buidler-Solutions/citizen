@@ -916,7 +916,7 @@ function normalizeLoginPayload(origin: string, payload: DappLoginParams) {
     chainId: payload.chainId?.trim() || NETWORKS.mainnet.chainIdHex,
     nonce,
     issuedAt,
-    statement: payload.statement?.trim() || 'Sign in with Bahandi',
+    statement: payload.statement?.trim() || 'Sign in with Citizen Wallet',
     expirationTime: payload.expirationTime?.trim() || undefined,
   };
 }

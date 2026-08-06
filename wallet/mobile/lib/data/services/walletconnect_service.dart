@@ -105,7 +105,7 @@ class WalletConnectService {
 
   static const _projectId = String.fromEnvironment(
     'WALLETCONNECT_PROJECT_ID',
-    defaultValue: 'bahandi-wallet-mobile',
+    defaultValue: 'citizen-wallet-mobile',
   );
 
   Future<void> initialize() async {
@@ -114,8 +114,8 @@ class WalletConnectService {
     _wallet = await Web3Wallet.createInstance(
       projectId: _projectId,
       metadata: const PairingMetadata(
-        name: 'Bahandi',
-        description: 'Bahandi wallet for the Citizen Protocol',
+        name: 'Citizen Wallet',
+        description: 'Citizen Protocol mobile wallet',
         url: 'https://greenarmor.github.io/citizen/',
         icons: ['https://greenarmor.github.io/citizen/icons/icon-192.png'],
         redirect: Redirect(
