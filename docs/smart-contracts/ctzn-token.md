@@ -1,6 +1,6 @@
 # CTZN Token
 
-CTZN is a **soulbound (non-transferable) identity token** module built on the Citizen WASM execution engine. Once minted to a recipient, a CTZN token is permanently bound to that identity - the `transfer` operation is always rejected.
+CTZN is a **soulbound (non-transferable) identity token** module built on the Civitas WASM execution engine. Once minted to a recipient, a CTZN token is permanently bound to that identity - the `transfer` operation is always rejected.
 
 **Location:** `citizen-protocol/modules/ctzn-token/`
 

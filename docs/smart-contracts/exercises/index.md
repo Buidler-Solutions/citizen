@@ -1,6 +1,6 @@
 # Exercises
 
-Hands-on practice exercises for mastering Citizen smart contract development. Each exercise builds on concepts from the guides and introduces progressively more complex patterns.
+Hands-on practice exercises for mastering Civitas smart contract development. Each exercise builds on concepts from the guides and introduces progressively more complex patterns.
 
 ## How to use these exercises
 

@@ -1,6 +1,6 @@
 # Project Structure
 
-Every Citizen smart contract is a self-contained Rust crate that compiles to `cdylib` (C-compatible dynamic library → WASM). This page explains every part of the setup.
+Every Civitas smart contract is a self-contained Rust crate that compiles to `cdylib` (C-compatible dynamic library → WASM). This page explains every part of the setup.
 
 ## Directory layout
 

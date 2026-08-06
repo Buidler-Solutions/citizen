@@ -1,6 +1,6 @@
 # Error Handling
 
-Citizen contracts use Rust's `Result<T>` type for error handling. The SDK's `ContractError` enum covers all common failure cases, and errors are automatically serialized to JSON for the caller.
+Civitas contracts use Rust's `Result<T>` type for error handling. The SDK's `ContractError` enum covers all common failure cases, and errors are automatically serialized to JSON for the caller.
 
 ## Error types
 

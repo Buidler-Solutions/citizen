@@ -1,6 +1,6 @@
-# Citizen Contract SDK
+# Civitas SDK
 
-Write Citizen Protocol smart contracts in Rust with Solidity-like ergonomics. No manual JSON parsing, no pointer arithmetic, no buffer management.
+Write Civitas smart contracts in Rust with Solidity-like ergonomics. No manual JSON parsing, no pointer arithmetic, no buffer management.
 
 ## Why?
 

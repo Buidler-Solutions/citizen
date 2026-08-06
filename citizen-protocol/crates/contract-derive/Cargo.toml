@@ -3,7 +3,7 @@ name = "citizen-contract-derive"
 version = "0.1.0"
 edition = "2021"
 license = "Apache-2.0"
-description = "Proc macros for the Citizen Contract SDK"
+description = "Proc macros for the Civitas SDK"
 
 [lib]
 proc-macro = true

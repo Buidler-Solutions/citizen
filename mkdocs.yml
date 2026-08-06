@@ -93,7 +93,7 @@ nav:
       - Backup Vault: wallets/backup.md
   - SDK:
       - TypeScript SDK: sdk/typescript.md
-  - Smart Contracts:
+  - Civitas:
       - Overview: smart-contracts/index.md
       - Installation: smart-contracts/installation.md
       - Hello World: smart-contracts/hello-world.md
