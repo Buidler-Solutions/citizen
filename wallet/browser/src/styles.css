@@ -285,6 +285,34 @@ body {
   gap: 0.52rem;
 }
 
+.sub-tab-bar {
+  display: flex;
+  gap: 0;
+  border-bottom: 1px solid #3d5ea5;
+  margin-bottom: 1rem;
+}
+
+.sub-tab {
+  flex: 1;
+  padding: 0.6rem 1rem;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: #8899bb;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.sub-tab:hover {
+  color: #cce0ff;
+}
+
+.sub-tab.active {
+  color: #eaf2ff;
+  border-bottom-color: #5599ff;
+}
+
 .activity-item {
   border: 1px solid #314b7f;
   border-radius: 10px;

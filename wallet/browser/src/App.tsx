@@ -166,7 +166,7 @@ type ComposeMultisigDraft = {
   collected_signatures: ComposeDraftCollectedSignature[];
 };
 
-type TabId = 'activity' | 'decrypt' | 'compose' | 'vault' | 'security' | 'profile' | 'cards';
+type TabId = 'activity' | 'operations' | 'vault' | 'security' | 'profile' | 'cards';
 
 type NetworkId = 'mainnet' | 'futurenet' | 'testnet' | 'localnode';
 type MnemonicWordCount = 12 | 24;
@@ -208,8 +208,7 @@ function buildExplorerDataHashSearchHref(network: NetworkId, receiptHash: string
 
 const NAV_ITEMS: { id: TabId; label: string }[] = [
   { id: 'activity', label: 'Activity' },
-  { id: 'decrypt', label: 'Decrypt' },
-  { id: 'compose', label: 'Compose' },
+  { id: 'operations', label: 'Operations' },
   { id: 'vault', label: 'Vault' },
   { id: 'security', label: 'Security' },
   { id: 'profile', label: 'Profile' },
@@ -558,6 +557,7 @@ function CitizenCard() {
 export function App() {
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<TabId>('activity');
+  const [operationSubTab, setOperationSubTab] = useState<'compose' | 'decrypt'>('compose');
   const [menuOpen, setMenuOpen] = useState(false);
   const [hasStoredWallet, setHasStoredWallet] = useState(false);
   const [activity, setActivity] = useState<ActivityEntry[]>([]);
@@ -1975,7 +1975,24 @@ export function App() {
             </>
           ) : null}
 
-          {activeTab === 'compose' ? (
+          {activeTab === 'operations' ? (
+            <>
+              <nav className="sub-tab-bar">
+                <button
+                  className={operationSubTab === 'compose' ? 'sub-tab active' : 'sub-tab'}
+                  onClick={() => setOperationSubTab('compose')}
+                >
+                  Compose
+                </button>
+                <button
+                  className={operationSubTab === 'decrypt' ? 'sub-tab active' : 'sub-tab'}
+                  onClick={() => setOperationSubTab('decrypt')}
+                >
+                  Decrypt
+                </button>
+              </nav>
+
+              {operationSubTab === 'compose' ? (
             <>
               <article className="request-card">
                 <h2>Compose and sign transaction</h2>
@@ -2114,7 +2131,7 @@ export function App() {
             </>
           ) : null}
 
-          {activeTab === 'decrypt' ? (
+          {operationSubTab === 'decrypt' ? (
             <article className="request-card">
               <h2>Decrypt transaction ciphertext</h2>
               <p className="meta-text">
@@ -2165,6 +2182,8 @@ export function App() {
                 ) : null}
               </div>
             </article>
+          ) : null}
+          </>
           ) : null}
 
           {activeTab === 'vault' ? (
