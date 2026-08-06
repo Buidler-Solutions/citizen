@@ -1,6 +1,6 @@
 # Host Functions
 
-Civitas contracts interact with the blockchain through **host functions** — WASM imports provided by the node's execution engine. The SDK wraps all 10 host functions with ergonomic Rust bindings.
+Citizen contracts interact with the blockchain through **host functions** — WASM imports provided by the node's execution engine. The SDK wraps all 10 host functions with ergonomic Rust bindings.
 
 ## Overview
 

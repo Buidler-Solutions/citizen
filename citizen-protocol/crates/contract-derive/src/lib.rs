@@ -1,4 +1,4 @@
-//! Proc macros for the Civitas SDK.
+//! Proc macros for the Citizen Contract SDK.
 //!
 //! The main macro is `#[contract]`, applied to a module containing
 //! public functions. Each `pub fn` becomes a dispatchable operation
@@ -8,7 +8,7 @@ use proc_macro::TokenStream;
 use quote::quote;
 use syn::{parse_macro_input, ItemMod, Item, Visibility};
 
-/// Mark a module as a Civitas smart contract.
+/// Mark a module as a Citizen smart contract.
 ///
 /// Every `pub fn` in the module becomes a dispatchable operation.
 /// The function name is used as the operation name.

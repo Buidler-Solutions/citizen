@@ -1,6 +1,6 @@
 # Authorization
 
-Civitas contracts have three built-in authorization mechanisms. These are the Solidity `modifier` equivalents.
+Citizen contracts have three built-in authorization mechanisms. These are the Solidity `modifier` equivalents.
 
 ## 1. Signature verification
 

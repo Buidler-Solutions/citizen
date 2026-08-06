@@ -1,6 +1,6 @@
 # Testing
 
-Testing Civitas smart contracts involves two levels: unit testing individual logic functions, and integration testing against a running node.
+Testing Citizen smart contracts involves two levels: unit testing individual logic functions, and integration testing against a running node.
 
 ## Unit testing
 
