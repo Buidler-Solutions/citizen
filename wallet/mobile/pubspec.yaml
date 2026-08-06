@@ -1,5 +1,5 @@
 name: citizen_wallet_mobile
-description: Citizen Protocol mobile wallet — client-facing wallet for signing, decryption, vault management, and direct submit.
+description: Bahandi — mobile wallet for the Citizen Protocol. Client-facing wallet for signing, decryption, vault management, and direct submit.
 publish_to: 'none'
 version: 0.1.0+1
 

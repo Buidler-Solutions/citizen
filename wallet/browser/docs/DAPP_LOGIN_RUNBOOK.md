@@ -1,4 +1,4 @@
-# Citizen Browser Wallet Runbook: Citizen Wallet dApp Login
+# Bahandi Browser Extension Runbook: dApp Login
 
 For cross-component developer documentation (backend, API, extension, operations), see:
 
@@ -120,7 +120,7 @@ await fetch("/auth/verify-typed", {
 
 ---
 
-## Chain Management (Citizen Wallet)
+## Chain Management (Bahandi)
 
 Use `wallet_switchCtznChain` with configured Citizen chain IDs:
 

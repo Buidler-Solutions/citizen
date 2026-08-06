@@ -51,7 +51,7 @@ class _ConnectScreenState extends ConsumerState<ConnectScreen> {
           ),
           const SizedBox(height: 8),
           Text(
-            'Paste a WalletConnect URI or scan a QR code from a dApp that supports Citizen Protocol.',
+            'Paste a WalletConnect URI or scan a QR code from a dApp that supports the Citizen Protocol.',
             textAlign: TextAlign.center,
             style: TextStyle(
               color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5),

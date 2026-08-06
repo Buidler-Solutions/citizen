@@ -18,7 +18,7 @@ function request(method: string, params?: unknown[]): Promise<unknown> {
       pending.delete(id);
       reject(
         new Error(
-          'Citizen Wallet request timed out waiting for extension response. '
+          'Bahandi request timed out waiting for extension response. '
           + 'Reload the page and confirm the extension is installed, unlocked, and enabled for this site.',
         ),
       );
