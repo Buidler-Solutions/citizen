@@ -78,7 +78,32 @@ async fn main() -> anyhow::Result<()> {
     let ledger = Arc::new(Ledger::new(storage.clone(), key_registry));
     ledger.bootstrap_namespaces(config.namespaces.clone());
 
-    if storage.latest_height()? == 0 && storage.get_block(0)?.is_none() {
+    let genesis_exists = storage.get_block(0)?.is_some();
+
+    if genesis_exists {
+        let genesis_block = storage
+            .get_block(0)?
+            .ok_or_else(|| anyhow::anyhow!("blockchain data exists but genesis block is missing"))?;
+        let stored_mode = genesis_block
+            .entries
+            .first()
+            .and_then(|entry| entry.payload.get("blockchain_mode"))
+            .and_then(|v| v.as_str())
+            .unwrap_or("governance_first");
+        let current_mode = match config.blockchain_mode {
+            BlockchainMode::GovernanceFirst => "governance_first",
+            BlockchainMode::Permissionless => "permissionless",
+        };
+        if stored_mode != current_mode {
+            return Err(anyhow::anyhow!(
+                "blockchain_mode mismatch: chain was created as '{}' but config specifies '{}'. \
+                 To change the mode, reset the blockchain by deleting the data directory and restarting from genesis.",
+                stored_mode, current_mode
+            ));
+        }
+    }
+
+    if !genesis_exists {
         let genesis_entry = LedgerEntry {
             entry_id: Uuid::new_v4(),
             namespace: "genesis.declaration".to_string(),
@@ -86,6 +111,10 @@ async fn main() -> anyhow::Result<()> {
             object_id: "genesis:0".to_string(),
             payload: json!({
                 "message": "You don't fight corruption with anger. You defeat it with awareness. Be the Change!",
+                "blockchain_mode": match config.blockchain_mode {
+                    BlockchainMode::GovernanceFirst => "governance_first",
+                    BlockchainMode::Permissionless => "permissionless",
+                },
             }),
             author: "greenarmor".to_string(),
             signature: "genesis".to_string(),
@@ -119,7 +148,7 @@ async fn main() -> anyhow::Result<()> {
             entries: vec![genesis_entry],
         };
         storage.store_block(genesis)?;
-        tracing::info!("genesis block stored: proposer=greenarmor message=\"You don't fight corruption with anger. You defeat it with awareness. Be the Change!\" height=0");
+        tracing::info!("genesis block stored: proposer=greenarmor mode={:?} msg=\"You don't fight corruption with anger. You defeat it with awareness. Be the Change!\" height=0", config.blockchain_mode);
     }
 
     let api_server = if let Some(minio_config) = config.offchain_minio_config() {
