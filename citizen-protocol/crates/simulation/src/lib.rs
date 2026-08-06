@@ -54,6 +54,7 @@ impl SimulationHarness {
         let consensus_config = ConsensusConfig {
             block_time_millis: 1_000,
             max_entries_per_block: 512,
+            max_pending_gossiped_entries: 10_000,
             quorum_bps: 6_667,
             epoch_length_blocks: 100,
             heartbeat_interval_millis: 500,

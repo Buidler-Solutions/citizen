@@ -258,6 +258,7 @@ pub struct PendingReplacement {
 pub struct ConsensusConfig {
     pub block_time_millis: u64,
     pub max_entries_per_block: usize,
+    pub max_pending_gossiped_entries: usize,
     pub quorum_bps: u32,
     pub epoch_length_blocks: u64,
     pub heartbeat_interval_millis: u64,

@@ -227,6 +227,7 @@ async fn main() -> anyhow::Result<()> {
             ConsensusConfig {
                 block_time_millis: config.block_time_millis,
                 max_entries_per_block: 1024,
+                max_pending_gossiped_entries: config.max_pending_gossiped_entries,
                 quorum_bps: config.quorum_bps,
                 epoch_length_blocks: config.epoch_length_blocks,
                 heartbeat_interval_millis: config.heartbeat_interval_millis,
@@ -367,12 +368,18 @@ struct NodeConfig {
     api_auth_required: bool,
     #[serde(default)]
     api_require_builder_credit_for_all_writes: bool,
+    #[serde(default = "default_mempool_cap")]
+    max_pending_gossiped_entries: usize,
     #[serde(default)]
     blockchain_mode: BlockchainMode,
     #[serde(default = "default_api_write_rpm")]
     api_max_write_requests_per_minute: usize,
     #[serde(default)]
     api_clients: Vec<ApiClientConfig>,
+    #[serde(default)]
+    namespace_rate_limits: HashMap<String, usize>,
+    #[serde(default)]
+    namespace_max_entry_bytes: HashMap<String, usize>,
     #[serde(default)]
     api_offchain_encrypted_files_v1_enabled: bool,
     #[serde(default)]
@@ -475,6 +482,9 @@ impl NodeConfig {
             write_enabled: self.node_role != NodeRole::Observer,
             auth_required,
             max_write_requests_per_minute: self.api_max_write_requests_per_minute,
+            namespace_rate_limits: self.namespace_rate_limits.clone(),
+            namespace_max_entry_bytes: self.namespace_max_entry_bytes.clone(),
+            max_pending_entries: self.max_pending_gossiped_entries,
             offchain_encrypted_files_v1_enabled: self.api_offchain_encrypted_files_v1_enabled,
             enforce_manifest_payload_binding: false,
             require_builder_credit_for_all_writes: require_builder_credit,
@@ -663,9 +673,12 @@ impl Default for NodeConfig {
             api_port: default_api_port(),
             api_auth_required: false,
             api_require_builder_credit_for_all_writes: false,
+            max_pending_gossiped_entries: default_mempool_cap(),
             blockchain_mode: BlockchainMode::default(),
             api_max_write_requests_per_minute: default_api_write_rpm(),
             api_clients: Vec::new(),
+            namespace_rate_limits: HashMap::new(),
+            namespace_max_entry_bytes: HashMap::new(),
             api_offchain_encrypted_files_v1_enabled: false,
             api_offchain_minio: None,
             data_dir: Some(PathBuf::from("data")),
@@ -715,6 +728,10 @@ fn default_liveness_threshold() -> u64 {
 
 fn default_api_write_rpm() -> usize {
     120
+}
+
+fn default_mempool_cap() -> usize {
+    10_000
 }
 
 fn default_true() -> bool {

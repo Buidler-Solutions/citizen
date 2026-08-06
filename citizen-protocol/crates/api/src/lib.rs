@@ -19,6 +19,7 @@ use ed25519_dalek::Signature;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
+use std::collections::HashMap;
 use std::collections::HashSet;
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -40,6 +41,9 @@ pub struct ApiEdgeConfig {
     pub write_enabled: bool,
     pub auth_required: bool,
     pub max_write_requests_per_minute: usize,
+    pub namespace_rate_limits: HashMap<String, usize>,
+    pub namespace_max_entry_bytes: HashMap<String, usize>,
+    pub max_pending_entries: usize,
     pub offchain_encrypted_files_v1_enabled: bool,
     pub enforce_manifest_payload_binding: bool,
     pub require_builder_credit_for_all_writes: bool,
@@ -76,6 +80,9 @@ impl Default for ApiEdgeConfig {
             write_enabled: true,
             auth_required: false,
             max_write_requests_per_minute: 120,
+            namespace_rate_limits: HashMap::new(),
+            namespace_max_entry_bytes: HashMap::new(),
+            max_pending_entries: 10_000,
             offchain_encrypted_files_v1_enabled: false,
             enforce_manifest_payload_binding: false,
             require_builder_credit_for_all_writes: false,
@@ -947,6 +954,12 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
         {
             return response;
         }
+        if let Err(response) = Self::check_namespace_rate_limit(&edge, &entry.namespace).await {
+            return response;
+        }
+        if let Err(response) = Self::check_namespace_entry_size(&edge, &entry) {
+            return response;
+        }
         if let Err(response) =
             Self::authorize_builder_credit_gate(Arc::clone(&edge), Arc::clone(&ledger), &entry)
         {
@@ -1012,6 +1025,12 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
         if let Err(response) =
             Self::authorize_write(Arc::clone(&edge), &headers, "envelopes.submit").await
         {
+            return response;
+        }
+        if let Err(response) = Self::check_namespace_rate_limit(&edge, &envelope.payload.namespace).await {
+            return response;
+        }
+        if let Err(response) = Self::check_namespace_entry_size(&edge, &envelope.payload) {
             return response;
         }
         if let Err(response) = Self::authorize_builder_credit_gate(
@@ -4541,6 +4560,64 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
         Ok(())
     }
 
+    async fn check_namespace_rate_limit(
+        edge: &ApiEdgeState,
+        namespace: &str,
+    ) -> Result<(), (StatusCode, Json<serde_json::Value>)> {
+        let limit = edge
+            .config
+            .namespace_rate_limits
+            .get(namespace)
+            .copied()
+            .unwrap_or(edge.config.max_write_requests_per_minute);
+        if limit == 0 {
+            return Ok(());
+        }
+        let now = Utc::now().timestamp();
+        let mut windows = edge.write_windows.lock().await;
+        let key = format!("ns:{}", namespace);
+        let entries = windows.entry(key).or_default();
+        entries.retain(|timestamp| *timestamp > now - 60);
+        if entries.len() >= limit {
+            return Err((
+                StatusCode::TOO_MANY_REQUESTS,
+                Json(serde_json::json!({
+                    "error": "namespace write rate limit exceeded",
+                    "namespace": namespace,
+                    "limit": limit,
+                })),
+            ));
+        }
+        entries.push(now);
+        Ok(())
+    }
+
+    fn check_namespace_entry_size(
+        edge: &ApiEdgeState,
+        entry: &LedgerEntry,
+    ) -> Result<(), (StatusCode, Json<serde_json::Value>)> {
+        let max_bytes = edge
+            .config
+            .namespace_max_entry_bytes
+            .get(&entry.namespace)
+            .copied();
+        if let Some(max) = max_bytes {
+            let size = serde_json::to_vec(entry).map(|v| v.len()).unwrap_or(0);
+            if size > max {
+                return Err((
+                    StatusCode::PAYLOAD_TOO_LARGE,
+                    Json(serde_json::json!({
+                        "error": "entry_too_large",
+                        "namespace": entry.namespace,
+                        "size_bytes": size,
+                        "max_bytes": max,
+                    })),
+                ));
+            }
+        }
+        Ok(())
+    }
+
     fn offchain_feature_disabled_response() -> (StatusCode, Json<serde_json::Value>) {
         (
             StatusCode::SERVICE_UNAVAILABLE,
@@ -6598,6 +6675,7 @@ mod tests {
             enforce_manifest_payload_binding: false,
             require_builder_credit_for_all_writes: false,
             clients: BTreeMap::new(),
+            ..ApiEdgeConfig::default()
         })
         .router();
 
@@ -6651,6 +6729,7 @@ mod tests {
             enforce_manifest_payload_binding: false,
             require_builder_credit_for_all_writes: false,
             clients,
+            ..ApiEdgeConfig::default()
         })
         .router();
 
@@ -6681,6 +6760,7 @@ mod tests {
             enforce_manifest_payload_binding: false,
             require_builder_credit_for_all_writes: true,
             clients: BTreeMap::new(),
+            ..ApiEdgeConfig::default()
         })
         .router();
 
@@ -6711,6 +6791,7 @@ mod tests {
             enforce_manifest_payload_binding: false,
             require_builder_credit_for_all_writes: true,
             clients: BTreeMap::new(),
+            ..ApiEdgeConfig::default()
         })
         .router();
 
@@ -6817,6 +6898,7 @@ mod tests {
             enforce_manifest_payload_binding: false,
             require_builder_credit_for_all_writes: false,
             clients,
+            ..ApiEdgeConfig::default()
         })
         .router();
 
@@ -6853,6 +6935,7 @@ mod tests {
             enforce_manifest_payload_binding: false,
             require_builder_credit_for_all_writes: false,
             clients,
+            ..ApiEdgeConfig::default()
         })
         .router();
 
@@ -6906,6 +6989,7 @@ mod tests {
             enforce_manifest_payload_binding: false,
             require_builder_credit_for_all_writes: false,
             clients,
+            ..ApiEdgeConfig::default()
         });
 
         let app = server.router();
@@ -6951,6 +7035,7 @@ mod tests {
             enforce_manifest_payload_binding: false,
             require_builder_credit_for_all_writes: false,
             clients: BTreeMap::new(),
+            ..ApiEdgeConfig::default()
         })
         .router();
 
@@ -11911,6 +11996,7 @@ mod tests {
             enforce_manifest_payload_binding: false,
             require_builder_credit_for_all_writes: false,
             clients,
+            ..ApiEdgeConfig::default()
         })
         .router();
 
@@ -11957,6 +12043,7 @@ mod tests {
             enforce_manifest_payload_binding: false,
             require_builder_credit_for_all_writes: false,
             clients,
+            ..ApiEdgeConfig::default()
         })
         .router();
 
