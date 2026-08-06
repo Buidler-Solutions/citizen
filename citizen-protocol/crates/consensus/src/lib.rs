@@ -379,6 +379,19 @@ where
             }
             ConsensusMessage::NewEntry(entry) => {
                 let entry_id = entry.entry_id.to_string();
+                {
+                    let gossiped = self.gossiped_entries.read();
+                    if gossiped.len() >= self.config.read().max_pending_gossiped_entries
+                        && !gossiped.contains(&entry_id)
+                    {
+                        warn!(
+                            pending = gossiped.len(),
+                            max = self.config.read().max_pending_gossiped_entries,
+                            "mempool full, dropping gossiped entry"
+                        );
+                        return Ok(());
+                    }
+                }
                 self.gossiped_entries.write().insert(entry_id.clone());
                 if self.included_entries.read().contains(&entry_id) {
                     return Ok(());
@@ -1248,6 +1261,7 @@ mod tests {
         let config = ConsensusConfig {
             block_time_millis: 1000,
             max_entries_per_block: 100,
+            max_pending_gossiped_entries: 10_000,
             quorum_bps: 6667,
             epoch_length_blocks: 0,
             heartbeat_interval_millis: 3000,
