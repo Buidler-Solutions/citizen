@@ -1,6 +1,6 @@
-# Citizen Wallet Signer
+# Bahandi (Browser Extension)
 
-Dedicated browser-wallet UX project for transaction/event signing flows.
+Dedicated browser-wallet UX project for transaction/event signing flows on the Citizen Protocol.
 
 ## Seed phrase alignment status vs `citizen-wallet` CLI
 
@@ -42,7 +42,7 @@ The side panel now includes a **Sponsorship draft builder** to generate strict `
 
 ## dApp login support
 
-The injected provider now supports Citizen wallet login patterns for dApps:
+The injected provider now supports Bahandi wallet login patterns for dApps:
 
 ```ts
 const accounts = await window.ctzn.request({ method: "ctzn_requestAccounts" });

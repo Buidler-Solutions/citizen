@@ -107,7 +107,7 @@ class SecurityNotifier extends StateNotifier<SecurityState> {
     }
     try {
       final authenticated = await _localAuth.authenticate(
-        localizedReason: 'Authenticate to unlock your Citizen wallet',
+        localizedReason: 'Authenticate to unlock your Bahandi wallet',
         options: const AuthenticationOptions(
           stickyAuth: true,
           biometricOnly: true,
