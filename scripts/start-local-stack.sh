@@ -7,12 +7,16 @@ cd "$ROOT_DIR"
 echo "=== CITIZEN LOCAL STACK ==="
 echo ""
 
-# ── 1. Kill existing processes ──
-echo "[1/7] stopping existing services..."
+# ── 1. Kill existing citizen processes ──
+echo "[1/7] stopping existing citizen services..."
 pkill -f citizen-node 2>/dev/null || true
-pkill -f "pnpm.*dev" 2>/dev/null || true
-pkill -f "nest start" 2>/dev/null || true
-pkill -f "tsx watch" 2>/dev/null || true
+# Kill only our specific project processes by port or cwd
+lsof -ti:3000 -sTCP:LISTEN | xargs kill 2>/dev/null || true
+lsof -ti:3001 -sTCP:LISTEN | xargs kill 2>/dev/null || true
+lsof -ti:5175 -sTCP:LISTEN | xargs kill 2>/dev/null || true
+lsof -ti:5177 -sTCP:LISTEN | xargs kill 2>/dev/null || true
+lsof -ti:4444 -sTCP:LISTEN | xargs kill 2>/dev/null || true
+lsof -ti:8885 -sTCP:LISTEN | xargs kill 2>/dev/null || true
 sleep 1
 
 # ── 2. Reset triolet from genesis ──
