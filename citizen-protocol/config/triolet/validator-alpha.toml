@@ -8,6 +8,22 @@ data_dir = "data/triolet-alpha"
 bind_addr = "127.0.0.1:9210"
 network_key_rotation_secs = 3600
 
+[namespace_rate_limits]
+"onboarding.interest" = 30
+"forms.commitment" = 30
+"content.article" = 60
+"identity.citizen" = 20
+"identity.kyc" = 20
+"governance.vote" = 50
+"civic.proposal" = 50
+"civic.ballot" = 100
+"audit.procurement" = 60
+"builder.credits" = 20
+
+[namespace_max_entry_bytes]
+"content.article" = 65536
+"forms.commitment" = 16384
+"identity.kyc" = 32768
 
 [quic_tls]
 ca_cert_path = "config/localnet/certs/ca.der"
