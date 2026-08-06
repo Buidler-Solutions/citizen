@@ -460,6 +460,7 @@ pub trait Network: Send + Sync {
     async fn broadcast(&self, message: ConsensusMessage) -> Result<()>;
     async fn unicast(&self, target: &ValidatorId, message: ConsensusMessage) -> Result<()>;
     async fn subscribe(&self) -> Result<mpsc::Receiver<ConsensusMessage>>;
+    async fn update_validator_set(&self, snapshot: ValidatorSetSnapshot);
 }
 
 #[derive(Clone)]
@@ -566,6 +567,10 @@ impl Network for MockNetwork {
             }
         });
         Ok(client_rx)
+    }
+
+    async fn update_validator_set(&self, _snapshot: ValidatorSetSnapshot) {
+        // MockNetwork has no admission control — no-op
     }
 }
 
@@ -779,6 +784,24 @@ impl QuicNetwork {
         let mut peers = self.peers.write().await;
         peers.clear();
         peers.extend(peer_map);
+    }
+
+    pub async fn add_peer(&self, validator_id: ValidatorId, addr: SocketAddr) {
+        self.peers.write().await.insert(validator_id, addr);
+    }
+
+    pub async fn discover_bootstrap(&self, bootstrap_addrs: &[SocketAddr]) {
+        for addr in bootstrap_addrs {
+            tracing::info!(%addr, "dialing bootstrap node");
+            match self.endpoint.connect(*addr, "citizen-quic") {
+                Ok(_conn) => {
+                    tracing::info!(%addr, "bootstrap connection established");
+                }
+                Err(err) => {
+                    tracing::warn!(%addr, %err, "bootstrap dial failed");
+                }
+            }
+        }
     }
 
     fn spawn_accept_loop(&self) {
@@ -1022,5 +1045,9 @@ impl Network for QuicNetwork {
             }
         });
         Ok(client_rx)
+    }
+
+    async fn update_validator_set(&self, snapshot: ValidatorSetSnapshot) {
+        self.admission.update_snapshot(snapshot).await;
     }
 }

@@ -1,6 +1,6 @@
 mod admission;
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::env;
 use std::fs;
 use std::net::{Ipv4Addr, SocketAddr};
@@ -20,9 +20,9 @@ use citizen_network::{
 };
 use citizen_storage::{LedgerStorage, RocksDbStorage};
 use citizen_types::{
-    Block, BlockHeader, CommitProof, ConsensusConfig, EpochState, LedgerEntry, NamespaceRuleset,
-    PrivacyMode, ProtocolError, ValidatorId, ValidatorMetadata, ValidatorPerformance,
-    ValidatorSetSnapshot, ValidatorStatus,
+    BlockchainMode, Block, BlockHeader, CommitProof, ConsensusConfig, EpochState, LedgerEntry,
+    NamespaceRuleset, PrivacyMode, ProtocolError, ValidatorId, ValidatorMetadata,
+    ValidatorPerformance, ValidatorSetSnapshot, ValidatorStatus,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -149,8 +149,10 @@ async fn main() -> anyhow::Result<()> {
             admission_identity,
         ));
 
-        let network = if !config.peers.is_empty() {
-            let peers = config
+        let use_quic = !config.peers.is_empty()
+            || config.blockchain_mode == BlockchainMode::Permissionless;
+        let network = if use_quic {
+            let peers: HashMap<ValidatorId, SocketAddr> = config
                 .peers
                 .iter()
                 .filter_map(|p| {
@@ -160,15 +162,27 @@ async fn main() -> anyhow::Result<()> {
                         .map(|addr| (p.validator_id.clone(), addr))
                 })
                 .collect();
-            Arc::new(NodeNetwork::Quic(QuicNetwork::new(
+            let quic = QuicNetwork::new(
                 config.bind_addr.unwrap_or(default_bind()),
-                peers,
+                peers.clone(),
                 admission,
                 config.validator_id.clone(),
                 verifying_key_hex,
                 Some(keypair.signing_key()),
                 config.quic_tls_config(),
-            )?))
+            )?;
+
+            if config.blockchain_mode == BlockchainMode::Permissionless
+                && !config.bootstrap_nodes.is_empty()
+            {
+                tracing::info!(
+                    bootstrap_count = config.bootstrap_nodes.len(),
+                    "permissionless mode: discovering peers via bootstrap nodes"
+                );
+                quic.discover_bootstrap(&config.bootstrap_nodes).await;
+            }
+
+            Arc::new(NodeNetwork::Quic(quic))
         } else {
             Arc::new(NodeNetwork::Mock(MockNetwork::new(NetworkLatency {
                 min_ms: 20,
@@ -324,6 +338,8 @@ struct NodeConfig {
     api_auth_required: bool,
     #[serde(default)]
     api_require_builder_credit_for_all_writes: bool,
+    #[serde(default)]
+    blockchain_mode: BlockchainMode,
     #[serde(default = "default_api_write_rpm")]
     api_max_write_requests_per_minute: usize,
     #[serde(default)]
@@ -342,6 +358,8 @@ struct NodeConfig {
     validators: Vec<ConfigValidator>,
     #[serde(default)]
     peers: Vec<PeerConfig>,
+    #[serde(default)]
+    bootstrap_nodes: Vec<SocketAddr>,
     #[serde(default = "default_rotation_secs")]
     network_key_rotation_secs: u64,
     #[serde(default = "default_network_id")]
@@ -420,13 +438,17 @@ impl NodeConfig {
                 )
             })
             .collect();
+        let (auth_required, require_builder_credit) = match self.blockchain_mode {
+            BlockchainMode::GovernanceFirst => (self.api_auth_required, self.api_require_builder_credit_for_all_writes),
+            BlockchainMode::Permissionless => (false, false),
+        };
         ApiEdgeConfig {
             write_enabled: self.node_role != NodeRole::Observer,
-            auth_required: self.api_auth_required,
+            auth_required,
             max_write_requests_per_minute: self.api_max_write_requests_per_minute,
             offchain_encrypted_files_v1_enabled: self.api_offchain_encrypted_files_v1_enabled,
             enforce_manifest_payload_binding: false,
-            require_builder_credit_for_all_writes: self.api_require_builder_credit_for_all_writes,
+            require_builder_credit_for_all_writes: require_builder_credit,
             clients,
         }
     }
@@ -612,6 +634,7 @@ impl Default for NodeConfig {
             api_port: default_api_port(),
             api_auth_required: false,
             api_require_builder_credit_for_all_writes: false,
+            blockchain_mode: BlockchainMode::default(),
             api_max_write_requests_per_minute: default_api_write_rpm(),
             api_clients: Vec::new(),
             api_offchain_encrypted_files_v1_enabled: false,
@@ -621,6 +644,7 @@ impl Default for NodeConfig {
             namespaces: default_namespaces(),
             validators: Vec::new(),
             peers: Vec::new(),
+            bootstrap_nodes: Vec::new(),
             network_key_rotation_secs: default_rotation_secs(),
             network_id: default_network_id(),
             quic_tls: None,
@@ -1073,6 +1097,13 @@ impl Network for NodeNetwork {
         match self {
             NodeNetwork::Mock(inner) => inner.subscribe().await,
             NodeNetwork::Quic(inner) => inner.subscribe().await,
+        }
+    }
+
+    async fn update_validator_set(&self, snapshot: ValidatorSetSnapshot) {
+        match self {
+            NodeNetwork::Mock(inner) => inner.update_validator_set(snapshot).await,
+            NodeNetwork::Quic(inner) => inner.update_validator_set(snapshot).await,
         }
     }
 }
