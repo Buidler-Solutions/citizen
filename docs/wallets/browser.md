@@ -1,6 +1,6 @@
 # Browser Extension
 
-Bahandi is the Citizen Protocol's browser extension — a focused signer-keeper for in-browser dApp interactions.
+The Citizen browser extension is a focused signer-keeper for in-browser dApp interactions.
 
 ## Installation
 

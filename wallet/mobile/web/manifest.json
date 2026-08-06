@@ -1,11 +1,11 @@
 {
-    "name": "Bahandi",
-    "short_name": "Bahandi",
+    "name": "citizen_wallet_mobile",
+    "short_name": "citizen_wallet_mobile",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",
     "theme_color": "#0175C2",
-    "description": "Bahandi wallet for the Citizen Protocol.",
+    "description": "A new Flutter project.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

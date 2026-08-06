@@ -1551,8 +1551,8 @@ export function App() {
     return (
       <main className="wallet-root">
         <section className="wallet-frame loading-state" aria-label="wallet loading">
-          <img className="brand-logo loading-logo" src="/icons/icon128.png" alt="Bahandi logo" />
-          <h1>Bahandi</h1>
+          <img className="brand-logo loading-logo" src="/icons/icon128.png" alt="Citizen Wallet logo" />
+          <h1>Citizen Wallet</h1>
           <p>Loading secure signer session…</p>
         </section>
       </main>
@@ -1564,9 +1564,9 @@ export function App() {
       <main className="wallet-root">
         <section className="wallet-frame auth-state" aria-label="wallet onboarding">
           <div className="brand-row centered-brand">
-            <img className="brand-logo" src="/icons/icon128.png" alt="Bahandi logo" />
+            <img className="brand-logo" src="/icons/icon128.png" alt="Citizen Wallet logo" />
             <div>
-              <p className="brand-kicker">Bahandi</p>
+              <p className="brand-kicker">Citizen Protocol</p>
               <h1>Welcome to Signer Wallet</h1>
             </div>
           </div>
@@ -1616,9 +1616,9 @@ export function App() {
       <main className="wallet-root">
         <section className="wallet-frame auth-state" aria-label="wallet unlock">
           <div className="brand-row centered-brand">
-            <img className="brand-logo" src="/icons/icon128.png" alt="Bahandi logo" />
+            <img className="brand-logo" src="/icons/icon128.png" alt="Citizen Wallet logo" />
             <div>
-              <p className="brand-kicker">Bahandi</p>
+              <p className="brand-kicker">Citizen Protocol</p>
               <h1>{needsPasswordSetup ? 'Set wallet password' : 'Unlock wallet'}</h1>
             </div>
           </div>
@@ -1653,9 +1653,9 @@ export function App() {
         <header className="wallet-header">
           <div className="top-nav">
             <div className="brand-row no-margin">
-              <img className="brand-logo" src="/icons/icon128.png" alt="Bahandi logo" />
+              <img className="brand-logo" src="/icons/icon128.png" alt="Citizen Wallet logo" />
               <div>
-                <p className="brand-kicker">Bahandi</p>
+                <p className="brand-kicker">Citizen Protocol</p>
                 <h1>Signer Wallet</h1>
               </div>
             </div>

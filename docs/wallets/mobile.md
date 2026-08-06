@@ -1,6 +1,6 @@
 # Mobile Wallet
 
-Bahandi is the Citizen Protocol's Flutter-based mobile wallet for iOS and Android, providing native wallet UX with WalletConnect dApp integration.
+The Citizen mobile wallet is a Flutter-based app for iOS and Android that provides native wallet UX with WalletConnect dApp integration.
 
 ## Installation
 

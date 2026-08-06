@@ -45,7 +45,7 @@ class _CitizenWalletAppState extends ConsumerState<CitizenWalletApp> {
   Widget build(BuildContext context) {
     final router = ref.watch(appRouterProvider);
     return MaterialApp.router(
-      title: 'Bahandi',
+      title: 'Citizen Wallet',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.dark(),
       routerConfig: router,
