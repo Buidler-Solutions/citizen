@@ -222,6 +222,14 @@ pub struct NamespaceRule {
     pub config: Value,
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum BlockchainMode {
+    #[default]
+    GovernanceFirst,
+    Permissionless,
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ValidatorSetSnapshot {
     pub height: BlockHeight,

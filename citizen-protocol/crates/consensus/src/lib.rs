@@ -9,7 +9,7 @@ use citizen_storage::LedgerStorage;
 use citizen_types::{
     Block, BlockHeader, CommitProof, ConsensusConfig, GovernanceAction,
     LedgerEntry, PendingReplacement, ProtocolError, ValidatorId,
-    ValidatorSetSnapshot, ValidatorStatus,
+    ValidatorMetadata, ValidatorPerformance, ValidatorSetSnapshot, ValidatorStatus,
 };
 use ed25519_dalek::Signature;
 use parking_lot::RwLock;
@@ -323,6 +323,35 @@ where
                 match &proposal.proposal_type {
                     GovernanceAction::UpdateParameter(name, value) => {
                         self.apply_runtime_parameter(name, value)?;
+                    }
+                    GovernanceAction::AddValidator(request) => {
+                        let mut snapshot = self.validator_set.write();
+                        if !snapshot.validators.contains_key(&request.candidate_id) {
+                            snapshot.validators.insert(
+                                request.candidate_id.clone(),
+                                ValidatorMetadata {
+                                    validator_id: request.candidate_id.clone(),
+                                    public_key: request.public_key.clone(),
+                                    anchors: request.anchors.clone(),
+                                    joined_at: request.submitted_at,
+                                    status: ValidatorStatus::Active,
+                                    performance: ValidatorPerformance {
+                                        uptime_bps: 0,
+                                        missed_prevotes: 0,
+                                    },
+                                },
+                            );
+                            self.ledger.update_validator_set(snapshot.clone())?;
+                            info!(candidate = %request.candidate_id, "validator admitted via governance");
+                        }
+                    }
+                    GovernanceAction::RemoveValidator(request) => {
+                        let mut snapshot = self.validator_set.write();
+                        if let Some(meta) = snapshot.validators.get_mut(&request.validator_id) {
+                            meta.status = ValidatorStatus::Suspended;
+                            self.ledger.update_validator_set(snapshot.clone())?;
+                            info!(validator = %request.validator_id, "validator suspended via governance");
+                        }
                     }
                     _ => {}
                 }
