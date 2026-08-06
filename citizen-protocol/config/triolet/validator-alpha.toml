@@ -286,4 +286,20 @@ writers = []
 [[namespaces.validators]]
 name = "allowed_actions"
 config.actions = ["REGISTER_MODULE", "ACTIVATE_MODULE", "EXECUTE_MODULE", "STATE_WRITE"]
+[[namespaces.validators]]
+name = "wasm_runtime_policy"
+config.allowed_module_classes = ["governance", "policy-guard", "deterministic-indexer", "receipt-verifier"]
+config.required_governance_approvals = 1
 
+[[namespaces]]
+descriptor.namespace = "governance"
+descriptor.version = 1
+descriptor.rules_hash = "sha256:governance-approval-v1"
+descriptor.governed_by = "governance.vote"
+writers = []
+[[namespaces.validators]]
+name = "require_signature"
+config = {}
+[[namespaces.validators]]
+name = "allowed_actions"
+config.actions = ["PROPOSE", "VOTE", "APPROVED", "REJECTED"]

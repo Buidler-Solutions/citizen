@@ -502,6 +502,7 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
         let builder_credits_ledger = Arc::clone(&self.ledger);
         let asset_positions_ledger = Arc::clone(&self.ledger);
         let module_runtime_ledger = Arc::clone(&self.ledger);
+        let module_execute_ledger = Arc::clone(&self.ledger);
         let interop_status_ledger = Arc::clone(&self.ledger);
         let governance_proposals_ledger = Arc::clone(&self.ledger);
         let civic_proposals_ledger = Arc::clone(&self.ledger);
@@ -709,6 +710,13 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
                 get(move |Path(module_id): Path<String>| {
                     let ledger = Arc::clone(&module_runtime_ledger);
                     async move { Self::handle_get_module_runtime(ledger, module_id).await }
+                }),
+            )
+            .route(
+                "/api/v1/modules/:module_id/execute",
+                post(move |Path(module_id): Path<String>, Json(body): Json<serde_json::Value>| {
+                    let ledger = Arc::clone(&module_execute_ledger);
+                    async move { Self::handle_module_execute(ledger, module_id, body).await }
                 }),
             )
             .route(
@@ -3367,6 +3375,49 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
         )
     }
 
+    async fn handle_module_execute(
+        ledger: Arc<Ledger<S>>,
+        module_id: String,
+        body: serde_json::Value,
+    ) -> (StatusCode, Json<serde_json::Value>) {
+        let gas_limit = body
+            .get("gas_limit")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(1_000_000);
+
+        let params_json = serde_json::to_string(&body).unwrap_or_else(|_| "{}".to_string());
+
+        match ledger.execute_wasm_module(&module_id, &params_json, gas_limit) {
+            Ok(result) => {
+                let output = result
+                    .return_value
+                    .as_ref()
+                    .and_then(|bytes| serde_json::from_slice::<serde_json::Value>(bytes).ok())
+                    .unwrap_or(serde_json::json!({"raw": result.return_value}));
+
+                (
+                    StatusCode::OK,
+                    Json(serde_json::json!({
+                        "module_id": module_id,
+                        "success": result.success,
+                        "result": output,
+                        "gas_consumed": result.gas_consumed,
+                        "logs": result.logs,
+                        "error": result.error,
+                    })),
+                )
+            }
+            Err(e) => (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({
+                    "module_id": module_id,
+                    "success": false,
+                    "error": e.to_string(),
+                })),
+            ),
+        }
+    }
+
     async fn handle_get_interop_status(
         ledger: Arc<Ledger<S>>,
         object_id: String,
@@ -4041,6 +4092,37 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
         ledger: Arc<Ledger<S>>,
         did: String,
     ) -> (StatusCode, Json<serde_json::Value>) {
+        // Try smart contract first (admin-registry module)
+        let params = serde_json::json!({"operation": "check_admin", "did": &did});
+        if let Ok(result) = ledger.execute_wasm_module(
+            "admin-registry",
+            &serde_json::to_string(&params).unwrap_or_default(),
+            500_000,
+        ) {
+            if result.success {
+                if let Some(output) = result.return_value.as_ref().and_then(|bytes| {
+                    serde_json::from_slice::<serde_json::Value>(bytes).ok()
+                }) {
+                    let is_admin = output.get("is_admin").and_then(|v| v.as_bool()).unwrap_or(false);
+                    let role = output.get("role").and_then(|v| v.as_str()).unwrap_or("admin");
+                    let scope = output.get("scope").and_then(|v| v.as_str()).unwrap_or("national");
+                    let revoked = output.get("revoked").and_then(|v| v.as_bool()).unwrap_or(false);
+                    return (
+                        StatusCode::OK,
+                        Json(serde_json::json!({
+                            "did": did,
+                            "is_admin": is_admin,
+                            "role": if is_admin { serde_json::json!(role) } else { serde_json::Value::Null },
+                            "scope": if is_admin { serde_json::json!(scope) } else { serde_json::Value::Null },
+                            "revoked": revoked,
+                            "source": "smart-contract",
+                        })),
+                    );
+                }
+            }
+        }
+
+        // Fallback: native namespace-based admin check (civic.admin)
         let entries = ledger
             .storage()
             .namespace_entries(&"civic.admin".to_string())
@@ -4088,6 +4170,7 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
                 "assigned_at": latest.payload.get("assigned_at").and_then(|v| v.as_str()),
                 "valid_until": valid_until,
                 "revoked": is_revoked,
+                "source": "namespace",
             })),
         )
     }
@@ -4095,6 +4178,34 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
     async fn handle_kyc_public_key(
         ledger: Arc<Ledger<S>>,
     ) -> (StatusCode, Json<serde_json::Value>) {
+        // Try smart contract first (admin-registry module)
+        let params = serde_json::json!({"operation": "get_kyc_key"});
+        if let Ok(result) = ledger.execute_wasm_module(
+            "admin-registry",
+            &serde_json::to_string(&params).unwrap_or_default(),
+            500_000,
+        ) {
+            if result.success {
+                if let Some(output) = result.return_value.as_ref().and_then(|bytes| {
+                    serde_json::from_slice::<serde_json::Value>(bytes).ok()
+                }) {
+                    let pk = output.get("public_key").and_then(|v| v.as_str());
+                    if let Some(key) = pk {
+                        if !key.is_empty() {
+                            return (
+                                StatusCode::OK,
+                                Json(serde_json::json!({
+                                    "public_key": key,
+                                    "source": "smart-contract",
+                                })),
+                            );
+                        }
+                    }
+                }
+            }
+        }
+
+        // Fallback: native namespace-based KYC key (civic.admin)
         let entries = ledger
             .storage()
             .namespace_entries(&"civic.admin".to_string())
@@ -4113,6 +4224,7 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
                     Json(serde_json::json!({
                         "public_key": pk,
                         "set_by": entry.author,
+                        "source": "namespace",
                     })),
                 )
             }

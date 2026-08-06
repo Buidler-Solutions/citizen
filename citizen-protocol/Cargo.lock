@@ -743,6 +743,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "citizen-contract-derive"
+version = "0.1.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.119",
+]
+
+[[package]]
+name = "citizen-contract-sdk"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "citizen-crypto"
 version = "0.1.0"
 dependencies = [
@@ -843,6 +860,7 @@ dependencies = [
  "citizen-api",
  "citizen-consensus",
  "citizen-crypto",
+ "citizen-execution",
  "citizen-governance",
  "citizen-ledger",
  "citizen-network",

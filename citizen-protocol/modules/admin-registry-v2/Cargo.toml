@@ -1,0 +1,21 @@
+[package]
+name = "admin-registry-v2"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib"]
+name = "admin_registry_v2"
+
+[dependencies]
+citizen-contract-sdk = { path = "../../crates/contract-sdk" }
+citizen-contract-derive = { path = "../../crates/contract-derive" }
+serde = { version = "1", default-features = false, features = ["derive", "alloc"] }
+serde_json = { version = "1", default-features = false, features = ["alloc"] }
+
+[profile.release]
+opt-level = "s"
+lto = true
+strip = "none"
+
+[workspace]

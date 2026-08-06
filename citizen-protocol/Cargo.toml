@@ -13,6 +13,8 @@ members = [
     "crates/execution",
     "crates/wallet",
     "wallet/cli",
+    "crates/contract-sdk",
+    "crates/contract-derive",
     "tools/validator-keygen",
 ]
 resolver = "2"

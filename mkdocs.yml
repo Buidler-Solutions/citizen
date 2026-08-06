@@ -95,7 +95,31 @@ nav:
       - TypeScript SDK: sdk/typescript.md
   - Smart Contracts:
       - Overview: smart-contracts/index.md
-      - CTZN Token: smart-contracts/ctzn-token.md
+      - Installation: smart-contracts/installation.md
+      - Hello World: smart-contracts/hello-world.md
+      - Project Structure: smart-contracts/project-structure.md
+      - Storage: smart-contracts/storage.md
+      - Context & Parameters: smart-contracts/context.md
+      - Authorization: smart-contracts/authorization.md
+      - Events: smart-contracts/events.md
+      - Error Handling: smart-contracts/errors.md
+      - Responses: smart-contracts/responses.md
+      - Host Functions: smart-contracts/host-functions.md
+      - Cross-Contract Calls: smart-contracts/cross-contract.md
+      - Deployment: smart-contracts/deployment.md
+      - Testing: smart-contracts/testing.md
+      - Best Practices: smart-contracts/best-practices.md
+      - Cheatsheet: smart-contracts/cheatsheet.md
+      - Raw WASM API: smart-contracts/raw-wasm.md
+      - CTZN Token Module: smart-contracts/ctzn-token.md
+      - Examples & Exercises:
+          - Exercises: smart-contracts/exercises/index.md
+          - "Exercise 1: Counter": smart-contracts/exercises/counter.md
+          - "Exercise 2: Token": smart-contracts/exercises/token.md
+          - "Exercise 3: Access Control": smart-contracts/exercises/access-control.md
+          - "Exercise 4: Voting": smart-contracts/exercises/voting.md
+          - "Exercise 5: Multi-Contract": smart-contracts/exercises/multi-contract.md
+          - "Exercise 6: Auction": smart-contracts/exercises/auction.md
   - Explorer:
       - Overview: explorer/overview.md
   - Node Operators:
