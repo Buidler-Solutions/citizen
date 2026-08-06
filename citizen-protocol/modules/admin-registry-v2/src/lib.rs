@@ -1,7 +1,7 @@
 #![no_std]
 #![no_main]
 
-/// Admin Registry v2 — written with the Citizen Contract SDK.
+/// Admin Registry v2 — written with the Civitas SDK.
 ///
 /// Compare this file to `../admin-registry/src/lib.rs` (600 lines of raw WASM)
 /// to see the DX improvement. Same functionality, 70% less code.

@@ -1,13 +1,13 @@
-# Citizen Smart Contracts
+# Civitas
 
-Citizen Protocol smart contracts are programs written in **Rust** that compile to **WebAssembly (WASM)** and execute inside a sandboxed runtime on every validator node. They have full access to on-chain state, signature verification, governance approval checks, and cross-contract composition.
+**Civitas** is the smart contract language and execution environment for the Citizen Protocol. Contracts are written in **Rust**, compiled to **WebAssembly (WASM)**, and executed inside a gas-metered sandbox on every validator node. They have full access to on-chain state, Ed25519 signature verification, governance approval checks, and cross-contract composition.
 
-## Why a new smart contract platform?
+## Why Civitas?
 
-Most blockchain smart contract platforms force you to learn a domain-specific language. Citizen takes a different approach: **you write in Rust** with a SDK that provides Solidity-like ergonomics — typed storage, modifiers, events, and automatic dispatch — but compiles to deterministic WASM that runs in a gas-metered sandbox.
+Most blockchain smart contract platforms force a domain-specific language. Civitas takes a different approach: **you write in Rust** with a SDK that provides Solidity-like ergonomics — typed storage, modifiers, events, and automatic dispatch — but compiles to deterministic WASM running inside Citizen's governance-first execution engine.
 
-| Feature | Solidity (EVM) | Citizen Contracts (WASM) |
-|---------|---------------|--------------------------|
+| Feature | Solidity (EVM) | Civitas (WASM) |
+|---------|---------------|-----------------|
 | Language | Solidity | Rust |
 | Runtime | EVM | wasmtime (WASM) |
 | Storage | Key-value slots | Typed `Item<T>` and `Map<K,V>` |
@@ -93,7 +93,7 @@ This documentation covers everything from setup to advanced patterns:
 
 ## Comparison: SDK vs raw WASM
 
-| | Raw WASM | SDK |
+| | Raw WASM | Civitas SDK |
 |---|---|---|
 | **Lines of code** (admin-registry) | 729 | 247 |
 | **JSON parsing** | Hand-rolled parser | `ctx.param::<T>()` |

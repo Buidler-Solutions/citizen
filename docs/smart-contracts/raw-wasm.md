@@ -1,6 +1,6 @@
 # Raw WASM API
 
-The SDK provides high-level ergonomics, but underneath it all, Citizen smart contracts are plain WASM modules with a simple ABI. This page documents the low-level interface — useful if you want to write contracts without the SDK, need maximum control over memory, or are building alternative tooling.
+The SDK provides high-level ergonomics, but underneath it all, Civitas smart contracts are plain WASM modules with a simple ABI. This page documents the low-level interface — useful if you want to write contracts without the SDK, need maximum control over memory, or are building alternative tooling.
 
 ## When to use raw WASM
 
@@ -17,7 +17,7 @@ The SDK adds serde and serde_json (~80KB of WASM) for type-safe serialization. I
 
 ## WASM ABI
 
-Every Citizen smart contract must export two functions and provide linear memory:
+Every Civitas smart contract must export two functions and provide linear memory:
 
 ```
 ┌──────────────────────────────────────────────────┐
@@ -374,7 +374,7 @@ strip = "none"
 
 ## Minimal raw WASM contract
 
-Here is the smallest useful Citizen smart contract (no SDK, no serde):
+Here is the smallest useful Civitas smart contract (no SDK, no serde):
 
 ```rust
 #![no_std]
