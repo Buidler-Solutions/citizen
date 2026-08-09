@@ -166,17 +166,16 @@ OpenCode uses a JSON config file at `~/.config/opencode/opencode.json` (global) 
 
 Restart OpenCode. The Citizen tools will be available to the AI agent.
 
-### Secretaria (Crush)
+### Crush
 
-Secretaria reads `crush.json` from the project root (or `~/.config/crush/crush.json` globally). Add the Citizen server under the `mcp` key:
+Crush reads `crush.json` from the project root (or `~/.config/crush/crush.json` globally). Add the Citizen server under the `mcp` key:
 
 ```json
 {
   "mcp": {
     "citizen-protocol": {
       "type": "stdio",
-      "command": "node",
-      "args": ["/absolute/path/to/sdk/mcp-server/dist/index.js"],
+      "command": "citizen-mcp",
       "env": {
         "CITIZEN_NODE_URL": "http://localhost:7001"
       }
@@ -185,7 +184,7 @@ Secretaria reads `crush.json` from the project root (or `~/.config/crush/crush.j
 }
 ```
 
-Restart Secretaria. The 49 Citizen tools, 10 resources, and 8 prompts will be loaded automatically. Verify with `/mcp` or check the startup log for `citizen-protocol = connected`.
+Restart Crush. The 49 Citizen tools, 10 resources, and 8 prompts will be loaded automatically. Verify with `/mcp` or check the startup log for `citizen-protocol = connected`.
 
 ### Any MCP Client
 
