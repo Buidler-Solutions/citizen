@@ -93,6 +93,7 @@ nav:
       - Backup Vault: wallets/backup.md
   - SDK:
       - TypeScript SDK: sdk/typescript.md
+      - MCP Server: sdk/mcp-server.md
   - Smart Contracts:
       - Overview: smart-contracts/index.md
       - Installation: smart-contracts/installation.md
@@ -124,6 +125,7 @@ nav:
       - Overview: explorer/overview.md
   - Node Operators:
       - Running a Node: node-operators/running-a-node.md
+      - Joining a Network: node-operators/joining-a-network.md
       - Validator Guide: node-operators/validator.md
       - Localnet: node-operators/localnet.md
       - Runbooks:

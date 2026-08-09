@@ -50,6 +50,8 @@ sdk/nodejs/node_modules/
 sdk/typescript/node_modules/
 sdk/typescript/dist/
 sdk/typescript/dist-test/
+sdk/mcp-server/node_modules/
+sdk/mcp-server/dist/
 
 wallet/browser/node_modules/
 wallet/browser/dist/
