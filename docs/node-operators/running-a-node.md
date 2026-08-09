@@ -58,6 +58,10 @@ On startup, the node will:
 6. Start the HTTP API server
 7. Join consensus (if validator) or begin replicating (if observer)
 
+### QUIC-Only Validator Mode
+
+Consensus participation and block synchronization happen entirely over QUIC — the HTTP API is only for external consumers (builders, wallets, explorers, health checks). A validator can stay fully synced and vote on blocks using QUIC alone, without exposing the HTTP API. To run a QUIC-only validator, firewall-block the API port (`api_port`) while leaving the QUIC port open for peer communication. The block sync protocol (`SyncRequest`/`SyncResponse`) operates exclusively over QUIC with full BFT commit-proof verification.
+
 ## Starting an Observer
 
 ```bash
