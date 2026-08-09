@@ -86,15 +86,13 @@ jobs:
           merge-multiple: true
 
       - name: Generate SHA256 checksums
-        working-directory: artifacts
         run: |
-          if ls *.tar.gz *.zip 1> /dev/null 2>&1; then
-            sha256sum *.tar.gz *.zip > SHA256SUMS.txt
-            cat SHA256SUMS.txt
-          else
-            echo "No artifacts found"
-            exit 1
-          fi
+          echo "=== Artifacts directory ==="
+          find artifacts -type f || true
+          echo "=== Generating checksums ==="
+          cd artifacts
+          sha256sum * > SHA256SUMS.txt
+          cat SHA256SUMS.txt
 
       - name: Create release in public repo
         env:
