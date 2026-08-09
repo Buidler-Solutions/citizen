@@ -194,10 +194,11 @@ Help me understand:
 1. How WASM modules are governance-gated on Citizen
 2. The wasm_runtime_policy configuration
 3. How to compile and submit a module
-4. How to execute it via citizen_execute_module
-5. How to query its runtime state via citizen_get_module_runtime
+4. Wallet ownership — only the deployer can upgrade or activate the contract
+5. How to execute it via citizen_execute_module
+6. How to query its runtime state via citizen_get_module_runtime
 
-Note: WASM execution is a scoped, optional layer on Citizen Protocol — it must be governance-approved.`,
+Note: WASM execution is a scoped, optional layer on Citizen Protocol — it must be governance-approved. Smart contracts are owned by the wallet that deploys them; no other wallet can modify or upgrade the contract.`,
       },
     }),
   },

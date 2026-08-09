@@ -307,7 +307,7 @@ Enforces asset ownership: only the current owner can transfer an asset. Tracks a
 ## Execution Policies
 
 ### wasm_runtime_policy
-Validates WASM module execution: checks module hash, gas limits, and capability permissions.
+Validates WASM module deployment and execution: checks module hash, gas limits, capability permissions, and **enforces wallet ownership** — only the original deployer can register, upgrade, or activate a module.
 - **Config**: \`{ "max_gas": 1000000, "allowed_capabilities": ["storage_read", "storage_write"] }\`
 
 ### envelope_multisig_policy
