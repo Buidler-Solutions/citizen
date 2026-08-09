@@ -1084,6 +1084,8 @@ where
         let mut total_stored = 0usize;
         let mut entries = Vec::new();
         let mut seen = HashSet::new();
+        let mut author_counts: HashMap<String, usize> = HashMap::new();
+        let max_per_author = self.config.read().max_entries_per_block / 4;
         let included = self.included_entries.read();
         let included_count = included.len();
         for ns in known_namespaces {
@@ -1097,6 +1099,18 @@ where
                     let is_included = included.contains(&id);
                     let ts_ok = entry.timestamp >= genesis_ts;
                     if !is_included && !seen.contains(&id) && ts_ok {
+                        let author_count = author_counts.entry(entry.author.clone()).or_insert(0);
+                        if max_per_author > 0 && *author_count >= max_per_author {
+                            info!(
+                                entry_id = %entry.entry_id,
+                                namespace = ns,
+                                author = %entry.author,
+                                max_per_author,
+                                "collect_entries: skipping entry — author already has max entries in this block"
+                            );
+                            continue;
+                        }
+                        *author_count += 1;
                         seen.insert(id);
                         entries.push(entry);
                     } else if is_included {

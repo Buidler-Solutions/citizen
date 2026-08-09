@@ -390,6 +390,10 @@ struct NodeConfig {
     #[serde(default)]
     namespace_rate_limits: HashMap<String, usize>,
     #[serde(default)]
+    writer_rate_limits: HashMap<String, usize>,
+    #[serde(default = "default_writer_rate_limit")]
+    default_writer_rate_limit_per_minute: usize,
+    #[serde(default)]
     namespace_max_entry_bytes: HashMap<String, usize>,
     #[serde(default)]
     api_offchain_encrypted_files_v1_enabled: bool,
@@ -494,6 +498,8 @@ impl NodeConfig {
             auth_required,
             max_write_requests_per_minute: self.api_max_write_requests_per_minute,
             namespace_rate_limits: self.namespace_rate_limits.clone(),
+            writer_rate_limits: self.writer_rate_limits.clone(),
+            default_writer_rate_limit_per_minute: self.default_writer_rate_limit_per_minute,
             namespace_max_entry_bytes: self.namespace_max_entry_bytes.clone(),
             max_pending_entries: self.max_pending_gossiped_entries,
             offchain_encrypted_files_v1_enabled: self.api_offchain_encrypted_files_v1_enabled,
@@ -690,6 +696,8 @@ impl Default for NodeConfig {
             api_max_write_requests_per_minute: default_api_write_rpm(),
             api_clients: Vec::new(),
             namespace_rate_limits: HashMap::new(),
+            writer_rate_limits: HashMap::new(),
+            default_writer_rate_limit_per_minute: default_writer_rate_limit(),
             namespace_max_entry_bytes: HashMap::new(),
             api_offchain_encrypted_files_v1_enabled: false,
             api_offchain_minio: None,
@@ -744,6 +752,10 @@ fn default_api_write_rpm() -> usize {
 
 fn default_mempool_cap() -> usize {
     10_000
+}
+
+fn default_writer_rate_limit() -> usize {
+    30
 }
 
 fn default_true() -> bool {
