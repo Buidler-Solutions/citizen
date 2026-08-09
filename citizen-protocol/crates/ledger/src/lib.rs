@@ -190,6 +190,7 @@ impl<S: LedgerStorage + 'static> Ledger<S> {
             "voter_jurisdiction_policy" => self.voter_jurisdiction_policy(entry, config),
             "wasm_runtime_policy" => self.wasm_runtime_policy(entry, config),
             "interop_adapter_policy" => self.interop_adapter_policy(entry, config),
+            "rate_limit_policy" => self.rate_limit_policy(entry, config),
             _ => {
                 let handler = self
                     .custom_rule_handlers
@@ -1399,6 +1400,100 @@ impl<S: LedgerStorage + 'static> Ledger<S> {
                 }
                 Ok(())
             }
+            "TRANSFER" => {
+                let amount = entry
+                    .payload
+                    .get("amount")
+                    .and_then(Value::as_u64)
+                    .ok_or_else(|| {
+                        ProtocolError::ValidationFailed(
+                            "transfers require numeric payload.amount".to_string(),
+                        )
+                    })?;
+                if amount == 0 {
+                    return Err(ProtocolError::ValidationFailed(
+                        "transfer amount must be greater than zero".into(),
+                    ));
+                }
+                let recipient = entry
+                    .payload
+                    .get("to")
+                    .and_then(Value::as_str)
+                    .ok_or_else(|| {
+                        ProtocolError::ValidationFailed(
+                            "transfers require payload.to (recipient DID)".to_string(),
+                        )
+                    })?;
+                if recipient == entry.object_id {
+                    return Err(ProtocolError::ValidationFailed(
+                        "cannot transfer to self".into(),
+                    ));
+                }
+                if recipient == entry.author {
+                    return Err(ProtocolError::ValidationFailed(
+                        "cannot transfer to self".into(),
+                    ));
+                }
+                let sender_balance = self.compute_asset_holding(
+                    &entry.namespace,
+                    &entry.object_id,
+                    issuer,
+                    asset_code,
+                )?;
+                if sender_balance < amount as i128 {
+                    return Err(ProtocolError::ValidationFailed(format!(
+                        "insufficient balance for transfer: available {sender_balance}, requested {amount}"
+                    )));
+                }
+                let recipient_trustline = self.latest_asset_trustline(
+                    &entry.namespace,
+                    recipient,
+                    issuer,
+                    asset_code,
+                )?;
+                match recipient_trustline {
+                    Some(ref tl) if tl.action == "TRUSTLINE_CLOSE" => {
+                        return Err(ProtocolError::ValidationFailed(
+                            "recipient trustline is closed".into(),
+                        ));
+                    }
+                    Some(ref tl) => {
+                        let max_holding = tl
+                            .payload
+                            .get("max_holding")
+                            .and_then(Value::as_u64)
+                            .ok_or_else(|| {
+                                ProtocolError::ValidationFailed(
+                                    "recipient trustline missing max_holding".into(),
+                                )
+                            })?;
+                        let recipient_current = self.compute_asset_holding(
+                            &entry.namespace,
+                            recipient,
+                            issuer,
+                            asset_code,
+                        )?;
+                        if recipient_current.saturating_add(amount as i128) > max_holding as i128 {
+                            return Err(ProtocolError::ValidationFailed(format!(
+                                "recipient trustline capacity exceeded: cap {max_holding}, would be {}",
+                                recipient_current.saturating_add(amount as i128)
+                            )));
+                        }
+                    }
+                    None => {
+                        let require_trustline = config
+                            .get("require_recipient_trustline")
+                            .and_then(Value::as_bool)
+                            .unwrap_or(true);
+                        if require_trustline {
+                            return Err(ProtocolError::ValidationFailed(
+                                "recipient has no trustline for this asset".into(),
+                            ));
+                        }
+                    }
+                }
+                Ok(())
+            }
             _ => Err(ProtocolError::ValidationFailed(
                 "asset control action is not supported".into(),
             )),
@@ -1434,25 +1529,31 @@ impl<S: LedgerStorage + 'static> Ledger<S> {
         let entries = self.storage.namespace_entries(&namespace.to_string())?;
         let mut holding = 0_i128;
         for entry in entries {
-            if entry.object_id != account_id {
-                continue;
-            }
-            if entry.payload.get("issuer").and_then(Value::as_str) != Some(issuer)
-                || entry.payload.get("asset_code").and_then(Value::as_str) != Some(asset_code)
-            {
-                continue;
-            }
-
             let amount = entry
                 .payload
                 .get("amount")
                 .and_then(Value::as_u64)
                 .unwrap_or_default() as i128;
-            match entry.action.as_str() {
-                "ASSET_HOLD" => holding = holding.saturating_add(amount),
-                "ASSET_RELEASE" => holding = holding.saturating_sub(amount),
-                "ASSET_REVOKE" => holding = holding.saturating_sub(amount),
-                _ => {}
+            let entry_issuer = entry.payload.get("issuer").and_then(Value::as_str);
+            let entry_asset = entry.payload.get("asset_code").and_then(Value::as_str);
+            if entry_issuer != Some(issuer) || entry_asset != Some(asset_code) {
+                continue;
+            }
+
+            if entry.object_id == account_id {
+                match entry.action.as_str() {
+                    "ASSET_HOLD" => holding = holding.saturating_add(amount),
+                    "ASSET_RELEASE" => holding = holding.saturating_sub(amount),
+                    "ASSET_REVOKE" => holding = holding.saturating_sub(amount),
+                    "TRANSFER" => holding = holding.saturating_sub(amount),
+                    _ => {}
+                }
+            } else if entry.action == "TRANSFER" {
+                if let Some(recipient) = entry.payload.get("to").and_then(Value::as_str) {
+                    if recipient == account_id {
+                        holding = holding.saturating_add(amount);
+                    }
+                }
             }
         }
         Ok(holding)
@@ -1479,6 +1580,69 @@ impl<S: LedgerStorage + 'static> Ledger<S> {
                 "unsupported field_path '{other}'"
             ))),
         }
+    }
+
+    fn rate_limit_policy(&self, entry: &LedgerEntry, config: &Value) -> Result<()> {
+        let max_writes = config
+            .get("max_writes_per_window")
+            .and_then(Value::as_u64)
+            .ok_or_else(|| {
+                ProtocolError::ValidationFailed(
+                    "rate_limit_policy requires { max_writes_per_window: N }".into(),
+                )
+            })? as usize;
+        let window_secs = config
+            .get("window_secs")
+            .and_then(Value::as_u64)
+            .unwrap_or(60) as i64;
+        let now = chrono::Utc::now().timestamp();
+        let cutoff = now - window_secs;
+        let entries = self.storage.namespace_entries(&entry.namespace)?;
+        let recent_count = entries
+            .iter()
+            .filter(|e| e.author == entry.author && e.timestamp >= cutoff)
+            .count();
+        if recent_count >= max_writes {
+            return Err(ProtocolError::ValidationFailed(format!(
+                "rate_limit_policy: author {} has submitted {} entries to namespace {} in the last {}s (limit: {})",
+                entry.author, recent_count, entry.namespace, window_secs, max_writes
+            )));
+        }
+
+        let wash_window_secs = config
+            .get("wash_trade_window_secs")
+            .and_then(Value::as_u64)
+            .unwrap_or(0) as i64;
+        let max_wash_cycles = config
+            .get("max_wash_trade_cycles")
+            .and_then(Value::as_u64)
+            .unwrap_or(0) as usize;
+        if wash_window_secs > 0 && max_wash_cycles > 0 && entry.action == "TRANSFER" {
+            let recipient = entry.payload.get("to").and_then(Value::as_str).unwrap_or("");
+            if !recipient.is_empty() {
+                let wash_cutoff = now - wash_window_secs;
+                let wash_count = entries
+                    .iter()
+                    .filter(|e| {
+                        e.action == "TRANSFER"
+                            && e.timestamp >= wash_cutoff
+                            && ((e.author == entry.author
+                                && e.payload.get("to").and_then(Value::as_str) == Some(recipient))
+                                || (e.author == recipient
+                                    && e.payload.get("to").and_then(Value::as_str)
+                                        == Some(entry.author.as_str())))
+                    })
+                    .count();
+                if wash_count >= max_wash_cycles {
+                    return Err(ProtocolError::ValidationFailed(format!(
+                        "rate_limit_policy: wash-trade pattern detected between {} and {} ({} transfers in {}s, limit: {})",
+                        entry.author, recipient, wash_count, wash_window_secs, max_wash_cycles
+                    )));
+                }
+            }
+        }
+
+        Ok(())
     }
 
     fn wasm_runtime_policy(&self, entry: &LedgerEntry, config: &Value) -> Result<()> {
@@ -2002,6 +2166,25 @@ impl<S: LedgerStorage + 'static> Ledger<S> {
             ))),
         }
     }
+    /// Check if a DID is an active admin via the admin-registry WASM smart contract.
+    /// Returns true if the contract confirms admin status. Fails-closed: returns false
+    /// if the contract is not deployed, not activated, or execution fails.
+    fn check_admin_in_contract(&self, did: &str) -> bool {
+        let params = serde_json::json!({"operation": "check_admin", "did": did}).to_string();
+        match self.execute_wasm_module("admin-registry", &params, 500_000) {
+            Ok(result) if result.success => {
+                result.return_value.as_ref().and_then(|bytes| {
+                    serde_json::from_slice::<serde_json::Value>(bytes).ok()
+                }).and_then(|v| {
+                    let is_admin = v.get("is_admin").and_then(|x| x.as_bool()).unwrap_or(false);
+                    let revoked = v.get("revoked").and_then(|x| x.as_bool()).unwrap_or(false);
+                    Some(is_admin && !revoked)
+                }).unwrap_or(false)
+            }
+            _ => false,
+        }
+    }
+
     fn kyc_verification_policy(&self, entry: &LedgerEntry, config: &Value) -> Result<()> {
         let admin_ns = config.get("admin_namespace")
             .and_then(Value::as_str)
@@ -2048,11 +2231,15 @@ impl<S: LedgerStorage + 'static> Ledger<S> {
                 }
             }
             "APPROVE_KYC" | "REVOKE_KYC" => {
-                let admin_entries = self.storage.namespace_entries(&admin_ns).map_err(|e| ProtocolError::ValidationFailed(e.to_string()))?;
-                let assigned: HashSet<&str> = admin_entries.iter().filter(|e| e.action == "ASSIGN_ADMIN").filter_map(|e| e.payload.get("admin_did").and_then(Value::as_str)).collect();
-                let revoked: HashSet<&str> = admin_entries.iter().filter(|e| e.action == "REVOKE_ADMIN").filter_map(|e| e.payload.get("admin_did").and_then(Value::as_str)).collect();
-                if !assigned.difference(&revoked).any(|d| *d == entry.author) {
-                    return Err(ProtocolError::ValidationFailed(format!("kyc_verification_policy: author '{}' is not an authorized admin", entry.author)));
+                // Try smart contract admin check first (admin-registry WASM module)
+                if !self.check_admin_in_contract(&entry.author) {
+                    // Fallback to native namespace admin check
+                    let admin_entries = self.storage.namespace_entries(&admin_ns).map_err(|e| ProtocolError::ValidationFailed(e.to_string()))?;
+                    let assigned: HashSet<&str> = admin_entries.iter().filter(|e| e.action == "ASSIGN_ADMIN").filter_map(|e| e.payload.get("admin_did").and_then(Value::as_str)).collect();
+                    let revoked: HashSet<&str> = admin_entries.iter().filter(|e| e.action == "REVOKE_ADMIN").filter_map(|e| e.payload.get("admin_did").and_then(Value::as_str)).collect();
+                    if !assigned.difference(&revoked).any(|d| *d == entry.author) {
+                        return Err(ProtocolError::ValidationFailed(format!("kyc_verification_policy: author '{}' is not an authorized admin", entry.author)));
+                    }
                 }
                 let kyc_ns = entry.namespace.clone();
                 let existing = self.storage.namespace_entries(&kyc_ns).map_err(|e| ProtocolError::ValidationFailed(e.to_string()))?;
@@ -2113,16 +2300,20 @@ impl<S: LedgerStorage + 'static> Ledger<S> {
         }
     }
     fn civic_admin_gate(&self, entry: &LedgerEntry, config: &Value) -> Result<()> {
-        let admin_ns = config.get("admin_namespace").and_then(Value::as_str).unwrap_or("civic.admin").to_string();
-        let admin_entries = self.storage.namespace_entries(&admin_ns).map_err(|e| ProtocolError::ValidationFailed(e.to_string()))?;
-        let assigned: HashSet<&str> = admin_entries.iter().filter(|e| e.action == "ASSIGN_ADMIN").filter_map(|e| e.payload.get("admin_did").and_then(Value::as_str)).collect();
-        let revoked: HashSet<&str> = admin_entries.iter().filter(|e| e.action == "REVOKE_ADMIN").filter_map(|e| e.payload.get("admin_did").and_then(Value::as_str)).collect();
-        if !assigned.difference(&revoked).any(|d| *d == entry.author) {
-            return Err(ProtocolError::ValidationFailed(format!("civic_admin_gate: author '{}' is not an authorized admin", entry.author)));
-        }
-        if let Some(scope) = entry.payload.get("election_id").or_else(|| entry.payload.get("jurisdiction")) {
-            let admin_scope = admin_entries.iter().rev().find(|e| e.action == "ASSIGN_ADMIN" && e.payload.get("admin_did").and_then(Value::as_str) == Some(&entry.author));
-            if let Some(a) = admin_scope { let _ = (a, scope); }
+        // Try smart contract admin check first (admin-registry WASM module)
+        if !self.check_admin_in_contract(&entry.author) {
+            // Fallback to native namespace admin check
+            let admin_ns = config.get("admin_namespace").and_then(Value::as_str).unwrap_or("civic.admin").to_string();
+            let admin_entries = self.storage.namespace_entries(&admin_ns).map_err(|e| ProtocolError::ValidationFailed(e.to_string()))?;
+            let assigned: HashSet<&str> = admin_entries.iter().filter(|e| e.action == "ASSIGN_ADMIN").filter_map(|e| e.payload.get("admin_did").and_then(Value::as_str)).collect();
+            let revoked: HashSet<&str> = admin_entries.iter().filter(|e| e.action == "REVOKE_ADMIN").filter_map(|e| e.payload.get("admin_did").and_then(Value::as_str)).collect();
+            if !assigned.difference(&revoked).any(|d| *d == entry.author) {
+                return Err(ProtocolError::ValidationFailed(format!("civic_admin_gate: author '{}' is not an authorized admin", entry.author)));
+            }
+            if let Some(scope) = entry.payload.get("election_id").or_else(|| entry.payload.get("jurisdiction")) {
+                let admin_scope = admin_entries.iter().rev().find(|e| e.action == "ASSIGN_ADMIN" && e.payload.get("admin_did").and_then(Value::as_str) == Some(&entry.author));
+                if let Some(a) = admin_scope { let _ = (a, scope); }
+            }
         }
         Ok(())
     }
@@ -2583,7 +2774,10 @@ impl<S: LedgerStorage + 'static> WasmHost for LedgerWasmHost<S> {
         let sig = Signature::from_slice(&sig_bytes)
             .map_err(|e| ExecutionError::HostError(format!("invalid signature: {e}")))?;
 
-        let pubkey = parse_verifying_key(signer_did)
+        let hex_key = signer_did
+            .strip_prefix("did:key:ed25519:")
+            .unwrap_or(signer_did);
+        let pubkey = parse_verifying_key(hex_key)
             .map_err(|e| ExecutionError::HostError(format!("invalid DID: {e}")))?;
 
         Ok(pubkey.verify_strict(&message_bytes, &sig).is_ok())
@@ -5167,5 +5361,104 @@ mod tests {
                 "did:citizen:carol",
             ))
             .expect("third distinct citizen should be able to vote");
+    }
+
+    #[test]
+    fn rate_limit_policy_allows_under_limit() {
+        let ruleset = NamespaceRuleset {
+            descriptor: NamespaceDescriptor {
+                namespace: "test.ratelimit".into(),
+                version: 1,
+                rules_hash: "0xabc".into(),
+                governed_by: "test".into(),
+            },
+            writers: BTreeSet::new(),
+            validators: vec![NamespaceRule {
+                name: "rate_limit_policy".into(),
+                config: json!({"max_writes_per_window": 3, "window_secs": 3600}),
+            }],
+        };
+        let ledger = Ledger::in_memory();
+        ledger.bootstrap_namespaces(vec![ruleset]);
+
+        for i in 0..3 {
+            ledger
+                .apply_entry(rl_test_entry("test.ratelimit", &format!("author-{i}")))
+                .unwrap();
+        }
+    }
+
+    #[test]
+    fn rate_limit_policy_rejects_over_limit() {
+        let ruleset = NamespaceRuleset {
+            descriptor: NamespaceDescriptor {
+                namespace: "test.ratelimit2".into(),
+                version: 1,
+                rules_hash: "0xabc".into(),
+                governed_by: "test".into(),
+            },
+            writers: BTreeSet::new(),
+            validators: vec![NamespaceRule {
+                name: "rate_limit_policy".into(),
+                config: json!({"max_writes_per_window": 2, "window_secs": 3600}),
+            }],
+        };
+        let ledger = Ledger::in_memory();
+        ledger.bootstrap_namespaces(vec![ruleset]);
+
+        let author = "did:test:same-author";
+        ledger.apply_entry(rl_test_entry("test.ratelimit2", author)).unwrap();
+        ledger.apply_entry(rl_test_entry("test.ratelimit2", author)).unwrap();
+        let result = ledger.apply_entry(rl_test_entry("test.ratelimit2", author));
+        assert!(result.is_err(), "third entry from same author should be rejected");
+    }
+
+    #[test]
+    fn rate_limit_policy_different_authors_not_affected() {
+        let ruleset = NamespaceRuleset {
+            descriptor: NamespaceDescriptor {
+                namespace: "test.ratelimit3".into(),
+                version: 1,
+                rules_hash: "0xabc".into(),
+                governed_by: "test".into(),
+            },
+            writers: BTreeSet::new(),
+            validators: vec![NamespaceRule {
+                name: "rate_limit_policy".into(),
+                config: json!({"max_writes_per_window": 1, "window_secs": 3600}),
+            }],
+        };
+        let ledger = Ledger::in_memory();
+        ledger.bootstrap_namespaces(vec![ruleset]);
+
+        ledger.apply_entry(rl_test_entry("test.ratelimit3", "did:test:alice")).unwrap();
+        ledger.apply_entry(rl_test_entry("test.ratelimit3", "did:test:bob")).unwrap();
+        ledger.apply_entry(rl_test_entry("test.ratelimit3", "did:test:carol")).unwrap();
+    }
+
+    fn rl_test_entry(namespace: &str, author: &str) -> LedgerEntry {
+        LedgerEntry {
+            entry_id: Uuid::new_v4(),
+            namespace: namespace.to_string(),
+            action: "CREATE".into(),
+            object_id: Uuid::new_v4().to_string(),
+            payload: json!({}),
+            privacy_flag: false,
+            privacy_mode: PrivacyMode::None,
+            payload_commitment: None,
+            ciphertext_hex: None,
+            nonce_hex: None,
+            salt_hex: None,
+            kdf_params: None,
+            consent_receipt: None,
+            authorized_readers: vec![],
+            custodian_policy_id: None,
+            field_reader_acls: Default::default(),
+            key_wrapped_secrets: vec![],
+            revocation_events: vec![],
+            author: author.to_string(),
+            signature: "test-sig".into(),
+            timestamp: chrono::Utc::now().timestamp(),
+        }
     }
 }

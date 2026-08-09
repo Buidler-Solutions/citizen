@@ -42,6 +42,8 @@ pub struct ApiEdgeConfig {
     pub auth_required: bool,
     pub max_write_requests_per_minute: usize,
     pub namespace_rate_limits: HashMap<String, usize>,
+    pub writer_rate_limits: HashMap<String, usize>,
+    pub default_writer_rate_limit_per_minute: usize,
     pub namespace_max_entry_bytes: HashMap<String, usize>,
     pub max_pending_entries: usize,
     pub offchain_encrypted_files_v1_enabled: bool,
@@ -82,6 +84,8 @@ impl Default for ApiEdgeConfig {
             auth_required: false,
             max_write_requests_per_minute: 120,
             namespace_rate_limits: HashMap::new(),
+            writer_rate_limits: HashMap::new(),
+            default_writer_rate_limit_per_minute: 30,
             namespace_max_entry_bytes: HashMap::new(),
             max_pending_entries: 10_000,
             offchain_encrypted_files_v1_enabled: false,
@@ -967,6 +971,9 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
         if let Err(response) = Self::check_namespace_rate_limit(&edge, &entry.namespace).await {
             return response;
         }
+        if let Err(response) = Self::check_writer_rate_limit(&edge, &entry.author, &entry.namespace).await {
+            return response;
+        }
         if let Err(response) = Self::check_namespace_entry_size(&edge, &entry) {
             return response;
         }
@@ -1040,6 +1047,9 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
         if let Err(response) = Self::check_namespace_rate_limit(&edge, &envelope.payload.namespace).await {
             return response;
         }
+        if let Err(response) = Self::check_writer_rate_limit(&edge, &envelope.payload.author, &envelope.payload.namespace).await {
+            return response;
+        }
         if let Err(response) = Self::check_namespace_entry_size(&edge, &envelope.payload) {
             return response;
         }
@@ -1065,6 +1075,15 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
             return response;
         }
 
+        for envelope in &envelopes {
+            if let Err(response) = Self::check_writer_rate_limit(
+                &edge,
+                &envelope.payload.author,
+                &envelope.payload.namespace,
+            ).await {
+                return response;
+            }
+        }
         for envelope in &envelopes {
             if let Err(response) = Self::authorize_builder_credit_gate(
                 Arc::clone(&edge),
@@ -4699,6 +4718,40 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
                     "error": "namespace write rate limit exceeded",
                     "namespace": namespace,
                     "limit": limit,
+                })),
+            ));
+        }
+        entries.push(now);
+        Ok(())
+    }
+
+    async fn check_writer_rate_limit(
+        edge: &ApiEdgeState,
+        author: &str,
+        namespace: &str,
+    ) -> Result<(), (StatusCode, Json<serde_json::Value>)> {
+        let limit = edge
+            .config
+            .writer_rate_limits
+            .get(namespace)
+            .copied()
+            .unwrap_or(edge.config.default_writer_rate_limit_per_minute);
+        if limit == 0 {
+            return Ok(());
+        }
+        let now = Utc::now().timestamp();
+        let mut windows = edge.write_windows.lock().await;
+        let key = format!("w:{}:{}", author, namespace);
+        let entries = windows.entry(key).or_default();
+        entries.retain(|timestamp| *timestamp > now - 60);
+        if entries.len() >= limit {
+            return Err((
+                StatusCode::TOO_MANY_REQUESTS,
+                Json(serde_json::json!({
+                    "error": "writer rate limit exceeded",
+                    "author": author,
+                    "namespace": namespace,
+                    "limit_per_minute": limit,
                 })),
             ));
         }
