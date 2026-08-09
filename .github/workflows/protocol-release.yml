@@ -13,6 +13,7 @@ jobs:
   build:
     name: Build ${{ matrix.target }}
     runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
@@ -29,10 +30,6 @@ jobs:
             runner: windows-latest
             artifact: citizen-node-windows-x86_64.exe
             archive: zip
-          - target: x86_64-apple-darwin
-            runner: macos-13
-            artifact: citizen-node-macos-x86_64
-            archive: tar.gz
           - target: aarch64-apple-darwin
             runner: macos-14
             artifact: citizen-node-macos-arm64
@@ -55,12 +52,6 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
-
-      - name: Install cross-compilation tools (Windows)
-        if: matrix.target == 'x86_64-pc-windows-msvc'
-        shell: bash
-        run: |
-          echo "Using native MSVC toolchain on Windows runner"
 
       - name: Build
         working-directory: citizen-protocol
@@ -90,6 +81,7 @@ jobs:
   release:
     name: Publish to public repo
     needs: build
+    if: always()
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
@@ -100,8 +92,13 @@ jobs:
       - name: Generate SHA256 checksums
         working-directory: artifacts
         run: |
-          sha256sum *.tar.gz *.zip > SHA256SUMS.txt
-          cat SHA256SUMS.txt
+          if ls *.tar.gz *.zip 1> /dev/null 2>&1; then
+            sha256sum *.tar.gz *.zip > SHA256SUMS.txt
+            cat SHA256SUMS.txt
+          else
+            echo "No artifacts found"
+            exit 1
+          fi
 
       - name: Create release in public repo
         env:
