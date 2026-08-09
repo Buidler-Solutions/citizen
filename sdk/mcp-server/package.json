@@ -1,6 +1,6 @@
 {
   "name": "@citizen-protocol/mcp-server",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "MCP server for the Citizen Protocol blockchain — helps developers build dApps",
   "license": "Apache-2.0",
   "type": "module",
@@ -13,7 +13,7 @@
     "url": "https://github.com/greenarmor/citizen.git",
     "directory": "sdk/mcp-server"
   },
-  "homepage": "https://github.com/greenarmor/citizen/tree/main/sdk/mcp-server#readme",
+  "homepage": "https://greenarmor.github.io/citizen/sdk/mcp-server/",
   "bugs": {
     "url": "https://github.com/greenarmor/citizen/issues"
   },
