@@ -97,6 +97,12 @@ jobs:
           path: artifacts
           merge-multiple: true
 
+      - name: Generate SHA256 checksums
+        working-directory: artifacts
+        run: |
+          sha256sum *.tar.gz *.zip > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
       - name: Create release in public repo
         env:
           GH_TOKEN: ${{ secrets.RELEASE_PAT }}
@@ -107,4 +113,5 @@ jobs:
             --repo greenarmor/citizen-protocol-v0.1.0 \
             --title "Citizen Protocol $VERSION" \
             --generate-notes \
+            artifacts/SHA256SUMS.txt \
             artifacts/*
