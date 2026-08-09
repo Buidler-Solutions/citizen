@@ -1719,6 +1719,31 @@ impl<S: LedgerStorage + 'static> Ledger<S> {
                         "register module requires payload.wasm_bytes (base64-encoded WASM bytecode)".to_string(),
                     ));
                 }
+
+                // ── Ownership enforcement ──────────────────────────────
+                // If this module_id was previously registered, only the
+                // original deployer (author) may submit a new registration
+                // (upgrade).  Any other wallet is rejected.
+                let existing_entries = self
+                    .storage
+                    .namespace_entries(&"execution.module".to_string())
+                    .map_err(|e| {
+                        ProtocolError::ValidationFailed(format!(
+                            "storage error during ownership check: {e}"
+                        ))
+                    })?;
+                for prior in existing_entries.iter() {
+                    if prior.object_id == *module_id
+                        && prior.action == "REGISTER_MODULE"
+                        && prior.author != entry.author
+                    {
+                        return Err(ProtocolError::ValidationFailed(format!(
+                            "module '{}' is owned by '{}'; only the original deployer can update it",
+                            module_id, prior.author
+                        )));
+                    }
+                }
+
                 Ok(())
             }
             "ACTIVATE_MODULE" => {
@@ -1740,6 +1765,30 @@ impl<S: LedgerStorage + 'static> Ledger<S> {
                         "governance approvals {approvals} below required {required_approvals}"
                     )));
                 }
+
+                // ── Ownership enforcement ──────────────────────────────
+                // Only the original deployer can activate or re-activate
+                // their own module.
+                let existing_entries = self
+                    .storage
+                    .namespace_entries(&"execution.module".to_string())
+                    .map_err(|e| {
+                        ProtocolError::ValidationFailed(format!(
+                            "storage error during ownership check: {e}"
+                        ))
+                    })?;
+                for prior in existing_entries.iter() {
+                    if prior.object_id == *module_id
+                        && prior.action == "REGISTER_MODULE"
+                        && prior.author != entry.author
+                    {
+                        return Err(ProtocolError::ValidationFailed(format!(
+                            "module '{}' is owned by '{}'; only the original deployer can activate it",
+                            module_id, prior.author
+                        )));
+                    }
+                }
+
                 Ok(())
             }
             "EXECUTE_MODULE" => {
@@ -5460,5 +5509,203 @@ mod tests {
             signature: "test-sig".into(),
             timestamp: chrono::Utc::now().timestamp(),
         }
+    }
+
+    // ── Module ownership tests ─────────────────────────────────────
+
+    fn module_test_entry(action: &str, module_id: &str, author: &str) -> LedgerEntry {
+        LedgerEntry {
+            entry_id: Uuid::new_v4(),
+            namespace: "execution.module".to_string(),
+            action: action.to_string(),
+            object_id: module_id.to_string(),
+            payload: json!({
+                "module_id": module_id,
+                "module_class": "governance",
+                "wasm_hash": "sha256:abc123",
+                "audit_hash": "sha256:def456",
+                "wasm_bytes": "AGFzbQ==",
+            }),
+            privacy_flag: false,
+            privacy_mode: PrivacyMode::None,
+            payload_commitment: None,
+            ciphertext_hex: None,
+            nonce_hex: None,
+            salt_hex: None,
+            kdf_params: None,
+            consent_receipt: None,
+            authorized_readers: vec![],
+            custodian_policy_id: None,
+            field_reader_acls: Default::default(),
+            key_wrapped_secrets: vec![],
+            revocation_events: vec![],
+            author: author.to_string(),
+            signature: "test-sig".into(),
+            timestamp: chrono::Utc::now().timestamp(),
+        }
+    }
+
+    #[test]
+    fn module_ownership_allows_deployer_to_register() {
+        let ruleset = NamespaceRuleset {
+            descriptor: NamespaceDescriptor {
+                namespace: "execution.module".into(),
+                version: 1,
+                rules_hash: "0xabc".into(),
+                governed_by: "governance.vote".into(),
+            },
+            writers: BTreeSet::new(),
+            validators: vec![NamespaceRule {
+                name: "wasm_runtime_policy".into(),
+                config: json!({
+                    "allowed_module_classes": ["governance"],
+                    "required_governance_approvals": 1
+                }),
+            }],
+        };
+        let ledger = Ledger::in_memory();
+        ledger.bootstrap_namespaces(vec![ruleset]);
+
+        ledger
+            .apply_entry(module_test_entry(
+                "REGISTER_MODULE",
+                "module:my-contract",
+                "did:web:alice",
+            ))
+            .expect("first registration by deployer should succeed");
+    }
+
+    #[test]
+    fn module_ownership_allows_deployer_to_upgrade() {
+        let ruleset = NamespaceRuleset {
+            descriptor: NamespaceDescriptor {
+                namespace: "execution.module".into(),
+                version: 1,
+                rules_hash: "0xabc".into(),
+                governed_by: "governance.vote".into(),
+            },
+            writers: BTreeSet::new(),
+            validators: vec![NamespaceRule {
+                name: "wasm_runtime_policy".into(),
+                config: json!({
+                    "allowed_module_classes": ["governance"],
+                    "required_governance_approvals": 1
+                }),
+            }],
+        };
+        let ledger = Ledger::in_memory();
+        ledger.bootstrap_namespaces(vec![ruleset]);
+
+        ledger
+            .apply_entry(module_test_entry(
+                "REGISTER_MODULE",
+                "module:upgrade-test",
+                "did:web:alice",
+            ))
+            .unwrap();
+
+        // Same author can register again (upgrade)
+        ledger
+            .apply_entry(module_test_entry(
+                "REGISTER_MODULE",
+                "module:upgrade-test",
+                "did:web:alice",
+            ))
+            .expect("original deployer should be able to upgrade their own module");
+    }
+
+    #[test]
+    fn module_ownership_rejects_non_deployer_upgrade() {
+        let ruleset = NamespaceRuleset {
+            descriptor: NamespaceDescriptor {
+                namespace: "execution.module".into(),
+                version: 1,
+                rules_hash: "0xabc".into(),
+                governed_by: "governance.vote".into(),
+            },
+            writers: BTreeSet::new(),
+            validators: vec![NamespaceRule {
+                name: "wasm_runtime_policy".into(),
+                config: json!({
+                    "allowed_module_classes": ["governance"],
+                    "required_governance_approvals": 1
+                }),
+            }],
+        };
+        let ledger = Ledger::in_memory();
+        ledger.bootstrap_namespaces(vec![ruleset]);
+
+        // Alice deploys
+        ledger
+            .apply_entry(module_test_entry(
+                "REGISTER_MODULE",
+                "module:protected",
+                "did:web:alice",
+            ))
+            .unwrap();
+
+        // Bob tries to upgrade — must fail
+        let result = ledger.apply_entry(module_test_entry(
+            "REGISTER_MODULE",
+            "module:protected",
+            "did:web:bob",
+        ));
+        assert!(
+            result.is_err(),
+            "non-deployer must NOT be able to upgrade a module they don't own"
+        );
+        let err_msg = result.unwrap_err().to_string();
+        assert!(
+            err_msg.contains("owned by"),
+            "error should mention ownership, got: {err_msg}"
+        );
+    }
+
+    #[test]
+    fn module_ownership_rejects_non_deployer_activate() {
+        let ruleset = NamespaceRuleset {
+            descriptor: NamespaceDescriptor {
+                namespace: "execution.module".into(),
+                version: 1,
+                rules_hash: "0xabc".into(),
+                governed_by: "governance.vote".into(),
+            },
+            writers: BTreeSet::new(),
+            validators: vec![NamespaceRule {
+                name: "wasm_runtime_policy".into(),
+                config: json!({
+                    "allowed_module_classes": ["governance"],
+                    "required_governance_approvals": 1
+                }),
+            }],
+        };
+        let ledger = Ledger::in_memory();
+        ledger.bootstrap_namespaces(vec![ruleset]);
+
+        // Alice deploys
+        ledger
+            .apply_entry(module_test_entry(
+                "REGISTER_MODULE",
+                "module:activate-test",
+                "did:web:alice",
+            ))
+            .unwrap();
+
+        // Bob tries to activate — must fail
+        let mut activate_entry = module_test_entry(
+            "ACTIVATE_MODULE",
+            "module:activate-test",
+            "did:web:bob",
+        );
+        activate_entry.payload = json!({
+            "module_id": "module:activate-test",
+            "governance_approvals": 1
+        });
+
+        let result = ledger.apply_entry(activate_entry);
+        assert!(
+            result.is_err(),
+            "non-deployer must NOT be able to activate a module they don't own"
+        );
     }
 }

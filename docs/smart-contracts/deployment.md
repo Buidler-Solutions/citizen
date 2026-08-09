@@ -146,15 +146,17 @@ curl http://127.0.0.1:8091/api/v1/modules/my-contract
 
 ## Upgrading a contract
 
+Only the **original deployer** can upgrade a contract. The protocol enforces wallet ownership — the `author` field on the first `REGISTER_MODULE` entry becomes the module owner. Any subsequent `REGISTER_MODULE` or `ACTIVATE_MODULE` from a different wallet will be rejected.
+
 To deploy a new version:
 
 1. Build the new WASM binary
-2. Submit a new `REGISTER_MODULE` entry with the same `module_id` (new `wasm_hash`)
-3. Submit a new `ACTIVATE_MODULE` entry
+2. Submit a new `REGISTER_MODULE` entry with the same `module_id` (new `wasm_hash`) **using the same wallet that originally deployed it**
+3. Submit a new `ACTIVATE_MODULE` entry (also from the original deployer)
 4. The latest activation entry takes precedence
 
 ```python
-# Re-register with new bytecode
+# Re-register with new bytecode (MUST use original deployer's wallet)
 submit("execution.module", "REGISTER_MODULE", MODULE_ID, {
     "module_id": MODULE_ID,
     "module_class": "governance",
@@ -163,13 +165,16 @@ submit("execution.module", "REGISTER_MODULE", MODULE_ID, {
     "wasm_bytes": new_wasm_b64,
 })
 
-# Re-activate
+# Re-activate (also from original deployer)
 submit("execution.module", "ACTIVATE_MODULE", MODULE_ID, {
     "module_id": MODULE_ID,
     "governance_approvals": 1,
     "proposal_id": new_proposal_id,
 })
 ```
+
+!!! danger "Wallet ownership enforced"
+    Smart contracts are owned by the wallet that deployed them. No other wallet can modify, upgrade, or activate the contract. This is enforced at the protocol level — not in contract code.
 
 !!! warning "State persistence"
     Upgrading a module does NOT clear its state. Previous `host_store_state` entries persist. Design your storage schema with backward-compatible serde defaults.
