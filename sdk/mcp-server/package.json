@@ -1,0 +1,53 @@
+{
+  "name": "@citizen-protocol/mcp-server",
+  "version": "0.1.1",
+  "description": "MCP server for the Citizen Protocol blockchain — helps developers build dApps",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "citizen-mcp": "bin/citizen-mcp.mjs"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/greenarmor/citizen.git",
+    "directory": "sdk/mcp-server"
+  },
+  "homepage": "https://github.com/greenarmor/citizen/tree/main/sdk/mcp-server#readme",
+  "bugs": {
+    "url": "https://github.com/greenarmor/citizen/issues"
+  },
+  "keywords": [
+    "citizen-protocol",
+    "mcp",
+    "model-context-protocol",
+    "blockchain",
+    "dapp",
+    "ai",
+    "llm",
+    "ledger"
+  ],
+  "files": [
+    "dist",
+    "bin",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "start": "node dist/index.js",
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "npm run build",
+    "prepack": "npm run build"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.17.5"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.3",
+    "@types/node": "^22.0.0"
+  }
+}
