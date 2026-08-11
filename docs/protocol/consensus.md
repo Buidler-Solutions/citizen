@@ -118,3 +118,51 @@ A remote validator can join an existing chain simply by starting with correct pe
 3. Blocks are applied contiguously with full commit-proof verification
 4. Once caught up, the node enters the normal consensus event loop
 5. Heartbeat-driven detection fills any remaining gaps during operation
+
+## What Makes Citizen's BFT Unique
+
+Citizen's BFT consensus engine - the propose/vote/commit cycle - is conventional and battle-tested. What sets Citizen apart is not the consensus algorithm itself but the **governance model and namespace architecture layered on top of it**. No other BFT chain combines all four of the following properties.
+
+### Common to All BFT Systems
+
+These properties are shared with any correct BFT implementation (Tendermint, HotStuff, DiemBFT, etc.):
+
+- **>2/3 quorum threshold** - blocks commit only when a supermajority of validators sign the same hash
+- **Deterministic finality** - once committed, a block is final; there are no probabilistic confirmations or reorgs
+- **Fast block times** - ~1 second from proposal to commitment
+- **Byzantine fault tolerance** - tolerates up to f faulty validators in a network of N >= 3f+1
+
+### Genuinely Unique to Citizen
+
+#### Namespace-Aware Consensus
+
+Each namespace is its own governed sub-chain with its own validation rules - but they all share one BFT engine. At consensus level, validators enforce per-namespace policies: signature schemes, consent requirements, builder-credit policies, privacy policies, asset controls, WASM runtime policies, and interop adapter policies. Other BFT chains have a flat, global state model where every transaction follows the same rules. Citizen's namespace architecture means a governance vote, a consent receipt, a smart contract activation, and a builder credit transfer are all validated under different rule sets - all in the same block, all in the same consensus round.
+
+#### Governance-Gated Execution by Default
+
+WASM smart contract modules cannot run until governance approves them. Every module requires:
+
+- A governance approval vote
+- A pinned audit hash (the exact bytecode that was reviewed)
+- Membership in the module class allowlist
+
+Most BFT chains are permissionless - anyone can deploy and execute arbitrary code. Citizen treats execution as a governed privilege, not a default right.
+
+#### Non-Speculative, No Gas, Real BFT
+
+Citizen has no native gas token and no per-transaction fees. Spam prevention is governance-based rather than economic:
+
+- Per-writer rate limits enforced at the namespace level
+- Governance can suspend abusive writers
+- Builder credits sponsor legitimate usage
+
+This is combined with real BFT consensus (not delegated proof-of-stake). Citizen is one of the only chains that is simultaneously fee-less, non-speculative, and Byzantine-fault-tolerant.
+
+#### Deterministic Receipts + Off-Chain Encrypted Custody
+
+Every committed entry produces a deterministic receipt containing:
+
+- The on-chain finality proof (block hash + commit signatures)
+- References to off-chain encrypted data with per-field reader ACLs
+
+This dual-layer receipt model - on-chain proof plus off-chain encrypted custody with field-level access control - is unique. Other chains either put all data on-chain (public, expensive, no privacy) or rely on off-chain storage with weak on-chain linkage. Citizen's receipts are cryptographic commitments that tie governed, encrypted, user-controlled data to BFT-final on-chain truth.
