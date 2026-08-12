@@ -81,6 +81,7 @@ nav:
       - Digital Citizenship: protocol/citizenship.md
       - Civic Voting: protocol/civic-voting.md
       - Namespaces: protocol/namespaces.md
+      - Builder Credits: protocol/builder-credits.md
       - Networks: protocol/networks.md
   - Wallets:
       - Overview: wallets/overview.md
