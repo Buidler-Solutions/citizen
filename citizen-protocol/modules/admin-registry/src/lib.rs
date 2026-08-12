@@ -411,8 +411,8 @@ fn is_active_admin(did: &str) -> bool {
     if state_get(&format_key("admin:", did)).is_none() {
         return false;
     }
-    // Revoked if the key exists with non-empty value (empty = cleared)
-    state_get(&format_key("revoked:", did)).is_some()
+    // Active unless a revocation record exists
+    state_get(&format_key("revoked:", did)).is_none()
 }
 
 fn add_to_admin_list(did: &str) {
