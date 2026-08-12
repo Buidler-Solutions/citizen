@@ -131,6 +131,7 @@ nav:
       - Localnet: node-operators/localnet.md
       - Runbooks:
           - Civic Voting Operator Runbook: node-operators/civic-voting-runbook.md
+          - Cross-Continental Deployment: node-operators/cross-continental.md
   - Compliance:
       - GDPR: compliance/gdpr.md
       - Security Policies: compliance/security.md
