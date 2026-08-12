@@ -150,11 +150,13 @@ Most BFT chains are permissionless - anyone can deploy and execute arbitrary cod
 
 #### Non-Speculative, No Gas, Real BFT
 
-Citizen has no native gas token and no per-transaction fees. Spam prevention is governance-based rather than economic:
+Citizen has no native gas token and no per-transaction fees. Spam prevention is layered across three complementary mechanisms:
 
-- Per-writer rate limits enforced at the namespace level
-- Governance can suspend abusive writers
-- Builder credits sponsor legitimate usage
+- **KYC + API keys** answer "who are you" and "are you authenticated" — preventing Sybil attacks and providing coarse rate-limiting
+- **Builder credits** answer "how much capacity have you earned" — a non-transferable allocation that caps blast radius if a key is compromised
+- **Governance enforcement** can suspend abusive writers regardless of credit balance
+
+Credits are not just a throttle — they double as a **reputation reward**. Builders who consistently submit valid, non-malicious transactions earn bonus allocations over time, while abusers face credit reduction or suspension. This creates a reputation gradient rather than a binary active/suspended status, all without speculative economics.
 
 This is combined with real BFT consensus (not delegated proof-of-stake). Citizen is one of the only chains that is simultaneously fee-less, non-speculative, and Byzantine-fault-tolerant.
 

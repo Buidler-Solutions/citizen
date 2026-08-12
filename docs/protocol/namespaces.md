@@ -19,7 +19,7 @@ Each namespace can configure the following policies:
 |--------|---------|
 | **Signature policy** | Which signature schemes and key types are accepted |
 | **Consent policy** | Whether consent receipts are required for entries |
-| **Builder-credit policy** | Rules for fee credits and sponsored usage |
+| **Builder-credit policy** | Non-transferable capacity allocation — baseline grants, reputation-based bonus credits, sponsored usage, and anti-abuse spend caps (see [Builder Credits](builder-credits.md)) |
 | **Privacy policy** | Field-level encryption and selective disclosure |
 | **Asset-control policy** | Asset issuance, transfer, and clawback rules |
 | **WASM runtime policy** | Whether scoped execution is enabled and its limits |
@@ -52,7 +52,7 @@ Because each namespace enforces its own policies independently, two namespaces o
 | **Identity gating** | Gold-tier CTZN citizenship required | Open to any DID |
 | **WASM execution** | Governance-gated, audited modules only | Disabled entirely (data plane only) |
 | **Asset transfers** | Allowed with clawback controls | Prohibited |
-| **Builder credits** | Per-entry fee in builder credits | Sponsored usage (free to end-users) |
+| **Builder credits** | Reputation-based allocation (earned by track record) | Sponsored usage (free to end-users) |
 | **Encrypted files** | Only PDF, max 5 MB | Any MIME type, max 100 MB |
 
 ### Real-World Example
