@@ -178,6 +178,73 @@ try {
   check("winner notified", notifications.json?.some((n) => n.type === "claim.confirmed"));
   const admin = await api("GET", "/admin/overview");
   check("admin overview lists namespaces", Array.isArray(admin.json?.namespaces) && admin.json.namespaces.length === 4);
+
+  // 10: mobile-app claim path — player requests, GM approves from the web console
+  const huntId2 = "hunt-smoke-002";
+  const player2 = generateKeyPair();
+  await api("POST", "/wallet/register", { did: player2.did });
+  const player2Token = await login(player2);
+  await api("POST", "/roles/grant", { did: player2.did, role: "player" });
+  const createSig2 = signMessage(claimMessages.createHunt(huntId2, gm.did), gm.privateKeyHex);
+  const hunt2 = await api("POST", "/games", {
+    hunt_id: huntId2,
+    gm_did: gm.did,
+    gm_signature: createSig2,
+    title: "Mobile Beacon",
+    reward_amount: 250,
+    expires_at: new Date(Date.now() + 3600_000).toISOString(),
+    clues: [
+      { index: 0, manifest_id: "manifest-m-0", latitude: 10.3167, longitude: 123.8908, radius_meters: 50 },
+      { index: 1, manifest_id: "manifest-m-1", latitude: 10.3172, longitude: 123.8912, radius_meters: 50 },
+    ],
+  });
+  check("mobile-path hunt created", hunt2.status === 200 && hunt2.json.escrow_id === `esc-${huntId2}`);
+  await api("POST", `/games/${huntId2}/fund`, {
+    gm_signature: signMessage(claimMessages.fundHunt(huntId2, gm.did), gm.privateKeyHex),
+    escrow_gm_signature: signMessage(claimMessages.fundEscrow(`esc-${huntId2}`), gm.privateKeyHex),
+  });
+  await api("POST", `/games/${huntId2}/activate`, {
+    gm_signature: signMessage(claimMessages.activate(huntId2, gm.did), gm.privateKeyHex),
+  });
+  await api("POST", "/consent/grant", { purposes: ["location", "photo"] }, player2Token);
+  const progress0 = await api("GET", `/games/${huntId2}/progress`, undefined, player2Token);
+  check("progress starts empty", progress0.json?.unlocked_clues.length === 0 && progress0.json.next_clue_index === 0);
+  await api("POST", `/games/${huntId2}/checkin`, { clue_index: 0, latitude: 10.31672, longitude: 123.89081 }, player2Token);
+  await api("POST", `/games/${huntId2}/checkin`, { clue_index: 1, latitude: 10.31721, longitude: 123.89119 }, player2Token);
+  const progress1 = await api("GET", `/games/${huntId2}/progress`, undefined, player2Token);
+  check("progress shows all clues", progress1.json?.unlocked_clues.length === 2 && progress1.json.next_clue_index === null);
+
+  const dupRequest = await api("POST", `/games/${huntId2}/claim/request`, {
+    photo_b64: "cGhvdG8tcHJvb2YtZGVtbwo=".repeat(4),
+    latitude: 10.3172,
+    longitude: 123.8912,
+  }, player2Token);
+  check("claim request accepted", dupRequest.status === 200 && dupRequest.json.request_id);
+  check("claim request pending", dupRequest.json.status === "pending");
+  const dupAgain = await api("POST", `/games/${huntId2}/claim/request`, {
+    photo_b64: "cGhvdG8tcHJvb2YtZGVtbwo=".repeat(4),
+    latitude: 10.3172,
+    longitude: 123.8912,
+  }, player2Token);
+  check("duplicate claim request rejected", dupAgain.status === 400 && dupAgain.json.code === "ClaimAlreadyRequested");
+
+  const pending = await api("GET", "/claims/pending");
+  check("GM console sees pending claim", pending.json?.some((r) => r.request_id === dupRequest.json.request_id));
+
+  const gmClaimSig2 = signMessage(claimMessages.hunt(huntId2, player2.did), gm.privateKeyHex);
+  const escrowClaimSig2 = signMessage(claimMessages.escrow(`esc-${huntId2}`, player2.did), gm.privateKeyHex);
+  const approved = await api("POST", `/games/${huntId2}/claim`, {
+    request_id: dupRequest.json.request_id,
+    gm_signature: gmClaimSig2,
+    escrow_gm_signature: escrowClaimSig2,
+  });
+  check("GM approval confirms claim", approved.status === 200 && approved.json.status === "confirmed", JSON.stringify(approved.json));
+  const balance2 = await api("GET", `/wallet/${encodeURIComponent(player2.did)}/balance`);
+  check("mobile player balance credited", balance2.json?.balance === 250, JSON.stringify(balance2.json));
+  const pendingAfter = await api("GET", "/claims/pending");
+  check("pending list drained", !pendingAfter.json?.some((r) => r.request_id === dupRequest.json.request_id));
+  const notified = await api("GET", `/wallet/${encodeURIComponent(player2.did)}/notifications`);
+  check("mobile player notified", notified.json?.some((n) => n.type === "claim.confirmed"));
 } finally {
   server.kill("SIGTERM");
 }

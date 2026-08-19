@@ -28,7 +28,7 @@ evidence of current state and the concrete work to close it.
 
 | # | Gap | Current state | Work required |
 |---|---|---|---|
-| 11 | Flutter player app | Port plan in `apps/flutter/README.md`; all backend endpoints live | Implement the seven screens reusing `wallet/mobile` structure (Riverpod, secure storage, GoRouter) |
+| 11 | Flutter player app | Resolved: implemented in `apps/flutter/` (seven screens, device Ed25519 wallet, GPS check-ins, photo claims with finality receipts); analyzer clean, tests green, debug APK builds | Remaining polish: flutter_map surface, biometric unlock, widget tests for the full onboarding/login flow |
 | 12 | GM console clue encryption | Console supplies manifest ids as strings | Client-side clue encryption (AES-GPU hybrid to reader ACL) before file intent creation |
 | 13 | Mobile anti-spoof sensors | Documented in the port plan | Port mock-location and accelerometer checks from the original app |
 | 14 | Admin governance actions | Panel shows overview/alerts/roles only | Add civic proposal creation UI for parameter changes (fees, oracle rotation) per the port spec |
@@ -46,8 +46,11 @@ evidence of current state and the concrete work to close it.
 
 - 41 ported contract scenarios green in `cargo test -p citizen-execution --test treasurenet_test`
 - Full E2E smoke (roles, hunt lifecycle, consent, GPS gating, oracle claim,
-  2-of-2 payout, balance, receipt, double-claim rejection) green in
-  `node scripts/smoke.mjs`
-- GM console and admin panel serve and talk to the 7755 API
+  2-of-2 payout, balance, receipt, double-claim rejection, mobile claim
+  request plus GM web approval) green in `node scripts/smoke.mjs`
+- GM console and admin panel serve and talk to the 7755 API; the GM console
+  lists and approves pending mobile claim requests
+- Flutter player app: `dart analyze` clean, `flutter test` green including
+  byte-exact Ed25519 parity with the node chain SDK, debug APK builds
 - Deploy script compiles-ready against a local node once governance
   proposals exist

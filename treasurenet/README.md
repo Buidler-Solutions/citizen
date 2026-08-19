@@ -17,9 +17,9 @@ proofs) onto Citizen namespaces and WASM execution modules.
 | Chain deployment script (register + activate + configure modules) | `chain/scripts/deploy_treasurenet.py` | Ready for a local node |
 | Typed chain SDK (keys, canonical entries, module gateway, mock chain) | `chain/sdk/` | Implemented, dependency-free |
 | Backend API on port 7755 | `apps/server/` | All original module boundaries, mock or node chain mode |
-| GM console on port 7777 (browser-held keys, WebCrypto Ed25519) | `apps/web/` | Functional scaffold |
+| GM console on port 7777 (browser-held keys, WebCrypto Ed25519, claim approvals) | `apps/web/` | Functional scaffold |
 | Admin panel on port 7778 | `apps/admin/` | Functional scaffold |
-| Flutter player app port plan | `apps/flutter/README.md` | Documented, not yet implemented |
+| Flutter player app (device wallet, GPS clue flow, photo claims, finality receipts) | `apps/flutter/` | Implemented, analyzer clean, tests green, debug APK builds |
 | Shared types + Prisma indexer schema | `packages/shared/` | Defined |
 
 ## Quick start (offline, mock chain)
@@ -34,15 +34,21 @@ cd treasurenet/apps/web && node serve.mjs
 # terminal 3: admin panel on :7778
 cd treasurenet/apps/admin && node serve.mjs
 
-# end-to-end smoke test (boots its own server)
+# terminal 4: player app on a device or emulator
+cd treasurenet/apps/flutter && flutter run \
+  --dart-define=TREASURENET_API=http://10.0.2.2:7755   # Android emulator
+
+# end-to-end smoke test (boots its own server, covers both claim paths)
 cd treasurenet && node scripts/smoke.mjs
 ```
 
 The GM console generates its keypair in the browser, requests the
 gamemaster role (dev admin path), and signs hunt lifecycle messages with
-WebCrypto Ed25519. The smoke test walks the entire player journey:
-roles, hunt creation, funding, activation, consent, GPS check-ins,
-oracle-verified photo claim, 2-of-2 multisig payout, balance + receipt.
+WebCrypto Ed25519. Players use the Flutter app: onboarding generates the
+device Ed25519 identity, login signs the `treasurenet-login:<nonce>`
+challenge, check-ins submit live GPS fixes, and claims submit photo proof.
+The smoke test walks the entire player journey both ways: direct GM-signed
+claim and the mobile claim request plus GM web-console approval.
 
 ## Quick start (local Citizen node)
 
@@ -88,7 +94,11 @@ GET  /games/:id
 POST /games/:id/fund            {gm_signature, escrow_gm_signature}
 POST /games/:id/activate|pause|resume|cancel   {gm_signature}
 POST /games/:id/checkin         {clue_index, latitude, longitude}  (player session)
+GET  /games/:id/progress        (player session; unlocked clue chain)
+POST /games/:id/claim/request   {photo_b64, latitude, longitude}   (player session; GM approves from web)
 POST /games/:id/claim           {gm_signature, escrow_gm_signature, photo_b64, latitude, longitude}
+                                or {request_id, gm_signature, escrow_gm_signature} (GM approval)
+GET  /claims/pending            POST /claims/:requestId/deny
 POST /games/:id/refund          {gm_signature}
 GET  /escrow/:id/status         GET  /escrow/:id/reward
 GET  /claims
@@ -101,15 +111,20 @@ POST /admin/indexer/poll
 
 ## Documentation
 
-- `docs/MIGRATION_NOTES.md` — every Stellar-to-Citizen deviation and why
-- `docs/GAP_ANALYSIS.md` — remaining gaps to full production parity
-- `apps/flutter/README.md` — mobile port plan
+- `docs/MIGRATION_NOTES.md` - every Stellar-to-Citizen deviation and why
+- `docs/GAP_ANALYSIS.md` - remaining gaps to full production parity
+- `apps/flutter/README.md` - mobile app implementation and port notes
 
 ## Key signing model
 
 Players never hold tokens and never sign chain writes: the service DID
-sponsors player actions via builder credits. Game Masters sign hunt
-lifecycle messages client-side (browser console or future mobile GM app);
-the oracle co-signs every claim; the modules enforce the 2-of-2 policy
-on-chain. Canonical message strings live in `chain/sdk/src/modules.ts`
-(`claimMessages`) and are shared verbatim by every surface.
+sponsors player actions via builder credits. Players use the native
+mobile app; Game Masters use the web console and sign hunt lifecycle
+messages client-side (WebCrypto Ed25519). Claims work in both directions:
+the GM can pre-sign a claim directly, or the player submits a claim
+request from the app (photo + geo proof) and the GM approves it from the
+console, which produces the two GM claim signatures bound to the player's
+DID. The oracle co-signs every claim; the modules enforce the 2-of-2
+policy on-chain. Canonical message strings live in
+`chain/sdk/src/modules.ts` (`claimMessages`) and are shared verbatim by
+every surface.

@@ -127,3 +127,27 @@ here.
 - The module gateway rejects replayed write scopes in-process
   (`ReplayedSubmission`); on-chain replay protection uses the canonical
   entry signature scope (`signature_scope` helper in the chain SDK).
+
+## 12. Player claim requests and GM web approval
+
+The original Stellar app assembled claim envelopes entirely client-side
+because the phone wallet held funds. In the Citizen port the player app is
+strictly a player surface, GM keys never leave the browser, so the claim
+flow gained an explicit approval hop:
+
+- `POST /games/:id/claim/request` (player session): stores photo + geo
+  proof as a pending `ClaimRequest` after re-checking the final-clue
+  unlock, active status, and proximity. Duplicate pending requests per
+  (hunt, player) are rejected with `ClaimAlreadyRequested`.
+- The GM console lists pending requests (`GET /claims/pending`) and
+  approves by signing both claim messages over the request's player DID;
+  `POST /games/:id/claim` with `request_id` resolves the player fields
+  from the request, so the approving GM needs no player session. The
+  direct path (player session plus pre-issued GM signatures) is unchanged
+  and remains what the smoke test's first scenario exercises.
+- Denial (`POST /claims/:requestId/deny`) notifies the player without
+  touching chain state.
+
+This deviation keeps the signing model verifiable (both GM signatures are
+still bound to the winner DID and verified on-chain by the modules) while
+matching the split-surface product: mobile players, web GMs.

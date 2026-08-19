@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { claimMessages, verifyMessage, ModuleError } from "../../../../chain/sdk/src/index.ts";
-import type { ClaimRecord } from "../../../../packages/shared/src/index.ts";
+import type { ClaimRecord, ClaimRequest } from "../../../../packages/shared/src/index.ts";
 import type { Store } from "../store.ts";
 import type { ChainModule } from "./chain.module.ts";
 import type { GameModule } from "./game.module.ts";
@@ -43,19 +43,18 @@ export class EscrowModule {
   }
 
   /**
-   * Full claim flow: geo + photo oracle verdict, 2-of-2 multisig envelope,
-   * escrow + hunt state transitions, payout receipt.
+   * Player claim request (mobile app flow): photo proof from the final clue
+   * location is stored pending Game Master review. The GM approves from the
+   * web console by signing both claim messages over the request's player DID.
    */
-  async claim(input: {
+  requestClaim(input: {
     hunt_id: string;
     player_did: string;
-    gm_signature: string;
-    escrow_gm_signature: string;
     photo_b64: string;
     latitude: number;
     longitude: number;
-    geo: { checkProximity: (a: number, b: number, c: number, d: number, r: number) => { withinRadius: boolean } };
-  }): Promise<ClaimRecord> {
+    geo: { checkProximity: (a: number, b: number, c: number, d: number, r: number) => { withinRadius: boolean; distanceMeters: number } };
+  }): ClaimRequest {
     const hunt = this.store.hunts.get(input.hunt_id);
     if (!hunt) notFound("HuntNotFound", `hunt ${input.hunt_id} does not exist`);
     const finalClue = hunt!.clues[hunt!.clues.length - 1];
@@ -65,10 +64,124 @@ export class EscrowModule {
     if (hunt!.status !== "active") {
       badRequest("HuntNotActive", `hunt ${input.hunt_id} is ${hunt!.status}`);
     }
+    if (this.pendingFor(hunt!.hunt_id, input.player_did)) {
+      badRequest("ClaimAlreadyRequested", "a pending claim request already exists for this hunt and player");
+    }
+    if (!input.photo_b64) badRequest("MissingFields", "photo_b64 is required");
+    const geoCheck = input.geo.checkProximity(
+      input.latitude,
+      input.longitude,
+      finalClue.latitude,
+      finalClue.longitude,
+      finalClue.radius_meters
+    );
+    if (!geoCheck.withinRadius) {
+      badRequest("NotAtLocation", `player is ${geoCheck.distanceMeters}m from the final clue`);
+    }
+    const request: ClaimRequest = {
+      request_id: randomUUID(),
+      hunt_id: hunt!.hunt_id,
+      escrow_id: hunt!.escrow_id,
+      player_did: input.player_did,
+      photo_b64: input.photo_b64,
+      latitude: input.latitude,
+      longitude: input.longitude,
+      status: "pending",
+      created_at: new Date().toISOString(),
+    };
+    this.store.claimRequests.set(request.request_id, request);
+    this.store.recordEvent("claim.requested", "game.claims", {
+      request_id: request.request_id,
+      hunt_id: request.hunt_id,
+      player_did: request.player_did,
+    });
+    this.store.notify(
+      hunt!.gm_did,
+      "claim.requested",
+      `Player ${request.player_did} requests the ${hunt!.title} reward. Approve from the console.`
+    );
+    return request;
+  }
+
+  pendingClaims(): ClaimRequest[] {
+    return [...this.store.claimRequests.values()]
+      .filter((request) => request.status === "pending")
+      .sort((a, b) => a.created_at.localeCompare(b.created_at));
+  }
+
+  denyClaim(requestId: string) {
+    const request = this.store.claimRequests.get(requestId);
+    if (!request) notFound("ClaimRequestNotFound", `claim request ${requestId} does not exist`);
+    if (request!.status !== "pending") {
+      badRequest("ClaimRequestNotPending", `claim request ${requestId} is ${request!.status}`);
+    }
+    request!.status = "denied";
+    const hunt = this.store.hunts.get(request!.hunt_id);
+    this.store.notify(
+      request!.player_did,
+      "claim.denied",
+      `Your claim request for ${hunt?.title ?? request!.hunt_id} was denied by the Game Master.`
+    );
+    this.store.recordEvent("claim.denied", "game.claims", { request_id: requestId, hunt_id: request!.hunt_id });
+    return { request_id: requestId, status: "denied" as const };
+  }
+
+  private pendingFor(huntId: string, playerDid: string): ClaimRequest | undefined {
+    return this.pendingClaims().find(
+      (request) => request.hunt_id === huntId && request.player_did === playerDid
+    );
+  }
+
+  /**
+   * Full claim flow: geo + photo oracle verdict, 2-of-2 multisig envelope,
+   * escrow + hunt state transitions, payout receipt. When request_id is set
+   * the player fields resolve from the approved mobile claim request.
+   */
+  async claim(input: {
+    hunt_id: string;
+    player_did?: string;
+    request_id?: string;
+    gm_signature: string;
+    escrow_gm_signature: string;
+    photo_b64?: string;
+    latitude?: number;
+    longitude?: number;
+    geo: { checkProximity: (a: number, b: number, c: number, d: number, r: number) => { withinRadius: boolean } };
+  }): Promise<ClaimRecord> {
+    const hunt = this.store.hunts.get(input.hunt_id);
+    if (!hunt) notFound("HuntNotFound", `hunt ${input.hunt_id} does not exist`);
+    let playerDid = input.player_did;
+    let photoB64 = input.photo_b64;
+    let latitude = input.latitude;
+    let longitude = input.longitude;
+    let request: ClaimRequest | undefined;
+    if (input.request_id) {
+      request = this.store.claimRequests.get(input.request_id);
+      if (!request) notFound("ClaimRequestNotFound", `claim request ${input.request_id} does not exist`);
+      if (request!.status !== "pending") {
+        badRequest("ClaimRequestNotPending", `claim request ${input.request_id} is ${request!.status}`);
+      }
+      if (request!.hunt_id !== input.hunt_id) {
+        badRequest("ClaimRequestMismatch", "claim request belongs to a different hunt");
+      }
+      playerDid = request!.player_did;
+      photoB64 = request!.photo_b64;
+      latitude = request!.latitude;
+      longitude = request!.longitude;
+    }
+    if (!playerDid) badRequest("MissingFields", "player_did or request_id is required");
+    if (!photoB64) badRequest("MissingFields", "photo_b64 is required");
+    const finalClue = hunt!.clues[hunt!.clues.length - 1];
+    if (!this.game.hasUnlocked(input.hunt_id, playerDid!, finalClue.index)) {
+      badRequest("ClueLocked", "final clue not unlocked; complete the clue chain first");
+    }
+    if (hunt!.status !== "active") {
+      badRequest("HuntNotActive", `hunt ${input.hunt_id} is ${hunt!.status}`);
+    }
 
     const gmPublicKeyHex = hunt!.gm_did.split(":").pop() ?? "";
-    const huntClaimMessage = claimMessages.hunt(input.hunt_id, input.player_did);
-    const escrowClaimMessage = claimMessages.escrow(hunt!.escrow_id, input.player_did);
+    const huntClaimMessage = claimMessages.hunt(input.hunt_id, playerDid!);
+    const escrowClaimMessage = claimMessages.escrow(hunt!.escrow_id, playerDid!);
     if (!verifyMessage(huntClaimMessage, input.gm_signature, gmPublicKeyHex)) {
       badRequest("InvalidSignature", "game master claim signature verification failed");
     }
@@ -77,32 +190,32 @@ export class EscrowModule {
     }
 
     const geoCheck = input.geo.checkProximity(
-      input.latitude,
-      input.longitude,
+      latitude!,
+      longitude!,
       finalClue.latitude,
       finalClue.longitude,
       finalClue.radius_meters
     );
     const verdict = this.oracle.evaluate({
       hunt_id: input.hunt_id,
-      player_did: input.player_did,
+      player_did: playerDid!,
       clue_index: finalClue.index,
-      photo_b64: input.photo_b64,
+      photo_b64: photoB64!,
       geoOk: geoCheck.withinRadius,
     });
     if (!verdict.passed) {
       badRequest("VerificationFailed", verdict.reason);
     }
 
-    const oracleHuntSig = this.oracle.coSignClaim("hunt", input.hunt_id, input.player_did, verdict);
-    const oracleEscrowSig = this.oracle.coSignClaim("escrow", hunt!.escrow_id, input.player_did, verdict);
+    const oracleHuntSig = this.oracle.coSignClaim("hunt", input.hunt_id, playerDid!, verdict);
+    const oracleEscrowSig = this.oracle.coSignClaim("escrow", hunt!.escrow_id, playerDid!, verdict);
 
     const claimId = randomUUID();
     const record: ClaimRecord = {
       claim_id: claimId,
       hunt_id: input.hunt_id,
       escrow_id: hunt!.escrow_id,
-      winner_did: input.player_did,
+      winner_did: playerDid!,
       reward_amount: hunt!.reward_amount,
       reward_token: hunt!.reward_token,
       gm_signature: input.gm_signature,
@@ -115,14 +228,14 @@ export class EscrowModule {
       const huntResult = await this.chain.adapter.execute("treasure-hunt.v1", {
         operation: "claim",
         hunt_id: input.hunt_id,
-        winner_did: input.player_did,
+        winner_did: playerDid!,
         cosigner_dids: `${hunt!.gm_did},${this.chain.config.oracleDid}`,
         signatures: `${input.gm_signature},${oracleHuntSig}`,
       });
       const escrowResult = await this.chain.adapter.execute("treasure-escrow.v1", {
         operation: "claim",
         escrow_id: hunt!.escrow_id,
-        winner_did: input.player_did,
+        winner_did: playerDid!,
         cosigner_dids: `${hunt!.gm_did},${this.chain.config.oracleDid}`,
         signatures: `${input.escrow_gm_signature},${oracleEscrowSig}`,
       });
@@ -136,19 +249,20 @@ export class EscrowModule {
         (huntResult.output.receipt_block as number | undefined);
 
       hunt!.status = "completed";
-      hunt!.winner_did = input.player_did;
+      hunt!.winner_did = playerDid!;
       hunt!.receipt_id = receiptId;
+      if (request) request.status = "approved";
       this.store.claims.set(claimId, record);
       this.store.analytics.claims_confirmed += 1;
       this.store.analytics.rewards_paid += hunt!.reward_amount;
       this.store.recordEvent("claim.confirmed", "game.claims", {
         claim_id: claimId,
         hunt_id: input.hunt_id,
-        winner_did: input.player_did,
+        winner_did: playerDid!,
         receipt_id: receiptId,
       });
       this.store.notify(
-        input.player_did,
+        playerDid!,
         "claim.confirmed",
         `Reward of ${hunt!.reward_amount} ${hunt!.reward_token} paid. Receipt ${receiptId ?? "pending"}.`
       );

@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import type {
   AuthChallenge,
   ClaimRecord,
+  ClaimRequest,
   ConsentReceipt,
   Hunt,
   LeaderboardEntry,
@@ -40,6 +41,7 @@ export interface ChainEvent {
 export class Store {
   readonly hunts = new Map<string, Hunt>();
   readonly claims = new Map<string, ClaimRecord>();
+  readonly claimRequests = new Map<string, ClaimRequest>();
   readonly challenges = new Map<string, AuthChallenge>();
   readonly sessions = new Map<string, Session>();
   readonly consentReceipts = new Map<string, ConsentReceipt>();

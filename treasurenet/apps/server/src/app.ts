@@ -188,16 +188,56 @@ export function buildRouter(ctx: AppContext): Router {
     return result.output;
   });
   router.get("/claims", () => ctx.escrow.listClaims());
-  router.post("/games/:id/claim", (req, params, _query, body) => {
+  router.get("/claims/pending", () => ctx.escrow.pendingClaims());
+  router.post("/claims/:requestId/deny", (_req, params) => ctx.escrow.denyClaim(params.requestId!));
+  router.get("/games/:id/progress", (req, params) => {
     const session = ctx.auth.session(ctx.auth.bearer(req));
+    return ctx.game.progress(params.id!, session.did);
+  });
+  router.post("/games/:id/claim/request", (req, params, _query, body) => {
+    const session = ctx.auth.session(ctx.auth.bearer(req));
+    const input = body as {
+      photo_b64?: string;
+      latitude?: number;
+      longitude?: number;
+    };
+    if (!input?.photo_b64) badRequest("MissingFields", "photo_b64 is required");
+    ctx.consent.requireValid(session.did, "photo");
+    ctx.consent.requireValid(session.did, "location");
+    return ctx.escrow.requestClaim({
+      hunt_id: params.id!,
+      player_did: session.did,
+      photo_b64: input!.photo_b64!,
+      latitude: input?.latitude ?? 0,
+      longitude: input?.longitude ?? 0,
+      geo,
+    });
+  });
+  router.post("/games/:id/claim", (req, params, _query, body) => {
     const input = body as {
       gm_signature?: string;
       escrow_gm_signature?: string;
       photo_b64?: string;
       latitude?: number;
       longitude?: number;
+      request_id?: string;
     };
-    if (!input?.gm_signature || !input?.escrow_gm_signature || !input?.photo_b64) {
+    if (!input?.gm_signature || !input?.escrow_gm_signature) {
+      badRequest("MissingFields", "gm_signature and escrow_gm_signature are required");
+    }
+    // GM approval path: the player fields come from the signed-in player's
+    // claim request, so the approving GM needs no player session.
+    if (input?.request_id) {
+      return ctx.escrow.claim({
+        hunt_id: params.id!,
+        request_id: input.request_id,
+        gm_signature: input.gm_signature!,
+        escrow_gm_signature: input.escrow_gm_signature!,
+        geo,
+      });
+    }
+    const session = ctx.auth.session(ctx.auth.bearer(req));
+    if (!input?.photo_b64) {
       badRequest("MissingFields", "gm_signature, escrow_gm_signature, and photo_b64 are required");
     }
     ctx.consent.requireValid(session.did, "photo");
