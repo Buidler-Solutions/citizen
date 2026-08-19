@@ -28,6 +28,7 @@ The protocol mission is to provide verifiable public truth infrastructure (recor
 ├── explorer/            # Explorer backend/frontend + infra
 ├── demo/                # Demo application surface
 ├── dapp/                # dApp surfaces and local-stack pieces
+├── treasurenet/         # TreasureNet Citizen Edition (GPS treasure hunt game: modules, backend, consoles)
 ├── docs/                 # MkDocs Material documentation site (deployed to GitHub Pages)
 ├── whitepaper/          # Whitepaper archive (superseded by docs/)
 ├── landing-page/        # Government adoption landing page (frontend + backend)

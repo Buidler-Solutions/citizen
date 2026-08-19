@@ -1,0 +1,31 @@
+{
+  "namespace": "game.hunts",
+  "version": 1,
+  "governed_by": "civic.treasurenet",
+  "writers": [
+    "did:key:ed25519:SERVICE_DID",
+    "did:key:ed25519:GAMEMASTER_DID"
+  ],
+  "rules": [
+    {
+      "name": "payload_schema",
+      "config": {
+        "required_fields": ["hunt_id", "gm_did", "reward_amount", "reward_token", "expires_at", "status"],
+        "status_enum": ["created", "funded", "active", "paused", "completed", "expired", "refunded", "cancelled"],
+        "reward_min": 1
+      }
+    },
+    {
+      "name": "allowed_actions",
+      "config": {
+        "actions": ["CREATE", "UPDATE"]
+      }
+    },
+    {
+      "name": "expiry_sanity",
+      "config": {
+        "description": "expires_at must be an ISO-8601 timestamp in the future at submission time"
+      }
+    }
+  ]
+}

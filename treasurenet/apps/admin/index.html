@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>TreasureNet — Admin Panel</title>
+<style>
+  :root { color-scheme: dark; font-family: ui-sans-serif, system-ui, sans-serif; }
+  body { margin: 0; background: #0b1020; color: #e6e9f2; }
+  header { padding: 16px 24px; background: #131a33; border-bottom: 1px solid #26304f; }
+  header h1 { font-size: 18px; margin: 0; }
+  main { padding: 24px; display: grid; gap: 24px; grid-template-columns: 1fr 1fr; max-width: 1200px; margin: 0 auto; }
+  section { background: #121936; border: 1px solid #26304f; border-radius: 12px; padding: 16px; }
+  h2 { font-size: 14px; text-transform: uppercase; letter-spacing: 0.08em; color: #8fa3d9; margin: 0 0 12px; }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  td, th { padding: 6px 8px; border-bottom: 1px solid #26304f; text-align: left; }
+  .did { font-family: ui-monospace, monospace; font-size: 11px; color: #8fa3d9; word-break: break-all; }
+  .event { font-family: ui-monospace, monospace; font-size: 11px; padding: 4px 0; border-bottom: 1px solid #1d2646; }
+  button { background: #3b6ef5; border: 0; color: white; border-radius: 8px; padding: 6px 12px; font-size: 12px; cursor: pointer; }
+</style>
+</head>
+<body>
+<header><h1>TreasureNet Citizen Edition — Admin Panel</h1></header>
+<main>
+  <section>
+    <h2>Chain + registry</h2>
+    <div id="overview">loading…</div>
+    <h2 style="margin-top:20px">Role grants</h2>
+    <div class="row" style="display:flex;gap:8px">
+      <input id="r-did" placeholder="did:key:ed25519:…" style="flex:1;background:#0b1020;color:#e6e9f2;border:1px solid #2c3a66;border-radius:8px;padding:6px;font-size:12px" />
+      <select id="r-role" style="background:#0b1020;color:#e6e9f2;border:1px solid #2c3a66;border-radius:8px;padding:6px;font-size:12px">
+        <option>player</option><option>gamemaster</option><option>auditor</option>
+      </select>
+      <button id="r-grant">Grant</button>
+      <button id="r-revoke">Revoke</button>
+    </div>
+  </section>
+  <section>
+    <h2>File access alerts (clue manifests)</h2>
+    <div id="alerts">loading…</div>
+    <h2 style="margin-top:20px">Analytics</h2>
+    <div id="analytics">loading…</div>
+  </section>
+  <section style="grid-column: 1 / -1">
+    <h2>Live chain events</h2>
+    <div id="events">loading…</div>
+  </section>
+</main>
+<script type="module">
+const API = "http://127.0.0.1:7755";
+
+async function api(method, path, body) {
+  const response = await fetch(`${API}${path}`, {
+    method,
+    headers: { "Content-Type": "application/json" },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const json = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(json.error ?? response.status);
+  return json;
+}
+
+function pre(value) {
+  return `<pre style="font-size:11px;white-space:pre-wrap;word-break:break-all;margin:0">${JSON.stringify(value, null, 2)}</pre>`;
+}
+
+async function refresh() {
+  try {
+    const overview = await api("GET", "/admin/overview");
+    document.getElementById("overview").innerHTML = `
+      <table>
+        <tr><th>chain mode</th><td>${overview.chain_mode}</td></tr>
+        <tr><th>service did</th><td class="did">${overview.service_did}</td></tr>
+        <tr><th>oracle did</th><td class="did">${overview.oracle_did}</td></tr>
+        <tr><th>reward module</th><td>${overview.reward_module}</td></tr>
+        <tr><th>namespaces</th><td>${overview.namespaces.join(", ")}</td></tr>
+        <tr><th>registry counts</th><td>${pre(overview.registry)}</td></tr>
+      </table>`;
+  } catch (e) {
+    document.getElementById("overview").textContent = e.message;
+  }
+  try {
+    const alerts = await api("GET", "/admin/file-alerts");
+    document.getElementById("alerts").innerHTML = alerts.length
+      ? alerts.map((a) => `<div class="event">${a.created_at} ${a.type} ${pre(a.payload)}</div>`).join("")
+      : "no alerts";
+  } catch (e) {
+    document.getElementById("alerts").textContent = e.message;
+  }
+  try {
+    document.getElementById("analytics").innerHTML = pre(await api("GET", "/analytics/summary"));
+  } catch (e) {
+    document.getElementById("analytics").textContent = e.message;
+  }
+  try {
+    const events = await api("GET", "/events");
+    document.getElementById("events").innerHTML = events.slice(-40).reverse()
+      .map((e) => `<div class="event">${e.created_at} <span style="color:#8fa3d9">${e.namespace}</span> ${e.type} ${pre(e.payload)}</div>`)
+      .join("");
+  } catch (e) {
+    document.getElementById("events").textContent = e.message;
+  }
+}
+
+document.getElementById("r-grant").onclick = async () => {
+  const did = document.getElementById("r-did").value.trim();
+  const role = document.getElementById("r-role").value;
+  try {
+    await api("POST", "/roles/grant", { did, role });
+    document.getElementById("r-did").value = "";
+    refresh();
+  } catch (e) {
+    alert(e.message);
+  }
+};
+document.getElementById("r-revoke").onclick = async () => {
+  const did = document.getElementById("r-did").value.trim();
+  try {
+    await api("POST", "/roles/revoke", { did });
+    document.getElementById("r-did").value = "";
+    refresh();
+  } catch (e) {
+    alert(e.message);
+  }
+};
+
+refresh();
+setInterval(refresh, 10_000);
+</script>
+</body>
+</html>

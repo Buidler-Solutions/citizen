@@ -1,0 +1,4 @@
+packages:
+  - "chain/sdk"
+  - "packages/shared"
+  - "apps/server"

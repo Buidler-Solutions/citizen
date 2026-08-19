@@ -1,0 +1,32 @@
+{
+  "namespace": "game.claims",
+  "version": 1,
+  "governed_by": "civic.treasurenet",
+  "writers": [
+    "did:key:ed25519:SERVICE_DID",
+    "did:key:ed25519:ORACLE_DID"
+  ],
+  "rules": [
+    {
+      "name": "multisig_policy",
+      "config": {
+        "description": "Every claim entry requires a 2-of-2 multisig envelope: Game Master + oracle",
+        "threshold": 2,
+        "required_signers": ["GM", "ORACLE"]
+      }
+    },
+    {
+      "name": "object_id_uniqueness",
+      "config": {
+        "description": "object_id is the claim id; duplicate claim object_ids are rejected (double-claim prevention)",
+        "unique_object_ids": true
+      }
+    },
+    {
+      "name": "receipt_reference",
+      "config": {
+        "description": "Claim payloads reference the finality receipt id of the payout entry"
+      }
+    }
+  ]
+}
