@@ -92,6 +92,25 @@ export interface ClaimRecord {
   created_at: string;
 }
 
+/**
+ * Player-initiated claim request (mobile app flow): the player submits photo
+ * proof from the final clue location; the Game Master reviews and approves it
+ * from the web console, producing the two GM claim signatures. The request
+ * carries the photo and geo proof so the approving GM never needs the
+ * player's session; the signatures remain bound to the player's DID.
+ */
+export interface ClaimRequest {
+  request_id: string;
+  hunt_id: string;
+  escrow_id: string;
+  player_did: string;
+  photo_b64: string;
+  latitude: number;
+  longitude: number;
+  status: "pending" | "approved" | "denied";
+  created_at: string;
+}
+
 export interface ConsentReceipt {
   subject_did: string;
   purposes: ("location" | "photo")[];

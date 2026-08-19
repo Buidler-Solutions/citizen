@@ -190,10 +190,73 @@ async function refresh() {
   }
 }
 
+// ── Pending player claim approvals (mobile app flow) ──
+
+const pendingEl = document.getElementById("pending");
+
+async function approveClaim(request) {
+  try {
+    const gmSignature = await sign(`claim:${request.hunt_id}:${request.player_did}`, gm.privateKeyHex);
+    const escrowGmSignature = await sign(`claim:${request.escrow_id}:${request.player_did}`, gm.privateKeyHex);
+    const claim = await api("POST", `/games/${request.hunt_id}/claim`, {
+      request_id: request.request_id,
+      gm_signature: gmSignature,
+      escrow_gm_signature: escrowGmSignature,
+    });
+    log(`claim approved for ${request.player_did.slice(0, 30)}… receipt ${claim.receipt_id ?? "pending"}`);
+    refreshPending();
+    refresh();
+  } catch (error) {
+    log(`claim approval failed: ${error.message}`, false);
+  }
+}
+
+async function refreshPending() {
+  try {
+    const pending = await api("GET", "/claims/pending");
+    pendingEl.innerHTML = "";
+    if (pending.length === 0) {
+      pendingEl.textContent = "none";
+      return;
+    }
+    for (const request of pending) {
+      const card = document.createElement("div");
+      card.className = "hunt";
+      card.innerHTML = `
+        <div class="title">Claim request
+          <span class="badge">${escapeHtml(request.hunt_id)}</span>
+          <span class="badge">${new Date(request.created_at).toLocaleTimeString()}</span>
+        </div>
+        <div class="did">player ${escapeHtml(request.player_did)}</div>
+        <div class="did">photo proof attached · ${request.photo_b64.length} bytes base64</div>
+        <div class="row">
+          <button data-approve="1">Approve + sign payout</button>
+          <button class="secondary" data-deny="1">Deny</button>
+        </div>
+      `;
+      card.querySelector("[data-approve]").onclick = () => approveClaim(request);
+      card.querySelector("[data-deny]").onclick = async () => {
+        try {
+          await api("POST", `/claims/${request.request_id}/deny`);
+          log("claim request denied");
+        } catch (error) {
+          log(`deny failed: ${error.message}`, false);
+        }
+        refreshPending();
+      };
+      pendingEl.appendChild(card);
+    }
+  } catch (error) {
+    pendingEl.textContent = `failed to load pending claims: ${error.message}`;
+  }
+}
+
 function escapeHtml(value) {
   return value.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
 
 await ensureKey();
 refresh();
+refreshPending();
 setInterval(refresh, 10_000);
+setInterval(refreshPending, 5_000);

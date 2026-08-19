@@ -244,6 +244,23 @@ export class GameModule {
   hasUnlocked(huntId: string, playerDid: string, clueIndex: number): boolean {
     return this.store.unlockedClues.has(`${huntId}:${playerDid}:${clueIndex}`);
   }
+
+  /** Player clue-chain progress for the mobile app resume flow. */
+  progress(huntId: string, playerDid: string) {
+    const hunt = this.getHunt(huntId);
+    const unlocked = hunt.clues
+      .filter((clue) => this.hasUnlocked(huntId, playerDid, clue.index))
+      .map((clue) => clue.index);
+    const next = hunt.clues.find((clue) => !unlocked.includes(clue.index));
+    return {
+      hunt_id: huntId,
+      player_did: playerDid,
+      status: hunt.status,
+      unlocked_clues: unlocked,
+      next_clue_index: next?.index ?? null,
+      final_clue_index: hunt.clues[hunt.clues.length - 1].index,
+    };
+  }
 }
 
 function randomHuntId(): string {
