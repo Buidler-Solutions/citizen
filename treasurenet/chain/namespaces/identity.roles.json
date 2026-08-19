@@ -1,0 +1,35 @@
+{
+  "namespace": "identity.roles",
+  "version": 1,
+  "governed_by": "civic.treasurenet",
+  "writers": [
+    "did:key:ed25519:SERVICE_DID"
+  ],
+  "rules": [
+    {
+      "name": "role_enum",
+      "config": {
+        "roles": ["player", "gamemaster", "auditor"]
+      }
+    },
+    {
+      "name": "soulbound_no_transfer",
+      "config": {
+        "description": "Roles are soulbound: TRANSFER actions are rejected by policy",
+        "forbidden_actions": ["TRANSFER"]
+      }
+    },
+    {
+      "name": "admin_only_writes",
+      "config": {
+        "description": "Only the backend service DID (after KYC/civic registry check) may write role entries"
+      }
+    },
+    {
+      "name": "revocation_updates",
+      "config": {
+        "description": "Revocation is an UPDATE entry setting revoked=true"
+      }
+    }
+  ]
+}

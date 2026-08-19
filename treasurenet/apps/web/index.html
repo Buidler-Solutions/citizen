@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>TreasureNet — GM Console</title>
+<style>
+  :root { color-scheme: dark; font-family: ui-sans-serif, system-ui, sans-serif; }
+  body { margin: 0; background: #0b1020; color: #e6e9f2; }
+  header { padding: 16px 24px; background: #131a33; border-bottom: 1px solid #26304f; display: flex; gap: 16px; align-items: center; }
+  header h1 { font-size: 18px; margin: 0; }
+  main { padding: 24px; display: grid; gap: 24px; grid-template-columns: 380px 1fr; max-width: 1200px; margin: 0 auto; }
+  section { background: #121936; border: 1px solid #26304f; border-radius: 12px; padding: 16px; }
+  h2 { font-size: 14px; text-transform: uppercase; letter-spacing: 0.08em; color: #8fa3d9; margin: 0 0 12px; }
+  label { display: block; font-size: 12px; color: #8fa3d9; margin: 10px 0 4px; }
+  input, textarea { width: 100%; box-sizing: border-box; background: #0b1020; color: #e6e9f2; border: 1px solid #2c3a66; border-radius: 8px; padding: 8px; font-size: 13px; }
+  button { background: #3b6ef5; border: 0; color: white; border-radius: 8px; padding: 8px 14px; font-size: 13px; cursor: pointer; margin-top: 10px; }
+  button.secondary { background: #2c3a66; }
+  button:disabled { opacity: 0.5; cursor: not-allowed; }
+  .hunt { border: 1px solid #2c3a66; border-radius: 10px; padding: 12px; margin-bottom: 12px; font-size: 13px; }
+  .hunt .title { font-weight: 600; font-size: 15px; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px; background: #2c3a66; margin-left: 8px; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; }
+  .did { font-family: ui-monospace, monospace; font-size: 11px; color: #8fa3d9; word-break: break-all; }
+  .ok { color: #6ee7a8; } .err { color: #ff8b8b; }
+  #log { font-family: ui-monospace, monospace; font-size: 11px; max-height: 160px; overflow: auto; background: #0b1020; border-radius: 8px; padding: 8px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>TreasureNet Citizen Edition — GM Console</h1>
+  <span class="did" id="gm-did">no wallet</span>
+  <button class="secondary" id="btn-new-key">New GM keypair</button>
+  <button class="secondary" id="btn-grant">Request gamemaster role</button>
+</header>
+<main>
+  <section>
+    <h2>Create hunt</h2>
+    <label>Title <input id="f-title" value="Harbor Beacon" /></label>
+    <label>Reward (CTZN) <input id="f-reward" type="number" value="500" /></label>
+    <label>Expires (hours from now) <input id="f-hours" type="number" value="24" /></label>
+    <label>Clue 1 — lat <input id="f-lat1" value="10.3167" /></label>
+    <label>Clue 1 — lon <input id="f-lon1" value="123.8908" /></label>
+    <label>Clue 2 — lat <input id="f-lat2" value="10.3172" /></label>
+    <label>Clue 2 — lon <input id="f-lon2" value="123.8912" /></label>
+    <label>Hunt id (optional) <input id="f-hunt-id" placeholder="auto" /></label>
+    <button id="btn-create">Sign + create hunt</button>
+    <h2 style="margin-top:24px">Server log</h2>
+    <div id="log"></div>
+  </section>
+  <section>
+    <h2>Hunts</h2>
+    <div id="hunts">loading…</div>
+  </section>
+</main>
+<script type="module" src="./app.js"></script>
+</body>
+</html>

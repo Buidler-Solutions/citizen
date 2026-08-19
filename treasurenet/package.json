@@ -1,0 +1,16 @@
+{
+  "name": "treasurenet-citizen",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@11.20.0",
+  "scripts": {
+    "server": "node apps/server/src/main.ts",
+    "web": "node apps/web/serve.mjs",
+    "admin": "node apps/admin/serve.mjs",
+    "smoke": "node scripts/smoke.mjs",
+    "deploy:chain": "python3 chain/scripts/deploy_treasurenet.py"
+  },
+  "devDependencies": {
+    "turbo": "^2.3.0"
+  }
+}

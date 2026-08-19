@@ -1,0 +1,36 @@
+{
+  "namespace": "game.escrow",
+  "version": 1,
+  "governed_by": "civic.treasurenet",
+  "writers": [
+    "did:key:ed25519:SERVICE_DID",
+    "did:key:ed25519:ESCROW_MODULE_DID"
+  ],
+  "rules": [
+    {
+      "name": "status_transitions",
+      "config": {
+        "transitions": {
+          "created": ["funded"],
+          "funded": ["completed", "refunded", "expired"],
+          "completed": [],
+          "refunded": []
+        }
+      }
+    },
+    {
+      "name": "multisig_claims",
+      "config": {
+        "description": "TRANSITION to completed requires a 2-of-2 multisig envelope (GM + oracle)",
+        "threshold": 2,
+        "required_signers": ["GM", "ORACLE"]
+      }
+    },
+    {
+      "name": "allowed_actions",
+      "config": {
+        "actions": ["CREATE", "UPDATE", "TRANSFER"]
+      }
+    }
+  ]
+}

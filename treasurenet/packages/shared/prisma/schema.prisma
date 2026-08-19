@@ -1,0 +1,113 @@
+// TreasureNet Citizen Edition — indexer projection schema.
+// The chain (namespaces + WASM module state) is the source of truth; these
+// tables are a queryable projection maintained by the indexer worker.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Hunt {
+  huntId       String   @id
+  gmDid        String
+  title        String
+  status       String
+  rewardAmount Int
+  rewardToken  String
+  escrowId     String   @unique
+  expiresAt    DateTime
+  expiresBlock BigInt
+  winnerDid    String?
+  receiptId    String?
+  entryHash    String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  claims  Claim[]
+  clues   Clue[]
+
+  @@index([status])
+  @@index([gmDid])
+}
+
+model Clue {
+  id          String   @id @default(uuid())
+  huntId      String
+  index       Int
+  manifestId  String
+  latitude    Float
+  longitude   Float
+  radiusMeters Float
+  Hunt        Hunt     @relation(fields: [huntId], references: [huntId])
+
+  @@unique([huntId, index])
+}
+
+model Claim {
+  claimId        String   @id @default(uuid())
+  huntId         String
+  winnerDid      String
+  rewardAmount   Int
+  rewardToken    String
+  gmSignature    String
+  oracleSignature String
+  receiptId      String?
+  blockHeight    BigInt?
+  status         String
+  createdAt      DateTime @default(now())
+  Hunt           Hunt     @relation(fields: [huntId], references: [huntId])
+
+  @@unique([huntId])
+  @@index([winnerDid])
+}
+
+model RoleEntry {
+  did        String   @id
+  role       String
+  revoked    Boolean  @default(false)
+  grantedAt  DateTime @default(now())
+  revokedAt  DateTime?
+}
+
+model Wallet {
+  did        String   @id
+  createdAt  DateTime @default(now())
+  lastSeenAt DateTime @default(now())
+}
+
+model OracleVerdict {
+  id              String   @id @default(uuid())
+  huntId          String
+  playerDid       String
+  clueIndex       Int
+  passed          Boolean
+  confidence      Float
+  oracleDid       String
+  verdictSignature String
+  reason          String
+  createdAt       DateTime @default(now())
+
+  @@unique([huntId, playerDid, clueIndex])
+}
+
+model ConsentReceipt {
+  receiptId  String   @id
+  subjectDid String
+  purposes   String
+  grantedAt  DateTime @default(now())
+  expiresAt  DateTime
+
+  @@index([subjectDid])
+}
+
+model OutboundEvent {
+  id         String   @id @default(uuid())
+  type       String
+  payload    String
+  createdAt  DateTime @default(now())
+  deliveredAt DateTime?
+}
