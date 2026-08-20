@@ -30,18 +30,26 @@ export interface ModuleExecuteResponse {
 
 export class CitizenNodeClient {
   private readonly baseUrl: string;
+  private readonly apiKey: string | undefined;
 
-  constructor(baseUrl: string) {
+  constructor(baseUrl: string, apiKey?: string) {
     this.baseUrl = baseUrl;
+    this.apiKey = apiKey;
+  }
+
+  private authHeaders(extra?: Record<string, string>): Record<string, string> {
+    return this.apiKey ? { "x-api-key": this.apiKey, ...extra } : { ...extra };
   }
 
   private async request<T>(
     path: string,
-    init?: { method?: string; body?: unknown }
+    init?: { method?: string; body?: unknown; headers?: Record<string, string> }
   ): Promise<T> {
+    const headers = this.authHeaders(init?.headers);
+    if (init?.body) headers["Content-Type"] = "application/json";
     const response = await fetch(`${this.baseUrl}${path}`, {
       method: init?.method ?? "GET",
-      headers: init?.body ? { "Content-Type": "application/json" } : undefined,
+      headers,
       body: init?.body ? JSON.stringify(init.body) : undefined,
     });
     const text = await response.text();
@@ -117,5 +125,63 @@ export class CitizenNodeClient {
     } catch {
       return false;
     }
+  }
+
+  // ── off-chain encrypted files (gap 3) ──
+
+  async createFileIntent(body: unknown): Promise<{
+    intent_id: string;
+    upload: { object_ref: string; upload_url: string; expires_at: number };
+    constraints?: Record<string, unknown>;
+  }> {
+    return this.request("/api/v1/files/intents", { method: "POST", body });
+  }
+
+  async uploadCiphertext(uploadUrl: string, bytes: Uint8Array): Promise<{
+    ciphertext_hash: string;
+  }> {
+    const url = uploadUrl.startsWith("/") ? `${this.baseUrl}${uploadUrl}` : uploadUrl;
+    const headers = this.authHeaders({ "Content-Type": "application/octet-stream" });
+    const response = await fetch(url, { method: "PUT", headers, body: bytes as unknown as BodyInit });
+    const text = await response.text();
+    if (!response.ok) {
+      throw new Error(`citizen node: upload failed HTTP ${response.status}: ${text.slice(0, 200)}`);
+    }
+    return JSON.parse(text);
+  }
+
+  async commitFile(
+    body: unknown,
+    idempotencyKey: string
+  ): Promise<{ manifest_id: string; manifest_commitment: string }> {
+    return this.request("/api/v1/files/commit", {
+      method: "POST",
+      body,
+      headers: { "idempotency-key": idempotencyKey },
+    });
+  }
+
+  async readFile(body: unknown): Promise<{
+    manifest_id: string;
+    file_ref: string;
+    ciphertext_hash: string;
+  }> {
+    return this.request("/api/v1/files/read", { method: "POST", body });
+  }
+
+  async revokeFileReader(body: unknown): Promise<{ status: string }> {
+    return this.request("/api/v1/files/revoke", { method: "POST", body });
+  }
+
+  /** Fetch local-store ciphertext by object_ref (path form `/api/v1/files/local/...`). */
+  async downloadCiphertext(path: string): Promise<{ ciphertext_b64: string }> {
+    return this.request(path);
+  }
+
+  async fileAlerts(): Promise<Array<Record<string, unknown>>> {
+    const result = await this.request<{ alerts?: Array<Record<string, unknown>> }>(
+      "/api/v1/files/alerts"
+    );
+    return result.alerts ?? [];
   }
 }

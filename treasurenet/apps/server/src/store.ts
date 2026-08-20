@@ -61,6 +61,10 @@ export class Store {
   readonly notifications: Notification[] = [];
   readonly events: ChainEvent[] = [];
   readonly orgs = new Map<string, Org>();
+  readonly govProposals = new Map<string, import("./modules/governance.module.ts").GovernanceProposal>();
+  readonly fileManifests = new Map<string, import("./modules/files.module.ts").ClueFileManifest>();
+  readonly fileBlobs = new Map<string, string>();
+  readonly fileRevocations = new Set<string>();
   readonly roles = new Map<string, string>();
   readonly analytics = {
     hunts_created: 0,

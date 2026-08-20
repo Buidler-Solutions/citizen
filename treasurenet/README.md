@@ -70,6 +70,10 @@ cd ../ctzn-token && RUSTFLAGS="-C link-arg=--allow-undefined" cargo build --rele
 # 2. build + start a solo node (single validator, mock network, advancing blocks)
 cd citizen-protocol && cargo build -p citizen-node --release
 ./target/release/citizen-node config/solo/validator-solo-tn.toml   # api on :8081
+#   (note: the config path is positional — a `--config` flag is silently
+#    treated as the path itself and the node falls back to defaults)
+#   for the encrypted-clue files flow use the files-enabled profile instead:
+#   ./target/release/citizen-node config/solo/validator-solo-tn-files.toml   # api on :8185
 
 # 3. deploy: governance approvals + module registration + configuration
 python3 chain/scripts/deploy_treasurenet.py \
@@ -126,6 +130,21 @@ GET  /leaderboard               GET  /analytics/summary
 GET  /admin/overview            GET  /admin/file-alerts
 GET  /events                    POST /admin/scheduler/tick
 POST /admin/indexer/poll
+POST /files/clue                (GM sig; encrypts+commits an AES-GCM clue via the node files API)
+POST /files/clue/key            (GM sig; attaches the wrapped content key)
+POST /files/clue/read           (player session; consent+unlock gated)
+POST /files/clue/revoke         (GM sig; ENCRYPTED_FILE_REVOKE on chain)
+GET  /admin/governance/proposals
+POST /admin/governance/proposals             {title, parameters}
+POST /admin/governance/proposals/:id/decision  {decision: approved|rejected}
+```
+
+Reference oracle service (`apps/oracle/service.mjs`, port 7760 by default):
+
+```
+GET  /health
+POST /verdict    {hunt_id, player_did, clue_index, photo_b64, geo_ok}
+                -> {passed, confidence, reason, verdict_signature, oracle_did}
 ```
 
 ## Documentation

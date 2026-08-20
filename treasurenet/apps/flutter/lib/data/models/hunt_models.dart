@@ -320,3 +320,30 @@ class AuthChallenge {
   final String message;
   final DateTime expiresAt;
 }
+
+@immutable
+class EncryptedClue {
+  const EncryptedClue({
+    required this.manifestId,
+    required this.ciphertextB64,
+    required this.ivB64,
+    required this.ciphertextHash,
+    this.keyWrappedB64,
+  });
+
+  factory EncryptedClue.fromJson(Map<String, dynamic> json) => EncryptedClue(
+        manifestId: json['manifest_id'] as String? ?? '',
+        ciphertextB64: json['ciphertext_b64'] as String? ?? '',
+        ivB64: json['iv_b64'] as String? ?? '',
+        ciphertextHash: json['ciphertext_hash'] as String? ?? '',
+        keyWrappedB64: json['key_wrapped_b64'] as String?,
+      );
+
+  final String manifestId;
+  final String ciphertextB64;
+  final String ivB64;
+  final String ciphertextHash;
+  final String? keyWrappedB64;
+
+  bool get hasKey => keyWrappedB64 != null && keyWrappedB64!.isNotEmpty;
+}

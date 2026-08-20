@@ -41,7 +41,7 @@ export class ChainModule {
   constructor(config: ServerConfig, persistence?: PersistenceModule) {
     this.config = config;
     if (config.nodeUrl) {
-      const client = new CitizenNodeClient(config.nodeUrl);
+      const client = new CitizenNodeClient(config.nodeUrl, config.nodeApiKey);
       const queueStore = persistence
         ? {
             enqueue: (item: { moduleId: string; operation: string; params: Record<string, unknown>; attempts: number }) => persistence.enqueueRetry(item),

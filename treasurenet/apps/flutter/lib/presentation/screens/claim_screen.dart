@@ -66,7 +66,8 @@ class _ClaimScreenState extends ConsumerState<ClaimScreen> {
     if (_photoBytes == null) return;
     setState(() => _stage = _ClaimStage.awaitingApproval);
     try {
-      final fix = await currentFix();
+      final trusted = await trustedFix();
+      final fix = trusted.fix;
       final request = await ref.read(apiProvider).requestClaim(
             huntId: widget.huntId,
             photoBase64: base64Encode(_photoBytes!),

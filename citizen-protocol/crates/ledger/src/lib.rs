@@ -190,6 +190,11 @@ impl<S: LedgerStorage + 'static> Ledger<S> {
             "voter_jurisdiction_policy" => self.voter_jurisdiction_policy(entry, config),
             "wasm_runtime_policy" => self.wasm_runtime_policy(entry, config),
             "interop_adapter_policy" => self.interop_adapter_policy(entry, config),
+            // Off-chain encrypted file policy is enforced at the API edge
+            // (size/mime/encryption-mode/action gates on the files endpoints).
+            // The ledger arm exists so namespace rulesets can carry the policy
+            // without failing validation on unrelated entries.
+            "offchain_encrypted_file_policy" => Ok(()),
             "rate_limit_policy" => self.rate_limit_policy(entry, config),
             _ => {
                 let handler = self

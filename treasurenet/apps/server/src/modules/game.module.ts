@@ -72,6 +72,11 @@ export class GameModule {
       badRequest("HuntExists", `hunt ${huntId} already exists`);
     }
 
+    // Node mode: refresh the height hint so short expiries convert to a
+    // block still in the future after submission/finalization latency.
+    if (this.chain.nodeClient) {
+      await this.chain.refreshHeight();
+    }
     const expiresBlock = expiryToBlock(input.expires_at, this.chain.currentBlock());
     const escrowId = `esc-${huntId}`;
 

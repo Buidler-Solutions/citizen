@@ -2,6 +2,8 @@
 /// (lowercase hex, raw 32-byte keys, raw 64-byte signatures).
 library;
 
+import 'dart:convert';
+
 String bytesToHex(List<int> bytes) {
   final buffer = StringBuffer();
   for (final byte in bytes) {
@@ -9,6 +11,10 @@ String bytesToHex(List<int> bytes) {
   }
   return buffer.toString();
 }
+
+List<int> utf8Bytes(String value) => utf8.encode(value);
+
+List<int> base64DecodeBytes(String value) => base64.decode(value);
 
 List<int> hexToBytes(String hexValue) {
   final normalized = hexValue.trim();
