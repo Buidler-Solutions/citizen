@@ -1,8 +1,10 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { Router, badRequest, corsHeaders, HttpError } from "./http.ts";
+import { Router, badRequest, corsHeaders, clientIp, HttpError, RateLimiter } from "./http.ts";
 import { Store } from "./store.ts";
 import type { ServerConfig } from "./config.ts";
+import { claimMessages, signMessage } from "../../../chain/sdk/src/index.ts";
 import { ChainModule } from "./modules/chain.module.ts";
+import { PersistenceModule } from "./modules/persistence.module.ts";
 import { AuthModule } from "./modules/auth.module.ts";
 import { GameModule } from "./modules/game.module.ts";
 import { EscrowModule } from "./modules/escrow.module.ts";
@@ -11,6 +13,7 @@ import { WalletModule } from "./modules/wallet.module.ts";
 import { ConsentModule } from "./modules/consent.module.ts";
 import { SchedulerModule } from "./modules/scheduler.module.ts";
 import { IndexerModule } from "./modules/indexer.module.ts";
+import { OrgsModule } from "./modules/orgs.module.ts";
 import {
   AdminModule,
   AnalyticsModule,
@@ -30,6 +33,8 @@ import { checkProximity } from "./modules/geo.module.ts";
 export interface AppContext {
   config: ServerConfig;
   store: Store;
+  persistence: PersistenceModule;
+  limiter: RateLimiter;
   chain: ChainModule;
   auth: AuthModule;
   game: GameModule;
@@ -39,6 +44,7 @@ export interface AppContext {
   consent: ConsentModule;
   scheduler: SchedulerModule;
   indexer: IndexerModule;
+  orgs: OrgsModule;
   leaderboard: LeaderboardModule;
   analytics: AnalyticsModule;
   notification: NotificationModule;
@@ -48,24 +54,43 @@ export interface AppContext {
 
 export function buildContext(config: ServerConfig): AppContext {
   const store = new Store();
-  const chain = new ChainModule(config);
+  const persistence = new PersistenceModule(config);
+  const chain = new ChainModule(config, persistence);
+  const limiter = new RateLimiter(config.rateLimitPerMin, config.rateLimitAuthPerMin);
   const auth = new AuthModule(store);
   const oracle = new OracleModule(chain, store);
   const game = new GameModule(chain, store);
   const escrow = new EscrowModule(chain, store, game, oracle);
   const wallet = new WalletModule(chain, store);
   const consent = new ConsentModule(store);
-  const indexer = new IndexerModule(chain, store);
+  const indexer = new IndexerModule(chain, store, persistence);
   const scheduler = new SchedulerModule({
     store,
-    onExpiry: async () => {
-      // Refunds are GM-signed; the scheduler marks expiry and the GM
-      // console completes the refund entry.
+    onExpiry: async (huntId) => {
+      // Self-serve refunds only when the configured GM refund key is the
+      // hunt owner's key: the refund must be GM-signed over two different
+      // canonical messages. Otherwise the console completes the refund.
+      const refundDid = chain.gmRefundDid();
+      const hunt = store.hunts.get(huntId);
+      if (!config.gmRefundKeyHex || !refundDid || !hunt || hunt.gm_did !== refundDid) {
+        return;
+      }
+      const escrowSig = signMessage(
+        claimMessages.refundEscrow(hunt.escrow_id),
+        config.gmRefundKeyHex
+      );
+      const huntSig = signMessage(
+        claimMessages.refundHunt(huntId, hunt.gm_did),
+        config.gmRefundKeyHex
+      );
+      await escrow.refund(huntId, huntSig, escrowSig);
     },
   });
   return {
     config,
     store,
+    persistence,
+    limiter,
     chain,
     auth,
     game,
@@ -75,6 +100,7 @@ export function buildContext(config: ServerConfig): AppContext {
     consent,
     scheduler,
     indexer,
+    orgs: new OrgsModule(store),
     leaderboard: new LeaderboardModule(store),
     analytics: new AnalyticsModule(store),
     notification: new NotificationModule(store),
@@ -253,9 +279,27 @@ export function buildRouter(ctx: AppContext): Router {
     });
   });
   router.post("/games/:id/refund", (_req, params, _query, body) => {
-    const input = body as { gm_signature?: string };
+    const input = body as { gm_signature?: string; escrow_gm_signature?: string };
     if (!input?.gm_signature) badRequest("MissingFields", "gm_signature is required");
-    return ctx.escrow.refund(params.id!, input.gm_signature!);
+    return ctx.escrow.refund(params.id!, input.gm_signature!, input.escrow_gm_signature);
+  });
+
+  // ── orgs ──
+  router.post("/orgs", (_req, _params, _query, body) =>
+    ctx.orgs.create(body as { owner_did?: string; name?: string })
+  );
+  router.get("/orgs", () => ctx.orgs.list());
+  router.post("/orgs/:id/members", (_req, params, _query, body) => {
+    const input = body as { requester_did?: string; did?: string; role?: string };
+    if (!input?.requester_did || !input?.did) {
+      badRequest("MissingFields", "requester_did and did are required");
+    }
+    return ctx.orgs.addMember(params.id!, input.requester_did!, input.did!, input.role);
+  });
+  router.delete("/orgs/:id/members/:did", (_req, params, _query, body) => {
+    const input = body as { requester_did?: string };
+    if (!input?.requester_did) badRequest("MissingFields", "requester_did is required");
+    return ctx.orgs.removeMember(params.id!, input.requester_did!, params.did!);
   });
 
   // ── oracle ──
@@ -273,6 +317,23 @@ export function buildRouter(ctx: AppContext): Router {
   );
   router.post("/admin/scheduler/tick", () => ctx.scheduler.tick());
   router.post("/admin/indexer/poll", () => ctx.indexer.poll());
+  router.get("/admin/persistence", () => ({
+    enabled: ctx.persistence.enabled,
+    postgres: ctx.persistence.postgres,
+    redis: ctx.persistence.redisEnabled,
+    webhook: Boolean(ctx.config.notifyWebhookUrl),
+    retries_pending: ctx.chain.pendingRetries(),
+    rate_limiter_buckets: ctx.limiter.size,
+    indexer_cursor: ctx.indexer.currentCursor(),
+  }));
+  router.post("/admin/flush-retries", async () => {
+    const failures = await ctx.chain.flushRetryQueue();
+    return {
+      flushed: true,
+      remaining: ctx.chain.pendingRetries(),
+      failures,
+    };
+  });
 
   return router;
 }
@@ -289,15 +350,21 @@ export async function handleRequest(
     return;
   }
   const url = new URL(req.url ?? "/", `http://${req.headers.host ?? "localhost"}`);
-  const matched = router.match(req.method ?? "GET", url.pathname);
   const headers = { "Content-Type": "application/json", ...corsHeaders() };
+  const limited = ctx.limiter.check(clientIp(req), url.pathname);
+  if (limited !== undefined) {
+    res.writeHead(429, { ...headers, "Retry-After": String(limited) });
+    res.end(JSON.stringify({ error: "rate limited", code: "RateLimited", retry_after_seconds: limited }));
+    return;
+  }
+  const matched = router.match(req.method ?? "GET", url.pathname);
   if (!matched) {
     res.writeHead(404, headers);
     res.end(JSON.stringify({ error: "route not found", code: "NotFound", routes: router.listRoutes() }));
     return;
   }
   let body: unknown = undefined;
-  if (req.method === "POST" || req.method === "PUT") {
+  if (req.method === "POST" || req.method === "PUT" || req.method === "DELETE") {
     const chunks: Buffer[] = [];
     for await (const chunk of req) chunks.push(chunk as Buffer);
     const raw = Buffer.concat(chunks).toString("utf8");

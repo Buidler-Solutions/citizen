@@ -90,6 +90,7 @@ export class EscrowModule {
       created_at: new Date().toISOString(),
     };
     this.store.claimRequests.set(request.request_id, request);
+    void this.store.upsertClaimRequest(request);
     this.store.recordEvent("claim.requested", "game.claims", {
       request_id: request.request_id,
       hunt_id: request.hunt_id,
@@ -196,7 +197,7 @@ export class EscrowModule {
       finalClue.longitude,
       finalClue.radius_meters
     );
-    const verdict = this.oracle.evaluate({
+    const verdict = await this.oracle.evaluate({
       hunt_id: input.hunt_id,
       player_did: playerDid!,
       clue_index: finalClue.index,
@@ -240,19 +241,25 @@ export class EscrowModule {
         signatures: `${input.escrow_gm_signature},${oracleEscrowSig}`,
       });
 
-      const receiptId = (escrowResult.meta as { receipt_id?: string }).receipt_id
-        ?? (huntResult.meta as { receipt_id?: string }).receipt_id;
-      record.status = "confirmed";
-      record.receipt_id = receiptId;
-      record.block_height =
+      const blockHeight =
         (escrowResult.output.receipt_block as number | undefined) ??
         (huntResult.output.receipt_block as number | undefined);
+      // Node mode: module executes finalize via block height + module state,
+      // not ledger receipts, so reference the sealed block deterministically.
+      const receiptId = (escrowResult.meta as { receipt_id?: string }).receipt_id
+        ?? (huntResult.meta as { receipt_id?: string }).receipt_id
+        ?? (this.chain.nodeClient ? `node:${blockHeight ?? 0}:${hunt!.escrow_id}` : undefined);
+      record.status = "confirmed";
+      record.receipt_id = receiptId;
+      record.block_height = blockHeight;
 
       hunt!.status = "completed";
       hunt!.winner_did = playerDid!;
       hunt!.receipt_id = receiptId;
       if (request) request.status = "approved";
-      this.store.claims.set(claimId, record);
+      this.store.upsertHunt(hunt!);
+      if (request) this.store.upsertClaimRequest(request);
+      this.store.upsertClaim(record);
       this.store.analytics.claims_confirmed += 1;
       this.store.analytics.rewards_paid += hunt!.reward_amount;
       this.store.recordEvent("claim.confirmed", "game.claims", {
@@ -266,9 +273,11 @@ export class EscrowModule {
         "claim.confirmed",
         `Reward of ${hunt!.reward_amount} ${hunt!.reward_token} paid. Receipt ${receiptId ?? "pending"}.`
       );
+      await this.chain.distributeReward(playerDid!, hunt!.reward_amount, hunt!.hunt_id);
     } catch (error) {
       record.status = "failed";
       this.store.claims.set(claimId, record);
+      this.store.upsertClaim(record);
       if (error instanceof ModuleError) {
         badRequest(error.code, error.message);
       }
@@ -277,21 +286,34 @@ export class EscrowModule {
     return record;
   }
 
-  /** Owner-signed refund after expiry (scheduler or manual). */
-  async refund(huntId: string, gmSignature: string): Promise<ClaimRecord | { refunded: true; hunt_id: string }> {
+  /**
+   * Owner-signed refund after expiry. Both refund messages are verified:
+   * `refund:<escrow_id>` for the escrow module and
+   * `refund:<hunt_id>:<gm_did>` for the hunt module, mirroring the dual
+   * claim signatures (the two modules sign different canonical strings).
+   * The scheduler signs the same pair when a GM refund key is configured.
+   */
+  async refund(
+    huntId: string,
+    gmSignature: string,
+    escrowGmSignature?: string
+  ): Promise<ClaimRecord | { refunded: true; hunt_id: string }> {
     const hunt = this.store.hunts.get(huntId);
     if (!hunt) notFound("HuntNotFound", `hunt ${huntId} does not exist`);
     const escrowMessage = claimMessages.refundEscrow(hunt!.escrow_id);
     const huntMessage = claimMessages.refundHunt(huntId, hunt!.gm_did);
     const gmPublicKeyHex = hunt!.gm_did.split(":").pop() ?? "";
-    if (!verifyMessage(escrowMessage, gmSignature, gmPublicKeyHex)) {
-      badRequest("InvalidSignature", "refund signature verification failed");
+    if (!verifyMessage(escrowMessage, escrowGmSignature ?? gmSignature, gmPublicKeyHex)) {
+      badRequest("InvalidSignature", "escrow refund signature verification failed");
+    }
+    if (!verifyMessage(huntMessage, gmSignature, gmPublicKeyHex)) {
+      badRequest("InvalidSignature", "hunt refund signature verification failed");
     }
     await this.chain.adapter.execute("treasure-escrow.v1", {
       operation: "refund",
       escrow_id: hunt!.escrow_id,
       owner_did: hunt!.gm_did,
-      signature: gmSignature,
+      signature: escrowGmSignature ?? gmSignature,
     });
     await this.chain.adapter.execute("treasure-hunt.v1", {
       operation: "refund",
@@ -300,7 +322,9 @@ export class EscrowModule {
       signature: gmSignature,
     });
     hunt!.status = "refunded";
+    this.store.upsertHunt(hunt!);
     this.store.recordEvent("hunt.refunded", "game.escrow", { hunt_id: huntId });
+    this.store.notify(hunt!.gm_did, "hunt.refunded", `Hunt ${hunt!.title} refunded after expiry.`);
     return { refunded: true, hunt_id: huntId };
   }
 

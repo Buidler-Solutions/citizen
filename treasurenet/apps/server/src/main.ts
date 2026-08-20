@@ -19,7 +19,16 @@ async function main() {
   const ctx = buildContext(config);
   const router = buildRouter(ctx);
 
+  // Optional backends first (Postgres projection, Redis streams, webhook):
+  // rehydrate the in-memory store and the durable retry queue before the
+  // modules bootstrap so a restarted process resumes where it stopped.
+  await ctx.persistence.connect();
+  const rehydrated = await ctx.persistence.rehydrate(ctx.store);
+  ctx.store.attach(ctx.persistence);
+  const restoredRetries = await ctx.chain.restoreRetryQueue();
+
   await ctx.chain.bootstrap();
+  await ctx.chain.refreshHeight();
   ctx.indexer.start();
   ctx.scheduler.start();
 
@@ -36,12 +45,19 @@ async function main() {
     console.log(
       `treasurenet-citizen server on :${config.port} (chain=${ctx.chain.mode()}, fingerprint=${configFingerprint(config)})`
     );
+    if (ctx.persistence.enabled) {
+      console.log(
+        `[persistence] rehydrated hunts=${rehydrated.hunts} claims=${rehydrated.claims} requests=${rehydrated.requests} retries=${restoredRetries}`
+      );
+    }
   });
 
   const shutdown = () => {
     ctx.scheduler.stop();
     ctx.indexer.stop();
-    server.close(() => process.exit(0));
+    server.close(() => {
+      ctx.persistence.close().finally(() => process.exit(0));
+    });
   };
   process.on("SIGINT", shutdown);
   process.on("SIGTERM", shutdown);

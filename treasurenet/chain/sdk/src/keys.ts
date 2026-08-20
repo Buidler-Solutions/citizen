@@ -39,6 +39,23 @@ export function didFromPublicKey(publicKeyHex: string): string {
   return `did:key:ed25519:${publicKeyHex}`;
 }
 
+/** Derive the public key hex (and DID form) from a raw 32-byte private key. */
+export function publicKeyFromPrivateKeyHex(privateKeyHex: string): string {
+  const privateKey = createPrivateKey({
+    key: Buffer.concat([PKCS8_PREFIX, Buffer.from(privateKeyHex, "hex")]),
+    format: "der",
+    type: "pkcs8",
+  });
+  const publicKey = createPublicKey(privateKey);
+  return Buffer.from(publicKey.export({ type: "spki", format: "der" }))
+    .subarray(-32)
+    .toString("hex");
+}
+
+export function didFromPrivateKeyHex(privateKeyHex: string): string {
+  return didFromPublicKey(publicKeyFromPrivateKeyHex(privateKeyHex));
+}
+
 export function publicKeyFromDid(did: string): string {
   const prefix = "did:key:ed25519:";
   if (!did.startsWith(prefix)) {

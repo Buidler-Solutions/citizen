@@ -42,7 +42,7 @@ bytes = "1"
 axum = { version = "0.7", features = ["macros"] }
 serde_with = "3.4"
 chrono = { version = "0.4", features = ["serde"] }
-uuid = { version = "1", features = ["serde", "v4"] }
+uuid = { version = "1", features = ["serde", "v4", "v7"] }
 anyhow = "1.0"
 hex = "0.4"
 base64 = "0.22"

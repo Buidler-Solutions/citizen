@@ -116,15 +116,27 @@ export class MockChain implements ChainAdapter {
     params: Record<string, unknown>
   ): Promise<{ output: Record<string, unknown>; meta: ChainWriteMeta }> {
     const operation = String(params.operation ?? "");
-    const scope = `${moduleId}:${operation}:${params.escrow_id ?? params.hunt_id ?? params.player_did ?? params.did ?? ""}`;
+    const scope = `${moduleId}:${operation}:${
+      params.escrow_id ?? params.hunt_id ?? params.token_id ?? params.player_did ?? params.did ?? ""
+    }`;
     const isWrite = !operation.startsWith("get") && !["is_expired", "is_registered", "has_role", "role_of", "list_counts"].includes(operation);
+    // Idempotency matches the real ModuleGateway: a scope is replayed only
+    // after a successful write; rejected executions stay retryable.
     if (isWrite && this.writeScopes.has(scope)) {
       this.fail("ReplayedSubmission");
     }
+    const result = this.dispatch(moduleId, operation, params);
     if (isWrite) {
       this.writeScopes.add(scope);
     }
+    return result;
+  }
 
+  private dispatch(
+    moduleId: string,
+    operation: string,
+    params: Record<string, unknown>
+  ): { output: Record<string, unknown>; meta: ChainWriteMeta } {
     if (moduleId === MODULES.escrow) return this.escrow(operation, params);
     if (moduleId === MODULES.hunt) return this.hunt(operation, params);
     if (moduleId === MODULES.registry) return this.registry(operation, params);
@@ -150,14 +162,20 @@ export class MockChain implements ChainAdapter {
         return this.ok({ admin }, `escrow-configure`);
       }
       case "init": {
+        const escrowId = String(p.escrow_id ?? "");
+        const ownerDid = String(p.owner_did ?? "");
+        const claimerDid = String(p.claimer_did ?? "");
+        if (!escrowId || !ownerDid || !claimerDid) {
+          this.fail("missing required fields: escrow_id, owner_did, claimer_did");
+        }
         const amount = Number(p.amount ?? 0);
         const deadline = Number(p.deadline_block ?? 0);
         if (amount <= 0) this.fail("InvalidAmount");
         if (deadline <= 0) this.fail("InvalidDeadline");
         if (state) this.fail("AlreadyInitialized");
         this.escrows.set(id, {
-          owner: String(p.owner_did ?? ""),
-          claimer: String(p.claimer_did ?? ""),
+          owner: ownerDid,
+          claimer: claimerDid,
           amount,
           token: String(p.token ?? "CTZN"),
           deadline,

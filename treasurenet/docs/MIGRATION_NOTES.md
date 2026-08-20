@@ -151,3 +151,78 @@ flow gained an explicit approval hop:
 This deviation keeps the signing model verifiable (both GM signatures are
 still bound to the winner DID and verified on-chain by the modules) while
 matching the split-surface product: mobile players, web GMs.
+
+## 13. Production depth: persistence, refunds, limits, external oracle
+
+Closes the Tier 2 deployment blockers and the Tier 1 node-operation gap
+with live evidence.
+
+### Persistence and rehydration
+
+- `PersistenceModule` (dynamic imports, zero hard dependencies) write-through
+  upserts hunts, claims, claim requests, roles, wallets, verdicts, consents,
+  events, notifications, orgs and unlocked clues to Postgres via Prisma
+  (pinned to 6.x; Prisma 7 dropped schema-level `DATABASE_URL`), publishes
+  every event to the Redis stream `treasurenet:events`, and delivers
+  notifications to `TREASURENET_NOTIFY_WEBHOOK_URL` with a 5s timeout.
+- Boot order in `main.ts`: connect, rehydrate the in-memory store from
+  Postgres, attach for write-through, restore the durable retry queue,
+  bootstrap modules, refresh the chain height hint, then start the indexer
+  and scheduler. The smoke restart scenario proves a hunt survives a cold
+  restart via the projection.
+- The server remains the source of truth for chain writes; Postgres is a
+  projection. Chain errors surface to the client regardless of projection
+  state.
+
+### Dual refund signatures and self-serve scheduler refunds
+
+- The escrow and hunt modules sign different refund messages
+  (`refund:<escrow_id>` vs `refund:<hunt_id>:<gm_did>`), so refunds carry
+  both signatures and each module verifies its own.
+- When `TREASURENET_GM_REFUND_KEY` matches a hunt's GM DID, the scheduler
+  completes expired hunts itself instead of waiting for the GM console. It
+  retries every tick until the on-chain deadline block passes because the
+  escrow deadline block can lag wall-clock expiry.
+
+### Rate limiting
+
+- Token-bucket limiter per client IP (`X-Forwarded-For` aware) with a
+  stricter authenticated-request class; over-limit calls get 429 plus
+  `Retry-After`. Tunable via `TREASURENET_RATE_LIMIT_PER_MIN` (default 240)
+  and `TREASURENET_RATE_LIMIT_AUTH_PER_MIN` (default 30).
+
+### External oracle mode
+
+- `TREASURENET_ORACLE_MODE=external` POSTs
+  `{hunt_id, player_did, clue_index, photo_b64, geo_ok}` to
+  `TREASURENET_ORACLE_URL` and expects
+  `{passed, confidence, reason, verdict_signature, oracle_did}`. When
+  `TREASURENET_ORACLE_VERIFIER_DID` is pinned, the verdict DID must match
+  and the signature must verify; external failures surface as 400
+  (`OracleUnavailable`/`VerificationFailed`) instead of silently falling
+  back to the heuristic.
+
+### Node mode on a live chain
+
+- `deploy_treasurenet.py --bootstrap-governance` submits the governance
+  PROPOSE+APPROVED entries the modules demand for first configure, then
+  registers, activates and configures treasure-escrow.v1, treasure-hunt.v1,
+  player-registry.v1 and ctzn-token.v1 (issuers: service+oracle, threshold
+  2) in one run.
+- Node-mode smoke passes the full journey against
+  `config/solo/validator-solo-tn.toml` (single validator, mock network,
+  advancing blocks): role grants, hunt create/fund/activate, consent, GPS
+  check-ins, oracle claim, 2-of-2 payout, on-chain soulbound CTZN mint,
+  wallet balance and receipts, mobile claim request plus GM approval,
+  scheduler refund after escrow expiry, orgs CRUD, admin persistence
+  status, retry flush and rate limits.
+- Two protocol fixes were required and are part of the workspace: the
+  ledger host accepts module signature messages hex-encoded or raw UTF-8,
+  and module state reads select the latest write deterministically (v7
+  time-ordered entry ids) instead of relying on RocksDB scan order of
+  random UUIDs. The consensus engine also evicts stale rounds so a failed
+  proposal round cannot freeze block production.
+- Node-mode claims reference their finality as `node:<height>:<escrow_id>`
+  because module executions finalize through block height plus module
+  state rather than ledger receipt ids; the wallet enriches receipts from
+  the chain when a ledger receipt id exists.

@@ -39,6 +39,8 @@ MODULE_FILES = {
                                      "wasm32-unknown-unknown", "release", "treasure_hunt.wasm"),
     "player-registry.v1": os.path.join(MODULES_DIR, "player-registry", "target",
                                        "wasm32-unknown-unknown", "release", "player_registry.wasm"),
+    "ctzn-token.v1": os.path.join(MODULES_DIR, "ctzn-token", "target",
+                                  "wasm32-unknown-unknown", "release", "ctzn_token.wasm"),
 }
 
 
@@ -102,7 +104,7 @@ def register_module(node, signing_key, module_id, wasm_path, approvals):
         wasm = fh.read()
     wasm_b64 = base64.b64encode(wasm).decode()
     wasm_hash = "sha256:" + hashlib.sha256(wasm).hexdigest()
-    module_class = "identity" if module_id == "player-registry.v1" else "asset"
+    module_class = "asset" if module_id.startswith("treasure-") else "identity"
 
     ok = submit(node, build_entry(signing_key, "execution.module", "REGISTER_MODULE", module_id, {
         "module_id": module_id,
@@ -139,6 +141,22 @@ def execute_module(node, module_id, params):
         return False
 
 
+def submit_governance_approval(node, signing_key, proposal_id):
+    """Submit PROPOSE + APPROVED entries so modules can pass their
+    first-configure governance gate (check_governance_approval looks for an
+    APPROVED entry in the bare `governance` namespace)."""
+    ok = submit(node, build_entry(signing_key, "governance", "PROPOSE", proposal_id, {
+        "proposal_id": proposal_id,
+        "title": f"TreasureNet module deployment: {proposal_id}",
+        "status": "proposed",
+    }))
+    return submit(node, build_entry(signing_key, "governance", "APPROVED", proposal_id, {
+        "proposal_id": proposal_id,
+        "status": "approved",
+        "approvals": 3,
+    })) and ok
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--node", default="http://127.0.0.1:8091")
@@ -149,14 +167,23 @@ def main():
     parser.add_argument("--oracle-did", required=True,
                         help="oracle DID authorized to co-sign claims")
     parser.add_argument("--governance-approvals", type=int, default=3)
+    parser.add_argument("--bootstrap-governance", action="store_true",
+                        help="submit PROPOSE+APPROVED governance entries before deploying")
     parser.add_argument("--proposal-escrow", default="proposal-treasurenet-escrow")
     parser.add_argument("--proposal-hunt", default="proposal-treasurenet-hunt")
     parser.add_argument("--proposal-registry", default="proposal-treasurenet-registry")
+    parser.add_argument("--proposal-ctzn", default="proposal-treasurenet-ctzn")
     args = parser.parse_args()
 
     signing_key = nacl.signing.SigningKey(bytes.fromhex(args.signing_key_hex))
     print(f"Deploying TreasureNet modules to {args.node}")
     print(f"Author DID: {author_did(signing_key)}")
+
+    if args.bootstrap_governance:
+        print("submitting governance approvals")
+        for proposal_id in (args.proposal_escrow, args.proposal_hunt, args.proposal_registry, args.proposal_ctzn):
+            if not submit_governance_approval(args.node, signing_key, proposal_id):
+                sys.exit(3)
 
     for module_id, wasm_path in MODULE_FILES.items():
         if not os.path.exists(wasm_path):
@@ -186,6 +213,13 @@ def main():
         "admin_did": args.admin_did,
         "oracles": args.oracle_did,
         "proposal_id": args.proposal_escrow,
+    }) and ok
+    ok = execute_module(args.node, "ctzn-token.v1", {
+        "operation": "configure",
+        "admin_did": args.admin_did,
+        "issuers": f"{args.admin_did},{args.oracle_did}",
+        "threshold": "2",
+        "proposal_id": args.proposal_ctzn,
     }) and ok
 
     if not ok:
