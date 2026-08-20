@@ -25,7 +25,7 @@ pub type Result<T> = std::result::Result<T, ProtocolError>;
 /// inclusion. Module deployments, module state writes, governance decisions
 /// and game projections must replicate across validators, so they belong
 /// here alongside the civic namespaces.
-const REPLICATED_NAMESPACES: [&str; 12] = [
+const REPLICATED_NAMESPACES: [&str; 13] = [
     "identity.citizen",
     "registry.land",
     "audit.procurement",
@@ -38,6 +38,7 @@ const REPLICATED_NAMESPACES: [&str; 12] = [
     "consent.receipt",
     "execution.module",
     "game.hunts",
+    "treasure.files",
 ];
 
 #[derive(Default)]

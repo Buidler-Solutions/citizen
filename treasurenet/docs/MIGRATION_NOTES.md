@@ -248,3 +248,112 @@ with live evidence.
   `validator-*-tn.toml` nodes, then `deploy_treasurenet.py
   --bootstrap-governance --node http://127.0.0.1:8091 ...` and run the
   smoke with `TREASURENET_NODE_URL=http://127.0.0.1:8091`.
+
+## 14. Encrypted clue delivery, anti-spoof mobile, governance and oracle service
+
+Closes gaps 3, 10, 12, 13 and 14 with live node-mode evidence.
+
+### Node files API additions
+
+- The node API gained local object-store endpoints the generated intent
+  upload URLs pointed at but nothing served: `PUT
+  /api/v1/files/upload/local/:namespace/:object_id/:intent_id` validates
+  the intent still matches (namespace, object, author, byte count equals
+  `file_size_bytes`), stores the bytes keyed by object ref and returns the
+  sha256 ciphertext hash; `GET /api/v1/files/local/:namespace/:object_id/:intent_id`
+  serves the bytes back and falls back to manifest lookup by `file_ref`
+  once the intent is consumed by the commit (expected ref shape
+  `<prefix>.cipher`). Rust round-trip test:
+  `local_object_store_upload_and_download_roundtrip` in `citizen-api`.
+- The ledger accepts `offchain_encrypted_file_policy` as a namespace rule
+  (enforcement lives at the API edge), and consensus replicates the
+  `treasure.files` namespace (REPLICATED_NAMESPACES).
+
+### Files-enabled solo node profile
+
+- `config/solo/validator-solo-tn-files.toml`: solo validator on api 8185 /
+  QUIC 9203 with `api_offchain_encrypted_files_v1_enabled = true`, an
+  `[[api_clients]]` service key entry (scopes incl. `files.*`), the
+  `treasure.files` namespace (`offchain_encrypted_file_policy`: 1 MiB cap,
+  aes-gcm-256, ENCRYPTED_FILE_COMMIT/REVOKE actions) and a
+  `consent.receipt` namespace (open writers, require_signature,
+  CONSENT_GRANTED/CONSENT_REVOKED) — the files intent path requires the
+  consent receipt on-chain in that namespace, which the standard tn configs
+  do not carry.
+- Gotchas learned live: `citizen-node` takes the config path as a
+  positional argument (`./target/debug/citizen-node config/solo/...`),
+  NOT a `--config` flag — a flag is silently treated as the path,
+  `NodeConfig::load` fails and `main()` falls back to `unwrap_or_default`
+  (validator.local, api 8080, `data/`). The `files_config_parses` test in
+  citizen-node now guards the shipped config. Also: node-mode hunt creation
+  refreshes the chain height hint before converting short wall-clock
+  expiries to `expires_block`, otherwise finalization latency can push the
+  derived block at-or-behind the executing block (`InvalidStatus`).
+
+### Clue crypto scheme (and its honest boundary)
+
+- GM console encrypts clue plaintext client-side with WebCrypto
+  AES-GCM-256 (random 256-bit key, 12-byte IV), then wraps the content key
+  with an AES-GCM key derived via HKDF-SHA256 over the manifest_id (salt
+  `treasurenet:clue-key-wrap`, info `clue-aes-key`, zero IV, tag appended).
+  The wrapped key attaches separately (`POST /files/clue/key`) with its own
+  GM signature (`clue-key:<manifest_id>`).
+- Flutter mirrors both steps byte-exactly (`clue_crypto.dart`, package
+  `cryptography`; fixed WebCrypto-generated vectors in
+  `test/clue_crypto_test.dart`). Reads only decrypt after the node serves
+  the ciphertext through the consent-gated read path.
+- Boundary: the wrap key is deterministic from the manifest_id, so it
+  protects the content key at rest in the store/chain (transport
+  protection under GM/service custody) — it is NOT end-to-end encryption
+  against a malicious backend. Per-player X25519 ephemeral wrapping is the
+  documented follow-up if that threat model matters.
+
+### Backend files flow and governance surface
+
+- `FilesModule` (node mode): GM-signed upload
+  (`clue-upload:<hunt>:<index>`) → on-chain CONSENT_GRANTED to
+  `consent.receipt` (object_id `<hunt>#<index>`, policy_ref
+  `treasurenet:clue-delivery:v1`, 90-day TTL) → file intent → ciphertext
+  upload → commit with ENCRYPTED_FILE_COMMIT envelope whose
+  payload.manifest_id equals the sha256 canonical-manifest commitment.
+  Reads require game unlock + consent + no revocation (`ClueLocked` /
+  `ReaderRevoked` 403s); revocation (`clue-revoke:<hunt>:<index>:<reader>`)
+  files an ENCRYPTED_FILE_REVOKE entry. `/admin/file-alerts` merges local
+  and node-side alerts.
+- New env vars: `TREASURENET_NODE_API_KEY` (sent as `x-api-key`; localnet
+  runs auth-off and the backend just sends it anyway),
+  `TREASURENET_FILES_NAMESPACE` (default `treasure.files`).
+- Governance surface: `/admin/governance/proposals*` (propose, decide,
+  list). Node mode signs PROPOSE/APPROVED/REJECTED entries to the
+  `governance` namespace; the list folds on-chain decisions
+  order-independently (PROPOSE pass first, decisions applied by timestamp)
+  because the node returns entries in non-chronological order. The admin
+  panel ships a propose/decide UI over it.
+- Short-expiry fix: hunt creation calls `refreshHeight()` before
+  `expiryToBlock` in node mode so tight expiries still land in a future
+  block.
+
+### Anti-spoof mobile checks
+
+- `anti_spoof.dart` derives a trust verdict from GPS fix sequences plus
+  accelerometer variance: rejects impossible inter-fix speeds
+  (`maxPlausibleSpeedMps = 56`), non-increasing timestamps, and
+  still-device-with-moving-GPS contradictions (accel variance below
+  `stillAccelVariance` while fixes move at sustained walking speed).
+- `hunt_provider.trustedFix()` enforces two fixes across a 4s window plus
+  sensor variance and rejects `isMocked` fixes outright; the hunt and
+  claim screens consume the trusted fix. 7 unit tests cover the
+  heuristics.
+
+### Reference oracle service
+
+- `apps/oracle/service.mjs`: `GET /health`, `POST /verdict`
+  `{hunt_id, player_did, clue_index, photo_b64, geo_ok}` →
+  `{passed, confidence, reason, verdict_signature, oracle_did}` with the
+  verdict signed over
+  `verdict:<hunt_id>:<player_did>:<clue_index>:<pass|fail>`. Env:
+  `ORACLE_KEY_HEX`, `ORACLE_PORT` (default 7760),
+  `ORACLE_MIN_PHOTO_BYTES` (default 32). This is the integration template
+  for the real model; smoke section 16 runs a claim through it with a
+  pinned verifier DID and section 17 proves rogue-DID verdicts are
+  rejected.

@@ -251,6 +251,87 @@ async function refreshPending() {
   }
 }
 
+// ── Encrypted clue content (client-side AES-GCM, gap 12) ──
+//
+// Clue plaintext is encrypted in this browser with a fresh 256-bit AES-GCM
+// key before anything leaves the page. The backend and the chain only ever
+// see ciphertext, IV, and commitments. The clue key is wrapped with a key
+// derived from the manifest id (HKDF-SHA256) and delivered through the same
+// consent-gated read channel, so players who unlock the clue can unwrap it.
+// This protects plaintext at rest; true end-to-end against a malicious
+// backend needs per-player key wrapping (documented follow-up).
+
+function b64(bytes) {
+  return btoa(String.fromCharCode(...bytes));
+}
+
+async function encryptClue(plaintext) {
+  const clueKey = crypto.getRandomValues(new Uint8Array(32));
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const key = await crypto.subtle.importKey("raw", clueKey, "AES-GCM", false, ["encrypt"]);
+  const ciphertext = new Uint8Array(
+    await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, new TextEncoder().encode(plaintext))
+  );
+  return { clueKey, iv, ciphertext };
+}
+
+async function wrapClueKey(manifestId, clueKey) {
+  const encoder = new TextEncoder();
+  const hkdf = await crypto.subtle.importKey("raw", encoder.encode(manifestId), "HKDF", false, ["deriveKey"]);
+  const wrapKey = await crypto.subtle.deriveKey(
+    {
+      name: "HKDF",
+      hash: "SHA-256",
+      salt: encoder.encode("treasurenet:clue-key-wrap"),
+      info: encoder.encode("clue-aes-key"),
+    },
+    hkdf,
+    { name: "AES-GCM", length: 256 },
+    false,
+    ["encrypt"]
+  );
+  const wrapped = new Uint8Array(
+    await crypto.subtle.encrypt(
+      { name: "AES-GCM", iv: new Uint8Array(12) },
+      wrapKey,
+      clueKey
+    )
+  );
+  return b64(wrapped);
+}
+
+document.getElementById("btn-clue-upload").onclick = async () => {
+  const huntId = document.getElementById("c-hunt-id").value.trim();
+  const clueIndex = Number(document.getElementById("c-clue-index").value);
+  const plaintext = document.getElementById("c-plaintext").value;
+  if (!huntId || !plaintext) {
+    log("clue upload needs a hunt id and plaintext", false);
+    return;
+  }
+  try {
+    const { clueKey, iv, ciphertext } = await encryptClue(plaintext);
+    const uploaded = await api("POST", "/files/clue", {
+      hunt_id: huntId,
+      clue_index: clueIndex,
+      ciphertext_b64: b64(ciphertext),
+      iv_b64: b64(iv),
+      gm_did: gm.did,
+      gm_signature: await sign(`clue-upload:${huntId}:${clueIndex}`, gm.privateKeyHex),
+    });
+    const keyWrapped = await wrapClueKey(uploaded.manifest_id, clueKey);
+    await api("POST", "/files/clue/key", {
+      hunt_id: huntId,
+      clue_index: clueIndex,
+      key_wrapped_b64: keyWrapped,
+      gm_signature: await sign(`clue-key:${uploaded.manifest_id}`, gm.privateKeyHex),
+    });
+    document.getElementById("c-plaintext").value = "";
+    log(`clue ${clueIndex} encrypted + uploaded (${ciphertext.length} bytes ciphertext, manifest ${uploaded.manifest_id.slice(0, 20)}…)`);
+  } catch (error) {
+    log(`clue upload failed: ${error.message}`, false);
+  }
+};
+
 function escapeHtml(value) {
   return value.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }

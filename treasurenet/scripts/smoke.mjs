@@ -16,7 +16,7 @@
  */
 
 import { spawn } from "node:child_process";
-import { generateKeyPair, signMessage, claimMessages } from "../chain/sdk/src/index.ts";
+import { generateKeyPair, didFromPrivateKeyHex, signMessage, claimMessages } from "../chain/sdk/src/index.ts";
 
 /** Generated before the server spawns so its private key can be injected
  *  as TREASURENET_GM_REFUND_KEY for the scheduler self-serve refund check. */
@@ -309,7 +309,188 @@ try {
     memberRemoved.status === 200 && !memberRemoved.json.members?.some((m) => m.did === orgMember.did)
   );
 
-  // 13: refund after expiry — scheduler self-serve with the configured GM
+  // 13: governance proposals — civic surface for parameter changes
+  const govProposal = await api("POST", "/admin/governance/proposals", {
+    title: "Rotate oracle verifier",
+    parameters: { oracle_did: "did:key:ed25519:rotate-smoke" },
+  });
+  check(
+    "governance proposal created",
+    govProposal.status === 200 && govProposal.json.status === "proposed",
+    JSON.stringify(govProposal.json)
+  );
+  let govListed = null;
+  for (let i = 0; i < 10 && !govListed; i++) {
+    const list = await api("GET", "/admin/governance/proposals");
+    govListed =
+      list.json?.find(
+        (p) => p.proposal_id === govProposal.json.proposal_id && p.status === "proposed"
+      ) ?? null;
+    if (!govListed) await new Promise((r) => setTimeout(r, 500));
+  }
+  check("governance proposal listed", govListed !== null);
+  const govDecide = await api(
+    "POST",
+    `/admin/governance/proposals/${govProposal.json.proposal_id}/decision`,
+    { decision: "approved" }
+  );
+  check(
+    "governance proposal approved",
+    govDecide.status === 200 && govDecide.json.status === "approved",
+    JSON.stringify(govDecide.json)
+  );
+  let govApproved = null;
+  for (let i = 0; i < 10 && !govApproved; i++) {
+    const list = await api("GET", "/admin/governance/proposals");
+    govApproved =
+      list.json?.find(
+        (p) => p.proposal_id === govProposal.json.proposal_id && p.status === "approved"
+      ) ?? null;
+    if (!govApproved) await new Promise((r) => setTimeout(r, 500));
+  }
+  check("governance decision visible in list", govApproved !== null);
+  const govReDecide = await api(
+    "POST",
+    `/admin/governance/proposals/${govProposal.json.proposal_id}/decision`,
+    { decision: "rejected" }
+  );
+  check(
+    "governance re-decision rejected",
+    govReDecide.status === 400 && govReDecide.json.code === "ProposalDecided"
+  );
+
+  // 13b: encrypted clue files — client-side AES-GCM, consent-gated reads,
+  // revocation, and admin alert feeds (gaps 3 + 12)
+  {
+    const nodeCrypto = await import("node:crypto");
+    const filesHuntId = `hunt-smoke-files-${runSuffix}`;
+    await api("POST", "/games", {
+      hunt_id: filesHuntId,
+      gm_did: gm.did,
+      gm_signature: signMessage(claimMessages.createHunt(filesHuntId, gm.did), gm.privateKeyHex),
+      title: "Encrypted Clue Beacon",
+      reward_amount: 60,
+      expires_at: new Date(Date.now() + 3_600_000).toISOString(),
+      clues: [
+        { index: 0, manifest_id: "manifest-files-0", latitude: 10.3167, longitude: 123.8908, radius_meters: 50 },
+      ],
+    });
+    await api("POST", `/games/${filesHuntId}/fund`, {
+      gm_signature: signMessage(claimMessages.fundHunt(filesHuntId, gm.did), gm.privateKeyHex),
+      escrow_gm_signature: signMessage(claimMessages.fundEscrow(`esc-${filesHuntId}`), gm.privateKeyHex),
+    });
+    await api("POST", `/games/${filesHuntId}/activate`, {
+      gm_signature: signMessage(claimMessages.activate(filesHuntId, gm.did), gm.privateKeyHex),
+    });
+
+    const cluePlaintext = "The beacon stands where the ferry queue forms. Ask for the silver crate.";
+    const clueKey = nodeCrypto.randomBytes(32);
+    const clueIv = nodeCrypto.randomBytes(12);
+    const cipher = nodeCrypto.createCipheriv("aes-256-gcm", clueKey, clueIv);
+    const ciphertext = Buffer.concat([cipher.update(cluePlaintext, "utf8"), cipher.final(), cipher.getAuthTag()]);
+    const uploaded = await api("POST", "/files/clue", {
+      hunt_id: filesHuntId,
+      clue_index: 0,
+      ciphertext_b64: ciphertext.toString("base64"),
+      iv_b64: clueIv.toString("base64"),
+      gm_did: gm.did,
+      gm_signature: signMessage(`clue-upload:${filesHuntId}:0`, gm.privateKeyHex),
+    });
+    check(
+      "encrypted clue uploaded",
+      uploaded.status === 200 && uploaded.json.manifest_id?.startsWith("sha256:"),
+      JSON.stringify(uploaded.json)
+    );
+    const manifestId = uploaded.json.manifest_id;
+
+    const wrapKey = Buffer.from(
+      nodeCrypto.hkdfSync("sha256", Buffer.from(manifestId, "utf8"), Buffer.from("treasurenet:clue-key-wrap", "utf8"), Buffer.from("clue-aes-key", "utf8"), 32)
+    );
+    const wrapCipher = nodeCrypto.createCipheriv("aes-256-gcm", wrapKey, Buffer.alloc(12, 0));
+    const keyWrapped = Buffer.concat([wrapCipher.update(clueKey), wrapCipher.final(), wrapCipher.getAuthTag()]);
+    const keyAttached = await api("POST", "/files/clue/key", {
+      hunt_id: filesHuntId,
+      clue_index: 0,
+      key_wrapped_b64: keyWrapped.toString("base64"),
+      gm_signature: signMessage(`clue-key:${manifestId}`, gm.privateKeyHex),
+    });
+    check("clue key attached", keyAttached.status === 200 && keyAttached.json.ok === true);
+
+    const filesPlayer = generateKeyPair();
+    await api("POST", "/wallet/register", { did: filesPlayer.did });
+    const filesPlayerToken = await login(filesPlayer);
+    await api("POST", "/roles/grant", { did: filesPlayer.did, role: "player" });
+    await api("POST", "/consent/grant", { purposes: ["location", "photo"] }, filesPlayerToken);
+
+    const lockedRead = await api("POST", "/files/clue/read", { hunt_id: filesHuntId, clue_index: 0 }, filesPlayerToken);
+    check(
+      "locked clue read forbidden",
+      lockedRead.status === 403 && lockedRead.json.code === "ClueLocked",
+      JSON.stringify(lockedRead.json)
+    );
+
+    await api("POST", `/games/${filesHuntId}/checkin`, { clue_index: 0, latitude: 10.31672, longitude: 123.89081 }, filesPlayerToken);
+    const clueRead = await api("POST", "/files/clue/read", { hunt_id: filesHuntId, clue_index: 0 }, filesPlayerToken);
+    check(
+      "unlocked clue read served",
+      clueRead.status === 200 && clueRead.json.manifest_id === manifestId && clueRead.json.ciphertext_b64,
+      JSON.stringify(clueRead.json).slice(0, 200)
+    );
+
+    const unwrapCipher = nodeCrypto.createDecipheriv(
+      "aes-256-gcm",
+      wrapKey,
+      Buffer.alloc(12, 0)
+    );
+    const wrappedBytes = Buffer.from(clueRead.json.key_wrapped_b64, "base64");
+    const wrappedMac = wrappedBytes.subarray(wrappedBytes.length - 16);
+    const unwrap = Buffer.concat([
+      unwrapCipher.update(wrappedBytes.subarray(0, wrappedBytes.length - 16)),
+    ]);
+    unwrapCipher.setAuthTag(wrappedMac);
+    const recoveredKey = Buffer.concat([unwrap, unwrapCipher.final()]);
+    check("wrapped clue key round-trips", recoveredKey.equals(clueKey));
+
+    const clueBytes = Buffer.from(clueRead.json.ciphertext_b64, "base64");
+    const clueMac = clueBytes.subarray(clueBytes.length - 16);
+    const decipher = nodeCrypto.createDecipheriv("aes-256-gcm", recoveredKey, Buffer.from(clueRead.json.iv_b64, "base64"));
+    decipher.setAuthTag(clueMac);
+    const recoveredPlaintext = Buffer.concat([decipher.update(clueBytes.subarray(0, clueBytes.length - 16)), decipher.final()]).toString("utf8");
+    check("clue decrypts to original plaintext", recoveredPlaintext === cluePlaintext, recoveredPlaintext);
+    const observedHash = `sha256:${nodeCrypto.createHash("sha256").update(clueBytes).digest("hex")}`;
+    check("ciphertext hash matches commitment", observedHash === clueRead.json.ciphertext_hash);
+
+    const revoked = await api("POST", "/files/clue/revoke", {
+      hunt_id: filesHuntId,
+      clue_index: 0,
+      reader_did: filesPlayer.did,
+      gm_signature: signMessage(`clue-revoke:${filesHuntId}:0:${filesPlayer.did}`, gm.privateKeyHex),
+    });
+    check("clue reader revoked", revoked.status === 200 && revoked.json.revoked === true);
+    const revokedRead = await api("POST", "/files/clue/read", { hunt_id: filesHuntId, clue_index: 0 }, filesPlayerToken);
+    check(
+      "revoked reader forbidden",
+      revokedRead.status === 403 && revokedRead.json.code === "ReaderRevoked",
+      JSON.stringify(revokedRead.json)
+    );
+    const badRevoke = await api("POST", "/files/clue/revoke", {
+      hunt_id: filesHuntId,
+      clue_index: 0,
+      reader_did: filesPlayer.did,
+      gm_signature: "00".repeat(64),
+    });
+    check("forged revoke signature rejected", badRevoke.status === 400 && badRevoke.json.code === "InvalidSignature");
+
+    const fileAlerts = await api("GET", "/admin/file-alerts");
+    check(
+      "file alerts include revocation + locked-read denial",
+      fileAlerts.json?.some((a) => a.type === "clue.revoked") &&
+        fileAlerts.json?.some((a) => a.type === "clue.read_denied_locked"),
+      JSON.stringify(fileAlerts.json?.map((a) => a.type))
+    );
+  }
+
+  // 14: refund after expiry — scheduler self-serve with the configured GM
   // refund key (dual signatures over refund:<escrow_id> and refund:<hunt>:<gm>)
   const refundHuntId = `hunt-smoke-refund-${Date.now() % 100000}`;
   const refundCreate = await api("POST", "/games", {
@@ -343,7 +524,7 @@ try {
   const escrowRefunded = await api("GET", `/escrow/esc-${refundHuntId}/status`);
   check("escrow shows Refunded", escrowRefunded.json?.status === "Refunded", JSON.stringify(escrowRefunded.json));
 
-  // 14: rate limiting — a second server with a tiny general bucket
+  // 15: rate limiting — a second server with a tiny general bucket
   const rateBase = "http://127.0.0.1:7756";
   const rateServer = spawn(process.execPath, ["src/main.ts"], {
     cwd: serverCwd,
@@ -367,7 +548,181 @@ try {
     rateServer.kill("SIGTERM");
   }
 
-  // 15: durable projection — create a hunt, restart the backend, verify the
+  // 16: external oracle mode — reference AI service with pinned verifier DID
+  const oraclePort = 7761;
+  const oracleKeyHex =
+    process.env.TREASURENET_ORACLE_KEY ??
+    "5dd19fb5ca3a25c2098fbdef1d01a28a35f0736b26cc50a36495a75c5ffba55b";
+  const oracleDid = didFromPrivateKeyHex(oracleKeyHex);
+  const oracleProc = spawn(process.execPath, ["service.mjs"], {
+    cwd: new URL("../apps/oracle/", import.meta.url).pathname,
+    env: { ...process.env, ORACLE_KEY_HEX: oracleKeyHex, ORACLE_PORT: String(oraclePort) },
+    stdio: "ignore",
+  });
+  const oracleBase = `http://127.0.0.1:${oraclePort}`;
+  const extPort = 7758;
+  const extBase = `http://127.0.0.1:${extPort}`;
+  const extServer = spawn(process.execPath, ["src/main.ts"], {
+    cwd: serverCwd,
+    env: {
+      ...process.env,
+      TREASURENET_PORT: String(extPort),
+      TREASURENET_ORACLE_MODE: "external",
+      TREASURENET_ORACLE_URL: `${oracleBase}/verdict`,
+      TREASURENET_ORACLE_VERIFIER_DID: oracleDid,
+      TREASURENET_ORACLE_KEY: oracleKeyHex,
+    },
+    stdio: "ignore",
+  });
+  async function extCall(method, path, body, token, base = extBase) {
+    const response = await fetch(`${base}${path}`, {
+      method,
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    return { status: response.status, json: await response.json().catch(() => ({})) };
+  }
+  try {
+    check("external oracle service healthy", await waitForBoot(oracleBase));
+    check("external-mode server healthy", await waitForBoot(extBase));
+    const extPlayer = generateKeyPair();
+    await extCall("POST", "/wallet/register", { did: gm.did });
+    await extCall("POST", "/wallet/register", { did: extPlayer.did });
+    const extPlayerToken = await (async () => {
+      const challenge = await extCall("POST", "/auth/challenge", { did: extPlayer.did });
+      const sig = signMessage(challenge.json.message, extPlayer.privateKeyHex);
+      const session = await extCall("POST", "/auth/verify", { did: extPlayer.did, signature: sig });
+      return session.json.token;
+    })();
+    await extCall("POST", "/roles/grant", { did: gm.did, role: "gamemaster" });
+    await extCall("POST", "/roles/grant", { did: extPlayer.did, role: "player" });
+    const extHuntId = `hunt-smoke-ext-${runSuffix}`;
+    await extCall("POST", "/games", {
+      hunt_id: extHuntId,
+      gm_did: gm.did,
+      gm_signature: signMessage(claimMessages.createHunt(extHuntId, gm.did), gm.privateKeyHex),
+      title: "External Oracle Beacon",
+      reward_amount: 90,
+      expires_at: new Date(Date.now() + 3_600_000).toISOString(),
+      clues: [
+        { index: 0, manifest_id: "manifest-ext-0", latitude: 10.3167, longitude: 123.8908, radius_meters: 50 },
+      ],
+    });
+    await extCall("POST", `/games/${extHuntId}/fund`, {
+      gm_signature: signMessage(claimMessages.fundHunt(extHuntId, gm.did), gm.privateKeyHex),
+      escrow_gm_signature: signMessage(claimMessages.fundEscrow(`esc-${extHuntId}`), gm.privateKeyHex),
+    });
+    await extCall("POST", `/games/${extHuntId}/activate`, {
+      gm_signature: signMessage(claimMessages.activate(extHuntId, gm.did), gm.privateKeyHex),
+    });
+    await extCall("POST", "/consent/grant", { purposes: ["location", "photo"] }, extPlayerToken);
+    await extCall("POST", `/games/${extHuntId}/checkin`, { clue_index: 0, latitude: 10.31672, longitude: 123.89081 }, extPlayerToken);
+    const extClaim = await extCall(
+      "POST",
+      `/games/${extHuntId}/claim`,
+      {
+        gm_signature: signMessage(claimMessages.hunt(extHuntId, extPlayer.did), gm.privateKeyHex),
+        escrow_gm_signature: signMessage(claimMessages.escrow(`esc-${extHuntId}`, extPlayer.did), gm.privateKeyHex),
+        photo_b64: "cGhvdG8tcHJvb2YtZGVtbwo=".repeat(4),
+        latitude: 10.3167,
+        longitude: 123.8908,
+      },
+      extPlayerToken
+    );
+    check(
+      "external-oracle claim confirmed",
+      extClaim.status === 200 && extClaim.json.status === "confirmed",
+      JSON.stringify(extClaim.json)
+    );
+    const extVerdicts = await extCall("GET", `/oracle/verdicts/${extHuntId}`);
+    check(
+      "external verdict recorded from pinned did",
+      extVerdicts.json?.some(
+        (v) => v.oracle_did === oracleDid && v.passed === true && v.verdict_signature
+      ),
+      JSON.stringify(extVerdicts.json)
+    );
+  } finally {
+    extServer.kill("SIGTERM");
+  }
+
+  // 17: pinned-verifier rejection — verdict signed by a foreign oracle did
+  const rogueDid = didFromPrivateKeyHex(generateKeyPair().privateKeyHex);
+  const pinPort = 7759;
+  const pinBase = `http://127.0.0.1:${pinPort}`;
+  const pinCall = (method, path, body, token) => extCall(method, path, body, token, pinBase);
+  const pinServer = spawn(process.execPath, ["src/main.ts"], {
+    cwd: serverCwd,
+    env: {
+      ...process.env,
+      TREASURENET_PORT: String(pinPort),
+      TREASURENET_ORACLE_MODE: "external",
+      TREASURENET_ORACLE_URL: `${oracleBase}/verdict`,
+      TREASURENET_ORACLE_VERIFIER_DID: rogueDid,
+      TREASURENET_ORACLE_KEY: oracleKeyHex,
+    },
+    stdio: "ignore",
+  });
+  try {
+    check("pinned-verifier server healthy", await waitForBoot(pinBase));
+    const pinPlayer = generateKeyPair();
+    await pinCall("POST", "/wallet/register", { did: gm.did });
+    await pinCall("POST", "/wallet/register", { did: pinPlayer.did });
+    const pinPlayerToken = await (async () => {
+      const challenge = await pinCall("POST", "/auth/challenge", { did: pinPlayer.did });
+      const sig = signMessage(challenge.json.message, pinPlayer.privateKeyHex);
+      const session = await pinCall("POST", "/auth/verify", { did: pinPlayer.did, signature: sig });
+      return session.json.token;
+    })();
+    await pinCall("POST", "/roles/grant", { did: gm.did, role: "gamemaster" });
+    await pinCall("POST", "/roles/grant", { did: pinPlayer.did, role: "player" });
+    const pinHuntId = `hunt-smoke-pin-${runSuffix}`;
+    await pinCall("POST", "/games", {
+      hunt_id: pinHuntId,
+      gm_did: gm.did,
+      gm_signature: signMessage(claimMessages.createHunt(pinHuntId, gm.did), gm.privateKeyHex),
+      title: "Pinned Verifier Beacon",
+      reward_amount: 40,
+      expires_at: new Date(Date.now() + 3_600_000).toISOString(),
+      clues: [
+        { index: 0, manifest_id: "manifest-pin-0", latitude: 10.3167, longitude: 123.8908, radius_meters: 50 },
+      ],
+    });
+    await pinCall("POST", `/games/${pinHuntId}/fund`, {
+      gm_signature: signMessage(claimMessages.fundHunt(pinHuntId, gm.did), gm.privateKeyHex),
+      escrow_gm_signature: signMessage(claimMessages.fundEscrow(`esc-${pinHuntId}`), gm.privateKeyHex),
+    });
+    await pinCall("POST", `/games/${pinHuntId}/activate`, {
+      gm_signature: signMessage(claimMessages.activate(pinHuntId, gm.did), gm.privateKeyHex),
+    });
+    await pinCall("POST", "/consent/grant", { purposes: ["location", "photo"] }, pinPlayerToken);
+    await pinCall("POST", `/games/${pinHuntId}/checkin`, { clue_index: 0, latitude: 10.31672, longitude: 123.89081 }, pinPlayerToken);
+    const pinClaim = await pinCall(
+      "POST",
+      `/games/${pinHuntId}/claim`,
+      {
+        gm_signature: signMessage(claimMessages.hunt(pinHuntId, pinPlayer.did), gm.privateKeyHex),
+        escrow_gm_signature: signMessage(claimMessages.escrow(`esc-${pinHuntId}`, pinPlayer.did), gm.privateKeyHex),
+        photo_b64: "cGhvdG8tcHJvb2YtZGVtbwo=".repeat(4),
+        latitude: 10.3167,
+        longitude: 123.8908,
+      },
+      pinPlayerToken
+    );
+    check(
+      "foreign-did verdict rejected",
+      pinClaim.status === 400 && pinClaim.json.code === "VerificationFailed",
+      JSON.stringify(pinClaim.json)
+    );
+  } finally {
+    pinServer.kill("SIGTERM");
+    oracleProc.kill("SIGTERM");
+  }
+
+  // 18: durable projection — create a hunt, restart the backend, verify the
   // projection was rehydrated (only meaningful with DATABASE_URL set)
   if (process.env.DATABASE_URL) {
     const dbPort = 7757;

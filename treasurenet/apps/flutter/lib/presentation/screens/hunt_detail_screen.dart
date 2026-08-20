@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/utils/clue_crypto.dart';
 import '../../data/models/hunt_models.dart';
 import '../../data/services/api_service.dart';
 import '../../providers/hunt_provider.dart';
@@ -23,6 +24,33 @@ class _HuntDetailScreenState extends ConsumerState<HuntDetailScreen> {
   bool _checkingIn = false;
   String? _message;
   CheckInResult? _lastResult;
+  final Map<int, String> _revealedClues = {};
+
+  Future<void> _revealClue(int clueIndex) async {
+    if (_revealedClues.containsKey(clueIndex)) return;
+    try {
+      final encrypted = await ref.read(apiProvider).readEncryptedClue(
+            huntId: widget.huntId,
+            clueIndex: clueIndex,
+          );
+      if (!encrypted.hasKey) {
+        setState(() => _message =
+            'No encrypted clue content uploaded for clue $clueIndex.');
+        return;
+      }
+      final plaintext = await decryptClue(
+        manifestId: encrypted.manifestId,
+        keyWrappedB64: encrypted.keyWrappedB64!,
+        ivB64: encrypted.ivB64,
+        ciphertextB64: encrypted.ciphertextB64,
+      );
+      setState(() => _revealedClues[clueIndex] = plaintext);
+    } catch (error) {
+      final apiError = toApiException(error);
+      setState(() =>
+          _message = 'Clue reveal failed: ${apiError.toString()}');
+    }
+  }
 
   Future<void> _checkIn(HuntProgress? progress) async {
     final nextIndex = progress?.nextClueIndex;
@@ -32,7 +60,9 @@ class _HuntDetailScreenState extends ConsumerState<HuntDetailScreen> {
       _message = null;
     });
     try {
-      final fix = await currentFix();
+      setState(() => _message = 'Verifying location proof…');
+      final trusted = await trustedFix();
+      final fix = trusted.fix;
       final result = await ref.read(apiProvider).checkIn(
             huntId: widget.huntId,
             clueIndex: nextIndex,
@@ -127,6 +157,8 @@ class _HuntDetailScreenState extends ConsumerState<HuntDetailScreen> {
                                 false,
                         isNext: progress?.nextClueIndex == clue.index,
                         isFinal: progress?.finalClueIndex == clue.index,
+                        revealedText: _revealedClues[clue.index],
+                        onReveal: () => _revealClue(clue.index),
                       ),
                     const SizedBox(height: 12),
                     if (progress != null && progress.allCluesUnlocked)
@@ -220,12 +252,16 @@ class _ClueTile extends StatelessWidget {
     required this.unlocked,
     required this.isNext,
     required this.isFinal,
+    this.revealedText,
+    this.onReveal,
   });
 
   final HuntClue clue;
   final bool unlocked;
   final bool isNext;
   final bool isFinal;
+  final String? revealedText;
+  final VoidCallback? onReveal;
 
   @override
   Widget build(BuildContext context) {
@@ -236,19 +272,48 @@ class _ClueTile extends StatelessWidget {
             : Colors.grey;
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
-      child: ListTile(
-        leading: Icon(
-          unlocked ? Icons.lock_open : Icons.lock_outline,
-          color: color,
-        ),
-        title: Text('Clue ${clue.index}${isFinal ? ' (final)' : ''}'),
-        subtitle: Text(
-          unlocked
-              ? 'manifest ${clue.manifestId}'
-              : 'locked · radius ${clue.radiusMeters.round()}m around '
-                  '${clue.latitude.toStringAsFixed(4)}, '
-                  '${clue.longitude.toStringAsFixed(4)}',
-          style: const TextStyle(fontFamily: 'monospace', fontSize: 11),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: Icon(
+                unlocked ? Icons.lock_open : Icons.lock_outline,
+                color: color,
+              ),
+              title: Text('Clue ${clue.index}${isFinal ? ' (final)' : ''}'),
+              subtitle: Text(
+                unlocked
+                    ? 'manifest ${clue.manifestId}'
+                    : 'locked · radius ${clue.radiusMeters.round()}m around '
+                        '${clue.latitude.toStringAsFixed(4)}, '
+                        '${clue.longitude.toStringAsFixed(4)}',
+                style:
+                    const TextStyle(fontFamily: 'monospace', fontSize: 11),
+              ),
+            ),
+            if (unlocked && revealedText == null)
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton.icon(
+                  icon: const Icon(Icons.enhanced_encryption_outlined),
+                  label: const Text('Reveal encrypted clue'),
+                  onPressed: onReveal,
+                ),
+              ),
+            if (revealedText != null)
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(revealedText!),
+              ),
+          ],
         ),
       ),
     );

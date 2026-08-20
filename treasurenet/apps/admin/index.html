@@ -35,6 +35,15 @@
     </div>
   </section>
   <section>
+    <h2>Governance proposals</h2>
+    <div class="row" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
+      <input id="g-title" placeholder="proposal title (e.g. rotate oracle key)" style="flex:1;min-width:200px;background:#0b1020;color:#e6e9f2;border:1px solid #2c3a66;border-radius:8px;padding:6px;font-size:12px" />
+      <input id="g-params" placeholder='parameters JSON e.g. {"oracle_did":"did:key:…"}' style="flex:1;min-width:200px;background:#0b1020;color:#e6e9f2;border:1px solid #2c3a66;border-radius:8px;padding:6px;font-size:12px" />
+      <button id="g-propose">Propose</button>
+    </div>
+    <div id="governance">loading…</div>
+  </section>
+  <section>
     <h2>File access alerts (clue manifests)</h2>
     <div id="alerts">loading…</div>
     <h2 style="margin-top:20px">Analytics</h2>
@@ -63,6 +72,18 @@ function pre(value) {
   return `<pre style="font-size:11px;white-space:pre-wrap;word-break:break-all;margin:0">${JSON.stringify(value, null, 2)}</pre>`;
 }
 
+function proposalRow(proposal) {
+  const statusColor = proposal.status === "approved" ? "#4ade80" : proposal.status === "rejected" ? "#f87171" : "#facc15";
+  const actions = proposal.status === "proposed"
+    ? `<button data-approve="${proposal.proposal_id}">Approve</button> <button data-reject="${proposal.proposal_id}">Reject</button>`
+    : "";
+  return `<div class="event" style="display:flex;gap:8px;align-items:center">
+    <span style="color:${statusColor};font-weight:600;min-width:70px">${proposal.status}</span>
+    <span style="flex:1">${proposal.title} ${pre(proposal.parameters)}</span>
+    ${actions}
+  </div>`;
+}
+
 async function refresh() {
   try {
     const overview = await api("GET", "/admin/overview");
@@ -77,6 +98,26 @@ async function refresh() {
       </table>`;
   } catch (e) {
     document.getElementById("overview").textContent = e.message;
+  }
+  try {
+    const proposals = await api("GET", "/admin/governance/proposals");
+    document.getElementById("governance").innerHTML = proposals.length
+      ? proposals.map(proposalRow).join("")
+      : "no proposals";
+    document.querySelectorAll("[data-approve]").forEach((el) => {
+      el.onclick = async () => {
+        try { await api("POST", `/admin/governance/proposals/${el.dataset.approve}/decision`, { decision: "approved" }); refresh(); }
+        catch (e) { alert(e.message); }
+      };
+    });
+    document.querySelectorAll("[data-reject]").forEach((el) => {
+      el.onclick = async () => {
+        try { await api("POST", `/admin/governance/proposals/${el.dataset.reject}/decision`, { decision: "rejected" }); refresh(); }
+        catch (e) { alert(e.message); }
+      };
+    });
+  } catch (e) {
+    document.getElementById("governance").textContent = e.message;
   }
   try {
     const alerts = await api("GET", "/admin/file-alerts");
@@ -100,6 +141,23 @@ async function refresh() {
     document.getElementById("events").textContent = e.message;
   }
 }
+
+document.getElementById("g-propose").onclick = async () => {
+  const title = document.getElementById("g-title").value.trim();
+  if (!title) { alert("title is required"); return; }
+  let parameters = {};
+  const rawParams = document.getElementById("g-params").value.trim();
+  if (rawParams) {
+    try { parameters = JSON.parse(rawParams); }
+    catch { alert("parameters must be valid JSON"); return; }
+  }
+  try {
+    await api("POST", "/admin/governance/proposals", { title, parameters });
+    document.getElementById("g-title").value = "";
+    document.getElementById("g-params").value = "";
+    refresh();
+  } catch (e) { alert(e.message); }
+};
 
 document.getElementById("r-grant").onclick = async () => {
   const did = document.getElementById("r-did").value.trim();

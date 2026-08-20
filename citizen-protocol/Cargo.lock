@@ -699,6 +699,7 @@ name = "citizen-api"
 version = "0.1.0"
 dependencies = [
  "axum",
+ "base64",
  "blake3",
  "chrono",
  "citizen-crypto",
@@ -709,6 +710,7 @@ dependencies = [
  "hex",
  "serde",
  "serde_json",
+ "sha2",
  "thiserror 1.0.69",
  "tokio",
  "tower",

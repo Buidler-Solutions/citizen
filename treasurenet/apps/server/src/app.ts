@@ -14,6 +14,8 @@ import { ConsentModule } from "./modules/consent.module.ts";
 import { SchedulerModule } from "./modules/scheduler.module.ts";
 import { IndexerModule } from "./modules/indexer.module.ts";
 import { OrgsModule } from "./modules/orgs.module.ts";
+import { GovernanceModule } from "./modules/governance.module.ts";
+import { FilesModule } from "./modules/files.module.ts";
 import {
   AdminModule,
   AnalyticsModule,
@@ -45,6 +47,8 @@ export interface AppContext {
   scheduler: SchedulerModule;
   indexer: IndexerModule;
   orgs: OrgsModule;
+  governance: GovernanceModule;
+  files: FilesModule;
   leaderboard: LeaderboardModule;
   analytics: AnalyticsModule;
   notification: NotificationModule;
@@ -101,6 +105,8 @@ export function buildContext(config: ServerConfig): AppContext {
     scheduler,
     indexer,
     orgs: new OrgsModule(store),
+    governance: new GovernanceModule(chain, store),
+    files: new FilesModule(chain, store, consent, game),
     leaderboard: new LeaderboardModule(store),
     analytics: new AnalyticsModule(store),
     notification: new NotificationModule(store),
@@ -311,7 +317,22 @@ export function buildRouter(ctx: AppContext): Router {
   );
   router.get("/analytics/summary", () => ctx.analytics.summary());
   router.get("/admin/overview", () => ctx.admin.overview());
-  router.get("/admin/file-alerts", () => ctx.admin.fileAlerts());
+  router.get("/admin/file-alerts", async () => {
+    const local = ctx.admin.fileAlerts();
+    const node = await ctx.files.nodeAlerts();
+    const remote = node.map((alert) => ({
+      created_at: new Date(Number(alert.detected_at ?? 0) * 1000).toISOString(),
+      type: `clue.node_${String(alert.alert_type ?? "alert")}`,
+      payload: {
+        manifest_id: alert.manifest_id,
+        namespace: alert.namespace,
+        object_id: alert.object_id,
+        reader_did: alert.reader_did,
+        detail: alert.detail,
+      },
+    }));
+    return [...local, ...remote].sort((a, b) => (a.created_at < b.created_at ? 1 : -1)).slice(0, 50);
+  });
   router.get("/events", (_req, _params, query) =>
     ctx.indexer.events(Number(query.get("since") ?? 0))
   );
@@ -334,6 +355,43 @@ export function buildRouter(ctx: AppContext): Router {
       failures,
     };
   });
+
+  // ── governance (civic proposals for parameter changes) ──
+  router.get("/admin/governance/proposals", () => ctx.governance.list());
+  router.post("/admin/governance/proposals", (_req, _params, _query, body) =>
+    ctx.governance.propose(body as never)
+  );
+  router.post("/admin/governance/proposals/:id/decision", (_req, params, _query, body) => {
+    const input = body as { decision?: string };
+    const decision = input?.decision;
+    if (decision !== "approved" && decision !== "rejected") {
+      badRequest("MissingFields", "decision must be 'approved' or 'rejected'");
+    }
+    return ctx.governance.decide({ proposal_id: params.id!, decision });
+  });
+
+  // ── encrypted clue files (client-side encrypted, consent-gated reads) ──
+  router.post("/files/clue", (_req, _params, _query, body) =>
+    ctx.files.uploadClue(body as never)
+  );
+  router.post("/files/clue/key", (_req, _params, _query, body) =>
+    ctx.files.attachKey(body as never)
+  );
+  router.post("/files/clue/read", (req, _params, _query, body) => {
+    const session = ctx.auth.session(ctx.auth.bearer(req));
+    const input = body as { hunt_id?: string; clue_index?: number };
+    if (!input?.hunt_id || typeof input.clue_index !== "number") {
+      badRequest("MissingFields", "hunt_id and clue_index are required");
+    }
+    return ctx.files.readClue({
+      hunt_id: input.hunt_id,
+      clue_index: input.clue_index!,
+      player_did: session.did,
+    });
+  });
+  router.post("/files/clue/revoke", (_req, _params, _query, body) =>
+    ctx.files.revokeReader(body as never)
+  );
 
   return router;
 }

@@ -1185,6 +1185,24 @@ mod tests {
     use citizen_storage::MemoryStorage;
 
     #[test]
+    fn files_config_parses() {
+        let contents = fs::read_to_string("../../config/solo/validator-solo-tn-files.toml")
+            .expect("read config");
+        match toml::from_str::<NodeConfig>(&contents) {
+            Ok(config) => {
+                assert_eq!(config.validator_id, "validator-solo-files");
+                assert!(config.api_offchain_encrypted_files_v1_enabled);
+                assert_eq!(config.api_port, 8185);
+                assert!(config
+                    .namespaces
+                    .iter()
+                    .any(|ns| ns.descriptor.namespace == "treasure.files"));
+            }
+            Err(err) => panic!("files config parse failed: {err}"),
+        }
+    }
+
+    #[test]
     fn observer_public_key_prefers_configured_validator_key() {
         let config = NodeConfig {
             validator_id: "observer-1".to_string(),

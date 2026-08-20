@@ -113,6 +113,19 @@ class TreasurenetApi {
     return CheckInResult.fromJson(json);
   }
 
+  /// Fetches the encrypted clue payload for an unlocked clue (consent-gated,
+  /// revocation-checked on the backend). Decryption happens on-device.
+  Future<EncryptedClue> readEncryptedClue({
+    required String huntId,
+    required int clueIndex,
+  }) async {
+    final json = await _post('/files/clue/read', {
+      'hunt_id': huntId,
+      'clue_index': clueIndex,
+    });
+    return EncryptedClue.fromJson(json);
+  }
+
   // ── claim (mobile flow: request, GM approves from the web console) ──
 
   Future<ClaimRequestResult> requestClaim({

@@ -4,7 +4,9 @@ import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:sensors_plus/sensors_plus.dart';
 
+import '../core/utils/anti_spoof.dart';
 import '../data/models/hunt_models.dart';
 import '../data/services/api_service.dart';
 import 'session_provider.dart';
@@ -112,6 +114,11 @@ Future<GpsFix> currentFix() async {
       timeLimit: Duration(seconds: 20),
     ),
   );
+  if (position.isMocked) {
+    throw LocationException(
+      'device reports a mocked location source; check in from a real GPS fix',
+    );
+  }
   final accuracy = position.accuracy;
   if (accuracy <= 0 || accuracy < 0.5) {
     throw LocationException('location fix looks mocked; try again outdoors');
@@ -126,6 +133,133 @@ Future<GpsFix> currentFix() async {
     longitude: position.longitude,
     accuracyMeters: accuracy,
   );
+}
+
+/// Fix plus the anti-spoof evidence gathered while taking it. Server-side
+/// verification never trusts these claims, but attaching them (and gating
+/// on them locally) blocks the casual spoofing path.
+@immutable
+class TrustedFix {
+  const TrustedFix({
+    required this.fix,
+    required this.assessment,
+  });
+
+  final GpsFix fix;
+  final TrustAssessment assessment;
+}
+
+/// Samples gravity-free accelerometer magnitudes for [window] and returns
+/// their variance. A motionless device sits near zero; handheld walking
+/// motion is orders of magnitude above. Returns NaN when no sensor stream
+Future<double> sampleAccelVariance(Duration window) async {
+  final magnitudes = <double>[];
+  final done = Completer<void>();
+  final subscription = userAccelerometerEventStream().listen(
+    (event) {
+      magnitudes.add(
+        math.sqrt(
+          event.x * event.x + event.y * event.y + event.z * event.z,
+        ),
+      );
+    },
+    onError: (Object error) {},
+    cancelOnError: false,
+  );
+  final timer = Timer(window, () {
+    subscription.cancel();
+    if (!done.isCompleted) done.complete();
+  });
+  await done.future;
+  timer.cancel();
+  if (magnitudes.isEmpty) return double.nan;
+  return magnitudeVariance(magnitudes);
+}
+
+/// GPS fix hardened with gap-13 anti-spoof checks: OS mock-provider flag,
+/// physically impossible inter-fix speeds, and the still-device-vs-moving-GPS
+/// accelerometer contradiction. Takes [window] of sampling, so callers
+/// should surface a progress state.
+Future<TrustedFix> trustedFix({Duration window = const Duration(seconds: 4)}) async {
+  var enabled = await Geolocator.isLocationServiceEnabled();
+  if (!enabled) {
+    enabled = await Geolocator.openLocationSettings();
+    if (!enabled) throw LocationException('location services are off');
+  }
+  var permission = await Geolocator.checkPermission();
+  if (permission == LocationPermission.denied) {
+    permission = await Geolocator.requestPermission();
+  }
+  if (permission == LocationPermission.denied ||
+      permission == LocationPermission.deniedForever) {
+    throw LocationException('location permission is required to check in');
+  }
+
+  final accelFuture = sampleAccelVariance(window);
+  final first = await Geolocator.getCurrentPosition(
+    locationSettings: const LocationSettings(
+      accuracy: LocationAccuracy.best,
+      timeLimit: Duration(seconds: 20),
+    ),
+  );
+  if (first.isMocked) {
+    throw LocationException(
+      'device reports a mocked location source; check in from a real GPS fix',
+    );
+  }
+  final firstFix = GpsFix(
+    latitude: first.latitude,
+    longitude: first.longitude,
+    accuracyMeters: first.accuracy,
+  );
+  if (first.accuracy <= 0 ||
+      first.accuracy < 0.5 ||
+      first.accuracy > 500) {
+    throw LocationException(
+      'location fix quality insufficient (${first.accuracy.round()}m); '
+      'try again outdoors',
+    );
+  }
+
+  final accelVariance = await accelFuture;
+  final second = await Geolocator.getCurrentPosition(
+    locationSettings: const LocationSettings(
+      accuracy: LocationAccuracy.best,
+      timeLimit: Duration(seconds: 20),
+    ),
+  );
+  if (second.isMocked) {
+    throw LocationException(
+      'device reports a mocked location source; check in from a real GPS fix',
+    );
+  }
+  final secondFix = GpsFix(
+    latitude: second.latitude,
+    longitude: second.longitude,
+    accuracyMeters: second.accuracy,
+  );
+
+  final assessment = assessLocationTrust(
+    fixes: [
+      FixSample(
+        latitude: firstFix.latitude,
+        longitude: firstFix.longitude,
+        timestampMs: first.timestamp.millisecondsSinceEpoch,
+      ),
+      FixSample(
+        latitude: secondFix.latitude,
+        longitude: secondFix.longitude,
+        timestampMs: second.timestamp.millisecondsSinceEpoch,
+      ),
+    ],
+    userAccelVariance: accelVariance,
+  );
+  if (!assessment.ok) {
+    throw LocationException(
+      'location proof rejected: ${assessment.reasons.join('; ')}',
+    );
+  }
+  return TrustedFix(fix: secondFix, assessment: assessment);
 }
 
 double distanceMeters({

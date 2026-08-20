@@ -34,6 +34,10 @@ export interface ServerConfig {
   rewardDistribute: boolean;
   /** Outbound notification webhook (FCM gateway / ntfy / ops relay). */
   notifyWebhookUrl: string | undefined;
+  /** Node API key (x-api-key) for nodes running with api_auth_required. */
+  nodeApiKey: string | undefined;
+  /** Namespace carrying the offchain encrypted file policy (node mode). */
+  filesNamespace: string;
 }
 
 const PKCS8_PREFIX = Buffer.from("302e020100300506032b657004220420", "hex");
@@ -87,6 +91,8 @@ export function loadConfig(): ServerConfig {
     oracleVerifierDid: process.env.TREASURENET_ORACLE_VERIFIER_DID,
     rewardDistribute: process.env.TREASURENET_REWARD_DISTRIBUTE !== "false",
     notifyWebhookUrl: process.env.TREASURENET_NOTIFY_WEBHOOK_URL,
+    nodeApiKey: process.env.TREASURENET_NODE_API_KEY,
+    filesNamespace: process.env.TREASURENET_FILES_NAMESPACE ?? "treasure.files",
   };
 }
 

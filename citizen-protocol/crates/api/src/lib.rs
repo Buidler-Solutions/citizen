@@ -1,4 +1,7 @@
 use axum::extract::{DefaultBodyLimit, Path, Query};
+use axum::body::Bytes;
+use base64::Engine as _;
+use sha2::{Digest, Sha256};
 use axum::http::HeaderMap;
 use axum::http::StatusCode;
 use axum::routing::{get, post};
@@ -108,6 +111,7 @@ struct ApiEdgeState {
     file_manifests: Mutex<BTreeMap<String, StoredFileManifest>>,
     payload_field_refs: Mutex<BTreeMap<String, EncryptedFieldRef>>,
     file_access_alerts: Mutex<Vec<FileAccessAlert>>,
+    file_blobs: Mutex<BTreeMap<String, Vec<u8>>>,
 }
 
 #[derive(Clone, Debug)]
@@ -147,6 +151,7 @@ impl ApiEdgeState {
             file_manifests: Mutex::new(BTreeMap::new()),
             payload_field_refs: Mutex::new(BTreeMap::new()),
             file_access_alerts: Mutex::new(Vec::new()),
+            file_blobs: Mutex::new(BTreeMap::new()),
         }
     }
 }
@@ -501,6 +506,8 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
         let file_revoke_edge = Arc::clone(&self.edge);
         let file_manifest_metadata_ledger = Arc::clone(&self.ledger);
         let file_manifest_metadata_edge = Arc::clone(&self.edge);
+        let file_upload_edge = Arc::clone(&self.edge);
+        let file_download_edge = Arc::clone(&self.edge);
         let file_alerts_edge = Arc::clone(&self.edge);
         let get_receipt_ledger = Arc::clone(&self.ledger);
         let builder_credits_ledger = Arc::clone(&self.ledger);
@@ -647,6 +654,40 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
                     let edge = Arc::clone(&file_revoke_edge);
                     async move { Self::handle_revoke_file_reader(ledger, edge, headers, request).await }
                 }),
+            )
+            .route(
+                "/api/v1/files/upload/local/:namespace/:object_id/:intent_id",
+                axum::routing::put(
+                    move |Path((namespace, object_id, intent_id)): Path<(String, String, Uuid)>,
+          headers: HeaderMap,
+          body: Bytes| {
+                        let edge = Arc::clone(&file_upload_edge);
+                        async move {
+                            Self::handle_upload_local_file(
+                                edge,
+                                headers,
+                                namespace,
+                                object_id,
+                                intent_id,
+                                body,
+                            )
+                            .await
+                        }
+                    },
+                ),
+            )
+            .route(
+                "/api/v1/files/local/:namespace/:object_id/:intent_id",
+                get(
+                    move |Path((namespace, object_id, intent_id)): Path<(String, String, Uuid)>,
+          headers: HeaderMap| {
+                        let edge = Arc::clone(&file_download_edge);
+                        async move {
+                            Self::handle_download_local_file(edge, headers, namespace, object_id, intent_id)
+                                .await
+                        }
+                    },
+                ),
             )
             .route(
                 "/api/v1/files/manifests/:manifest_id",
@@ -2186,6 +2227,158 @@ impl<S: LedgerStorage + 'static> ApiServer<S> {
                 "manifest_id": request.manifest_id,
                 "reader_did": request.reader_did,
                 "result": base,
+            })),
+        )
+    }
+
+    /// Local object-store upload path backing LocalOffchainObjectStore
+    /// upload URLs (PUT <upload_url>). Stores ciphertext bytes keyed by the
+    /// issued object_ref so readers can fetch them after consent/ACL checks.
+    async fn handle_upload_local_file(
+        edge: Arc<ApiEdgeState>,
+        headers: HeaderMap,
+        namespace: String,
+        object_id: String,
+        intent_id: Uuid,
+        body: Bytes,
+    ) -> (StatusCode, Json<serde_json::Value>) {
+        if !edge.config.offchain_encrypted_files_v1_enabled {
+            return Self::offchain_feature_disabled_response();
+        }
+
+        if let Err(response) =
+            Self::authorize_write(Arc::clone(&edge), &headers, "files.upload").await
+        {
+            return response;
+        }
+
+        let intent = {
+            let intents = edge.file_intents.lock().await;
+            intents.get(&intent_id).cloned()
+        };
+        let Some(intent) = intent else {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(serde_json::json!({"error": "file intent not found"})),
+            );
+        };
+        if intent.request.namespace != namespace || intent.request.object_id != object_id {
+            return (
+                StatusCode::UNPROCESSABLE_ENTITY,
+                Json(serde_json::json!({
+                    "error": "upload path does not match intent namespace/object_id"
+                })),
+            );
+        }
+        if body.len() as u64 != intent.request.file_size_bytes {
+            return (
+                StatusCode::UNPROCESSABLE_ENTITY,
+                Json(serde_json::json!({
+                    "error": "uploaded byte count does not match intent file_size_bytes",
+                    "expected": intent.request.file_size_bytes,
+                    "received": body.len(),
+                })),
+            );
+        }
+
+        let ciphertext_hash = format!("sha256:{}", hex::encode(Sha256::digest(&body)));
+        let object_ref = intent.object_ref.clone();
+        edge.file_blobs.lock().await.insert(object_ref.clone(), body.to_vec());
+
+        (
+            StatusCode::CREATED,
+            Json(serde_json::json!({
+                "status": "stored",
+                "intent_id": intent_id,
+                "object_ref": object_ref,
+                "ciphertext_hash": ciphertext_hash,
+            })),
+        )
+    }
+
+    /// Local object-store download path: returns stored ciphertext bytes for
+    /// a committed or in-flight intent. Authorization is the files.read
+    /// scope; per-reader consent/ACL/revocation gating happens on the read
+    /// endpoint before clients reach for this.
+    async fn handle_download_local_file(
+        edge: Arc<ApiEdgeState>,
+        headers: HeaderMap,
+        namespace: String,
+        object_id: String,
+        intent_id: Uuid,
+    ) -> (StatusCode, Json<serde_json::Value>) {
+        if !edge.config.offchain_encrypted_files_v1_enabled {
+            return Self::offchain_feature_disabled_response();
+        }
+
+        if let Err(response) =
+            Self::authorize_write(Arc::clone(&edge), &headers, "files.read").await
+        {
+            return response;
+        }
+
+        let intent = {
+            let intents = edge.file_intents.lock().await;
+            intents.get(&intent_id).cloned()
+        };
+        let object_ref = match intent {
+            Some(intent)
+                if intent.request.namespace == namespace
+                    && intent.request.object_id == object_id =>
+            {
+                intent.object_ref.clone()
+            }
+            _ => {
+                // Intent consumed by a commit: recover the object_ref from the
+                // manifest metadata keyed by the committed manifest.
+                let prefix = format!(
+                    "blob://local/{}/{}/{}",
+                    urlencoding::encode(&namespace),
+                    urlencoding::encode(&object_id),
+                    intent_id
+                );
+                let expected_ref = format!("{}.cipher", prefix);
+                let manifests = edge.file_manifests.lock().await;
+                match manifests
+                    .values()
+                    .find(|stored| {
+                        stored
+                            .manifest
+                            .get("file_ref")
+                            .and_then(|value| value.as_str())
+                            .map(|file_ref| file_ref == expected_ref)
+                            .unwrap_or(false)
+                    }) {
+                    Some(_) => expected_ref,
+                    None => {
+                        return (
+                            StatusCode::NOT_FOUND,
+                            Json(serde_json::json!({
+                                "error": "no stored object for namespace/object/intent"
+                            })),
+                        )
+                    }
+                }
+            }
+        };
+
+        let blobs = edge.file_blobs.lock().await;
+        let Some(bytes) = blobs.get(&object_ref) else {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(serde_json::json!({
+                    "error": "ciphertext not uploaded for this intent",
+                    "object_ref": object_ref,
+                })),
+            );
+        };
+
+        (
+            StatusCode::OK,
+            Json(serde_json::json!({
+                "status": "ok",
+                "object_ref": object_ref,
+                "ciphertext_b64": base64::engine::general_purpose::STANDARD.encode(bytes),
             })),
         )
     }
@@ -4922,6 +5115,7 @@ mod tests {
     use axum::body::{to_bytes, Body};
     use axum::http::{Request, StatusCode};
     use axum::Json;
+    use sha2::Digest as _;
     use chrono::Utc;
     use citizen_crypto::{sign_message, verifying_key_to_string, KeyRegistry, ValidatorKeypair};
     use citizen_ledger::Ledger;
@@ -7630,6 +7824,173 @@ mod tests {
         let third_payload: Value = serde_json::from_slice(&third_body).expect("third payload");
         assert_eq!(third_payload["error"], "file intent already committed");
         assert_eq!(third_payload["intent_id"], intent_id);
+    }
+
+    #[tokio::test]
+    async fn local_object_store_upload_and_download_roundtrip() {
+        let app = build_server().router();
+        let now = chrono::Utc::now().timestamp();
+        let signer = ValidatorKeypair::generate("did:citizen:holder-1".to_string());
+
+        let mut consent_entry = LedgerEntry {
+            entry_id: Uuid::new_v4(),
+            namespace: "consent.receipt".to_string(),
+            action: "CONSENT_GRANTED".to_string(),
+            object_id: "did:citizen:holder-1".to_string(),
+            payload: json!({
+                "data_hash": "sha256:file-upload-1",
+                "policy_ref": "policy:offchain:v1",
+                "expires_at": now + 3_600
+            }),
+            privacy_flag: false,
+            privacy_mode: citizen_types::PrivacyMode::None,
+            payload_commitment: None,
+            ciphertext_hex: None,
+            nonce_hex: None,
+            salt_hex: None,
+            kdf_params: None,
+            consent_receipt: None,
+            authorized_readers: vec![],
+            custodian_policy_id: None,
+            field_reader_acls: BTreeMap::new(),
+            key_wrapped_secrets: vec![],
+            revocation_events: vec![],
+            author: "did:citizen:holder-1".to_string(),
+            signature: String::new(),
+            timestamp: now,
+        };
+        sign_entry_for_tests(&mut consent_entry, &signer);
+        let consent_envelope = SignedEnvelope {
+            envelope_id: Uuid::new_v4(),
+            signer: consent_entry.author.clone(),
+            signature: consent_entry.signature.clone(),
+            signature_scope: None,
+            co_signatures: Vec::new(),
+            multisig_policy: None,
+            submitted_at: chrono::Utc::now(),
+            payload: consent_entry,
+        };
+        let _ = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/envelopes/submit")
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        serde_json::to_vec(&consent_envelope).expect("serialize envelope"),
+                    ))
+                    .expect("request"),
+            )
+            .await
+            .expect("submit response");
+
+        let intent_request = json!({
+            "namespace": "files.secure",
+            "object_id": "PROC-UP-1",
+            "author_did": "did:author:a",
+            "mime_type": "application/pdf",
+            "file_size_bytes": 24,
+            "encryption_mode": "hybrid-acl",
+            "consent_receipt": {
+                "subject_did": "did:citizen:holder-1",
+                "data_hash": "sha256:file-upload-1",
+                "policy_ref": "policy:offchain:v1",
+                "granted_at": now,
+                "expires_at": now + 3_600,
+                "authorized_readers": ["did:author:a"]
+            }
+        });
+        let intent_response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/files/intents")
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        serde_json::to_vec(&intent_request).expect("intent body"),
+                    ))
+                    .expect("request"),
+            )
+            .await
+            .expect("intent response");
+        assert_eq!(intent_response.status(), StatusCode::CREATED);
+        let intent_body = axum::body::to_bytes(intent_response.into_body(), usize::MAX)
+            .await
+            .expect("intent body");
+        let intent_payload: Value = serde_json::from_slice(&intent_body).expect("intent payload");
+        let intent_id = intent_payload["intent_id"].as_str().expect("intent id").to_string();
+        let upload_url = intent_payload["upload"]["upload_url"]
+            .as_str()
+            .expect("upload url")
+            .to_string();
+        let upload_path = upload_url
+            .split('?')
+            .next()
+            .expect("upload path")
+            .to_string();
+
+        // Wrong byte count must be rejected before anything is stored.
+        let wrong_size = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("PUT")
+                    .uri(&upload_path)
+                    .body(Body::from(vec![7u8; 12]))
+                    .expect("request"),
+            )
+            .await
+            .expect("wrong size response");
+        assert_eq!(wrong_size.status(), StatusCode::UNPROCESSABLE_ENTITY);
+
+        let ciphertext = b"0123456789abcdef012345\0\0".to_vec();
+        let upload = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("PUT")
+                    .uri(&upload_path)
+                    .body(Body::from(ciphertext.clone()))
+                    .expect("request"),
+            )
+            .await
+            .expect("upload response");
+        assert_eq!(upload.status(), StatusCode::CREATED);
+        let upload_body = axum::body::to_bytes(upload.into_body(), usize::MAX)
+            .await
+            .expect("upload body");
+        let upload_payload: Value = serde_json::from_slice(&upload_body).expect("upload payload");
+        let expected_hash = format!(
+            "sha256:{}",
+            hex::encode(sha2::Sha256::digest(ciphertext.clone()))
+        );
+        assert_eq!(upload_payload["ciphertext_hash"], expected_hash);
+
+        let download_path = format!("/api/v1/files/local/files.secure/PROC-UP-1/{}", intent_id);
+        let download = app
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri(&download_path)
+                    .body(Body::empty())
+                    .expect("request"),
+            )
+            .await
+            .expect("download response");
+        assert_eq!(download.status(), StatusCode::OK);
+        let download_body = axum::body::to_bytes(download.into_body(), usize::MAX)
+            .await
+            .expect("download body");
+        let download_payload: Value =
+            serde_json::from_slice(&download_body).expect("download payload");
+        let decoded = base64::Engine::decode(
+            &base64::engine::general_purpose::STANDARD,
+            download_payload["ciphertext_b64"].as_str().expect("b64"),
+        )
+        .expect("decode");
+        assert_eq!(decoded, ciphertext);
     }
 
     #[tokio::test]
