@@ -1913,20 +1913,19 @@ impl<S: LedgerStorage + 'static> Ledger<S> {
             .storage
             .namespace_entries(&"execution.module".to_string())
             .ok()?;
-        for entry in entries.iter().rev() {
-            if entry.object_id == module_id && entry.action == "STATE_WRITE" {
-                if let Some(state_key) = entry.payload.get("state_key").and_then(|v| v.as_str()) {
-                    if state_key == key {
-                        return entry
-                            .payload
-                            .get("state_value")
-                            .and_then(|v| v.as_str())
-                            .map(ToString::to_string);
-                    }
-                }
-            }
-        }
-        None
+        entries
+            .iter()
+            .filter(|e| e.object_id == module_id && e.action == "STATE_WRITE")
+            .filter(|e| {
+                e.payload.get("state_key").and_then(|v| v.as_str()) == Some(key)
+            })
+            .max_by_key(|e| (e.timestamp, e.entry_id))
+            .and_then(|e| {
+                e.payload
+                    .get("state_value")
+                    .and_then(|v| v.as_str())
+                    .map(ToString::to_string)
+            })
     }
 
     fn ctzn_citizenship_policy(&self, entry: &LedgerEntry, config: &Value) -> Result<()> {
@@ -2770,7 +2769,9 @@ impl<S: LedgerStorage + 'static> WasmHost for LedgerWasmHost<S> {
             format!("MODULE_WRITE\n{namespace}\n{object_id}\n{action}\n{entry_payload}");
         let commitment = hex::encode(Sha256::digest(canonical.as_bytes()));
 
-        let entry_id = Uuid::new_v4();
+        // Time-ordered (v7) entry ids keep RocksDB byte-order scans
+        // chronological, so "latest state write" reads are deterministic.
+        let entry_id = Uuid::now_v7();
         let receipt = serde_json::json!({
             "entry_id": entry_id,
             "namespace": namespace,
@@ -2816,8 +2817,11 @@ impl<S: LedgerStorage + 'static> WasmHost for LedgerWasmHost<S> {
         message_hex: &str,
         signature_hex: &str,
     ) -> std::result::Result<bool, ExecutionError> {
+        // Modules may pass the signed message either hex-encoded or as raw
+        // UTF-8; accept both encodings and verify against the same signature.
         let message_bytes = hex::decode(message_hex)
-            .map_err(|e| ExecutionError::HostError(format!("invalid message hex: {e}")))?;
+            .map(|bytes| bytes)
+            .unwrap_or_else(|_| message_hex.as_bytes().to_vec());
         let sig_bytes = hex::decode(signature_hex)
             .map_err(|e| ExecutionError::HostError(format!("invalid signature hex: {e}")))?;
         let sig = Signature::from_slice(&sig_bytes)
@@ -2910,7 +2914,8 @@ impl<S: LedgerStorage + 'static> WasmHost for LedgerWasmHost<S> {
         let commitment = hex::encode(Sha256::digest(canonical.as_bytes()));
 
         let entry = citizen_types::LedgerEntry {
-            entry_id: Uuid::new_v4(),
+            // v7: byte-ordered chronologically for deterministic latest-reads.
+            entry_id: Uuid::now_v7(),
             namespace: "execution.module".into(),
             action: "STATE_WRITE".into(),
             object_id: module_id.to_string(),
@@ -2951,18 +2956,18 @@ impl<S: LedgerStorage + 'static> WasmHost for LedgerWasmHost<S> {
             .namespace_entries(&"execution.module".to_string())
             .map_err(|e| ExecutionError::HostError(e.to_string()))?;
 
-        for entry in entries.iter().rev() {
-            if entry.object_id == module_id && entry.action == "STATE_WRITE" {
-                if let Some(state_key) = entry.payload.get("state_key").and_then(|v| v.as_str()) {
-                    if state_key == key {
-                        if let Some(state_value) = entry.payload.get("state_value").and_then(|v| v.as_str()) {
-                            return Ok(Some(state_value.to_string()));
-                        }
-                    }
-                }
-            }
-        }
-        Ok(None)
+        // Latest write = max (timestamp, entry_id); entry ids are v7 for
+        // host-written state so same-second writes still order chronologically.
+        let latest = entries
+            .iter()
+            .filter(|e| e.object_id == module_id && e.action == "STATE_WRITE")
+            .filter(|e| {
+                e.payload.get("state_key").and_then(|v| v.as_str()) == Some(key)
+            })
+            .max_by_key(|e| (e.timestamp, e.entry_id));
+        Ok(latest.and_then(|e| {
+            e.payload.get("state_value").and_then(|v| v.as_str()).map(String::from)
+        }))
     }
 
     fn verify_signature_batch(

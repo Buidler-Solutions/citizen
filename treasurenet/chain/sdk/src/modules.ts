@@ -79,9 +79,19 @@ export interface ChainAdapter {
   ): Promise<{ output: Record<string, unknown>; meta: ChainWriteMeta }>;
 }
 
+/** Durable backing for the retry queue (Postgres/Redis adapter injected by the server). */
+export interface RetryQueueStore {
+  enqueue(item: { moduleId: string; operation: string; params: Record<string, unknown>; attempts: number }): Promise<{ id: string }>;
+  dequeue(id: string): Promise<void>;
+  bumpAttempts(id: string, attempts: number): Promise<void>;
+  load(): Promise<Array<{ id: string; moduleId: string; operation: string; params: Record<string, unknown>; attempts: number }>>;
+}
+
 export class ModuleGateway implements ChainAdapter {
-  private readonly retryQueue: Array<{
+  private retryQueue: Array<{
+    id: string;
     moduleId: string;
+    operation: string;
     params: Record<string, unknown>;
     attempts: number;
   }> = [];
@@ -89,27 +99,44 @@ export class ModuleGateway implements ChainAdapter {
 
   private readonly client: CitizenNodeClient;
   private readonly retry: RetryOptions;
+  private readonly queueStore?: RetryQueueStore;
 
-  constructor(client: CitizenNodeClient, retry: RetryOptions = DEFAULT_RETRY) {
+  constructor(client: CitizenNodeClient, retry: RetryOptions = DEFAULT_RETRY, queueStore?: RetryQueueStore) {
     this.client = client;
     this.retry = retry;
+    this.queueStore = queueStore;
+  }
+
+  /** Restore persisted retry items after a restart (durable queue). */
+  async restoreRetryQueue(): Promise<number> {
+    if (!this.queueStore) return 0;
+    const items = await this.queueStore.load();
+    for (const item of items) {
+      this.retryQueue.push(item);
+    }
+    return items.length;
   }
 
   /** Drain the retry queue after a node outage. Returns failures. */
   async flushRetryQueue(): Promise<Array<{ moduleId: string; error: string }>> {
     const failures: Array<{ moduleId: string; error: string }> = [];
-    while (this.retryQueue.length > 0) {
-      const item = this.retryQueue.shift()!;
+    const draining = [...this.retryQueue];
+    this.retryQueue = [];
+    for (const item of draining) {
       try {
         await this.execute(item.moduleId, item.params);
+        await this.queueStore?.dequeue(item.id);
       } catch (error) {
         if (item.attempts + 1 >= this.retry.maxAttempts) {
+          await this.queueStore?.dequeue(item.id);
           failures.push({
             moduleId: item.moduleId,
             error: error instanceof Error ? error.message : String(error),
           });
         } else {
-          this.retryQueue.push({ ...item, attempts: item.attempts + 1 });
+          const bumped = { ...item, attempts: item.attempts + 1 };
+          this.retryQueue.push(bumped);
+          await this.queueStore?.bumpAttempts(item.id, bumped.attempts);
         }
       }
     }
@@ -124,7 +151,9 @@ export class ModuleGateway implements ChainAdapter {
     moduleId: string,
     params: Record<string, unknown>
   ): Promise<{ output: Record<string, unknown>; meta: ChainWriteMeta }> {
-    const scope = `${moduleId}:${params.operation}:${params.escrow_id ?? params.hunt_id ?? params.player_did ?? params.did ?? ""}`;
+    const scope = `${moduleId}:${params.operation}:${
+      params.escrow_id ?? params.hunt_id ?? params.token_id ?? params.player_did ?? params.did ?? ""
+    }`;
     // Idempotency: same envelope scope replayed in-process is rejected.
     if (this.replayScopes.has(scope) && isWriteOperation(params.operation)) {
       throw new ModuleError(moduleId, String(params.operation), "ReplayedSubmission");
@@ -148,7 +177,10 @@ export class ModuleGateway implements ChainAdapter {
         await new Promise((resolve) => setTimeout(resolve, this.retry.backoffMs));
       }
     }
-    this.retryQueue.push({ moduleId, params, attempts: this.retry.maxAttempts });
+    const durable = this.queueStore
+      ? await this.queueStore.enqueue({ moduleId, operation: String(params.operation), params, attempts: this.retry.maxAttempts })
+      : { id: `mem-${Date.now()}-${Math.random().toString(36).slice(2, 8)}` };
+    this.retryQueue.push({ id: durable.id, moduleId, operation: String(params.operation), params, attempts: this.retry.maxAttempts });
     throw new Error(`${moduleId} unreachable after retries: ${lastError?.message}`);
   }
 

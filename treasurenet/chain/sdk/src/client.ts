@@ -6,9 +6,9 @@
  * - POST /api/v1/modules/:id/execute   (WASM module invocations)
  * - GET  /api/v1/modules/:id           (module runtime state)
  * - GET  /api/v1/receipts/:id          (finality receipts)
- * - GET  /api/v1/entries?namespace=... (entry reads for the indexer)
- * - GET  /api/v1/blocks                (block listing for the indexer)
- * - GET  /api/v1/ctzn/:id/balance/:did (reward token balances)
+ * - GET  /entries/:namespace           (entry reads for the indexer)
+ * - GET  /blocks                       (block listing for the indexer)
+ * - GET  /api/v1/ctzn/:id/check/:did   (soulbound reward token ownership)
  */
 
 export interface SubmitResponse {
@@ -91,18 +91,23 @@ export class CitizenNodeClient {
 
   async listEntries(namespace: string): Promise<Record<string, unknown>> {
     return this.request<Record<string, unknown>>(
-      `/api/v1/entries?namespace=${encodeURIComponent(namespace)}`
+      `/entries/${encodeURIComponent(namespace)}`
     );
   }
 
   async listBlocks(): Promise<Record<string, unknown>> {
-    return this.request<Record<string, unknown>>("/api/v1/blocks");
+    return this.request<Record<string, unknown>>("/blocks?limit=100");
   }
 
-  async getCtznBalance(moduleId: string, did: string): Promise<Record<string, unknown>> {
+  /** Soulbound CTZN token ownership check for a DID. */
+  async checkCtzn(moduleId: string, did: string): Promise<Record<string, unknown>> {
     return this.request<Record<string, unknown>>(
-      `/api/v1/ctzn/${encodeURIComponent(moduleId)}/balance/${encodeURIComponent(did)}`
+      `/api/v1/ctzn/${encodeURIComponent(moduleId)}/check/${encodeURIComponent(did)}`
     );
+  }
+
+  getCtznBalance(moduleId: string, did: string): Promise<Record<string, unknown>> {
+    return this.checkCtzn(moduleId, did);
   }
 
   async health(): Promise<boolean> {

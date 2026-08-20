@@ -21,10 +21,18 @@ use tracing::{info, warn};
 
 pub type Result<T> = std::result::Result<T, ProtocolError>;
 
+#[derive(Default)]
 struct PendingRound {
     proposal: Option<BlockProposal>,
     proposal_hash: Option<String>,
     prevotes: BTreeMap<ValidatorId, SignedPreVote>,
+    created_at: Option<std::time::Instant>,
+}
+
+impl PendingRound {
+    fn new() -> Self {
+        Self { created_at: Some(std::time::Instant::now()), ..Default::default() }
+    }
 }
 
 #[derive(Default)]
@@ -37,16 +45,6 @@ struct LivenessMonitor {
 struct SignedPreVote {
     hash: String,
     signature: Signature,
-}
-
-impl PendingRound {
-    fn new() -> Self {
-        Self {
-            proposal: None,
-            proposal_hash: None,
-            prevotes: BTreeMap::new(),
-        }
-    }
 }
 
 pub struct ConsensusEngine<N, S>
@@ -173,6 +171,35 @@ where
         }
         let current_height = self.ledger.storage().latest_height()?;
         let next_height = current_height + 1;
+        // Evict rounds that can never finalize: rounds for heights at or
+        // below the finalized tip (e.g. raced by the local API submit path)
+        // and rounds stuck without quorum for many block intervals. Without
+        // this, a single failed round at next_height freezes the chain
+        // forever because try_propose refuses to re-open the height.
+        {
+            let stale_after = std::time::Duration::from_millis(
+                (self.config.read().block_time_millis as u64).saturating_mul(5).max(1_000),
+            );
+            let mut rounds = self.rounds.write();
+            let stuck: Vec<u64> = rounds
+                .iter()
+                .filter(|(h, r)| {
+                    **h <= current_height
+                        || r.created_at
+                            .map(|t| t.elapsed())
+                            .unwrap_or_default()
+                            > stale_after
+                })
+                .map(|(h, _)| *h)
+                .collect();
+            for height in stuck {
+                if let Some(round) = rounds.remove(&height) {
+                    if round.proposal.is_some() {
+                        warn!(height, "evicting stale consensus round");
+                    }
+                }
+            }
+        }
         let leader = self.select_leader(next_height, &snapshot);
         if leader != self.validator_id {
             return Ok(());

@@ -16,6 +16,24 @@ export interface ServerConfig {
   rewardTokenModuleId: string;
   /** Approximate blocks per second for expiry scheduling (dev mock cadence). */
   blockCadencePerSecond: number;
+  /** Postgres projection persistence (unset -> in-memory only). */
+  databaseUrl: string | undefined;
+  /** Redis streams for events/notifications (unset -> skip). */
+  redisUrl: string | undefined;
+  /** Rate limiting: general requests per minute per IP (0 disables). */
+  rateLimitPerMin: number;
+  /** Rate limiting: auth endpoint requests per minute per IP (0 disables). */
+  rateLimitAuthPerMin: number;
+  /** GM escrow-refund key (64-hex) enabling scheduler-triggered refunds. */
+  gmRefundKeyHex: string | undefined;
+  /** Oracle mode: heuristic (in-process) or external (AI service). */
+  oracleMode: "heuristic" | "external";
+  oracleUrl: string | undefined;
+  oracleVerifierDid: string | undefined;
+  /** Distribute CTZN rewards via the token module after escrow payout (node mode). */
+  rewardDistribute: boolean;
+  /** Outbound notification webhook (FCM gateway / ntfy / ops relay). */
+  notifyWebhookUrl: string | undefined;
 }
 
 const PKCS8_PREFIX = Buffer.from("302e020100300506032b657004220420", "hex");
@@ -42,6 +60,12 @@ export function loadConfig(): ServerConfig {
   const nodeUrl = process.env.TREASURENET_NODE_URL;
   const serviceKeyHex = envHex("TREASURENET_SERVICE_KEY") ?? generateKeyPair().privateKeyHex;
   const oracleKeyHex = envHex("TREASURENET_ORACLE_KEY") ?? generateKeyPair().privateKeyHex;
+  const gmRefundKeyHex = envHex("TREASURENET_GM_REFUND_KEY");
+  const oracleMode =
+    process.env.TREASURENET_ORACLE_MODE === "external" ? "external" : "heuristic";
+  if (oracleMode === "external" && !process.env.TREASURENET_ORACLE_URL) {
+    throw new Error("TREASURENET_ORACLE_MODE=external requires TREASURENET_ORACLE_URL");
+  }
   return {
     port: Number(process.env.TREASURENET_PORT ?? 7755),
     nodeUrl,
@@ -53,6 +77,16 @@ export function loadConfig(): ServerConfig {
     oracleKeyHex,
     rewardTokenModuleId: process.env.TREASURENET_REWARD_MODULE ?? "ctzn-token.v1",
     blockCadencePerSecond: Number(process.env.TREASURENET_BLOCK_CADENCE ?? 1),
+    databaseUrl: process.env.DATABASE_URL,
+    redisUrl: process.env.REDIS_URL,
+    rateLimitPerMin: Number(process.env.TREASURENET_RATE_LIMIT_PER_MIN ?? 240),
+    rateLimitAuthPerMin: Number(process.env.TREASURENET_RATE_LIMIT_AUTH_PER_MIN ?? 30),
+    gmRefundKeyHex,
+    oracleMode,
+    oracleUrl: process.env.TREASURENET_ORACLE_URL,
+    oracleVerifierDid: process.env.TREASURENET_ORACLE_VERIFIER_DID,
+    rewardDistribute: process.env.TREASURENET_REWARD_DISTRIBUTE !== "false",
+    notifyWebhookUrl: process.env.TREASURENET_NOTIFY_WEBHOOK_URL,
   };
 }
 

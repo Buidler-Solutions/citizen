@@ -29,6 +29,7 @@ export class WalletModule {
   }
 
   async balance(did: string) {
+    this.store.touchWallet(did);
     if (this.chain.mock) {
       return {
         did,
@@ -37,24 +38,75 @@ export class WalletModule {
         source: "mock",
       };
     }
-    // Real node: query the configured CTZN reward token module.
-    const client = this.chain.config;
+    // Node mode: CTZN rewards are soulbound tokens minted per won hunt, so
+    // the balance is the number of reward tokens the player still owns.
+    // Read owner_of for each minted reward token of this winner's confirmed
+    // claims; fall back to the projection when the node is unreachable.
+    const tokenIds = [...this.store.claims.values()]
+      .filter((claim) => claim.winner_did === did && claim.status === "confirmed")
+      .map((claim) => `reward-${claim.hunt_id}`);
+    let owned = 0;
+    let source = "node";
+    let note: string | undefined;
+    try {
+      for (const tokenId of tokenIds) {
+        const result = await this.chain.adapter.execute(
+          this.chain.config.rewardTokenModuleId,
+          { operation: "owner_of", token_id: tokenId }
+        );
+        const owner = result.output.owner as string | undefined;
+        const burned = result.output.burned as boolean | undefined;
+        if (owner === did && !burned) owned += 1;
+      }
+    } catch {
+      owned = tokenIds.length;
+      source = "projection";
+      note = "reward token module unreachable; balance from local projection";
+    }
     return {
       did,
-      token: client.rewardTokenModuleId,
-      balance: 0,
-      source: "node",
-      note: "query /api/v1/ctzn/<module>/balance/<did> on the node",
+      token: this.chain.config.rewardTokenModuleId,
+      balance: owned,
+      tokens: tokenIds.length,
+      source,
+      ...(note ? { note } : {}),
     };
   }
 
-  receipts(did: string) {
-    if (!this.chain.mock) return { did, receipts: [] };
-    const receipts = this.chain.mock.listReceipts();
-    return {
-      did,
-      receipts: Object.values(receipts).slice(-20),
-    };
+  async receipts(did: string) {
+    if (this.chain.mock) {
+      const receipts = this.chain.mock.listReceipts();
+      return {
+        did,
+        receipts: Object.values(receipts).slice(-20),
+      };
+    }
+    // Node mode: fetch finality receipts for this player's confirmed claims;
+    // claims without a receipt id surface as pending entries.
+    const claims = [...this.store.claims.values()]
+      .filter((claim) => claim.winner_did === did)
+      .slice(-20);
+    const client = this.chain.nodeClient;
+    const receipts = await Promise.all(
+      claims.map(async (claim) => {
+        if (claim.receipt_id && client && !claim.receipt_id.startsWith("node:")) {
+          try {
+            const chainReceipt = await client.getReceipt(claim.receipt_id);
+            return { claim_id: claim.claim_id, hunt_id: claim.hunt_id, status: claim.status, chain_receipt: chainReceipt };
+          } catch {
+            // fall through to the projection summary below
+          }
+        }
+        return {
+          claim_id: claim.claim_id,
+          hunt_id: claim.hunt_id,
+          status: claim.status,
+          receipt_id: claim.receipt_id,
+          block_height: claim.block_height,
+        };
+      })
+    );
+    return { did, receipts };
   }
 
   /** Service-signed role grant (admin path after KYC/civic registry check). */

@@ -40,6 +40,11 @@ cd treasurenet/apps/flutter && flutter run \
 
 # end-to-end smoke test (boots its own server, covers both claim paths)
 cd treasurenet && node scripts/smoke.mjs
+
+# same smoke with durable persistence (Postgres projection, Redis event
+# stream, server-restart rehydration): DATABASE_URL required, REDIS_URL optional
+cd treasurenet && DATABASE_URL=postgresql://tata@localhost:5432/treasurenet_citizen \
+  REDIS_URL=redis://127.0.0.1:6379 node scripts/smoke.mjs
 ```
 
 The GM console generates its keypair in the browser, requests the
@@ -53,25 +58,39 @@ claim and the mobile claim request plus GM web-console approval.
 ## Quick start (local Citizen node)
 
 ```bash
-# 1. build the three WASM modules
+# 0. workspace install (pnpm; Prisma is pinned to 6.x)
+cd treasurenet && pnpm install --no-frozen-lockfile
+
+# 1. build the WASM modules (escrow, hunt, registry, ctzn-token)
 cd citizen-protocol/modules/treasure-escrow && RUSTFLAGS="-C link-arg=--allow-undefined" cargo build --release --target wasm32-unknown-unknown
 cd ../treasure-hunt && RUSTFLAGS="-C link-arg=--allow-undefined" cargo build --release --target wasm32-unknown-unknown
 cd ../player-registry && RUSTFLAGS="-C link-arg=--allow-undefined" cargo build --release --target wasm32-unknown-unknown
+cd ../ctzn-token && RUSTFLAGS="-C link-arg=--allow-undefined" cargo build --release --target wasm32-unknown-unknown
 
-# 2. start a local node (see citizen-protocol/scripts/run_solo.sh)
+# 2. build + start a solo node (single validator, mock network, advancing blocks)
+cd citizen-protocol && cargo build -p citizen-node --release
+./target/release/citizen-node config/solo/validator-solo-tn.toml   # api on :8081
 
-# 3. deploy modules + namespaces
+# 3. deploy: governance approvals + module registration + configuration
 python3 chain/scripts/deploy_treasurenet.py \
-  --node http://127.0.0.1:8091 \
+  --node http://127.0.0.1:8081 \
+  --bootstrap-governance \
   --signing-key-hex <64-hex> \
   --admin-did did:key:ed25519:<pubhex> \
   --oracle-did did:key:ed25519:<pubhex>
 
-# 4. point the backend at the node
-TREASURENET_NODE_URL=http://127.0.0.1:8091 \
+# 4. point the backend at the node (scheduler self-serve refunds need the
+#    GM refund key; rate limits and oracle mode have env toggles too)
+TREASURENET_NODE_URL=http://127.0.0.1:8081 \
 TREASURENET_SERVICE_KEY=<64-hex> \
 TREASURENET_ORACLE_KEY=<64-hex> \
+TREASURENET_GM_REFUND_KEY=<gm-64-hex> \
 node apps/server/src/main.ts
+
+# 5. full node-mode smoke against the live chain
+cd treasurenet && TREASURENET_NODE_URL=http://127.0.0.1:8081 \
+  TREASURENET_SERVICE_KEY=<64-hex> TREASURENET_ORACLE_KEY=<64-hex> \
+  node scripts/smoke.mjs
 ```
 
 ## API surface (port 7755)

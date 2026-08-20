@@ -9,10 +9,13 @@
   },
   "dependencies": {
     "@treasurenet/chain-sdk": "workspace:*",
-    "@treasurenet/shared": "workspace:*"
+    "@treasurenet/shared": "workspace:*",
+    "@prisma/client": "^6.16.2",
+    "ioredis": "^5.4.1"
   },
   "devDependencies": {
     "typescript": "^5.4.5",
-    "@types/node": "^20.11.30"
+    "@types/node": "^20.11.30",
+    "prisma": "^6.16.2"
   }
 }

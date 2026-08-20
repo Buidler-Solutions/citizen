@@ -3,7 +3,7 @@ import { claimMessages, signMessage, verifyMessage } from "../../../../chain/sdk
 import type { OracleVerdict } from "../../../../packages/shared/src/index.ts";
 import type { Store } from "../store.ts";
 import type { ChainModule } from "./chain.module.ts";
-import { badRequest } from "../http.ts";
+import { badRequest, HttpError } from "../http.ts";
 
 /**
  * Oracle module — AI photo verification port. Input: player photo (base64
@@ -30,15 +30,26 @@ export class OracleModule {
     return `verdict:${v.hunt_id}:${v.player_did}:${v.clue_index}:${v.passed ? "pass" : "fail"}`;
   }
 
-  evaluate(input: {
+  /**
+   * Heuristic verification (in-process) or external AI oracle, per
+   * TREASURENET_ORACLE_MODE. External verdicts are only trusted when the
+   * returned signature verifies over the canonical verdict message against
+   * the pinned TREASURENET_ORACLE_VERIFIER_DID. External failures surface as
+   * VerificationFailed instead of silently downgrading to the heuristic.
+   */
+  async evaluate(input: {
     hunt_id: string;
     player_did: string;
     clue_index: number;
     photo_b64: string;
     geoOk: boolean;
-  }): OracleVerdict {
+  }): Promise<OracleVerdict> {
     if (!input.photo_b64 || input.photo_b64.length < 32) {
       badRequest("PhotoRequired", "photo proof payload missing or too small");
+    }
+    const config = this.chain.config;
+    if (config.oracleMode === "external" && config.oracleUrl) {
+      return this.evaluateExternal(input);
     }
     const passed = input.geoOk && input.photo_b64.length >= 32;
     const verdict: OracleVerdict = {
@@ -47,7 +58,7 @@ export class OracleModule {
       clue_index: input.clue_index,
       passed,
       confidence: passed ? 0.92 : 0.1,
-      oracle_did: this.chain.config.oracleDid,
+      oracle_did: config.oracleDid,
       verdict_signature: "",
       reason: passed
         ? "photo matches clue location context"
@@ -55,11 +66,68 @@ export class OracleModule {
           ? "photo could not be verified"
           : "geo proximity check failed",
     };
-    verdict.verdict_signature = signMessage(
-      this.verdictMessage(verdict),
-      this.chain.config.oracleKeyHex
-    );
-    this.store.oracleVerdicts.push(verdict);
+    verdict.verdict_signature = signMessage(this.verdictMessage(verdict), config.oracleKeyHex);
+    this.store.addVerdict(verdict);
+    return verdict;
+  }
+
+  private async evaluateExternal(input: {
+    hunt_id: string;
+    player_did: string;
+    clue_index: number;
+    photo_b64: string;
+    geoOk: boolean;
+  }): Promise<OracleVerdict> {
+    const config = this.chain.config;
+    let data: {
+      passed?: boolean;
+      confidence?: number;
+      reason?: string;
+      verdict_signature?: string;
+      oracle_did?: string;
+    };
+    try {
+      const response = await fetch(config.oracleUrl!, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          hunt_id: input.hunt_id,
+          player_did: input.player_did,
+          clue_index: input.clue_index,
+          photo_b64: input.photo_b64,
+          geo_ok: input.geoOk,
+        }),
+        signal: AbortSignal.timeout(10_000),
+      });
+      if (!response.ok) {
+        throw new Error(`oracle service returned HTTP ${response.status}`);
+      }
+      data = (await response.json()) as typeof data;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      badRequest("OracleUnavailable", `external oracle unreachable: ${message}`);
+    }
+    const passed = Boolean(data!.passed);
+    const oracleDid = data!.oracle_did ?? config.oracleVerifierDid ?? config.oracleDid;
+    const verdict: OracleVerdict = {
+      hunt_id: input.hunt_id,
+      player_did: input.player_did,
+      clue_index: input.clue_index,
+      passed,
+      confidence: Number(data!.confidence ?? (passed ? 0.9 : 0.1)),
+      oracle_did: oracleDid,
+      verdict_signature: data!.verdict_signature ?? "",
+      reason: data!.reason ?? (passed ? "external oracle accepted the proof" : "external oracle rejected the proof"),
+    };
+    if (config.oracleVerifierDid) {
+      if (verdict.oracle_did !== config.oracleVerifierDid) {
+        badRequest("VerificationFailed", "external oracle did does not match the pinned verifier did");
+      }
+      if (!verdict.verdict_signature || !this.verifyVerdict(verdict)) {
+        badRequest("VerificationFailed", "external oracle verdict signature verification failed");
+      }
+    }
+    this.store.addVerdict(verdict);
     return verdict;
   }
 

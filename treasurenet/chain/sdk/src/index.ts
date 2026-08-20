@@ -1,7 +1,9 @@
 export {
   generateKeyPair,
   didFromPublicKey,
+  didFromPrivateKeyHex,
   publicKeyFromDid,
+  publicKeyFromPrivateKeyHex,
   signMessage,
   verifyMessage,
   canonicalJson,

@@ -81,7 +81,9 @@ export class GameModule {
       operation: "init",
       escrow_id: escrowId,
       owner_did: input.gm_did,
-      claimer_did: "",
+      // Real escrow module requires a non-empty claimer; hunts mint any
+      // verified winner at claim time, so "-" is a placeholder only.
+      claimer_did: "-",
       amount: String(input.reward_amount),
       token: input.reward_token ?? "CTZN",
       deadline_block: String(expiresBlock),
@@ -117,7 +119,7 @@ export class GameModule {
       clues: [...input.clues].sort((a, b) => a.index - b.index),
       created_at: new Date().toISOString(),
     };
-    this.store.hunts.set(huntId, hunt);
+    this.store.upsertHunt(hunt);
     this.store.analytics.hunts_created += 1;
     this.store.recordEvent("hunt.created", "game.hunts", { hunt_id: huntId });
     return hunt;
@@ -145,6 +147,7 @@ export class GameModule {
       signature: escrowSignature,
     });
     hunt.status = "funded";
+    this.store.upsertHunt(hunt);
     this.store.recordEvent("hunt.funded", "game.hunts", { hunt_id: huntId });
     return hunt;
   }
@@ -168,6 +171,7 @@ export class GameModule {
       : operation === "resume" ? "active"
       : "cancelled";
     if (hunt.status === "active") this.store.analytics.hunts_active += 1;
+    this.store.upsertHunt(hunt);
     this.store.recordEvent(`hunt.${operation}`, "game.hunts", { hunt_id: huntId });
     return hunt;
   }
@@ -224,7 +228,7 @@ export class GameModule {
       badRequest("NotAtLocation", `player is ${check.distanceMeters}m away (radius ${clue!.radius_meters}m)`);
     }
     const key = `${input.hunt_id}:${input.player_did}:${input.clue_index}`;
-    this.store.unlockedClues.add(key);
+    this.store.unlockClue(key);
     this.store.recordEvent("clue.unlocked", "game.hunts", {
       hunt_id: input.hunt_id,
       player_did: input.player_did,
