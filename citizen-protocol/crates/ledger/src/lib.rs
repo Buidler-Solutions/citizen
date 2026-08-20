@@ -1818,6 +1818,39 @@ impl<S: LedgerStorage + 'static> Ledger<S> {
                 }
                 Ok(())
             }
+            "STATE_WRITE" => {
+                // Host-generated module state. The executing node ran the
+                // WASM and sealed the write; peers verify the tamper-evident
+                // commitment over (module_id, key, value) instead of
+                // re-executing nondeterministic module code.
+                let key = entry
+                    .payload
+                    .get("state_key")
+                    .and_then(Value::as_str)
+                    .ok_or_else(|| {
+                        ProtocolError::ValidationFailed(
+                            "state write requires payload.state_key".to_string(),
+                        )
+                    })?;
+                let value = entry
+                    .payload
+                    .get("state_value")
+                    .and_then(Value::as_str)
+                    .ok_or_else(|| {
+                        ProtocolError::ValidationFailed(
+                            "state write requires payload.state_value".to_string(),
+                        )
+                    })?;
+                let canonical =
+                    format!("STATE_WRITE\n{module_id}\n{key}\n{value}");
+                let expected = hex::encode(Sha256::digest(canonical.as_bytes()));
+                if entry.signature != expected {
+                    return Err(ProtocolError::ValidationFailed(
+                        "state write commitment mismatch".to_string(),
+                    ));
+                }
+                Ok(())
+            }
             _ => Err(ProtocolError::ValidationFailed(
                 "wasm runtime action is not supported".to_string(),
             )),
@@ -2920,6 +2953,9 @@ impl<S: LedgerStorage + 'static> WasmHost for LedgerWasmHost<S> {
             action: "STATE_WRITE".into(),
             object_id: module_id.to_string(),
             payload: serde_json::json!({
+                // module_id lets peers validate gossiped state writes through
+                // the wasm_runtime_policy (object_id == payload.module_id).
+                "module_id": module_id,
                 "state_key": key,
                 "state_value": value,
                 "system_generated": true,

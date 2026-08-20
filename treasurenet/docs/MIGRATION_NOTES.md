@@ -226,3 +226,25 @@ with live evidence.
   because module executions finalize through block height plus module
   state rather than ledger receipt ids; the wallet enriches receipts from
   the chain when a ledger receipt id exists.
+
+### Multi-validator triolet verification
+
+- `config/triolet/validator-{alpha,beta,gamma}-tn.toml` run a 3-validator
+  localnet (api 8091/8092/8093, QUIC 9210-9212) with the bare `governance`
+  namespace, `game.hunts`, and `asset`/`identity` added to the allowed
+  module classes.
+- Protocol support for replication: consensus gossips and block-includes
+  `execution.module`, `governance` and `game.hunts` entries alongside the
+  civic namespaces; STATE_WRITE entries carry `payload.module_id` and are
+  validated on receipt by recomputing the SHA-256 commitment over
+  `STATE_WRITE\n<module_id>\n<key>\n<value>` rather than re-executing the
+  module.
+- Verified live: rotating proposers with 3-party aggregated commit
+  signatures, identical heights across validators, identical module state
+  (REGISTER/ACTIVATE/STATE_WRITE counts) after deploy, and the full
+  node-mode smoke green against the triolet with the treasurenet backend
+  pointed at the alpha API.
+- Boot recipe: fresh `data/triolet-tn-*` dirs, start all three
+  `validator-*-tn.toml` nodes, then `deploy_treasurenet.py
+  --bootstrap-governance --node http://127.0.0.1:8091 ...` and run the
+  smoke with `TREASURENET_NODE_URL=http://127.0.0.1:8091`.
