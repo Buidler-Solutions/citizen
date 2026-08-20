@@ -21,6 +21,25 @@ use tracing::{info, warn};
 
 pub type Result<T> = std::result::Result<T, ProtocolError>;
 
+/// Namespaces whose entries are gossiped to peers and eligible for block
+/// inclusion. Module deployments, module state writes, governance decisions
+/// and game projections must replicate across validators, so they belong
+/// here alongside the civic namespaces.
+const REPLICATED_NAMESPACES: [&str; 12] = [
+    "identity.citizen",
+    "registry.land",
+    "audit.procurement",
+    "governance",
+    "governance.vote",
+    "forms.commitment",
+    "onboarding.interest",
+    "content.article",
+    "builder.credits",
+    "consent.receipt",
+    "execution.module",
+    "game.hunts",
+];
+
 #[derive(Default)]
 struct PendingRound {
     proposal: Option<BlockProposal>,
@@ -1042,17 +1061,7 @@ where
     }
 
     async fn gossip_pending_entries(&self) {
-        let known_namespaces = [
-            "identity.citizen",
-            "registry.land",
-            "audit.procurement",
-            "governance.vote",
-            "forms.commitment",
-            "onboarding.interest",
-            "content.article",
-            "builder.credits",
-            "consent.receipt",
-        ];
+        let known_namespaces = REPLICATED_NAMESPACES;
         let mut to_gossip = Vec::new();
         {
             let mut gossiped = self.gossiped_entries.write();
@@ -1096,17 +1105,7 @@ where
             0
         };
 
-        let known_namespaces = [
-            "identity.citizen",
-            "registry.land",
-            "audit.procurement",
-            "governance.vote",
-            "forms.commitment",
-            "onboarding.interest",
-            "content.article",
-            "builder.credits",
-            "consent.receipt",
-        ];
+        let known_namespaces = REPLICATED_NAMESPACES;
 
         let mut total_stored = 0usize;
         let mut entries = Vec::new();

@@ -1,0 +1,316 @@
+validator_id = "validator-beta"
+block_time_millis = 1000
+quorum_bps = 6667
+signing_key_hex = "2f2e2d2c2b2a292827262524232221201f1e1d1c1b1a19181716151413121110"
+manifest_enforce = false
+api_port = 8092
+data_dir = "data/triolet-tn-beta"
+bind_addr = "127.0.0.1:9211"
+network_key_rotation_secs = 3600
+
+[namespace_rate_limits]
+"onboarding.interest" = 30
+"forms.commitment" = 30
+"content.article" = 60
+"identity.citizen" = 20
+"identity.kyc" = 20
+"governance.vote" = 50
+"civic.proposal" = 50
+"civic.ballot" = 100
+"audit.procurement" = 60
+"builder.credits" = 20
+
+[namespace_max_entry_bytes]
+"content.article" = 65536
+"forms.commitment" = 16384
+"identity.kyc" = 32768
+
+[quic_tls]
+ca_cert_path = "config/localnet/certs/ca.der"
+cert_chain_path = "config/localnet/certs/validator-beta.der"
+private_key_path = "config/localnet/certs/validator-beta.key.der"
+
+[[namespaces]]
+descriptor.namespace = "game.hunts"
+descriptor.version = 1
+descriptor.rules_hash = "sha256:game-hunts-triolet-tn-v1"
+descriptor.governed_by = "governance.vote"
+writers = []
+[[namespaces.validators]]
+name = "require_signature"
+config = {}
+
+
+[[namespaces]]
+descriptor.namespace = "identity.citizen"
+descriptor.version = 1
+descriptor.rules_hash = "sha256:identity-localnet-v1"
+descriptor.governed_by = "governance.vote"
+writers = ["registry.identity"]
+[[namespaces.validators]]
+name = "require_signature"
+config = {}
+
+[[namespaces]]
+descriptor.namespace = "identity.kyc"
+descriptor.version = 1
+descriptor.rules_hash = "sha256:identity-kyc-v1"
+descriptor.governed_by = "governance.vote"
+writers = []
+[[namespaces.validators]]
+name = "require_signature"
+config = {}
+[[namespaces.validators]]
+name = "allowed_actions"
+config.actions = ["SUBMIT_KYC", "APPROVE_KYC", "REVOKE_KYC"]
+[[namespaces.validators]]
+name = "kyc_verification_policy"
+config.admin_namespace = "civic.admin"
+[[namespaces]]
+descriptor.namespace = "registry.land"
+descriptor.version = 1
+descriptor.rules_hash = "sha256:land-localnet-v1"
+descriptor.governed_by = "governance.vote"
+writers = ["registry.land"]
+[[namespaces.validators]]
+name = "require_signature"
+config = {}
+[[namespaces.validators]]
+name = "prevent_double_transfer"
+config.object_id = "object_id"
+
+[[namespaces]]
+descriptor.namespace = "audit.procurement"
+descriptor.version = 1
+descriptor.rules_hash = "sha256:audit-localnet-v1"
+descriptor.governed_by = "governance.vote"
+writers = ["audit.procurement"]
+[[namespaces.validators]]
+name = "require_signature"
+config = {}
+
+[[namespaces]]
+descriptor.namespace = "governance.vote"
+descriptor.version = 1
+descriptor.rules_hash = "sha256:governance-localnet-v1"
+descriptor.governed_by = "governance.vote"
+writers = ["governance.vote"]
+[[namespaces.validators]]
+name = "require_signature"
+config = {}
+
+[[namespaces]]
+descriptor.namespace = "forms.commitment"
+descriptor.version = 1
+descriptor.rules_hash = "sha256:forms-commitment-v1"
+descriptor.governed_by = "governance.vote"
+writers = ["forms.commitment"]
+[[namespaces.validators]]
+name = "require_signature"
+config = {}
+[[namespaces.validators]]
+name = "require_payload_fields"
+config.fields = ["data_hash", "encrypted_form_url"]
+
+[[namespaces]]
+descriptor.namespace = "content.article"
+descriptor.version = 1
+descriptor.rules_hash = "sha256:content-article-localnet-v1"
+descriptor.governed_by = "governance.vote"
+writers = []
+[[namespaces.validators]]
+name = "require_signature"
+config = {}
+[[namespaces.validators]]
+name = "require_payload_fields"
+config.fields = ["title", "content", "signedMessage", "network"]
+
+[[namespaces]]
+descriptor.namespace = "builder.credits"
+descriptor.version = 1
+descriptor.rules_hash = "sha256:builder-credits-localnet-v1"
+descriptor.governed_by = "governance.vote"
+writers = ["builder.credits"]
+[[namespaces.validators]]
+name = "require_signature"
+config = {}
+[[namespaces.validators]]
+name = "builder_credit_policy"
+config.required_grant_approvals = 3
+config.max_daily_spend = 5000
+config.grant_approvers = [
+  { id = "grant:ops-1", public_key = "11eec230e93451631d92331ab14f7cd3beb71d7d0664213c3c245ee34e218bbc" },
+  { id = "grant:ops-2", public_key = "4fba12886de6f3955e1e00122ecfa5f28f6143b4ebfd623426b31db6e3ba759b" },
+  { id = "grant:ops-3", public_key = "05d820297454180f0a29826db77629efaf2866ce6321bdf1e36653fbce5f87fc" },
+  { id = "grant:ops-4", public_key = "871aae4a90265130ec08636783f7c6967201557511093f2ebe5b1ec3b5759500" },
+  { id = "grant:ops-5", public_key = "64b4461734432d8b1651171a2f4385948748665c876a377cd1722ef55389553b" }
+]
+
+[namespaces.validators.config.programmable_multisig]
+enabled = false
+policy_id = "builder-credits-auto-v1"
+actors = ["automation.builder-credit-bot"]
+max_grant_amount = 1000
+
+[[validators]]
+validator_id = "validator-alpha"
+public_key = "712651f450ba05b63898b99ef5f7ba45632e8e2527f7f715cd671ec4024cc51e"
+anchors = ["org:alpha"]
+
+[[validators]]
+validator_id = "validator-gamma"
+public_key = "1482e33d057c573003b7a18e1318c8eb12b847850b450e34a776fef7193a8739"
+anchors = ["org:gamma"]
+
+[[peers]]
+validator_id = "validator-alpha"
+address = "127.0.0.1:9210"
+
+[[peers]]
+validator_id = "validator-gamma"
+address = "127.0.0.1:9212"
+
+[[namespaces]]
+descriptor.namespace = "onboarding.interest"
+descriptor.version = 1
+descriptor.rules_hash = "sha256:onboarding-localnet-v1"
+descriptor.governed_by = "governance.vote"
+writers = ["onboarding.interest"]
+[[namespaces.validators]]
+name = "require_signature"
+config = {}
+
+[[namespaces]]
+descriptor.namespace = "consent.receipt"
+descriptor.version = 1
+descriptor.rules_hash = "sha256:consent-localnet-v1"
+descriptor.governed_by = "governance.vote"
+writers = ["consent.receipt"]
+[[namespaces.validators]]
+name = "require_signature"
+config = {}
+
+[[namespaces]]
+descriptor.namespace = "civic.proposal"
+descriptor.version = 1
+descriptor.rules_hash = "sha256:civic-proposal-v1"
+descriptor.governed_by = "governance.vote"
+writers = []
+[[namespaces.validators]]
+name = "allowed_actions"
+config.actions = ["OPEN_PROPOSAL", "CLOSE_PROPOSAL"]
+[[namespaces.validators]]
+name = "require_signature"
+config = {}
+
+[[namespaces]]
+descriptor.namespace = "civic.ballot"
+descriptor.version = 1
+descriptor.rules_hash = "sha256:civic-ballot-v1"
+descriptor.governed_by = "governance.vote"
+writers = []
+[[namespaces.validators]]
+name = "require_signature"
+config = {}
+[[namespaces.validators]]
+name = "civic_voting_policy"
+config.proposal_namespace = "civic.proposal"
+config.valid_choices = ["yes", "no", "abstain"]
+
+[[namespaces]]
+descriptor.namespace = "civic.admin"
+descriptor.version = 1
+descriptor.rules_hash = "sha256:civic-admin-v1"
+descriptor.governed_by = "governance.vote"
+writers = []
+[[namespaces.validators]]
+name = "require_signature"
+config = {}
+[[namespaces.validators]]
+name = "allowed_actions"
+config.actions = ["ASSIGN_ADMIN", "REVOKE_ADMIN", "SET_KYC_PUBLIC_KEY"]
+[[namespaces.validators]]
+name = "admin_assignment_policy"
+config = {}
+
+[[namespaces]]
+descriptor.namespace = "civic.election"
+descriptor.version = 1
+descriptor.rules_hash = "sha256:civic-election-v1"
+descriptor.governed_by = "governance.vote"
+writers = []
+[[namespaces.validators]]
+name = "require_signature"
+config = {}
+[[namespaces.validators]]
+name = "allowed_actions"
+config.actions = ["OPEN_ELECTION", "CLOSE_ELECTION", "ADD_RACE", "REMOVE_RACE", "ADD_CANDIDATE", "REMOVE_CANDIDATE", "UPDATE_RACE"]
+[[namespaces.validators]]
+name = "civic_admin_gate"
+config.admin_namespace = "civic.admin"
+[[namespaces.validators]]
+name = "election_race_policy"
+config = {}
+
+[[namespaces]]
+descriptor.namespace = "civic.election.ballot"
+descriptor.version = 1
+descriptor.rules_hash = "sha256:civic-election-ballot-v1"
+descriptor.governed_by = "governance.vote"
+writers = []
+[[namespaces.validators]]
+name = "require_signature"
+config = {}
+[[namespaces.validators]]
+name = "election_ballot_policy"
+config.election_namespace = "civic.election"
+[[namespaces.validators]]
+name = "ctzn_citizenship_policy"
+config.ctzn_module_id = "ctzn-token.v1"
+config.required_schema = "citizenship"
+[[namespaces.validators]]
+name = "voter_jurisdiction_policy"
+config.registry_namespace = "civic.registry"
+config.election_namespace = "civic.election"
+
+[[namespaces]]
+descriptor.namespace = "civic.registry"
+descriptor.version = 1
+descriptor.rules_hash = "sha256:civic-registry-v1"
+descriptor.governed_by = "governance.vote"
+writers = []
+[[namespaces.validators]]
+name = "require_signature"
+config = {}
+[[namespaces.validators]]
+name = "allowed_actions"
+config.actions = ["UPDATE_JURISDICTION"]
+[[namespaces.validators]]
+name = "voter_registration_policy"
+config.admin_namespace = "civic.admin"
+[[namespaces]]
+descriptor.namespace = "execution.module"
+descriptor.version = 1
+descriptor.rules_hash = "sha256:execution-module-triolet-v1"
+descriptor.governed_by = "governance.vote"
+writers = []
+[[namespaces.validators]]
+name = "allowed_actions"
+config.actions = ["REGISTER_MODULE", "ACTIVATE_MODULE", "EXECUTE_MODULE", "STATE_WRITE"]
+[[namespaces.validators]]
+name = "wasm_runtime_policy"
+config.allowed_module_classes = ["governance", "policy-guard", "deterministic-indexer", "receipt-verifier", "asset", "identity"]
+config.required_governance_approvals = 1
+
+[[namespaces]]
+descriptor.namespace = "governance"
+descriptor.version = 1
+descriptor.rules_hash = "sha256:governance-approval-v1"
+descriptor.governed_by = "governance.vote"
+writers = []
+[[namespaces.validators]]
+name = "require_signature"
+config = {}
+[[namespaces.validators]]
+name = "allowed_actions"
+config.actions = ["PROPOSE", "VOTE", "APPROVED", "REJECTED"]

@@ -8,7 +8,7 @@ evidence of current state and the concrete work to close it.
 
 | # | Gap | Current state | Work required |
 |---|---|---|---|
-| 1 | Governance-gated module bootstrap on a real node | Resolved: live solo node boot verified end to end. `deploy_treasurenet.py --bootstrap-governance` submits PROPOSE+APPROVED governance entries, registers and configures all four modules (escrow, hunt, registry, ctzn-token); node-mode smoke (`TREASURENET_NODE_URL=...`) passes the full player journey including dual-sig refund after expiry and on-chain CTZN mint | Run the same flow against a multi-validator localnet/triolet before mainline staging |
+| 1 | Governance-gated module bootstrap on a real node | Resolved: verified on both a solo node and a 3-validator triolet localnet. `deploy_treasurenet.py --bootstrap-governance` submits PROPOSE+APPROVED governance entries, registers and configures all four modules (escrow, hunt, registry, ctzn-token); node-mode smoke passes the full player journey including dual-sig refund after expiry and on-chain CTZN mint against rotating proposers with 3-party aggregate commit proofs, and module state (STATE_WRITE entries) replicates identically across all validators | Multi-validator profile is single-writer (backend talks to one node); add entry-submit load balancing only if needed |
 | 2 | CTZN reward token distribution on payout | Resolved: escrow payout triggers `ctzn-token.v1 mint` under service+oracle dual signatures (threshold 2); node-mode wallet balance counts soulbound tokens via `owner_of`; `/api/v1/ctzn/:id/check/:did` verified | Consider batch distribution if reward volume grows |
 | 3 | Encrypted clue file store integration | Clues carry `manifest_id`s; check-in state gates reads in the store | Wire `citizen_create_file_intent` / `citizen_commit_file` on clue upload, `citizen_read_file` authorization on unlock, `citizen_revoke_file_reader` on cheat detection, feed alerts into `/admin/file-alerts` |
 | 4 | Node-backed wallet balances and receipts | Resolved: node mode reads `owner_of` per confirmed claim for balances and enriches receipts from chain where a ledger receipt id exists; module-execution claims carry deterministic `node:<height>:<escrow_id>` receipt references | None for the solo-node profile; revisit if module executions gain ledger-level receipt ids |
@@ -47,15 +47,25 @@ evidence of current state and the concrete work to close it.
 - 41 ported contract scenarios green in `cargo test -p citizen-execution --test treasurenet_test`
 - 77 ledger tests and 6 consensus tests green; the ledger now accepts module
   signature messages hex-encoded or raw UTF-8, orders module state writes
-  deterministically (time-ordered v7 entry ids, latest-write selection), and
-  the consensus engine evicts stale rounds so a failed round can no longer
-  freeze block production
+  deterministically (time-ordered v7 entry ids, latest-write selection),
+  validates gossiped STATE_WRITE entries via their tamper-evident
+  commitment (module_id + key + value), and the consensus engine gossips
+  and block-includes execution.module/governance/game.hunts entries and
+  evicts stale rounds so a failed round can no longer freeze block
+  production
+- Two pre-existing citizen-api test failures
+  (`election_lifecycle_and_tally`,
+  `module_runtime_endpoint_reports_registration_and_activation`) predate
+  the TreasureNet work (fail at the pre-port commit) and are unrelated to
+  it
 - Full E2E smoke green in all three modes: mock (`node scripts/smoke.mjs`),
   persistence (`DATABASE_URL=... REDIS_URL=... node scripts/smoke.mjs`,
   including server-restart rehydration), and node mode
-  (`TREASURENET_NODE_URL=... node scripts/smoke.mjs` against a live
-  citizen-node with governance bootstrapped modules, escrow expiry refunds,
-  on-chain CTZN mint, rate limits and orgs)
+  (`TREASURENET_NODE_URL=... node scripts/smoke.mjs`) against both a live
+  solo node and a 3-validator triolet (`config/triolet/validator-*-tn.toml`,
+  rotating proposers, aggregate commit proofs, STATE_WRITE module state
+  replicated identically across validators: governance-gated module
+  bootstrap, escrow expiry refunds, on-chain CTZN mint, rate limits, orgs)
 - GM console and admin panel serve and talk to the 7755 API; the GM console
   lists and approves pending mobile claim requests
 - Flutter player app: `dart analyze` clean, `flutter test` green including
