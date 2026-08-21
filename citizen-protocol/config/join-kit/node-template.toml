@@ -1,0 +1,63 @@
+# ---------------------------------------------------------------------------
+# Citizen Node Join Kit — Template
+# ---------------------------------------------------------------------------
+# Fill in the placeholders below with your node's identity and network info.
+# All values marked {{PLACEHOLDER}} must be replaced before use.
+# ---------------------------------------------------------------------------
+
+# ── Node Identity ──────────────────────────────────────────────────────────
+validator_id = "{{NODE_ID}}"                        # e.g. "validator-delta"
+block_time_millis = 1000
+quorum_bps = 6667                                   # >2/3 BFT quorum
+signing_key_hex = "{{SIGNING_KEY_HEX}}"             # 32-byte Ed25519 seed in hex (64 chars)
+manifest_enforce = {{MANIFEST_ENFORCE}}              # true for production, false for dev
+api_port = {{API_PORT}}                              # e.g. 8094
+data_dir = "data/{{NODE_ID}}"                        # unique data directory per node
+bind_addr = "{{BIND_ADDR}}"                          # e.g. "0.0.0.0:9213" (QUIC P2P port)
+network_key_rotation_secs = 3600
+
+# ── TLS (QUIC transport security) ──────────────────────────────────────────
+[quic_tls]
+ca_cert_path = "{{CA_CERT_PATH}}"                    # e.g. "config/certs/ca.der"
+cert_chain_path = "{{CERT_CHAIN_PATH}}"               # e.g. "config/certs/my-node.der"
+private_key_path = "{{PRIVATE_KEY_PATH}}"             # e.g. "config/certs/my-node.key.der"
+
+# ── Namespace rate limits (per-minute entry caps) ──────────────────────────
+[namespace_rate_limits]
+"governance.vote" = 50
+"civic.proposal" = 50
+"civic.ballot" = 100
+"audit.procurement" = 60
+"builder.credits" = 20
+# Add application-specific namespaces here.
+
+# ── Namespace max entry bytes ──────────────────────────────────────────────
+[namespace_max_entry_bytes]
+# e.g. "content.article" = 65536
+
+# ═══════════════════════════════════════════════════════════════════════════
+# APPLICATION NAMESPACES
+# ═══════════════════════════════════════════════════════════════════════════
+# Copy namespace definitions from the genesis node config.
+# All namespaces must match the genesis exactly — same descriptor and rules.
+# ═══════════════════════════════════════════════════════════════════════════
+
+{{NAMESPACES}}
+
+# ═══════════════════════════════════════════════════════════════════════════
+# VALIDATOR SET
+# ═══════════════════════════════════════════════════════════════════════════
+# List ALL validators in the network (existing + your new node).
+# Public keys are the Ed25519 verify keys (32-byte hex).
+# ═══════════════════════════════════════════════════════════════════════════
+
+{{VALIDATOR_SET}}
+
+# ═══════════════════════════════════════════════════════════════════════════
+# BOOTSTRAP PEERS
+# ═══════════════════════════════════════════════════════════════════════════
+# QUIC addresses of existing validators to contact on startup.
+# Your node will discovery other peers from these bootstrap nodes.
+# ═══════════════════════════════════════════════════════════════════════════
+
+{{BOOTSTRAP_PEERS}}
