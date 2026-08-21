@@ -96,6 +96,31 @@ function fundDepositMessage(hunt) {
   return `transfer:${hunt.reward_token}:${gm.did}:vault:${hunt.escrow_id}:${hunt.reward_amount}:deposit-${hunt.hunt_id}`;
 }
 
+// ── Clue chain builder (coordinates + riddle per clue) ──
+
+const clueRowsEl = document.getElementById("f-clues");
+const clueCountEl = document.getElementById("f-clue-count");
+
+function renderClueRows() {
+  const count = Math.max(1, Math.min(12, Number(clueCountEl.value) || 1));
+  clueRowsEl.innerHTML = "";
+  for (let i = 0; i < count; i++) {
+    const wrap = document.createElement("div");
+    wrap.style.marginTop = "12px";
+    wrap.innerHTML = `
+      <label style="font-weight:600;color:#e6e9f2">Clue ${i} — checkpoint${i === count - 1 ? " (final treasure)" : ""}</label>
+      <label>Lat <input id="f-lat-${i}" value="${(10.3167 + i * 0.0005).toFixed(5)}" /></label>
+      <label>Lon <input id="f-lon-${i}" value="${(123.8908 + i * 0.0005).toFixed(5)}" /></label>
+      <label>Riddle / hint (encrypted client-side, guides players to these coordinates)
+        <textarea id="f-riddle-${i}" rows="2" placeholder="Where the ferry queue meets the morning shade, count three lamps from the sea…"></textarea>
+      </label>
+    `;
+    clueRowsEl.appendChild(wrap);
+  }
+}
+clueCountEl.onchange = renderClueRows;
+renderClueRows();
+
 async function huntAction(hunt, action) {
   try {
     let body;
@@ -121,7 +146,44 @@ document.getElementById("btn-create").onclick = async () => {
   try {
     const huntId = document.getElementById("f-hunt-id").value.trim() || `hunt-${Date.now().toString(36)}`;
     const expiresAt = new Date(Date.now() + Number(document.getElementById("f-hours").value) * 3600_000).toISOString();
+    const clueCount = Math.max(1, Math.min(12, Number(clueCountEl.value) || 1));
+    const clues = [];
+    const riddles = [];
+    for (let i = 0; i < clueCount; i++) {
+      const lat = Number(document.getElementById(`f-lat-${i}`).value);
+      const lon = Number(document.getElementById(`f-lon-${i}`).value);
+      if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+        log(`clue ${i} needs numeric coordinates`, false);
+        return;
+      }
+      clues.push({
+        index: i,
+        manifest_id: `manifest-${huntId}-${i}`,
+        latitude: lat,
+        longitude: lon,
+        radius_meters: 50,
+      });
+      riddles.push(document.getElementById(`f-riddle-${i}`).value.trim());
+    }
+    const admissionMode = document.getElementById("f-admission").value;
+    const feeAmount = Number(document.getElementById("f-fee").value) || 0;
+    if (admissionMode === "paid" && feeAmount <= 0) {
+      log("paid admission needs a positive fee", false);
+      return;
+    }
+    const autoClaim = document.getElementById("f-autoclaim").checked;
     const gmSignature = await sign(`create:${huntId}:${gm.did}`, gm.privateKeyHex);
+    // Instant settlement: delegate claim authority to the service DID on
+    // both modules (message: delegate:<id>:<service did>). Refunds stay GM-only.
+    let delegateGmSignature;
+    let delegateEscrowGmSignature;
+    if (autoClaim) {
+      const overview = await api("GET", "/admin/overview");
+      const serviceDid = overview.service_did;
+      if (!serviceDid) throw new Error("server did not report its service did");
+      delegateGmSignature = await sign(`delegate:${huntId}:${serviceDid}`, gm.privateKeyHex);
+      delegateEscrowGmSignature = await sign(`delegate:esc-${huntId}:${serviceDid}`, gm.privateKeyHex);
+    }
     const hunt = await api("POST", "/games", {
       hunt_id: huntId,
       gm_did: gm.did,
@@ -129,24 +191,25 @@ document.getElementById("btn-create").onclick = async () => {
       title: document.getElementById("f-title").value,
       reward_amount: Number(document.getElementById("f-reward").value),
       expires_at: expiresAt,
-      clues: [
-        {
-          index: 0,
-          manifest_id: `manifest-${huntId}-0`,
-          latitude: Number(document.getElementById("f-lat1").value),
-          longitude: Number(document.getElementById("f-lon1").value),
-          radius_meters: 50,
-        },
-        {
-          index: 1,
-          manifest_id: `manifest-${huntId}-1`,
-          latitude: Number(document.getElementById("f-lat2").value),
-          longitude: Number(document.getElementById("f-lon2").value),
-          radius_meters: 50,
-        },
-      ],
+      clues,
+      admission: { mode: admissionMode, fee_amount: admissionMode === "paid" ? feeAmount : 0 },
+      auto_claim: autoClaim,
+      ...(autoClaim
+        ? { delegate_gm_signature: delegateGmSignature, delegate_escrow_gm_signature: delegateEscrowGmSignature }
+        : {}),
     });
-    log(`hunt created: ${hunt.hunt_id} (escrow ${hunt.escrow_id})`);
+    log(`hunt created: ${hunt.hunt_id} (escrow ${hunt.escrow_id}${autoClaim ? ", instant claim delegated" : ""})`);
+    // Publish each riddle through the encrypted clue channel so players who
+    // unlock a checkpoint can read the hint for the next one.
+    for (let i = 0; i < riddles.length; i++) {
+      if (!riddles[i]) continue;
+      try {
+        await uploadClueText(hunt.hunt_id, i, riddles[i]);
+        log(`riddle ${i} encrypted + uploaded`);
+      } catch (error) {
+        log(`riddle ${i} upload failed: ${error.message}`, false);
+      }
+    }
     refresh();
   } catch (error) {
     log(`create failed: ${error.message}`, false);
@@ -173,15 +236,29 @@ async function refresh() {
         <div class="title">${escapeHtml(hunt.title)}
           <span class="badge">${hunt.status}</span>
           <span class="badge">${hunt.reward_amount} ${hunt.reward_token}</span>
+          ${hunt.admission?.mode === "paid" ? `<span class="badge">paid ${hunt.admission.fee_amount}</span>` : `<span class="badge">free admission</span>`}
+          ${hunt.auto_claim ? `<span class="badge">instant claim</span>` : ""}
         </div>
         <div class="did">${hunt.hunt_id} · escrow ${hunt.escrow_id}</div>
-        <div class="did">expires ${hunt.expires_at} · ${hunt.clues.length} clues</div>
+        <div class="did">expires ${hunt.expires_at} · ${hunt.clues.length} clues · ${hunt.player_count ?? 0} players</div>
         ${hunt.winner_did ? `<div class="did">winner ${hunt.winner_did}${hunt.receipt_id ? ` · receipt ${hunt.receipt_id}` : ""}</div>` : ""}
         <div class="row">${actions.map((a) => `<button class="secondary" data-action="${a}">${a}</button>`).join("")}</div>
+        <div class="did" data-players="1" style="margin-top:6px"></div>
       `;
       for (const button of card.querySelectorAll("button")) {
         button.onclick = () => huntAction(hunt, button.dataset.action);
       }
+      // Player roster: admitted players (free or fee-paid) per hunt.
+      api("GET", `/games/${hunt.hunt_id}/players`).then((roster) => {
+        const el = card.querySelector("[data-players]");
+        if (el && roster.player_count > 0) {
+          el.textContent = `players: ${roster.players
+            .map((p) => `${p.did.slice(-12)}${p.fee_paid ? ` (+${p.fee_paid})` : ""}`)
+            .join(", ")}`;
+        } else if (el) {
+          el.textContent = hunt.status === "active" ? "players: none yet" : "";
+        }
+      }).catch(() => undefined);
       huntsEl.appendChild(card);
     }
   } catch (error) {
@@ -307,6 +384,27 @@ async function wrapClueKey(manifestId, clueKey) {
   return b64(wrapped);
 }
 
+/** Encrypt a clue/riddle plaintext in-browser and upload it + the wrapped key. */
+async function uploadClueText(huntId, clueIndex, plaintext) {
+  const { clueKey, iv, ciphertext } = await encryptClue(plaintext);
+  const uploaded = await api("POST", "/files/clue", {
+    hunt_id: huntId,
+    clue_index: clueIndex,
+    ciphertext_b64: b64(ciphertext),
+    iv_b64: b64(iv),
+    gm_did: gm.did,
+    gm_signature: await sign(`clue-upload:${huntId}:${clueIndex}`, gm.privateKeyHex),
+  });
+  const keyWrapped = await wrapClueKey(uploaded.manifest_id, clueKey);
+  await api("POST", "/files/clue/key", {
+    hunt_id: huntId,
+    clue_index: clueIndex,
+    key_wrapped_b64: keyWrapped,
+    gm_signature: await sign(`clue-key:${uploaded.manifest_id}`, gm.privateKeyHex),
+  });
+  return uploaded;
+}
+
 document.getElementById("btn-clue-upload").onclick = async () => {
   const huntId = document.getElementById("c-hunt-id").value.trim();
   const clueIndex = Number(document.getElementById("c-clue-index").value);
@@ -316,24 +414,9 @@ document.getElementById("btn-clue-upload").onclick = async () => {
     return;
   }
   try {
-    const { clueKey, iv, ciphertext } = await encryptClue(plaintext);
-    const uploaded = await api("POST", "/files/clue", {
-      hunt_id: huntId,
-      clue_index: clueIndex,
-      ciphertext_b64: b64(ciphertext),
-      iv_b64: b64(iv),
-      gm_did: gm.did,
-      gm_signature: await sign(`clue-upload:${huntId}:${clueIndex}`, gm.privateKeyHex),
-    });
-    const keyWrapped = await wrapClueKey(uploaded.manifest_id, clueKey);
-    await api("POST", "/files/clue/key", {
-      hunt_id: huntId,
-      clue_index: clueIndex,
-      key_wrapped_b64: keyWrapped,
-      gm_signature: await sign(`clue-key:${uploaded.manifest_id}`, gm.privateKeyHex),
-    });
+    const uploaded = await uploadClueText(huntId, clueIndex, plaintext);
     document.getElementById("c-plaintext").value = "";
-    log(`clue ${clueIndex} encrypted + uploaded (${ciphertext.length} bytes ciphertext, manifest ${uploaded.manifest_id.slice(0, 20)}…)`);
+    log(`clue ${clueIndex} encrypted + uploaded (manifest ${uploaded.manifest_id.slice(0, 20)}…)`);
   } catch (error) {
     log(`clue upload failed: ${error.message}`, false);
   }

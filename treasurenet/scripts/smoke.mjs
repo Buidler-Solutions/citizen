@@ -8,11 +8,14 @@
  *   2. Wallet registration + challenge-response auth for both
  *   3. Admin grants gamemaster + player roles (player-registry module)
  *   4. GM creates a hunt (escrow init + hunt creation, GM-signed)
- *   5. GM funds + activates the hunt
- *   6. Player grants consent (location + photo), checks in at clue GPS
+ *   5. GM funds + activates the hunt (activation is impossible before funding)
+ *   6. Player joins (free or paid admission), grants consent, checks in at
+ *      clue GPS positions strictly in clue-chain order
  *   7. Claim: photo proof -> oracle verdict -> 2-of-2 multisig (GM + oracle)
  *   8. Escrow + hunt complete; reward-asset balance increases; finality receipt exists
  *   9. Double-claim is rejected; leaderboard/analytics reflect the win
+ *  13c. Full game-design flow: paid admission, riddle-decrypted sequential
+ *       clues, and instant claim via GM-delegated service settlement
  */
 
 import { spawn } from "node:child_process";
@@ -157,12 +160,38 @@ try {
   const activated = await api("POST", `/games/${huntId}/activate`, { gm_signature: activateSig });
   check("hunt activated", activated.status === 200 && activated.json.status === "active", JSON.stringify(activated.json));
 
-  // 6: consent + check-ins
+  // 6: consent + admission + check-ins
   const consent = await api("POST", "/consent/grant", { purposes: ["location", "photo"] }, playerToken);
   check("consent receipt granted", consent.status === 200 && consent.json.receipt_id);
 
+  const outsiderCheck = await api("POST", `/games/${huntId}/checkin`, { clue_index: 0, latitude: 10.31672, longitude: 123.89081 }, playerToken);
+  check(
+    "non-participant check-in rejected",
+    outsiderCheck.status === 400 && outsiderCheck.json.code === "NotParticipant",
+    JSON.stringify(outsiderCheck.json)
+  );
+
+  const join1 = await api("POST", `/games/${huntId}/join`, undefined, playerToken);
+  check("free admission join accepted", join1.status === 200 && join1.json.joined === true, JSON.stringify(join1.json));
+  check("join reports mode + count", join1.json.mode === "free" && join1.json.player_count === 1);
+  const rejoin = await api("POST", `/games/${huntId}/join`, undefined, playerToken);
+  check("double join rejected", rejoin.status === 400 && rejoin.json.code === "AlreadyJoined");
+  const roster = await api("GET", `/games/${huntId}/players`);
+  check(
+    "players roster lists participant",
+    roster.json?.player_count === 1 && roster.json.players?.some((p) => p.did === player.did && p.fee_paid === 0),
+    JSON.stringify(roster.json)
+  );
+
   const tooFar = await api("POST", `/games/${huntId}/checkin`, { clue_index: 0, latitude: 10.5, longitude: 124.0 }, playerToken);
   check("distant check-in rejected", tooFar.status === 400 && tooFar.json.code === "NotAtLocation", JSON.stringify(tooFar.json));
+
+  const outOfOrder = await api("POST", `/games/${huntId}/checkin`, { clue_index: 1, latitude: 10.31721, longitude: 123.89119 }, playerToken);
+  check(
+    "out-of-order clue rejected",
+    outOfOrder.status === 400 && outOfOrder.json.code === "OutOfOrderClue",
+    JSON.stringify(outOfOrder.json)
+  );
 
   const checkin0 = await api("POST", `/games/${huntId}/checkin`, { clue_index: 0, latitude: 10.31672, longitude: 123.89081 }, playerToken);
   check("clue 0 unlocked", checkin0.status === 200 && checkin0.json.unlocked === true);
@@ -248,6 +277,7 @@ try {
     gm_signature: signMessage(claimMessages.activate(huntId2, gm.did), gm.privateKeyHex),
   });
   await api("POST", "/consent/grant", { purposes: ["location", "photo"] }, player2Token);
+  await api("POST", `/games/${huntId2}/join`, undefined, player2Token);
   const progress0 = await api("GET", `/games/${huntId2}/progress`, undefined, player2Token);
   check("progress starts empty", (progress0.json?.unlocked_clues?.length ?? 0) === 0 && progress0.json.next_clue_index === 0);
   await api("POST", `/games/${huntId2}/checkin`, { clue_index: 0, latitude: 10.31672, longitude: 123.89081 }, player2Token);
@@ -446,6 +476,7 @@ try {
     const filesPlayerToken = await login(filesPlayer);
     await api("POST", "/roles/grant", { did: filesPlayer.did, role: "player" });
     await api("POST", "/consent/grant", { purposes: ["location", "photo"] }, filesPlayerToken);
+    await api("POST", `/games/${filesHuntId}/join`, undefined, filesPlayerToken);
 
     const lockedRead = await api("POST", "/files/clue/read", { hunt_id: filesHuntId, clue_index: 0 }, filesPlayerToken);
     check(
@@ -512,6 +543,202 @@ try {
       fileAlerts.json?.some((a) => a.type === "clue.revoked") &&
         fileAlerts.json?.some((a) => a.type === "clue.read_denied_locked"),
       JSON.stringify(fileAlerts.json?.map((a) => a.type))
+    );
+  }
+
+  // 13c: full game-design flow — funding gate, paid admission, riddle-guided
+  // sequential clue chain, and instant claim via GM-delegated settlement
+  {
+    const adminOverview = await api("GET", "/admin/overview");
+    const serviceDid = adminOverview.json?.service_did;
+    check("admin overview exposes service did", typeof serviceDid === "string" && serviceDid.startsWith("did:key:"), JSON.stringify(adminOverview.json).slice(0, 120));
+
+    // Funding gate: activation and admission are impossible until the GM
+    // funds the escrow (the module itself rejects the transition).
+    const gateHuntId = `hunt-smoke-gate-${runSuffix}`;
+    const gateCreate = await api("POST", "/games", {
+      hunt_id: gateHuntId,
+      gm_did: gm.did,
+      gm_signature: signMessage(claimMessages.createHunt(gateHuntId, gm.did), gm.privateKeyHex),
+      title: "Unfunded Gate Beacon",
+      reward_amount: 100,
+      expires_at: new Date(Date.now() + 3_600_000).toISOString(),
+      clues: [
+        { index: 0, manifest_id: "manifest-gate-0", latitude: 10.3167, longitude: 123.8908, radius_meters: 50 },
+      ],
+      ...(serviceDid
+        ? {
+            auto_claim: true,
+            delegate_gm_signature: signMessage(claimMessages.huntDelegate(gateHuntId, serviceDid), gm.privateKeyHex),
+            delegate_escrow_gm_signature: signMessage(claimMessages.escrowDelegate(`esc-${gateHuntId}`, serviceDid), gm.privateKeyHex),
+          }
+        : {}),
+    });
+    check("gate hunt created", gateCreate.status === 200, JSON.stringify(gateCreate.json));
+    check("auto_claim persisted", gateCreate.json.auto_claim === true);
+    const earlyActivate = await api("POST", `/games/${gateHuntId}/activate`, {
+      gm_signature: signMessage(claimMessages.activate(gateHuntId, gm.did), gm.privateKeyHex),
+    });
+    check(
+      "activation before funding rejected",
+      earlyActivate.status === 400 && earlyActivate.json.code === "InvalidStatus",
+      JSON.stringify(earlyActivate.json)
+    );
+    const earlyJoin = await api("POST", `/games/${gateHuntId}/join`, undefined, playerToken);
+    check(
+      "join before activation rejected",
+      earlyJoin.status === 400 && earlyJoin.json.code === "HuntNotActive",
+      JSON.stringify(earlyJoin.json)
+    );
+
+    // Full flow hunt: paid admission, three riddle-guided clues, auto-claim.
+    const flowHuntId = `hunt-smoke-flow-${runSuffix}`;
+    const flowReward = 300;
+    const flowFee = 25;
+    const flowCreate = await api("POST", "/games", {
+      hunt_id: flowHuntId,
+      gm_did: gm.did,
+      gm_signature: signMessage(claimMessages.createHunt(flowHuntId, gm.did), gm.privateKeyHex),
+      title: "Riddle Chain Beacon",
+      reward_amount: flowReward,
+      expires_at: new Date(Date.now() + 2 * 3_600_000).toISOString(),
+      clues: [
+        { index: 0, manifest_id: `manifest-flow-${runSuffix}-0`, latitude: 10.3167, longitude: 123.8908, radius_meters: 50 },
+        { index: 1, manifest_id: `manifest-flow-${runSuffix}-1`, latitude: 10.3172, longitude: 123.8912, radius_meters: 50 },
+        { index: 2, manifest_id: `manifest-flow-${runSuffix}-2`, latitude: 10.3177, longitude: 123.8916, radius_meters: 50 },
+      ],
+      admission: { mode: "paid", fee_amount: flowFee },
+      auto_claim: true,
+      delegate_gm_signature: signMessage(claimMessages.huntDelegate(flowHuntId, serviceDid), gm.privateKeyHex),
+      delegate_escrow_gm_signature: signMessage(claimMessages.escrowDelegate(`esc-${flowHuntId}`, serviceDid), gm.privateKeyHex),
+    });
+    check(
+      "flow hunt created with paid admission + auto claim",
+      flowCreate.status === 200 && flowCreate.json.admission?.mode === "paid" && flowCreate.json.admission?.fee_amount === flowFee && flowCreate.json.auto_claim === true,
+      JSON.stringify(flowCreate.json).slice(0, 200)
+    );
+    await api("POST", `/games/${flowHuntId}/fund`, {
+      gm_signature: signMessage(claimMessages.fundHunt(flowHuntId, gm.did), gm.privateKeyHex),
+      escrow_gm_signature: signMessage(claimMessages.fundEscrow(`esc-${flowHuntId}`), gm.privateKeyHex),
+      asset_gm_signature: signMessage(
+        assetMessages.transfer("treasurenet.gold", gm.did, assetMessages.vaultAccount(`esc-${flowHuntId}`), flowReward, `deposit-${flowHuntId}`),
+        gm.privateKeyHex
+      ),
+    });
+    await api("POST", `/games/${flowHuntId}/activate`, {
+      gm_signature: signMessage(claimMessages.activate(flowHuntId, gm.did), gm.privateKeyHex),
+    });
+
+    // Paid admission: the fee transfer message is signed by the player's
+    // device key and moves real tokens to the GM.
+    const flowJoinMessage = assetMessages.transfer("treasurenet.gold", player.did, gm.did, flowFee, `join-${flowHuntId}`);
+    const missingPayment = await api("POST", `/games/${flowHuntId}/join`, undefined, playerToken);
+    check(
+      "paid join without payment rejected",
+      missingPayment.status === 400 && missingPayment.json.code === "PaymentRequired",
+      JSON.stringify(missingPayment.json)
+    );
+    const wrongFeeSig = await api(
+      "POST",
+      `/games/${flowHuntId}/join`,
+      { payment_signature: signMessage(assetMessages.transfer("treasurenet.gold", player.did, gm.did, flowFee + 1, `join-${flowHuntId}`), player.privateKeyHex) },
+      playerToken
+    );
+    check(
+      "wrong-fee admission signature rejected",
+      wrongFeeSig.status === 400 && wrongFeeSig.json.code === "InvalidSignature",
+      JSON.stringify(wrongFeeSig.json)
+    );
+    const brokePlayer = generateKeyPair();
+    await api("POST", "/wallet/register", { did: brokePlayer.did });
+    const brokeToken = await login(brokePlayer);
+    const brokeJoin = await api(
+      "POST",
+      `/games/${flowHuntId}/join`,
+      { payment_signature: signMessage(assetMessages.transfer("treasurenet.gold", brokePlayer.did, gm.did, flowFee, `join-${flowHuntId}`), brokePlayer.privateKeyHex) },
+      brokeToken
+    );
+    check(
+      "paid join without balance rejected on-chain",
+      brokeJoin.status === 400 && brokeJoin.json.code === "InsufficientFunds",
+      JSON.stringify(brokeJoin.json)
+    );
+    const paidJoin = await api(
+      "POST",
+      `/games/${flowHuntId}/join`,
+      { payment_signature: signMessage(flowJoinMessage, player.privateKeyHex) },
+      playerToken
+    );
+    check(
+      "paid admission join accepted",
+      paidJoin.status === 200 && paidJoin.json.fee_paid === flowFee && paidJoin.json.mode === "paid",
+      JSON.stringify(paidJoin.json)
+    );
+    const gmBalance = await api("GET", `/wallet/${encodeURIComponent(gm.did)}/balance`);
+    check("admission fee credited to GM", gmBalance.json?.balance === flowFee, JSON.stringify(gmBalance.json));
+    const playerBalanceAfterFee = await api("GET", `/wallet/${encodeURIComponent(player.did)}/balance`);
+    check("admission fee debited from player", playerBalanceAfterFee.json?.balance === 500 - flowFee, JSON.stringify(playerBalanceAfterFee.json));
+
+    // Riddle for clue 0 rides the encrypted clue channel; solving it reveals
+    // the coordinates players must walk to for clue 1.
+    const nodeCrypto = await import("node:crypto");
+    const riddlePlaintext = "From the harbor master's steps walk east past two moorings; the next mark sits where the seawall ends (10.3172, 123.8912).";
+    const riddleKey = nodeCrypto.randomBytes(32);
+    const riddleIv = nodeCrypto.randomBytes(12);
+    const riddleCipher = nodeCrypto.createCipheriv("aes-256-gcm", riddleKey, riddleIv);
+    const riddleCiphertext = Buffer.concat([riddleCipher.update(riddlePlaintext, "utf8"), riddleCipher.final(), riddleCipher.getAuthTag()]);
+    await api("POST", "/files/clue", {
+      hunt_id: flowHuntId,
+      clue_index: 0,
+      ciphertext_b64: riddleCiphertext.toString("base64"),
+      iv_b64: riddleIv.toString("base64"),
+      gm_did: gm.did,
+      gm_signature: signMessage(`clue-upload:${flowHuntId}:0`, gm.privateKeyHex),
+    });
+
+    // Sequential chain: clue 0 -> riddle decrypt -> clue 1 -> clue 2 (final).
+    const flowOutOfOrder = await api("POST", `/games/${flowHuntId}/checkin`, { clue_index: 2, latitude: 10.3177, longitude: 123.8916 }, playerToken);
+    check(
+      "skipping ahead the clue chain rejected",
+      flowOutOfOrder.status === 400 && flowOutOfOrder.json.code === "OutOfOrderClue",
+      JSON.stringify(flowOutOfOrder.json)
+    );
+    await api("POST", `/games/${flowHuntId}/checkin`, { clue_index: 0, latitude: 10.31672, longitude: 123.89081 }, playerToken);
+    const riddleRead = await api("POST", "/files/clue/read", { hunt_id: flowHuntId, clue_index: 0 }, playerToken);
+    check("riddle served after unlock", riddleRead.status === 200 && riddleRead.json.ciphertext_b64, JSON.stringify(riddleRead.json).slice(0, 120));
+    await api("POST", `/games/${flowHuntId}/checkin`, { clue_index: 1, latitude: 10.31721, longitude: 123.89119 }, playerToken);
+
+    // Final treasure coordinates: unlock + instant claim in one request.
+    const finalCheckin = await api("POST", `/games/${flowHuntId}/checkin`, { clue_index: 2, latitude: 10.31772, longitude: 123.89159 }, playerToken);
+    check(
+      "final clue unlocked with instant claim",
+      finalCheckin.status === 200 &&
+        finalCheckin.json.is_final_clue === true &&
+        finalCheckin.json.instant_claim?.status === "confirmed",
+      JSON.stringify(finalCheckin.json).slice(0, 300)
+    );
+    check("instant claim has receipt", typeof finalCheckin.json.instant_claim?.receipt_id === "string");
+    const playerBalanceFinal = await api("GET", `/wallet/${encodeURIComponent(player.did)}/balance`);
+    check(
+      "reward credited instantly",
+      playerBalanceFinal.json?.balance === 500 - flowFee + flowReward,
+      JSON.stringify(playerBalanceFinal.json)
+    );
+    const flowHuntAfter = await api("GET", `/games/${flowHuntId}`);
+    check("flow hunt completed", flowHuntAfter.json.status === "completed" && flowHuntAfter.json.winner_did === player.did);
+    const flowEscrow = await api("GET", `/escrow/esc-${flowHuntId}/status`);
+    check("flow escrow Completed", flowEscrow.json?.status === "Completed", JSON.stringify(flowEscrow.json));
+    const instantNotified = await api("GET", `/wallet/${encodeURIComponent(player.did)}/notifications`);
+    check(
+      "instant claim notification sent",
+      instantNotified.json?.some((n) => n.type === "claim.instant"),
+      JSON.stringify(instantNotified.json?.map((n) => n.type))
+    );
+    const lateJoin = await api("POST", `/games/${flowHuntId}/join`, undefined, player2Token);
+    check(
+      "join after completion rejected",
+      lateJoin.status === 400 && lateJoin.json.code === "HuntNotActive",
+      JSON.stringify(lateJoin.json)
     );
   }
 
@@ -648,6 +875,7 @@ try {
       gm_signature: signMessage(claimMessages.activate(extHuntId, gm.did), gm.privateKeyHex),
     });
     await extCall("POST", "/consent/grant", { purposes: ["location", "photo"] }, extPlayerToken);
+    await extCall("POST", `/games/${extHuntId}/join`, undefined, extPlayerToken);
     await extCall("POST", `/games/${extHuntId}/checkin`, { clue_index: 0, latitude: 10.31672, longitude: 123.89081 }, extPlayerToken);
     const extClaim = await extCall(
       "POST",
@@ -736,6 +964,7 @@ try {
       gm_signature: signMessage(claimMessages.activate(pinHuntId, gm.did), gm.privateKeyHex),
     });
     await pinCall("POST", "/consent/grant", { purposes: ["location", "photo"] }, pinPlayerToken);
+    await pinCall("POST", `/games/${pinHuntId}/join`, undefined, pinPlayerToken);
     await pinCall("POST", `/games/${pinHuntId}/checkin`, { clue_index: 0, latitude: 10.31672, longitude: 123.89081 }, pinPlayerToken);
     const pinClaim = await pinCall(
       "POST",

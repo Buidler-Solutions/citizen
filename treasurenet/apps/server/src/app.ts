@@ -212,7 +212,19 @@ export function buildRouter(ctx: AppContext): Router {
       return ctx.game[op](params.id!, input.gm_signature!);
     });
   }
-  router.post("/games/:id/checkin", (req, params, _query, body) => {
+
+  // ── player admission (free or paid) ──
+  router.post("/games/:id/join", (req, params, _query, body) => {
+    const session = ctx.auth.session(ctx.auth.bearer(req));
+    const input = body as { payment_signature?: string };
+    return ctx.game.join({
+      hunt_id: params.id!,
+      player_did: session.did,
+      ...(input?.payment_signature ? { payment_signature: input.payment_signature } : {}),
+    });
+  });
+  router.get("/games/:id/players", (_req, params) => ctx.game.players(params.id!));
+  router.post("/games/:id/checkin", async (req, params, _query, body) => {
     const session = ctx.auth.session(ctx.auth.bearer(req));
     const input = body as {
       clue_index?: number;
@@ -224,7 +236,7 @@ export function buildRouter(ctx: AppContext): Router {
       badRequest("MissingFields", "clue_index, latitude, longitude are required");
     }
     ctx.consent.requireValid(session.did, "location");
-    return ctx.game.checkIn({
+    const result = await ctx.game.checkIn({
       hunt_id: params.id!,
       player_did: session.did,
       clue_index: input!.clue_index!,
@@ -233,6 +245,20 @@ export function buildRouter(ctx: AppContext): Router {
       accuracy_meters: input!.accuracy_meters,
       geo,
     });
+    // Final-clue unlock on an auto-claim hunt settles instantly: the service
+    // DID claims as the GM's delegate and the winner is paid in this request.
+    const hunt = ctx.store.hunts.get(params.id!);
+    if (result.is_final_clue && hunt?.auto_claim && hunt.status === "active") {
+      const claim = await ctx.escrow.settleInstantClaim({
+        hunt_id: params.id!,
+        winner_did: session.did,
+        latitude: input!.latitude!,
+        longitude: input!.longitude!,
+        geo,
+      });
+      return { ...result, instant_claim: claim };
+    }
+    return result;
   });
 
   // ── escrow / claims ──
@@ -479,6 +505,14 @@ export async function handleRequest(
       return;
     }
     const message = error instanceof Error ? error.message : String(error);
+    // Module rejections (mock chain and WASM ModuleError) carry a code:
+    // surface them as rule failures, not internal errors.
+    const code = (error as { code?: string }).code;
+    if (code) {
+      res.writeHead(400, headers);
+      res.end(JSON.stringify({ error: message, code }));
+      return;
+    }
     res.writeHead(500, headers);
     res.end(JSON.stringify({ error: message, code: "InternalError" }));
   }

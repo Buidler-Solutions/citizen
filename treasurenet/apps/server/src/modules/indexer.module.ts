@@ -154,6 +154,11 @@ export class IndexerModule {
         longitude: Number(clue.longitude ?? 0),
         radius_meters: Number(clue.radius_meters ?? 50),
       })),
+      admission: {
+        mode: (String(payload.admission_mode ?? "free") as "free" | "paid"),
+        fee_amount: Number(payload.admission_fee ?? 0),
+      },
+      auto_claim: Boolean(payload.auto_claim ?? false),
       created_at: new Date().toISOString(),
     };
   }

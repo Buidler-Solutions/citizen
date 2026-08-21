@@ -252,6 +252,17 @@ export class ModuleGateway implements ChainAdapter {
     });
   }
 
+  /** Owner-signed claim delegation for instant settlements. */
+  setEscrowClaimDelegate(escrowId: string, gmDid: string, signature: string, delegateDid: string) {
+    return this.execute(MODULES.escrow, {
+      operation: "set_claim_delegate",
+      escrow_id: escrowId,
+      gm_did: gmDid,
+      signature,
+      delegate_did: delegateDid,
+    });
+  }
+
   getEscrowStatus(escrowId: string) {
     return this.execute(MODULES.escrow, {
       operation: "get_status",
@@ -374,6 +385,17 @@ export class ModuleGateway implements ChainAdapter {
       hunt_id: huntId,
       gm_did: gmDid,
       signature,
+    });
+  }
+
+  /** GM-signed claim delegation for instant settlements. */
+  setHuntClaimDelegate(huntId: string, gmDid: string, signature: string, delegateDid: string) {
+    return this.execute(MODULES.hunt, {
+      operation: "set_claim_delegate",
+      hunt_id: huntId,
+      gm_did: gmDid,
+      signature,
+      delegate_did: delegateDid,
     });
   }
 
@@ -559,6 +581,8 @@ export const claimMessages = {
   fundEscrow: (escrowId: string) => `fund:${escrowId}`,
   refundEscrow: (escrowId: string) => `refund:${escrowId}`,
   createHunt: (huntId: string, gmDid: string) => `create:${huntId}:${gmDid}`,
+  escrowDelegate: (escrowId: string, delegateDid: string) => `delegate:${escrowId}:${delegateDid}`,
+  huntDelegate: (huntId: string, delegateDid: string) => `delegate:${huntId}:${delegateDid}`,
   fundHunt: (huntId: string, gmDid: string) => `fund:${huntId}:${gmDid}`,
   activate: (huntId: string, gmDid: string) => `activate:${huntId}:${gmDid}`,
   pause: (huntId: string, gmDid: string) => `pause:${huntId}:${gmDid}`,

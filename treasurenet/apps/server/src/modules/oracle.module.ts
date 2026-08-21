@@ -71,6 +71,38 @@ export class OracleModule {
     return verdict;
   }
 
+  /**
+   * Instant-claim verdict: the verified final-clue geo check-in replaces the
+   * photo proof. The GM pre-authorized instant settlement via
+   * set_claim_delegate at setup, so the delegated payout's evidence is the
+   * coordinate match at the treasure location (walking-pace anti-spoof
+   * applies at check-in). The oracle still co-signs only on a geo pass.
+   */
+  async evaluateInstant(input: {
+    hunt_id: string;
+    player_did: string;
+    clue_index: number;
+    geoOk: boolean;
+  }): Promise<OracleVerdict> {
+    const config = this.chain.config;
+    const passed = input.geoOk;
+    const verdict: OracleVerdict = {
+      hunt_id: input.hunt_id,
+      player_did: input.player_did,
+      clue_index: input.clue_index,
+      passed,
+      confidence: passed ? 0.85 : 0.1,
+      oracle_did: config.oracleDid,
+      verdict_signature: "",
+      reason: passed
+        ? "final-clue geo proof verified (instant claim)"
+        : "geo proximity check failed at the final clue",
+    };
+    verdict.verdict_signature = signMessage(this.verdictMessage(verdict), config.oracleKeyHex);
+    this.store.addVerdict(verdict);
+    return verdict;
+  }
+
   private async evaluateExternal(input: {
     hunt_id: string;
     player_did: string;

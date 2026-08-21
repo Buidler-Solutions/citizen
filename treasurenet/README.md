@@ -117,7 +117,10 @@ GET  /games                     POST /games
 GET  /games/:id
 POST /games/:id/fund            {gm_signature, escrow_gm_signature, asset_gm_signature?}
 POST /games/:id/activate|pause|resume|cancel   {gm_signature}
-POST /games/:id/checkin         {clue_index, latitude, longitude}  (player session)
+POST /games/:id/join            {payment_signature?}   (player session; free or paid admission)
+GET  /games/:id/players         (admitted roster: did, fee_paid, joined_at)
+POST /games/:id/checkin         {clue_index, latitude, longitude}  (player session; sequential chain)
+                                (final clue on an auto-claim hunt settles the payout instantly)
 GET  /games/:id/progress        (player session; unlocked clue chain)
 POST /games/:id/claim/request   {photo_b64, latitude, longitude}   (player session; GM approves from web)
 POST /games/:id/claim           {gm_signature, escrow_gm_signature, asset_gm_signature?, photo_b64, latitude, longitude}
@@ -156,11 +159,15 @@ soulbound CTZN identity token. Custody flow per hunt:
 
 1. **create** — service opens a timed vault `esc-<huntId>` (approvers
    GM + oracle, threshold 2, fallback owner GM, expiry = hunt deadline).
+   Instant-claim hunts add the service DID as a third approver so delegated
+   payouts (service + oracle) also reach the threshold.
 2. **fund** — issuers mint the reward to the GM (threshold-2 signatures),
    then the GM deposits it into the vault account `vault:esc-<huntId>`
    (GM signs `transfer:<token>:<gm>:vault:<escrow>:<amount>:deposit-<hunt>`).
 3. **claim** — GM + oracle co-sign `vt:<escrow>:<winner>:<amount>:claim-<hunt>`
    and the vault pays the winner real tokens; wallet balances read the asset module.
+   On auto-claim hunts the service DID (GM's claim delegate) + oracle co-sign
+   the same vault transfer at the final-clue unlock — instant settlement.
 4. **refund after expiry** — only the fallback owner (GM) can move the
    vault balance back (`vt:<escrow>:<gm>:<amount>:refund-<hunt>`).
 
@@ -189,3 +196,30 @@ DID. The oracle co-signs every claim; the modules enforce the 2-of-2
 policy on-chain. Canonical message strings live in
 `chain/sdk/src/modules.ts` (`claimMessages`) and are shared verbatim by
 every surface.
+
+## Hunt game flow (admission, clue chain, instant claim)
+
+1. **Funding gate** — a hunt cannot start until the GM funds the escrow:
+   the `treasure-hunt.v1` module rejects `activate` unless the hunt is
+   `funded`, and player joins are only accepted while a hunt is `active`.
+2. **Admission** — `admission: {mode: "free"|"paid", fee_amount}` on
+   create. Free hunts enroll any authenticated player via
+   `POST /games/:id/join`. Paid hunts additionally require the player's
+   `payment_signature` over
+   `transfer:<token>:<player>:<gm>:<fee>:join-<huntId>`; the server relays
+   the transfer to `citizen-asset.v1` (real token movement to the GM)
+   before recording the participant. Rosters: `GET /games/:id/players`.
+3. **Clue chain** — the GM configures any number of clues, each with
+   coordinates and an AES-GCM-encrypted riddle/hint (uploaded from the
+   console). Check-ins unlock strictly in order: only the next expected
+   clue index opens (`OutOfOrderClue` otherwise), and only admitted
+   players can check in (`NotParticipant`). The unlocked riddle reveals
+   how to find the next checkpoint.
+4. **Instant claim** — with `auto_claim: true` the GM signs a claim
+   delegation at create (`delegate:<huntId>:<serviceDid>` and
+   `delegate:<escrowId>:<serviceDid>`, executed via the modules'
+   `set_claim_delegate`). The first player to unlock the final treasure
+   coordinates is paid in the same request: the service signs both claim
+   envelopes as the delegate, the oracle co-signs the geo verdict, the
+   vault pays out, and the hunt completes. Refunds stay GM-only either
+   way; hunts without a delegation keep the GM-approved claim flow.

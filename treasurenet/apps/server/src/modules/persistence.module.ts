@@ -88,6 +88,10 @@ type PrismaLike = {
     deleteMany: (args: unknown) => Promise<unknown>;
     findMany: (args?: unknown) => Promise<Array<Record<string, unknown>>>;
   };
+  huntParticipant: {
+    upsert: (args: unknown) => Promise<unknown>;
+    findMany: (args?: unknown) => Promise<Array<Record<string, unknown>>>;
+  };
   $disconnect: () => Promise<void>;
 };
 
@@ -112,7 +116,7 @@ export class PersistenceModule {
   async connect(): Promise<void> {
     if (this.config.databaseUrl) {
       try {
-        const mod = (await import("@prisma/client")) as { PrismaClient: new () => PrismaLike };
+        const mod = (await import("@prisma/client")) as unknown as { PrismaClient: new () => PrismaLike };
         this.prisma = new mod.PrismaClient();
       } catch (error) {
         this.warn("prisma unavailable (run pnpm install); continuing in-memory", error);
@@ -174,12 +178,18 @@ export class PersistenceModule {
           escrowId: hunt.escrow_id,
           expiresAt: new Date(hunt.expires_at),
           expiresBlock: BigInt(hunt.expires_block),
+          admissionMode: hunt.admission.mode,
+          admissionFee: hunt.admission.fee_amount,
+          autoClaim: hunt.auto_claim,
           winnerDid: hunt.winner_did,
           receiptId: hunt.receipt_id,
           createdAt: new Date(hunt.created_at),
         },
         update: {
           status: hunt.status,
+          admissionMode: hunt.admission.mode,
+          admissionFee: hunt.admission.fee_amount,
+          autoClaim: hunt.auto_claim,
           winnerDid: hunt.winner_did,
           receiptId: hunt.receipt_id,
         },
@@ -385,6 +395,24 @@ export class PersistenceModule {
     });
   }
 
+  saveParticipant(huntId: string, participant: { did: string; fee_paid: number; joined_at: string }): Promise<void> {
+    return this.sink(async () => {
+      await this.prisma!.huntParticipant.upsert({
+        where: { huntId_playerDid: { huntId, playerDid: participant.did } },
+        create: {
+          huntId,
+          playerDid: participant.did,
+          feePaid: participant.fee_paid,
+          joinedAt: new Date(participant.joined_at),
+        },
+        update: {
+          feePaid: participant.fee_paid,
+          joinedAt: new Date(participant.joined_at),
+        },
+      });
+    });
+  }
+
   // ── durable retry queue ──
 
   async enqueueRetry(item: { moduleId: string; operation: string; params: Record<string, unknown>; attempts: number }): Promise<DurableQueueItem> {
@@ -532,10 +560,32 @@ export class PersistenceModule {
           expires_at: new Date(row.expiresAt as unknown as string).toISOString(),
           expires_block: Number(row.expiresBlock),
           clues,
+          admission: {
+            mode: String(row.admissionMode ?? "free") as "free" | "paid",
+            fee_amount: Number(row.admissionFee ?? 0),
+          },
+          auto_claim: Boolean(row.autoClaim ?? false),
           created_at: new Date(row.createdAt as unknown as string).toISOString(),
           ...(row.winnerDid ? { winner_did: String(row.winnerDid) } : {}),
           ...(row.receiptId ? { receipt_id: String(row.receiptId) } : {}),
         });
+      }
+      const participants = await p.huntParticipant.findMany();
+      for (const row of participants) {
+        const huntId = String(row.huntId);
+        const roster = store.participants.get(huntId) ?? new Map();
+        roster.set(String(row.playerDid), {
+          did: String(row.playerDid),
+          fee_paid: Number(row.feePaid ?? 0),
+          joined_at: new Date(row.joinedAt as unknown as string).toISOString(),
+        });
+        store.participants.set(huntId, roster);
+      }
+      const huntsWithPlayers = new Set(participants.map((row) => String(row.huntId)));
+      for (const [huntId, hunt] of store.hunts) {
+        if (huntsWithPlayers.has(huntId) || store.participants.has(huntId)) {
+          hunt.player_count = store.participants.get(huntId)?.size ?? 0;
+        }
       }
       const claims = await p.claim.findMany();
       for (const row of claims) {

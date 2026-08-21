@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/utils/clue_crypto.dart';
 import '../../data/models/hunt_models.dart';
 import '../../data/services/api_service.dart';
+import '../../data/services/crypto_service.dart';
 import '../../providers/hunt_provider.dart';
 import '../../providers/session_provider.dart';
 
@@ -22,9 +23,57 @@ class HuntDetailScreen extends ConsumerStatefulWidget {
 
 class _HuntDetailScreenState extends ConsumerState<HuntDetailScreen> {
   bool _checkingIn = false;
+  bool _joining = false;
+  bool _joined = false;
   String? _message;
   CheckInResult? _lastResult;
   final Map<int, String> _revealedClues = {};
+
+  /// Canonical admission payment message: the player authorizes the fee
+  /// transfer to the GM (mirrors assetMessages.transfer on the backend).
+  String _admissionPaymentMessage(Hunt hunt, String playerDid) =>
+      'transfer:${hunt.rewardToken}:$playerDid:${hunt.gmDid}:'
+      '${hunt.admissionFee}:join-${hunt.huntId}';
+
+  Future<void> _join(Hunt hunt) async {
+    final auth = ref.read(sessionProvider);
+    if (auth.did == null || auth.seedHex == null) return;
+    setState(() {
+      _joining = true;
+      _message = null;
+    });
+    try {
+      String? paymentSignature;
+      if (hunt.isPaidAdmission) {
+        paymentSignature = await DeviceCryptoService.instance.signMessage(
+          _admissionPaymentMessage(hunt, auth.did!),
+          auth.seedHex!,
+        );
+      }
+      final result = await ref.read(apiProvider).joinHunt(
+        huntId: hunt.huntId,
+        paymentSignature: paymentSignature,
+      );
+      setState(() {
+        _joining = false;
+        _joined = true;
+        _message = hunt.isPaidAdmission
+            ? 'Joined — admission fee ${result.feePaid} ${hunt.rewardToken} transferred to the Game Master.'
+            : 'Joined the hunt. Head to the first checkpoint!';
+      });
+    } catch (error) {
+      final apiError = toApiException(error);
+      setState(() {
+        _joining = false;
+        if (apiError.code == 'AlreadyJoined') {
+          _joined = true;
+          _message = null;
+        } else {
+          _message = 'Join failed: ${apiError.toString()}';
+        }
+      });
+    }
+  }
 
   Future<void> _revealClue(int clueIndex) async {
     if (_revealedClues.containsKey(clueIndex)) return;
@@ -73,10 +122,13 @@ class _HuntDetailScreenState extends ConsumerState<HuntDetailScreen> {
       setState(() {
         _checkingIn = false;
         _lastResult = result;
-        _message = result.isFinalClue
-            ? 'Final clue unlocked! You can claim the reward.'
-            : 'Clue ${result.clueIndex} unlocked '
-                '(${result.distanceMeters.round()}m from the beacon).';
+        _message = result.instantClaim != null && result.instantClaim!.confirmed
+            ? 'Treasure found! Reward of ${result.instantClaim!.rewardAmount} '
+              'paid instantly.'
+            : result.isFinalClue
+                ? 'Final clue unlocked! You can claim the reward.'
+                : 'Clue ${result.clueIndex} unlocked '
+                    '(${result.distanceMeters.round()}m from the beacon).';
       });
       ref.invalidate(huntProgressProvider(widget.huntId));
       ref.invalidate(huntProvider(widget.huntId));
@@ -86,6 +138,9 @@ class _HuntDetailScreenState extends ConsumerState<HuntDetailScreen> {
         _checkingIn = false;
         if (apiError.isConsentRequired) {
           _message = 'Location consent required before checking in.';
+        } else if (apiError.code == 'NotParticipant') {
+          _joined = false;
+          _message = 'Join the hunt before checking in.';
         } else {
           _message = apiError.toString();
         }
@@ -161,6 +216,26 @@ class _HuntDetailScreenState extends ConsumerState<HuntDetailScreen> {
                         onReveal: () => _revealClue(clue.index),
                       ),
                     const SizedBox(height: 12),
+                    if (hunt.isActive && !_joined)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: FilledButton.tonalIcon(
+                          icon: _joining
+                              ? const SizedBox(
+                                  height: 18,
+                                  width: 18,
+                                  child: CircularProgressIndicator(
+                                      strokeWidth: 2),
+                                )
+                              : const Icon(Icons.group_add_outlined),
+                          label: Text(
+                            hunt.isPaidAdmission
+                                ? 'Join — pay ${hunt.admissionFee} ${hunt.rewardToken} admission'
+                                : 'Join hunt (free admission)',
+                          ),
+                          onPressed: !_joining ? () => _join(hunt) : null,
+                        ),
+                      ),
                     if (progress != null && progress.allCluesUnlocked)
                       FilledButton.icon(
                         icon: const Icon(Icons.emoji_events_outlined),

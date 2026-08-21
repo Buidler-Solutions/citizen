@@ -543,6 +543,36 @@ fn asset_vault_fallback_refund_after_expiry() {
     assert!(info.contains(r#""balance":0"#), "vault info balance: {info}");
 }
 
+/// Deadline-window payout: in node mode the escrow claim and the vault
+/// transfer are separate ledger entries, so a claim accepted at exactly the
+/// deadline block can pay out one block later when the vault is already
+/// expired. The fallback owner (GM) is among the cosigned pair, so the
+/// expired branch must accept the full GM+oracle envelope TreasureNet sends.
+#[test]
+fn asset_vault_deadline_window_payout_after_expiry_with_pair() {
+    let engine = make_engine();
+    let wasm = load_fixture("citizen_asset.wasm");
+    let host = new_host(100);
+    configure(&engine, &wasm, host.clone());
+    create_gold(&engine, &wasm, host.clone());
+    mint_gold(&engine, &wasm, host.clone(), GM, 500, "m1");
+    open_vault(&engine, &wasm, host.clone(), 500);
+    deposit(&engine, &wasm, host.clone(), 500);
+
+    // Escrow deadline == vault expiry 500; the payout entry lands at 501.
+    host.set_block_height(501);
+
+    let out = run(
+        &engine,
+        &wasm,
+        r#"{"operation":"vault_transfer","vault_id":"esc-hunt","token_id":"gold","to_did":"did:key:ed25519:player1","amount":"500","ref":"claim-1","cosigner_dids":"did:key:ed25519:gamemaster1,did:key:ed25519:oracle1","signatures":"sig-gm,sig-oracle"}"#,
+        host.clone(),
+    );
+    assert!(out.contains(r#""ok":true"#), "deadline-window payout failed: {out}");
+    assert!(out.contains(r#""expired":true"#), "payout should report expired path: {out}");
+    assert_eq!(balance(&engine, &wasm, host, "gold", PLAYER), 500);
+}
+
 /// Full TreasureNet escrow journey with real token custody: issuers mint
 /// to the GM, the GM deposits into a timed 2-of-2 vault, the winners claim
 /// via GM+oracle signatures, and the winner can transfer onward because

@@ -66,6 +66,9 @@ export class EscrowModule {
     if (!this.game.hasUnlocked(input.hunt_id, input.player_did, finalClue.index)) {
       badRequest("ClueLocked", "final clue not unlocked; complete the clue chain first");
     }
+    if (!this.game.isParticipant(input.hunt_id, input.player_did)) {
+      badRequest("NotParticipant", `player ${input.player_did} has not joined hunt ${input.hunt_id}`);
+    }
     if (hunt!.status !== "active") {
       badRequest("HuntNotActive", `hunt ${input.hunt_id} is ${hunt!.status}`);
     }
@@ -245,6 +248,22 @@ export class EscrowModule {
     };
 
     try {
+      // Settle the reward BEFORE completing the hunt/escrow on-chain: an
+      // under-funded or missing vault must fail the claim while the hunt is
+      // still active (retryable after the vault is topped up), not strand a
+      // winner behind a Completed hunt with no payout retry path.
+      if (assetCustody) {
+        await this.chain.vaultPayout(
+          hunt!.escrow_id,
+          playerDid!,
+          hunt!.reward_amount,
+          payoutRef,
+          hunt!.gm_did,
+          input.asset_gm_signature!
+        );
+      } else {
+        await this.chain.distributeReward(playerDid!, hunt!.reward_amount, hunt!.hunt_id);
+      }
       const huntResult = await this.chain.adapter.execute("treasure-hunt.v1", {
         operation: "claim",
         hunt_id: input.hunt_id,
@@ -292,18 +311,150 @@ export class EscrowModule {
         "claim.confirmed",
         `Reward of ${hunt!.reward_amount} ${hunt!.reward_token} paid. Receipt ${receiptId ?? "pending"}.`
       );
+    } catch (error) {
+      record.status = "failed";
+      this.store.claims.set(claimId, record);
+      this.store.upsertClaim(record);
+      if (error instanceof ModuleError) {
+        badRequest(error.code, error.message);
+      }
+      throw error;
+    }
+    return record;
+  }
+
+  /**
+   * Instant settlement for auto-claim hunts: the final-clue unlock at the
+   * treasure coordinates triggers payout immediately. The service DID signs
+   * both claim envelopes as the GM's delegate (set_claim_delegate at hunt
+   * setup), the oracle co-signs the geo verdict, and the reward moves before
+   * the on-chain completion writes — the same failure-ordering invariant as
+   * the manual claim path.
+   */
+  async settleInstantClaim(input: {
+    hunt_id: string;
+    winner_did: string;
+    latitude: number;
+    longitude: number;
+    geo: { checkProximity: (a: number, b: number, c: number, d: number, r: number) => { withinRadius: boolean; distanceMeters: number } };
+  }): Promise<ClaimRecord> {
+    const hunt = this.store.hunts.get(input.hunt_id);
+    if (!hunt) notFound("HuntNotFound", `hunt ${input.hunt_id} does not exist`);
+    if (!hunt.auto_claim) {
+      badRequest("AutoClaimDisabled", `hunt ${input.hunt_id} settles via GM-approved claims`);
+    }
+    if (hunt.status !== "active") {
+      badRequest("HuntNotActive", `hunt ${input.hunt_id} is ${hunt.status}`);
+    }
+    if (!this.game.isParticipant(input.hunt_id, input.winner_did)) {
+      badRequest("NotParticipant", `player ${input.winner_did} has not joined hunt ${input.hunt_id}`);
+    }
+    const finalClue = hunt!.clues[hunt!.clues.length - 1];
+    if (!this.game.hasUnlocked(input.hunt_id, input.winner_did, finalClue.index)) {
+      badRequest("ClueLocked", "final clue not unlocked; complete the clue chain first");
+    }
+    const geoCheck = input.geo.checkProximity(
+      input.latitude,
+      input.longitude,
+      finalClue.latitude,
+      finalClue.longitude,
+      finalClue.radius_meters
+    );
+    if (!geoCheck.withinRadius) {
+      badRequest("NotAtLocation", `player is ${geoCheck.distanceMeters}m from the final clue`);
+    }
+    const verdict = await this.oracle.evaluateInstant({
+      hunt_id: input.hunt_id,
+      player_did: input.winner_did,
+      clue_index: finalClue.index,
+      geoOk: geoCheck.withinRadius,
+    });
+    if (!verdict.passed) {
+      badRequest("VerificationFailed", verdict.reason);
+    }
+
+    const serviceDid = this.chain.config.serviceDid;
+    const serviceHuntSig = this.chain.serviceSignature(claimMessages.hunt(input.hunt_id, input.winner_did));
+    const serviceEscrowSig = this.chain.serviceSignature(claimMessages.escrow(hunt!.escrow_id, input.winner_did));
+    const oracleHuntSig = this.oracle.coSignClaim("hunt", input.hunt_id, input.winner_did, verdict);
+    const oracleEscrowSig = this.oracle.coSignClaim("escrow", hunt!.escrow_id, input.winner_did, verdict);
+
+    const claimId = randomUUID();
+    const record: ClaimRecord = {
+      claim_id: claimId,
+      hunt_id: input.hunt_id,
+      escrow_id: hunt!.escrow_id,
+      winner_did: input.winner_did,
+      reward_amount: hunt!.reward_amount,
+      reward_token: hunt!.reward_token,
+      gm_signature: serviceHuntSig,
+      oracle_signature: oracleHuntSig,
+      status: "pending",
+      created_at: new Date().toISOString(),
+    };
+
+    try {
+      // Reward first (same invariant as the manual claim): an under-funded
+      // vault must fail while the hunt is still active and retryable.
+      const assetCustody = hunt!.reward_token === this.chain.config.rewardAssetId;
       if (assetCustody) {
-        await this.chain.vaultPayout(
+        await this.chain.vaultPayoutDelegated(
           hunt!.escrow_id,
-          playerDid!,
+          input.winner_did,
           hunt!.reward_amount,
-          payoutRef,
-          hunt!.gm_did,
-          input.asset_gm_signature!
+          `claim-${input.hunt_id}`
         );
       } else {
-        await this.chain.distributeReward(playerDid!, hunt!.reward_amount, hunt!.hunt_id);
+        await this.chain.distributeReward(input.winner_did, hunt!.reward_amount, input.hunt_id);
       }
+      const huntResult = await this.chain.adapter.execute("treasure-hunt.v1", {
+        operation: "claim",
+        hunt_id: input.hunt_id,
+        winner_did: input.winner_did,
+        cosigner_dids: `${serviceDid},${this.chain.config.oracleDid}`,
+        signatures: `${serviceHuntSig},${oracleHuntSig}`,
+      });
+      const escrowResult = await this.chain.adapter.execute("treasure-escrow.v1", {
+        operation: "claim",
+        escrow_id: hunt!.escrow_id,
+        winner_did: input.winner_did,
+        cosigner_dids: `${serviceDid},${this.chain.config.oracleDid}`,
+        signatures: `${serviceEscrowSig},${oracleEscrowSig}`,
+      });
+
+      const blockHeight =
+        (escrowResult.output.receipt_block as number | undefined) ??
+        (huntResult.output.receipt_block as number | undefined);
+      const receiptId = (escrowResult.meta as { receipt_id?: string }).receipt_id
+        ?? (huntResult.meta as { receipt_id?: string }).receipt_id
+        ?? (this.chain.nodeClient ? `node:${blockHeight ?? 0}:${hunt!.escrow_id}` : undefined);
+      record.status = "confirmed";
+      record.receipt_id = receiptId;
+      record.block_height = blockHeight;
+
+      hunt!.status = "completed";
+      hunt!.winner_did = input.winner_did;
+      hunt!.receipt_id = receiptId;
+      this.store.upsertHunt(hunt!);
+      this.store.upsertClaim(record);
+      this.store.analytics.claims_confirmed += 1;
+      this.store.analytics.rewards_paid += hunt!.reward_amount;
+      this.store.recordEvent("claim.instant", "game.claims", {
+        claim_id: claimId,
+        hunt_id: input.hunt_id,
+        winner_did: input.winner_did,
+        receipt_id: receiptId,
+      });
+      this.store.notify(
+        input.winner_did,
+        "claim.instant",
+        `Treasure found! Reward of ${hunt!.reward_amount} ${hunt!.reward_token} paid instantly. Receipt ${receiptId ?? "pending"}.`
+      );
+      this.store.notify(
+        hunt!.gm_did,
+        "hunt.completed",
+        `${hunt!.title} was won by ${input.winner_did}; the delegated payout settled instantly.`
+      );
     } catch (error) {
       record.status = "failed";
       this.store.claims.set(claimId, record);
@@ -366,13 +517,29 @@ export class EscrowModule {
       signature: gmSignature,
     });
     if (assetCustody) {
-      await this.chain.vaultRefund(
-        hunt!.escrow_id,
-        hunt!.gm_did,
-        hunt!.reward_amount,
-        refundRef,
-        assetGmSignature!
-      );
+      // The vault reclaim is idempotent after the escrow/hunt refund: an
+      // already-reclaimed vault, an empty vault (fund step failed partway),
+      // or a never-opened vault all mean there is nothing left to move —
+      // swallowing them keeps the refund settling instead of looping the
+      // scheduler against an already-refunded escrow (NotActive).
+      try {
+        await this.chain.vaultRefund(
+          hunt!.escrow_id,
+          hunt!.gm_did,
+          hunt!.reward_amount,
+          refundRef,
+          assetGmSignature!
+        );
+      } catch (error) {
+        const code = (error as { code?: string }).code;
+        if (
+          code !== "ReplayedSubmission" &&
+          code !== "InsufficientVaultFunds" &&
+          code !== "VaultNotFound"
+        ) {
+          throw error;
+        }
+      }
     }
     hunt!.status = "refunded";
     this.store.upsertHunt(hunt!);
