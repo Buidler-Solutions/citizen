@@ -1,4 +1,4 @@
-import { claimMessages, verifyMessage } from "../../../../chain/sdk/src/index.ts";
+import { assetMessages, claimMessages, verifyMessage } from "../../../../chain/sdk/src/index.ts";
 import { expiryToBlock, type Hunt, type HuntClue } from "../../../../packages/shared/src/index.ts";
 import type { Store } from "../store.ts";
 import type { ChainModule } from "./chain.module.ts";
@@ -79,6 +79,11 @@ export class GameModule {
     }
     const expiresBlock = expiryToBlock(input.expires_at, this.chain.currentBlock());
     const escrowId = `esc-${huntId}`;
+    // Default reward token is the transferable reward asset: the hunt then
+    // settles through citizen-asset vault custody instead of soulbound
+    // CTZN mints. Any other token id keeps the legacy escrow-only path.
+    const rewardToken = input.reward_token ?? this.chain.config.rewardAssetId;
+    const assetCustody = rewardToken === this.chain.config.rewardAssetId;
 
     // Escrow init is service-sponsored (namespace writer); funding happens
     // in a separate, GM-signed step exactly like the Stellar contract.
@@ -90,7 +95,7 @@ export class GameModule {
       // verified winner at claim time, so "-" is a placeholder only.
       claimer_did: "-",
       amount: String(input.reward_amount),
-      token: input.reward_token ?? "CTZN",
+      token: rewardToken,
       deadline_block: String(expiresBlock),
     });
 
@@ -106,10 +111,16 @@ export class GameModule {
       gm_did: input.gm_did,
       signature: input.gm_signature,
       reward_amount: String(input.reward_amount),
-      reward_token: input.reward_token ?? "CTZN",
+      reward_token: rewardToken,
       expires_block: String(expiresBlock),
       escrow_id: escrowId,
     });
+
+    // Reward custody: a timed 2-of-2 vault (GM + oracle, GM fallback after
+    // the deadline) holds the real token balance backing the escrow.
+    if (assetCustody) {
+      await this.chain.openRewardVault(escrowId, input.gm_did, expiresBlock);
+    }
 
     const hunt: Hunt = {
       hunt_id: huntId,
@@ -117,7 +128,7 @@ export class GameModule {
       title: input.title,
       status: "created",
       reward_amount: input.reward_amount,
-      reward_token: input.reward_token ?? "CTZN",
+      reward_token: rewardToken,
       escrow_id: escrowId,
       expires_at: input.expires_at,
       expires_block: expiresBlock,
@@ -134,16 +145,33 @@ export class GameModule {
     huntId: string,
     gmSignature: string,
     escrowSignature: string,
+    assetSignature?: string,
     amount?: number
   ): Promise<Hunt> {
     const hunt = this.getHunt(huntId);
     this.verifyGmSignature(hunt, claimMessages.fundHunt(huntId, hunt.gm_did), gmSignature);
+    const fundAmount = amount ?? hunt.reward_amount;
+    // Asset-custody hunts back the escrow with real tokens: issuers mint the
+    // reward to the GM, then the GM deposits it into the hunt vault. The GM
+    // signs the deposit transfer before any chain state moves.
+    const assetCustody = hunt.reward_token === this.chain.config.rewardAssetId;
+    const depositRef = `deposit-${huntId}`;
+    const depositMessage = assetMessages.transfer(
+      hunt.reward_token,
+      hunt.gm_did,
+      assetMessages.vaultAccount(hunt.escrow_id),
+      fundAmount,
+      depositRef
+    );
+    if (assetCustody && !verifyMessage(depositMessage, assetSignature ?? "", hunt.gm_did.split(":").pop() ?? "")) {
+      badRequest("InvalidSignature", "reward vault deposit signature verification failed");
+    }
     await this.chain.adapter.execute("treasure-hunt.v1", {
       operation: "fund_hunt",
       hunt_id: huntId,
       funder_did: hunt.gm_did,
       signature: gmSignature,
-      amount: String(amount ?? hunt.reward_amount),
+      amount: String(fundAmount),
     });
     await this.chain.adapter.execute("treasure-escrow.v1", {
       operation: "fund",
@@ -151,6 +179,18 @@ export class GameModule {
       funder_did: hunt.gm_did,
       signature: escrowSignature,
     });
+    if (assetCustody) {
+      await this.chain.mintRewardToOwner(hunt.gm_did, fundAmount, `fund-${huntId}`);
+      await this.chain.adapter.execute(this.chain.config.assetModuleId, {
+        operation: "transfer",
+        token_id: hunt.reward_token,
+        from_did: hunt.gm_did,
+        to_did: assetMessages.vaultAccount(hunt.escrow_id),
+        amount: String(fundAmount),
+        ref: depositRef,
+        signature: assetSignature!,
+      });
+    }
     hunt.status = "funded";
     this.store.upsertHunt(hunt);
     this.store.recordEvent("hunt.funded", "game.hunts", { hunt_id: huntId });

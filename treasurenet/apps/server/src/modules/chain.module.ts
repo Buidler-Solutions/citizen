@@ -2,6 +2,7 @@ import {
   CitizenNodeClient,
   MockChain,
   ModuleGateway,
+  assetMessages,
   claimMessages,
   signMessage,
   didFromPrivateKeyHex,
@@ -23,6 +24,7 @@ const GOVERNANCE_PROPOSALS = {
   escrow: "proposal-approved-treasurenet-escrow",
   hunt: "proposal-approved-treasurenet-hunt",
   registry: "proposal-approved-treasurenet-registry",
+  asset: "proposal-approved-treasurenet-asset",
 };
 
 export class ChainModule {
@@ -102,7 +104,41 @@ export class ChainModule {
       proposal_id: GOVERNANCE_PROPOSALS.escrow,
       admin_sig: this.serviceSignature(`configure:${config.oracleDid}`),
     });
+    const assetIssuers = `${config.serviceDid},${config.oracleDid}`;
+    await this.adapter.execute(this.config.assetModuleId, {
+      operation: "configure",
+      admin_did: config.serviceDid,
+      issuers: assetIssuers,
+      threshold: "2",
+      proposal_id: GOVERNANCE_PROPOSALS.asset,
+      // Reconfiguration after the deploy-time governance bootstrap requires
+      // the admin signature over `configure:<issuers>:<threshold>`.
+      admin_sig: this.serviceSignature(`configure:${assetIssuers}:2`),
+    });
+    await this.ensureRewardAsset();
     this.bootstrapped = true;
+  }
+
+  /**
+   * Create the default reward asset (issuer-threshold signed). Idempotent:
+   * TokenExists or a replayed scope means a previous boot already created it.
+   */
+  private async ensureRewardAsset(): Promise<void> {
+    const token = this.config.rewardAssetId;
+    const message = assetMessages.createToken(token, "TNG", 2);
+    try {
+      await this.adapter.execute(this.config.assetModuleId, {
+        operation: "create_token",
+        token_id: token,
+        symbol: "TNG",
+        decimals: "2",
+        issuer_dids: `${this.config.serviceDid},${this.config.oracleDid}`,
+        signatures: `${this.serviceSignature(message)},${signMessage(message, this.config.oracleKeyHex)}`,
+      });
+    } catch (error) {
+      const code = (error as { code?: string }).code;
+      if (code !== "TokenExists" && code !== "ReplayedSubmission") throw error;
+    }
   }
 
   /** Oracle co-signature for a 2-of-2 claim envelope. */
@@ -118,12 +154,111 @@ export class ChainModule {
     return signMessage(message, this.config.serviceKeyHex);
   }
 
+  /** Oracle co-signature over an asset module message (vault payout). */
+  oracleAssetSignature(message: string): string {
+    return signMessage(message, this.config.oracleKeyHex);
+  }
+
   /**
-   * CTZN reward distribution after an escrow payout. Node mode executes a
-   * mint on the configured reward token module signed by the service and
-   * oracle keys (the issuers configured at deploy time); mock mode credits
-   * the balance inside the escrow claim already, so this is a no-op there
-   * (single payout authority).
+   * Reward custody on the citizen-asset module. Hunts no longer settle via
+   * soulbound CTZN mints: issuers mint transferable reward tokens to the GM,
+   * the GM deposits them into a timed 2-of-2 vault (GM + oracle, fallback
+   * GM after the escrow deadline), and payouts/refunds move real balances.
+   */
+  async mintRewardToOwner(ownerDid: string, amount: number, ref: string): Promise<boolean> {
+    const message = assetMessages.mint(this.config.rewardAssetId, ownerDid, amount, ref);
+    const result = await this.adapter.execute(this.config.assetModuleId, {
+      operation: "mint",
+      token_id: this.config.rewardAssetId,
+      recipient_did: ownerDid,
+      amount: String(amount),
+      ref,
+      issuer_dids: `${this.config.serviceDid},${this.config.oracleDid}`,
+      signatures: `${this.serviceSignature(message)},${this.oracleAssetSignature(message)}`,
+    });
+    return Boolean(result.output.ok);
+  }
+
+  async openRewardVault(
+    vaultId: string,
+    ownerDid: string,
+    deadlineBlock: number
+  ): Promise<string> {
+    const threshold = 2;
+    const message = assetMessages.openVault(vaultId, this.config.rewardAssetId, threshold, deadlineBlock);
+    const result = await this.adapter.execute(this.config.assetModuleId, {
+      operation: "open_vault",
+      vault_id: vaultId,
+      token_id: this.config.rewardAssetId,
+      approver_dids: `${ownerDid},${this.config.oracleDid}`,
+      threshold: String(threshold),
+      expiry_block: String(deadlineBlock),
+      fallback_owner_did: ownerDid,
+      admin_did: this.config.serviceDid,
+      admin_sig: this.serviceSignature(message),
+    });
+    if (!result.output.ok) return "";
+    return assetMessages.vaultAccount(vaultId);
+  }
+
+  /** 2-of-2 vault payout (GM + oracle) to the hunt winner. */
+  async vaultPayout(
+    vaultId: string,
+    winnerDid: string,
+    amount: number,
+    ref: string,
+    gmDid: string,
+    gmSignature: string
+  ): Promise<boolean> {
+    const message = assetMessages.vaultTransfer(vaultId, winnerDid, amount, ref);
+    const result = await this.adapter.execute(this.config.assetModuleId, {
+      operation: "vault_transfer",
+      vault_id: vaultId,
+      token_id: this.config.rewardAssetId,
+      to_did: winnerDid,
+      amount: String(amount),
+      ref,
+      cosigner_dids: `${gmDid},${this.config.oracleDid}`,
+      signatures: `${gmSignature},${this.oracleAssetSignature(message)}`,
+    });
+    return Boolean(result.output.ok);
+  }
+
+  /** Post-expiry vault refund to the fallback owner (GM signature only). */
+  async vaultRefund(
+    vaultId: string,
+    ownerDid: string,
+    amount: number,
+    ref: string,
+    ownerSignature: string
+  ): Promise<boolean> {
+    const message = assetMessages.vaultTransfer(vaultId, ownerDid, amount, ref);
+    const result = await this.adapter.execute(this.config.assetModuleId, {
+      operation: "vault_transfer",
+      vault_id: vaultId,
+      token_id: this.config.rewardAssetId,
+      to_did: ownerDid,
+      amount: String(amount),
+      ref,
+      cosigner_dids: ownerDid,
+      signatures: ownerSignature,
+    });
+    return Boolean(result.output.ok);
+  }
+
+  /** Balance of the default reward asset for a DID (mock and node). */
+  async assetBalance(did: string): Promise<number> {
+    const result = await this.adapter.execute(this.config.assetModuleId, {
+      operation: "balance",
+      token_id: this.config.rewardAssetId,
+      did,
+    });
+    return Number(result.output.balance ?? 0);
+  }
+
+  /**
+   * Reward token module kept for soulbound CTZN identity surfaces; hunt
+   * payouts settle through the transferable asset vault instead.
    */
   async distributeReward(winnerDid: string, amount: number, huntId: string): Promise<boolean> {
     if (!this.nodeClient || !this.config.rewardDistribute) return false;

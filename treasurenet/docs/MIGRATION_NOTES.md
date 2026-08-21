@@ -357,3 +357,81 @@ Closes gaps 3, 10, 12, 13 and 14 with live node-mode evidence.
   for the real model; smoke section 16 runs a claim through it with a
   pinned verifier DID and section 17 proves rogue-DID verdicts are
   rejected.
+
+## 15. Reward custody on citizen-asset.v1 (transferable tokens + vaults)
+
+CTZN is a soulbound identity token — transfers are structurally rejected —
+so it cannot back escrowed prizes. Escrow settlement now uses the new
+**generic transferable token module** `citizen-asset.v1`
+(`citizen-protocol/modules/citizen-asset`, 14 integration tests in
+`crates/execution/tests/citizen_asset_test.rs`): issuer-threshold minting,
+owner-signed transfer/burn, and **timed M-of-N vaults** as the custody
+primitive. The module is deliberately use-case-agnostic (crowdfunding
+refunds, delayed payments, governance-gated releases all fit the same
+vault shape); TreasureNet is just the first consumer.
+
+### Module operations and signed messages
+
+Formats live in `assetMessages` (`chain/sdk/src/modules.ts`), shared
+verbatim by backend, GM console, smoke, and the mock chain.
+
+| Operation | Signed message | Enforced by |
+|-----------|----------------|-------------|
+| `configure` | `configure:<issuers>:<threshold>` (admin sig; first configure is governance-gated instead) | mirrors ctzn-token bootstrap |
+| `create_token` | `create:<token_id>:<symbol>:<decimals>` | issuer threshold |
+| `mint` | `mint:<token>:<recipient>:<amount>:<ref>` | issuer threshold |
+| `burn` | `burn:<token>:<owner>:<amount>:<ref>` | owner sig |
+| `transfer` | `transfer:<token>:<from>:<to>:<amount>:<ref>` | sender sig + balance |
+| `open_vault` | `vopen:<vault>:<token>:<threshold>:<expiry>` | admin sig |
+| `vault_transfer` | `vt:<vault>:<to>:<amount>:<ref>` | pre-expiry: approver threshold; post-expiry: ONLY fallback owner (empty signature rejected before host verify) |
+| `balance` / `token_info` / `vault_info` | — | reads |
+
+Vault balances live in the generic balance namespace under account
+`vault:<vault_id>` (a separate per-vault balance key was the first cut and
+broke deposit-then-payout; unified so `vault_transfer` and `transfer`
+share one ledger).
+
+### TreasureNet wiring
+
+- Default hunt reward is the transferable asset `treasurenet.gold`
+  (TNG, 2 decimals), created idempotently at server bootstrap
+  (`ensureRewardAsset`, issuer-threshold signed by service+oracle).
+  Env: `TREASURENET_ASSET_MODULE` (default `citizen-asset.v1`),
+  `TREASURENET_REWARD_ASSET` (default `treasurenet.gold`).
+- **create**: escrow init + `create_hunt` + `openRewardVault` — vault
+  `esc-<huntId>`, approvers GM+oracle, threshold 2, fallback owner GM,
+  expiry = the hunt deadline block.
+- **fund** (`asset_gm_signature`): issuers mint to the GM
+  (`mint:...:fund-<hunt>`), then the GM deposits into
+  `vault:esc-<huntId>` by signing
+  `transfer:<token>:<gm>:vault:<escrow>:<amount>:deposit-<hunt>`. The
+  signature is verified server-side before any chain state moves.
+- **claim** (`asset_gm_signature`): GM co-signs
+  `vt:<escrow>:<winner>:<amount>:claim-<hunt>`, the backend adds the
+  oracle co-signature and the vault pays the winner real tokens.
+- **refund after expiry**: only the fallback owner can reclaim — GM signs
+  `vt:<escrow>:<gm>:<amount>:refund-<hunt>`; the scheduler adds it
+  (from `TREASURENET_GM_REFUND_KEY`) to its self-serve refund envelope.
+- Wallet `GET /wallet/:did/balance` reads the asset module in both modes
+  (mock parity); unreachable module → local projection of confirmed
+  custody payouts.
+- Hunts created with an explicit non-default `reward_token` keep the
+  legacy escrow-only path (the smoke's refund hunt uses `"CTZN"` to prove
+  both branches).
+- Deploy: `deploy_treasurenet.py` registers `citizen-asset.v1` with
+  `module_class="asset"` (special-cased; the old prefix heuristic would
+  have mislabeled it `identity`), bootstraps governance proposal
+  `proposal-treasurenet-asset`, and configures issuers
+  `<admin>,<oracle>` threshold 2. Server-side reconfigure carries the
+  admin signature over `configure:<issuers>:2`.
+
+### Mock parity fixes that surfaced during wiring
+
+- The mock's replay-scope key now matches the gateway exactly
+  (`vault_id`/`ref` included) — without it a second mint of the same
+  token was rejected as `ReplayedSubmission`, and repeated `balance`
+  reads were treated as writes. Read-op lists are identical too.
+- Two module bugs were caught by the Rust tests before deployment:
+  vault balances in a separate key namespace (deposit-then-payout broke)
+  and an empty fallback-owner signature passing host verification.
+

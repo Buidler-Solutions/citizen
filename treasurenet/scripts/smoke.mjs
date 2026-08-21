@@ -11,12 +11,12 @@
  *   5. GM funds + activates the hunt
  *   6. Player grants consent (location + photo), checks in at clue GPS
  *   7. Claim: photo proof -> oracle verdict -> 2-of-2 multisig (GM + oracle)
- *   8. Escrow + hunt complete; CTZN balance increases; finality receipt exists
+ *   8. Escrow + hunt complete; reward-asset balance increases; finality receipt exists
  *   9. Double-claim is rejected; leaderboard/analytics reflect the win
  */
 
 import { spawn } from "node:child_process";
-import { generateKeyPair, didFromPrivateKeyHex, signMessage, claimMessages } from "../chain/sdk/src/index.ts";
+import { generateKeyPair, didFromPrivateKeyHex, signMessage, claimMessages, assetMessages } from "../chain/sdk/src/index.ts";
 
 /** Generated before the server spawns so its private key can be injected
  *  as TREASURENET_GM_REFUND_KEY for the scheduler self-serve refund check. */
@@ -111,7 +111,8 @@ try {
   const roleOf = await api("GET", `/roles/${encodeURIComponent(player.did)}`);
   check("role_of returns player", roleOf.json?.role === "player", JSON.stringify(roleOf.json));
 
-  // 4: hunt creation (GM signs client-side)
+  // 4: hunt creation (GM signs client-side). No explicit reward_token means
+  // the default transferable reward asset: escrow backed by vault custody.
   const huntId = `hunt-smoke-${runSuffix}-1`;
   const expiresAt = new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString();
   const createSig = signMessage(claimMessages.createHunt(huntId, gm.did), gm.privateKeyHex);
@@ -121,7 +122,6 @@ try {
     gm_signature: createSig,
     title: "Harbor Beacon",
     reward_amount: 500,
-    reward_token: "CTZN",
     expires_at: expiresAt,
     clues: [
       { index: 0, manifest_id: "manifest-clue-0", latitude: 10.3167, longitude: 123.8908, radius_meters: 50 },
@@ -130,16 +130,24 @@ try {
   });
   check("hunt created", hunt.status === 200 && hunt.json.status === "created", JSON.stringify(hunt.json));
   check("escrow linked", hunt.json.escrow_id === `esc-${huntId}`);
+  check("default reward is the transferable asset", hunt.json.reward_token === "treasurenet.gold", hunt.json.reward_token);
+  const rewardToken = hunt.json.reward_token;
+  const vaultAccount = assetMessages.vaultAccount(`esc-${huntId}`);
 
   const escrowStatus = await api("GET", `/escrow/${hunt.json.escrow_id}/status`);
   check("escrow status Created", escrowStatus.json?.status === "Created");
 
-  // 5: fund + activate
+  // 5: fund + activate (the asset signature deposits real tokens into the vault)
   const fundSig = signMessage(claimMessages.fundHunt(huntId, gm.did), gm.privateKeyHex);
   const escrowFundSig = signMessage(claimMessages.fundEscrow(`esc-${huntId}`), gm.privateKeyHex);
+  const depositSig = signMessage(
+    assetMessages.transfer(rewardToken, gm.did, vaultAccount, 500, `deposit-${huntId}`),
+    gm.privateKeyHex
+  );
   const funded = await api("POST", `/games/${huntId}/fund`, {
     gm_signature: fundSig,
     escrow_gm_signature: escrowFundSig,
+    asset_gm_signature: depositSig,
   });
   check("hunt funded", funded.status === 200 && funded.json.status === "funded");
   const escrowFunded = await api("GET", `/escrow/${hunt.json.escrow_id}/status`);
@@ -166,19 +174,23 @@ try {
   // 7: claim with photo proof (GM pre-authorizes winner claim, oracle co-signs)
   const gmClaimSig = signMessage(claimMessages.hunt(huntId, player.did), gm.privateKeyHex);
   const escrowClaimSig = signMessage(claimMessages.escrow(`esc-${huntId}`, player.did), gm.privateKeyHex);
+  const assetClaimSig = signMessage(
+    assetMessages.vaultTransfer(`esc-${huntId}`, player.did, 500, `claim-${huntId}`),
+    gm.privateKeyHex
+  );
   const claim = await api(
     "POST",
     `/games/${huntId}/claim`,
-    { gm_signature: gmClaimSig, escrow_gm_signature: escrowClaimSig, photo_b64: "cGhvdG8tcHJvb2YtZGVtbwo=".repeat(4), latitude: 10.3172, longitude: 123.8912 },
+    { gm_signature: gmClaimSig, escrow_gm_signature: escrowClaimSig, asset_gm_signature: assetClaimSig, photo_b64: "cGhvdG8tcHJvb2YtZGVtbwo=".repeat(4), latitude: 10.3172, longitude: 123.8912 },
     playerToken
   );
   check("claim confirmed", claim.status === 200 && claim.json.status === "confirmed", JSON.stringify(claim.json));
   check("claim has receipt", typeof claim.json.receipt_id === "string");
   check("claim has block height", typeof claim.json.block_height === "number");
 
-  // 8: balance + hunt state
+  // 8: balance + hunt state — the vault payout moved real tokens
   const balance = await api("GET", `/wallet/${encodeURIComponent(player.did)}/balance`);
-  check("CTZN balance credited", balance.json?.balance === 500 || balance.json?.balance === 1, JSON.stringify(balance.json));
+  check("reward-asset balance credited", balance.json?.balance === 500, JSON.stringify(balance.json));
   const huntAfter = await api("GET", `/games/${huntId}`);
   check("hunt completed on-chain", huntAfter.json.status === "completed");
   check("winner recorded", huntAfter.json.winner_did === player.did);
@@ -187,7 +199,7 @@ try {
   const replay = await api(
     "POST",
     `/games/${huntId}/claim`,
-    { gm_signature: gmClaimSig, escrow_gm_signature: escrowClaimSig, photo_b64: "cGhvdG8tcHJvb2YtZGVtbwo=".repeat(4), latitude: 10.3172, longitude: 123.8912 },
+    { gm_signature: gmClaimSig, escrow_gm_signature: escrowClaimSig, asset_gm_signature: assetClaimSig, photo_b64: "cGhvdG8tcHJvb2YtZGVtbwo=".repeat(4), latitude: 10.3172, longitude: 123.8912 },
     playerToken
   );
   check("double claim rejected", replay.status === 400, JSON.stringify(replay.json));
@@ -227,6 +239,10 @@ try {
   await api("POST", `/games/${huntId2}/fund`, {
     gm_signature: signMessage(claimMessages.fundHunt(huntId2, gm.did), gm.privateKeyHex),
     escrow_gm_signature: signMessage(claimMessages.fundEscrow(`esc-${huntId2}`), gm.privateKeyHex),
+    asset_gm_signature: signMessage(
+      assetMessages.transfer("treasurenet.gold", gm.did, assetMessages.vaultAccount(`esc-${huntId2}`), 250, `deposit-${huntId2}`),
+      gm.privateKeyHex
+    ),
   });
   await api("POST", `/games/${huntId2}/activate`, {
     gm_signature: signMessage(claimMessages.activate(huntId2, gm.did), gm.privateKeyHex),
@@ -258,14 +274,19 @@ try {
 
   const gmClaimSig2 = signMessage(claimMessages.hunt(huntId2, player2.did), gm.privateKeyHex);
   const escrowClaimSig2 = signMessage(claimMessages.escrow(`esc-${huntId2}`, player2.did), gm.privateKeyHex);
+  const assetClaimSig2 = signMessage(
+    assetMessages.vaultTransfer(`esc-${huntId2}`, player2.did, 250, `claim-${huntId2}`),
+    gm.privateKeyHex
+  );
   const approved = await api("POST", `/games/${huntId2}/claim`, {
     request_id: dupRequest.json.request_id,
     gm_signature: gmClaimSig2,
     escrow_gm_signature: escrowClaimSig2,
+    asset_gm_signature: assetClaimSig2,
   });
   check("GM approval confirms claim", approved.status === 200 && approved.json.status === "confirmed", JSON.stringify(approved.json));
   const balance2 = await api("GET", `/wallet/${encodeURIComponent(player2.did)}/balance`);
-  check("mobile player balance credited", balance2.json?.balance === 250 || balance2.json?.balance === 1, JSON.stringify(balance2.json));
+  check("mobile player balance credited", balance2.json?.balance === 250, JSON.stringify(balance2.json));
   const pendingAfter = await api("GET", "/claims/pending");
   check("pending list drained", !pendingAfter.json?.some((r) => r.request_id === dupRequest.json.request_id));
   const notified = await api("GET", `/wallet/${encodeURIComponent(player2.did)}/notifications`);
@@ -378,6 +399,10 @@ try {
     await api("POST", `/games/${filesHuntId}/fund`, {
       gm_signature: signMessage(claimMessages.fundHunt(filesHuntId, gm.did), gm.privateKeyHex),
       escrow_gm_signature: signMessage(claimMessages.fundEscrow(`esc-${filesHuntId}`), gm.privateKeyHex),
+      asset_gm_signature: signMessage(
+        assetMessages.transfer("treasurenet.gold", gm.did, assetMessages.vaultAccount(`esc-${filesHuntId}`), 60, `deposit-${filesHuntId}`),
+        gm.privateKeyHex
+      ),
     });
     await api("POST", `/games/${filesHuntId}/activate`, {
       gm_signature: signMessage(claimMessages.activate(filesHuntId, gm.did), gm.privateKeyHex),
@@ -614,6 +639,10 @@ try {
     await extCall("POST", `/games/${extHuntId}/fund`, {
       gm_signature: signMessage(claimMessages.fundHunt(extHuntId, gm.did), gm.privateKeyHex),
       escrow_gm_signature: signMessage(claimMessages.fundEscrow(`esc-${extHuntId}`), gm.privateKeyHex),
+      asset_gm_signature: signMessage(
+        assetMessages.transfer("treasurenet.gold", gm.did, assetMessages.vaultAccount(`esc-${extHuntId}`), 90, `deposit-${extHuntId}`),
+        gm.privateKeyHex
+      ),
     });
     await extCall("POST", `/games/${extHuntId}/activate`, {
       gm_signature: signMessage(claimMessages.activate(extHuntId, gm.did), gm.privateKeyHex),
@@ -626,6 +655,10 @@ try {
       {
         gm_signature: signMessage(claimMessages.hunt(extHuntId, extPlayer.did), gm.privateKeyHex),
         escrow_gm_signature: signMessage(claimMessages.escrow(`esc-${extHuntId}`, extPlayer.did), gm.privateKeyHex),
+        asset_gm_signature: signMessage(
+          assetMessages.vaultTransfer(`esc-${extHuntId}`, extPlayer.did, 90, `claim-${extHuntId}`),
+          gm.privateKeyHex
+        ),
         photo_b64: "cGhvdG8tcHJvb2YtZGVtbwo=".repeat(4),
         latitude: 10.3167,
         longitude: 123.8908,
@@ -694,6 +727,10 @@ try {
     await pinCall("POST", `/games/${pinHuntId}/fund`, {
       gm_signature: signMessage(claimMessages.fundHunt(pinHuntId, gm.did), gm.privateKeyHex),
       escrow_gm_signature: signMessage(claimMessages.fundEscrow(`esc-${pinHuntId}`), gm.privateKeyHex),
+      asset_gm_signature: signMessage(
+        assetMessages.transfer("treasurenet.gold", gm.did, assetMessages.vaultAccount(`esc-${pinHuntId}`), 40, `deposit-${pinHuntId}`),
+        gm.privateKeyHex
+      ),
     });
     await pinCall("POST", `/games/${pinHuntId}/activate`, {
       gm_signature: signMessage(claimMessages.activate(pinHuntId, gm.did), gm.privateKeyHex),
@@ -706,6 +743,10 @@ try {
       {
         gm_signature: signMessage(claimMessages.hunt(pinHuntId, pinPlayer.did), gm.privateKeyHex),
         escrow_gm_signature: signMessage(claimMessages.escrow(`esc-${pinHuntId}`, pinPlayer.did), gm.privateKeyHex),
+        asset_gm_signature: signMessage(
+          assetMessages.vaultTransfer(`esc-${pinHuntId}`, pinPlayer.did, 40, `claim-${pinHuntId}`),
+          gm.privateKeyHex
+        ),
         photo_b64: "cGhvdG8tcHJvb2YtZGVtbwo=".repeat(4),
         latitude: 10.3167,
         longitude: 123.8908,

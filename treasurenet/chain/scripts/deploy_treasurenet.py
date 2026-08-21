@@ -41,6 +41,8 @@ MODULE_FILES = {
                                        "wasm32-unknown-unknown", "release", "player_registry.wasm"),
     "ctzn-token.v1": os.path.join(MODULES_DIR, "ctzn-token", "target",
                                   "wasm32-unknown-unknown", "release", "ctzn_token.wasm"),
+    "citizen-asset.v1": os.path.join(MODULES_DIR, "citizen-asset", "target",
+                                     "wasm32-unknown-unknown", "release", "citizen_asset.wasm"),
 }
 
 
@@ -104,7 +106,10 @@ def register_module(node, signing_key, module_id, wasm_path, approvals):
         wasm = fh.read()
     wasm_b64 = base64.b64encode(wasm).decode()
     wasm_hash = "sha256:" + hashlib.sha256(wasm).hexdigest()
-    module_class = "asset" if module_id.startswith("treasure-") else "identity"
+    if module_id.startswith("treasure-") or module_id == "citizen-asset.v1":
+        module_class = "asset"
+    else:
+        module_class = "identity"
 
     ok = submit(node, build_entry(signing_key, "execution.module", "REGISTER_MODULE", module_id, {
         "module_id": module_id,
@@ -173,6 +178,7 @@ def main():
     parser.add_argument("--proposal-hunt", default="proposal-treasurenet-hunt")
     parser.add_argument("--proposal-registry", default="proposal-treasurenet-registry")
     parser.add_argument("--proposal-ctzn", default="proposal-treasurenet-ctzn")
+    parser.add_argument("--proposal-asset", default="proposal-treasurenet-asset")
     args = parser.parse_args()
 
     signing_key = nacl.signing.SigningKey(bytes.fromhex(args.signing_key_hex))
@@ -181,7 +187,7 @@ def main():
 
     if args.bootstrap_governance:
         print("submitting governance approvals")
-        for proposal_id in (args.proposal_escrow, args.proposal_hunt, args.proposal_registry, args.proposal_ctzn):
+        for proposal_id in (args.proposal_escrow, args.proposal_hunt, args.proposal_registry, args.proposal_ctzn, args.proposal_asset):
             if not submit_governance_approval(args.node, signing_key, proposal_id):
                 sys.exit(3)
 
@@ -220,6 +226,13 @@ def main():
         "issuers": f"{args.admin_did},{args.oracle_did}",
         "threshold": "2",
         "proposal_id": args.proposal_ctzn,
+    }) and ok
+    ok = execute_module(args.node, "citizen-asset.v1", {
+        "operation": "configure",
+        "admin_did": args.admin_did,
+        "issuers": f"{args.admin_did},{args.oracle_did}",
+        "threshold": "2",
+        "proposal_id": args.proposal_asset,
     }) and ok
 
     if not ok:

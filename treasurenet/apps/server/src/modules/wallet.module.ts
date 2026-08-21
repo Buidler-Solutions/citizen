@@ -30,47 +30,34 @@ export class WalletModule {
 
   async balance(did: string) {
     this.store.touchWallet(did);
-    if (this.chain.mock) {
+    // Balances are real transferable reward-asset holdings on the
+    // citizen-asset module (mock and node alike). If the module is
+    // unreachable, fall back to the local projection of confirmed payouts.
+    try {
+      const balance = await this.chain.assetBalance(did);
       return {
         did,
-        token: "CTZN",
-        balance: this.chain.mock.getCtznBalance(did),
-        source: "mock",
+        token: this.chain.config.rewardAssetId,
+        balance,
+        source: this.chain.mode(),
+      };
+    } catch {
+      const projected = [...this.store.claims.values()]
+        .filter(
+          (claim) =>
+            claim.winner_did === did &&
+            claim.status === "confirmed" &&
+            claim.reward_token === this.chain.config.rewardAssetId
+        )
+        .reduce((sum, claim) => sum + claim.reward_amount, 0);
+      return {
+        did,
+        token: this.chain.config.rewardAssetId,
+        balance: projected,
+        source: "projection",
+        note: "asset module unreachable; balance from local projection",
       };
     }
-    // Node mode: CTZN rewards are soulbound tokens minted per won hunt, so
-    // the balance is the number of reward tokens the player still owns.
-    // Read owner_of for each minted reward token of this winner's confirmed
-    // claims; fall back to the projection when the node is unreachable.
-    const tokenIds = [...this.store.claims.values()]
-      .filter((claim) => claim.winner_did === did && claim.status === "confirmed")
-      .map((claim) => `reward-${claim.hunt_id}`);
-    let owned = 0;
-    let source = "node";
-    let note: string | undefined;
-    try {
-      for (const tokenId of tokenIds) {
-        const result = await this.chain.adapter.execute(
-          this.chain.config.rewardTokenModuleId,
-          { operation: "owner_of", token_id: tokenId }
-        );
-        const owner = result.output.owner as string | undefined;
-        const burned = result.output.burned as boolean | undefined;
-        if (owner === did && !burned) owned += 1;
-      }
-    } catch {
-      owned = tokenIds.length;
-      source = "projection";
-      note = "reward token module unreachable; balance from local projection";
-    }
-    return {
-      did,
-      token: this.chain.config.rewardTokenModuleId,
-      balance: owned,
-      tokens: tokenIds.length,
-      source,
-      ...(note ? { note } : {}),
-    };
   }
 
   async receipts(did: string) {

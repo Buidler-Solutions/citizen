@@ -1,5 +1,10 @@
 import { randomUUID } from "node:crypto";
-import { claimMessages, verifyMessage, ModuleError } from "../../../../chain/sdk/src/index.ts";
+import {
+  assetMessages,
+  claimMessages,
+  verifyMessage,
+  ModuleError,
+} from "../../../../chain/sdk/src/index.ts";
 import type { ClaimRecord, ClaimRequest } from "../../../../packages/shared/src/index.ts";
 import type { Store } from "../store.ts";
 import type { ChainModule } from "./chain.module.ts";
@@ -144,6 +149,7 @@ export class EscrowModule {
     request_id?: string;
     gm_signature: string;
     escrow_gm_signature: string;
+    asset_gm_signature?: string;
     photo_b64?: string;
     latitude?: number;
     longitude?: number;
@@ -188,6 +194,19 @@ export class EscrowModule {
     }
     if (!verifyMessage(escrowClaimMessage, input.escrow_gm_signature, gmPublicKeyHex)) {
       badRequest("InvalidSignature", "escrow claim signature verification failed");
+    }
+    // Asset-custody hunts pay the winner from the reward vault: the GM
+    // co-signs the vault transfer (the oracle co-signature is added here).
+    const assetCustody = hunt!.reward_token === this.chain.config.rewardAssetId;
+    const payoutRef = `claim-${input.hunt_id}`;
+    const vaultPayoutMessage = assetMessages.vaultTransfer(
+      hunt!.escrow_id,
+      playerDid!,
+      hunt!.reward_amount,
+      payoutRef
+    );
+    if (assetCustody && !verifyMessage(vaultPayoutMessage, input.asset_gm_signature ?? "", gmPublicKeyHex)) {
+      badRequest("InvalidSignature", "reward vault payout signature verification failed");
     }
 
     const geoCheck = input.geo.checkProximity(
@@ -273,7 +292,18 @@ export class EscrowModule {
         "claim.confirmed",
         `Reward of ${hunt!.reward_amount} ${hunt!.reward_token} paid. Receipt ${receiptId ?? "pending"}.`
       );
-      await this.chain.distributeReward(playerDid!, hunt!.reward_amount, hunt!.hunt_id);
+      if (assetCustody) {
+        await this.chain.vaultPayout(
+          hunt!.escrow_id,
+          playerDid!,
+          hunt!.reward_amount,
+          payoutRef,
+          hunt!.gm_did,
+          input.asset_gm_signature!
+        );
+      } else {
+        await this.chain.distributeReward(playerDid!, hunt!.reward_amount, hunt!.hunt_id);
+      }
     } catch (error) {
       record.status = "failed";
       this.store.claims.set(claimId, record);
@@ -296,7 +326,8 @@ export class EscrowModule {
   async refund(
     huntId: string,
     gmSignature: string,
-    escrowGmSignature?: string
+    escrowGmSignature?: string,
+    assetGmSignature?: string
   ): Promise<ClaimRecord | { refunded: true; hunt_id: string }> {
     const hunt = this.store.hunts.get(huntId);
     if (!hunt) notFound("HuntNotFound", `hunt ${huntId} does not exist`);
@@ -308,6 +339,19 @@ export class EscrowModule {
     }
     if (!verifyMessage(huntMessage, gmSignature, gmPublicKeyHex)) {
       badRequest("InvalidSignature", "hunt refund signature verification failed");
+    }
+    // Asset-custody hunts return the vaulted reward to the GM (fallback
+    // owner path after the deadline block).
+    const assetCustody = hunt!.reward_token === this.chain.config.rewardAssetId;
+    const refundRef = `refund-${huntId}`;
+    const vaultRefundMessage = assetMessages.vaultTransfer(
+      hunt!.escrow_id,
+      hunt!.gm_did,
+      hunt!.reward_amount,
+      refundRef
+    );
+    if (assetCustody && !verifyMessage(vaultRefundMessage, assetGmSignature ?? "", gmPublicKeyHex)) {
+      badRequest("InvalidSignature", "reward vault refund signature verification failed");
     }
     await this.chain.adapter.execute("treasure-escrow.v1", {
       operation: "refund",
@@ -321,6 +365,15 @@ export class EscrowModule {
       gm_did: hunt!.gm_did,
       signature: gmSignature,
     });
+    if (assetCustody) {
+      await this.chain.vaultRefund(
+        hunt!.escrow_id,
+        hunt!.gm_did,
+        hunt!.reward_amount,
+        refundRef,
+        assetGmSignature!
+      );
+    }
     hunt!.status = "refunded";
     this.store.upsertHunt(hunt!);
     this.store.recordEvent("hunt.refunded", "game.escrow", { hunt_id: huntId });
