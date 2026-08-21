@@ -99,3 +99,9 @@ wallet/desktop/src-tauri/target/
 wallet/desktop/src-tauri/gen/
 site/
 /tmp/mkdocs-venv
+
+# Universal dependency/install/OS junk (was leaking as untracked noise)
+node_modules/
+.DS_Store
+.citizen/
+__pycache__/
