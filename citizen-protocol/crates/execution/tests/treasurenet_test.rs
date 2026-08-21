@@ -1247,3 +1247,121 @@ fn registry_has_role_gates_actions() {
         "InsufficientRole",
     );
 }
+
+// ═══════════════════════════════════════════════════════════════
+// Claim delegation: GM authorizes a delegate DID for instant claims
+// ═══════════════════════════════════════════════════════════════
+
+const DELEGATE: &str = "did:key:ed25519:service1";
+
+#[test]
+fn escrow_claim_delegate_lifecycle() {
+    let engine = make_engine();
+    let wasm = load_fixture("treasure_escrow.wasm");
+    let host = Arc::new(TestHost::new(100).with_governance("proposal-escrow", true));
+    configure_escrow(&engine, &wasm, host.clone());
+    init_escrow(&engine, &wasm, host.clone(), 500);
+    fund_escrow(&engine, &wasm, host.clone());
+
+    // Only the escrow owner may delegate; a forged signature is rejected.
+    host.set_signature(GM, false);
+    run_expect_error(
+        &engine,
+        &wasm,
+        "treasure-escrow.v1",
+        r#"{"operation":"set_claim_delegate","escrow_id":"esc1","gm_did":"did:key:ed25519:gamemaster1","signature":"forged","delegate_did":"did:key:ed25519:service1"}"#,
+        host.clone(),
+        "NotOwner",
+    );
+    host.set_signature(GM, true);
+
+    // A third party cannot delegate on the owner's behalf.
+    run_expect_error(
+        &engine,
+        &wasm,
+        "treasure-escrow.v1",
+        r#"{"operation":"set_claim_delegate","escrow_id":"esc1","gm_did":"did:key:ed25519:player1","signature":"sig","delegate_did":"did:key:ed25519:service1"}"#,
+        host.clone(),
+        "NotOwner",
+    );
+
+    let delegate = format!(
+        r#"{{"operation":"set_claim_delegate","escrow_id":"esc1","gm_did":"{GM}","signature":"sig-delegate","delegate_did":"{DELEGATE}"}}"#
+    );
+    let out = run(&engine, &wasm, "treasure-escrow.v1", &delegate, host.clone());
+    assert!(out.contains(r#""ok":true"#), "set_claim_delegate failed: {out}");
+    assert!(out.contains(r#""delegate":"did:key:ed25519:service1""#), "got: {out}");
+
+    // Delegate + oracle satisfies the 2-of-2 policy (instant claims).
+    let claim = format!(
+        r#"{{"operation":"claim","escrow_id":"esc1","winner_did":"{PLAYER}","cosigner_dids":"{DELEGATE},{ORACLE}","signatures":"delegate-sig,oracle-sig"}}"#
+    );
+    let out = run(&engine, &wasm, "treasure-escrow.v1", &claim, host.clone());
+    assert!(out.contains(r#""ok":true"#), "delegated claim failed: {out}");
+    assert!(out.contains(r#""status":"completed""#), "got: {out}");
+}
+
+#[test]
+fn escrow_claim_undelegated_did_fails() {
+    let engine = make_engine();
+    let wasm = load_fixture("treasure_escrow.wasm");
+    let host = Arc::new(TestHost::new(100).with_governance("proposal-escrow", true));
+    configure_escrow(&engine, &wasm, host.clone());
+    init_escrow(&engine, &wasm, host.clone(), 500);
+    fund_escrow(&engine, &wasm, host.clone());
+
+    // Without a delegation the service DID is just another third party:
+    // the owner side of the 2-of-2 envelope is missing.
+    let claim = format!(
+        r#"{{"operation":"claim","escrow_id":"esc1","winner_did":"{PLAYER}","cosigner_dids":"{DELEGATE},{ORACLE}","signatures":"delegate-sig,oracle-sig"}}"#
+    );
+    run_expect_error(&engine, &wasm, "treasure-escrow.v1", &claim, host, "NotOwner");
+}
+
+#[test]
+fn hunt_claim_delegate_lifecycle() {
+    let engine = make_engine();
+    let wasm = load_fixture("treasure_hunt.wasm");
+    let host = Arc::new(TestHost::new(100).with_governance("proposal-hunt", true));
+    configure_hunt(&engine, &wasm, host.clone());
+    create_hunt(&engine, &wasm, host.clone(), 500);
+    fund_hunt(&engine, &wasm, host.clone());
+    activate_hunt(&engine, &wasm, host.clone());
+
+    let delegate = format!(
+        r#"{{"operation":"set_claim_delegate","hunt_id":"hunt1","gm_did":"{GM}","signature":"sig-delegate","delegate_did":"{DELEGATE}"}}"#
+    );
+    let out = run(&engine, &wasm, "treasure-hunt.v1", &delegate, host.clone());
+    assert!(out.contains(r#""ok":true"#), "set_claim_delegate failed: {out}");
+
+    let claim = format!(
+        r#"{{"operation":"claim","hunt_id":"hunt1","winner_did":"{PLAYER}","cosigner_dids":"{DELEGATE},{ORACLE}","signatures":"delegate-sig,oracle-sig"}}"#
+    );
+    let out = run(&engine, &wasm, "treasure-hunt.v1", &claim, host);
+    assert!(out.contains(r#""ok":true"#), "delegated claim failed: {out}");
+    assert!(out.contains(r#""payout":250"#), "got: {out}");
+}
+
+#[test]
+fn hunt_refund_delegate_rejected() {
+    let engine = make_engine();
+    let wasm = load_fixture("treasure_hunt.wasm");
+    let host = Arc::new(TestHost::new(100).with_governance("proposal-hunt", true));
+    configure_hunt(&engine, &wasm, host.clone());
+    create_hunt(&engine, &wasm, host.clone(), 500);
+    fund_hunt(&engine, &wasm, host.clone());
+    activate_hunt(&engine, &wasm, host.clone());
+
+    let delegate = format!(
+        r#"{{"operation":"set_claim_delegate","hunt_id":"hunt1","gm_did":"{GM}","signature":"sig-delegate","delegate_did":"{DELEGATE}"}}"#
+    );
+    let out = run(&engine, &wasm, "treasure-hunt.v1", &delegate, host.clone());
+    assert!(out.contains(r#""ok":true"#), "set_claim_delegate failed: {out}");
+
+    // Refunds stay owner-only: the delegate cannot reclaim the escrow.
+    host.set_block_height(600);
+    let refund = format!(
+        r#"{{"operation":"refund","hunt_id":"hunt1","gm_did":"{DELEGATE}","signature":"delegate-sig"}}"#
+    );
+    run_expect_error(&engine, &wasm, "treasure-hunt.v1", &refund, host, "NotOwner");
+}

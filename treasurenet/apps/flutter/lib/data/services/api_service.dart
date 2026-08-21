@@ -97,6 +97,18 @@ class TreasurenetApi {
   Future<HuntProgress> huntProgress(String huntId) async =>
       HuntProgress.fromJson(await _get('/games/$huntId/progress'));
 
+  /// Admission: free hunts enroll immediately; paid hunts transfer the fee
+  /// to the GM with [paymentSignature] over the canonical transfer message.
+  Future<JoinResult> joinHunt({
+    required String huntId,
+    String? paymentSignature,
+  }) async {
+    final json = await _post('/games/$huntId/join', {
+      if (paymentSignature != null) 'payment_signature': paymentSignature,
+    });
+    return JoinResult.fromJson(json);
+  }
+
   Future<CheckInResult> checkIn({
     required String huntId,
     required int clueIndex,

@@ -49,6 +49,12 @@ export interface Org {
   members: Array<{ did: string; role: string }>;
 }
 
+export interface HuntParticipant {
+  did: string;
+  fee_paid: number;
+  joined_at: string;
+}
+
 export class Store {
   readonly hunts = new Map<string, Hunt>();
   readonly claims = new Map<string, ClaimRecord>();
@@ -58,6 +64,7 @@ export class Store {
   readonly consentReceipts = new Map<string, ConsentReceipt>();
   readonly oracleVerdicts: OracleVerdict[] = [];
   readonly unlockedClues = new Set<string>();
+  readonly participants = new Map<string, Map<string, HuntParticipant>>();
   readonly notifications: Notification[] = [];
   readonly events: ChainEvent[] = [];
   readonly orgs = new Map<string, Org>();
@@ -148,6 +155,26 @@ export class Store {
     this.unlockedClues.add(key);
     const [huntId, did, clueIndex] = key.split(":");
     void this.persistence?.saveUnlockedClue(huntId, did, Number(clueIndex));
+  }
+
+  addParticipant(huntId: string, did: string, feePaid: number) {
+    const roster = this.participants.get(huntId) ?? new Map<string, HuntParticipant>();
+    const participant: HuntParticipant = {
+      did,
+      fee_paid: feePaid,
+      joined_at: new Date().toISOString(),
+    };
+    roster.set(did, participant);
+    this.participants.set(huntId, roster);
+    void this.persistence?.saveParticipant(huntId, participant);
+  }
+
+  isParticipant(huntId: string, did: string): boolean {
+    return this.participants.get(huntId)?.has(did) ?? false;
+  }
+
+  participantsOf(huntId: string): HuntParticipant[] {
+    return [...(this.participants.get(huntId)?.values() ?? [])];
   }
 
   upsertOrg(org: Org) {

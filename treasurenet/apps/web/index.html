@@ -38,10 +38,19 @@
     <label>Title <input id="f-title" value="Harbor Beacon" /></label>
     <label>Reward (CTZN) <input id="f-reward" type="number" value="500" /></label>
     <label>Expires (hours from now) <input id="f-hours" type="number" value="24" /></label>
-    <label>Clue 1 — lat <input id="f-lat1" value="10.3167" /></label>
-    <label>Clue 1 — lon <input id="f-lon1" value="123.8908" /></label>
-    <label>Clue 2 — lat <input id="f-lat2" value="10.3172" /></label>
-    <label>Clue 2 — lon <input id="f-lon2" value="123.8912" /></label>
+    <label>Admission
+      <select id="f-admission" style="width:100%;background:#0b1020;color:#e6e9f2;border:1px solid #2c3a66;border-radius:8px;padding:8px;font-size:13px">
+        <option value="free">Free — anyone joins</option>
+        <option value="paid">Paid — players transfer a fee to the GM</option>
+      </select>
+    </label>
+    <label>Admission fee (reward units, paid mode) <input id="f-fee" type="number" value="0" min="0" /></label>
+    <label style="display:flex;gap:8px;align-items:center;margin-top:12px">
+      <input id="f-autoclaim" type="checkbox" checked style="width:auto" />
+      <span>Instant claim — final treasure unlock pays out automatically (GM signs a claim delegation at setup)</span>
+    </label>
+    <label>Number of clues / riddles <input id="f-clue-count" type="number" value="2" min="1" max="12" /></label>
+    <div id="f-clues"></div>
     <label>Hunt id (optional) <input id="f-hunt-id" placeholder="auto" /></label>
     <button id="btn-create">Sign + create hunt</button>
     <h2 style="margin-top:24px">Server log</h2>

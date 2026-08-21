@@ -1,5 +1,5 @@
 import { assetMessages, claimMessages, verifyMessage } from "../../../../chain/sdk/src/index.ts";
-import { expiryToBlock, type Hunt, type HuntClue } from "../../../../packages/shared/src/index.ts";
+import { expiryToBlock, type Hunt, type HuntAdmission, type HuntClue } from "../../../../packages/shared/src/index.ts";
 import type { Store } from "../store.ts";
 import type { ChainModule } from "./chain.module.ts";
 import { badRequest, notFound, unauthorized } from "../http.ts";
@@ -54,6 +54,10 @@ export class GameModule {
     reward_token?: string;
     expires_at: string;
     clues: HuntClue[];
+    admission?: HuntAdmission;
+    auto_claim?: boolean;
+    delegate_gm_signature?: string;
+    delegate_escrow_gm_signature?: string;
   }): Promise<Hunt> {
     await this.requireRole(input.gm_did, "gamemaster");
     if (!input.title || input.reward_amount <= 0 || !input.expires_at) {
@@ -66,6 +70,21 @@ export class GameModule {
       if (!clue.manifest_id) {
         badRequest("InvalidClues", "every clue requires an encrypted file manifest_id");
       }
+    }
+    const admission: HuntAdmission = input.admission ?? { mode: "free", fee_amount: 0 };
+    if (admission.mode === "paid" && (!Number.isFinite(admission.fee_amount) || admission.fee_amount <= 0)) {
+      badRequest("InvalidAdmission", "paid admission requires a positive fee_amount");
+    }
+    // Instant settlement needs the GM's claim delegation on both modules at
+    // setup: the service DID then signs claim envelopes as the owner side of
+    // the 2-of-2 (oracle still co-signs), while refunds stay GM-only.
+    const autoClaim =
+      input.auto_claim ?? Boolean(input.delegate_gm_signature && input.delegate_escrow_gm_signature);
+    if (autoClaim && (!input.delegate_gm_signature || !input.delegate_escrow_gm_signature)) {
+      badRequest(
+        "MissingFields",
+        "auto_claim requires delegate_gm_signature and delegate_escrow_gm_signature over delegate:<id>:<service did>"
+      );
     }
     const huntId = input.hunt_id ?? `hunt-${randomHuntId()}`;
     if (this.store.hunts.has(huntId)) {
@@ -116,10 +135,48 @@ export class GameModule {
       escrow_id: escrowId,
     });
 
-    // Reward custody: a timed 2-of-2 vault (GM + oracle, GM fallback after
-    // the deadline) holds the real token balance backing the escrow.
+    // Reward custody: a timed 2-of-2 vault holds the real token balance
+    // backing the escrow. Instant-claim hunts add the service DID as a third
+    // approver so delegated payouts (service + oracle) reach the threshold.
     if (assetCustody) {
-      await this.chain.openRewardVault(escrowId, input.gm_did, expiresBlock);
+      await this.chain.openRewardVault(escrowId, input.gm_did, expiresBlock, {
+        instantClaim: autoClaim,
+      });
+    }
+
+    // GM claim delegation for instant settlement (both modules, re-callable
+    // to rotate by the GM). Signatures: delegate:<id>:<service did>.
+    if (autoClaim) {
+      const serviceDid = this.chain.config.serviceDid;
+      const gmPublicKeyHex = input.gm_did.split(":").pop() ?? "";
+      if (
+        !verifyMessage(claimMessages.huntDelegate(huntId, serviceDid), input.delegate_gm_signature!, gmPublicKeyHex)
+      ) {
+        unauthorized("InvalidSignature", "hunt claim delegate signature verification failed");
+      }
+      if (
+        !verifyMessage(
+          claimMessages.escrowDelegate(escrowId, serviceDid),
+          input.delegate_escrow_gm_signature!,
+          gmPublicKeyHex
+        )
+      ) {
+        unauthorized("InvalidSignature", "escrow claim delegate signature verification failed");
+      }
+      await this.chain.adapter.execute("treasure-hunt.v1", {
+        operation: "set_claim_delegate",
+        hunt_id: huntId,
+        gm_did: input.gm_did,
+        signature: input.delegate_gm_signature,
+        delegate_did: serviceDid,
+      });
+      await this.chain.adapter.execute("treasure-escrow.v1", {
+        operation: "set_claim_delegate",
+        escrow_id: escrowId,
+        gm_did: input.gm_did,
+        signature: input.delegate_escrow_gm_signature,
+        delegate_did: serviceDid,
+      });
     }
 
     const hunt: Hunt = {
@@ -133,6 +190,9 @@ export class GameModule {
       expires_at: input.expires_at,
       expires_block: expiresBlock,
       clues: [...input.clues].sort((a, b) => a.index - b.index),
+      admission,
+      auto_claim: autoClaim,
+      player_count: 0,
       created_at: new Date().toISOString(),
     };
     this.store.upsertHunt(hunt);
@@ -245,6 +305,91 @@ export class GameModule {
     return this.getHunt(huntId);
   }
 
+  isParticipant(huntId: string, playerDid: string): boolean {
+    return this.store.isParticipant(huntId, playerDid);
+  }
+
+  players(huntId: string) {
+    this.getHunt(huntId);
+    const roster = this.store.participantsOf(huntId);
+    return {
+      hunt_id: huntId,
+      player_count: roster.length,
+      players: roster.sort((a, b) => a.joined_at.localeCompare(b.joined_at)),
+    };
+  }
+
+  /**
+   * Player admission. Free hunts record the participant; paid hunts require
+   * the player's signature over the canonical admission transfer
+   * `transfer:<token>:<player>:<gm>:<fee>:join-<hunt_id>` and move the fee
+   * on-chain to the GM before the participant is recorded. Joining is only
+   * possible while the hunt is active (activation requires a funded escrow,
+   * so an unfunded hunt can never admit players).
+   */
+  async join(input: { hunt_id: string; player_did: string; payment_signature?: string }) {
+    const hunt = this.getHunt(input.hunt_id);
+    if (hunt.status !== "active") {
+      badRequest("HuntNotActive", `hunt ${input.hunt_id} is ${hunt.status}; join opens when the GM activates the funded hunt`);
+    }
+    if (this.store.isParticipant(input.hunt_id, input.player_did)) {
+      badRequest("AlreadyJoined", `player ${input.player_did} already joined hunt ${input.hunt_id}`);
+    }
+    let feePaid = 0;
+    if (hunt.admission.mode === "paid") {
+      const fee = hunt.admission.fee_amount;
+      if (!input.payment_signature) {
+        badRequest(
+          "PaymentRequired",
+          `paid admission: payment_signature over assetMessages.transfer(${hunt.reward_token}, player, gm, ${fee}, join-${input.hunt_id}) is required`
+        );
+      }
+      const message = assetMessages.transfer(
+        hunt.reward_token,
+        input.player_did,
+        hunt.gm_did,
+        fee,
+        `join-${input.hunt_id}`
+      );
+      const playerPublicKeyHex = input.player_did.split(":").pop() ?? "";
+      if (!verifyMessage(message, input.payment_signature, playerPublicKeyHex)) {
+        badRequest("InvalidSignature", "admission payment signature verification failed");
+      }
+      await this.chain.adapter.execute(this.chain.config.assetModuleId, {
+        operation: "transfer",
+        token_id: hunt.reward_token,
+        from_did: input.player_did,
+        to_did: hunt.gm_did,
+        amount: String(fee),
+        ref: `join-${input.hunt_id}`,
+        signature: input.payment_signature,
+      });
+      feePaid = fee;
+    }
+    this.store.addParticipant(input.hunt_id, input.player_did, feePaid);
+    hunt.player_count = this.store.participantsOf(input.hunt_id).length;
+    this.store.upsertHunt(hunt);
+    this.store.recordEvent("player.joined", "game.hunts", {
+      hunt_id: input.hunt_id,
+      player_did: input.player_did,
+      mode: hunt.admission.mode,
+      fee_paid: feePaid,
+    });
+    this.store.notify(
+      hunt.gm_did,
+      "player.joined",
+      `Player joined ${hunt.title} (${hunt.admission.mode} admission${feePaid ? `, fee ${feePaid} ${hunt.reward_token}` : ""}).`
+    );
+    return {
+      joined: true as const,
+      hunt_id: input.hunt_id,
+      player_did: input.player_did,
+      mode: hunt.admission.mode,
+      fee_paid: feePaid,
+      player_count: hunt.player_count,
+    };
+  }
+
   /** Player check-in at a clue checkpoint: geo gate, then clue manifest unlock. */
   async checkIn(input: {
     hunt_id: string;
@@ -259,8 +404,19 @@ export class GameModule {
     if (hunt.status !== "active") {
       badRequest("HuntNotActive", `hunt ${input.hunt_id} is ${hunt.status}, not active`);
     }
+    if (!this.store.isParticipant(input.hunt_id, input.player_did)) {
+      badRequest("NotParticipant", `join hunt ${input.hunt_id} before checking in`);
+    }
     const clue = hunt.clues.find((c) => c.index === input.clue_index);
     if (!clue) notFound("ClueNotFound", `clue ${input.clue_index} not in hunt`);
+    // Sequential clue chain: only the next expected clue unlocks (already
+    // unlocked clues stay readable for review/idempotent re-checks).
+    if (!this.hasUnlocked(input.hunt_id, input.player_did, input.clue_index)) {
+      const expected = this.progress(input.hunt_id, input.player_did).next_clue_index;
+      if (input.clue_index !== expected) {
+        badRequest("OutOfOrderClue", `clue ${input.clue_index} is locked; solve clue ${expected} first`);
+      }
+    }
     const check = input.geo.checkProximity(
       input.latitude,
       input.longitude,

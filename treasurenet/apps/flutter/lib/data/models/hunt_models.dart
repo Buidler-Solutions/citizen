@@ -41,6 +41,10 @@ class Hunt {
     required this.expiresBlock,
     required this.clues,
     required this.createdAt,
+    this.admissionMode = 'free',
+    this.admissionFee = 0,
+    this.autoClaim = false,
+    this.playerCount,
     this.winnerDid,
     this.receiptId,
   });
@@ -59,6 +63,17 @@ class Hunt {
             .map((c) => HuntClue.fromJson(c as Map<String, dynamic>))
             .toList(),
         createdAt: DateTime.parse(json['created_at'] as String),
+        admissionMode:
+            (json['admission'] as Map<String, dynamic>? ?? const {})
+                    ['mode'] as String? ??
+                'free',
+        admissionFee:
+            (((json['admission'] as Map<String, dynamic>? ?? const {})[
+                        'fee_amount']) as num?)
+                    ?.toInt() ??
+                0,
+        autoClaim: json['auto_claim'] as bool? ?? false,
+        playerCount: (json['player_count'] as num?)?.toInt(),
         winnerDid: json['winner_did'] as String?,
         receiptId: json['receipt_id'] as String?,
       );
@@ -74,11 +89,16 @@ class Hunt {
   final int expiresBlock;
   final List<HuntClue> clues;
   final DateTime createdAt;
+  final String admissionMode;
+  final int admissionFee;
+  final bool autoClaim;
+  final int? playerCount;
   final String? winnerDid;
   final String? receiptId;
 
   bool get isActive => status == 'active';
   bool get isCompleted => status == 'completed';
+  bool get isPaidAdmission => admissionMode == 'paid' && admissionFee > 0;
 }
 
 @immutable
@@ -124,6 +144,7 @@ class CheckInResult {
     required this.manifestId,
     required this.isFinalClue,
     required this.distanceMeters,
+    this.instantClaim,
   });
 
   factory CheckInResult.fromJson(Map<String, dynamic> json) => CheckInResult(
@@ -133,6 +154,10 @@ class CheckInResult {
         manifestId: json['manifest_id'] as String? ?? '',
         isFinalClue: json['is_final_clue'] as bool? ?? false,
         distanceMeters: (json['distance_meters'] as num?)?.toDouble() ?? 0,
+        instantClaim: json['instant_claim'] == null
+            ? null
+            : InstantClaim.fromJson(
+                json['instant_claim'] as Map<String, dynamic>),
       );
 
   final String huntId;
@@ -141,6 +166,59 @@ class CheckInResult {
   final String manifestId;
   final bool isFinalClue;
   final double distanceMeters;
+  final InstantClaim? instantClaim;
+}
+
+/// Delegated payout that settled in the same check-in request (auto-claim
+/// hunts): reward moved, hunt completed, receipt recorded.
+@immutable
+class InstantClaim {
+  const InstantClaim({
+    required this.claimId,
+    required this.status,
+    required this.rewardAmount,
+    this.receiptId,
+  });
+
+  factory InstantClaim.fromJson(Map<String, dynamic> json) => InstantClaim(
+        claimId: json['claim_id'] as String,
+        status: json['status'] as String,
+        rewardAmount: (json['reward_amount'] as num?)?.toInt() ?? 0,
+        receiptId: json['receipt_id'] as String?,
+      );
+
+  final String claimId;
+  final String status;
+  final int rewardAmount;
+  final String? receiptId;
+
+  bool get confirmed => status == 'confirmed';
+}
+
+/// Admission result: the player is enrolled (fee transferred for paid hunts).
+@immutable
+class JoinResult {
+  const JoinResult({
+    required this.huntId,
+    required this.playerDid,
+    required this.mode,
+    required this.feePaid,
+    required this.playerCount,
+  });
+
+  factory JoinResult.fromJson(Map<String, dynamic> json) => JoinResult(
+        huntId: json['hunt_id'] as String,
+        playerDid: json['player_did'] as String,
+        mode: json['mode'] as String? ?? 'free',
+        feePaid: (json['fee_paid'] as num?)?.toInt() ?? 0,
+        playerCount: (json['player_count'] as num?)?.toInt() ?? 0,
+      );
+
+  final String huntId;
+  final String playerDid;
+  final String mode;
+  final int feePaid;
+  final int playerCount;
 }
 
 @immutable

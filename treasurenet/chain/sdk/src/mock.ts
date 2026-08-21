@@ -19,6 +19,7 @@ interface EscrowState {
   deadline: number;
   status: "created" | "funded" | "completed" | "refunded";
   winner?: string;
+  delegate?: string;
   receiptBlock: number;
 }
 
@@ -31,6 +32,7 @@ interface HuntState {
   status: "created" | "funded" | "active" | "paused" | "completed" | "refunded" | "cancelled";
   winner?: string;
   claimed?: boolean;
+  delegate?: string;
   receiptBlock: number;
 }
 
@@ -239,6 +241,7 @@ export class MockChain implements ChainAdapter {
           if (!dids[i] || !sigs[i]) continue;
           if (!this.verify(dids[i], message, sigs[i])) continue;
           if (dids[i] === state.owner) ownerSigned = true;
+          if (state.delegate && dids[i] === state.delegate) ownerSigned = true;
           if (oracles.includes(dids[i])) oracleSigned = true;
         }
         if (!ownerSigned) this.fail("NotOwner");
@@ -262,6 +265,17 @@ export class MockChain implements ChainAdapter {
         state.status = "refunded";
         state.receiptBlock = this.blockHeight;
         return this.ok({ escrow_id: id, status: "refunded", refund: state.amount }, `escrow-refund-${id}`);
+      }
+      case "set_claim_delegate": {
+        if (!state) this.fail("Uninitialized");
+        const gm = String(p.gm_did ?? "");
+        const delegateDid = String(p.delegate_did ?? "");
+        if (gm !== state.owner) this.fail("NotOwner");
+        if (!delegateDid) this.fail("missing required fields: escrow_id, gm_did, delegate_did");
+        if (!p.signature) this.fail("SignatureRequired");
+        if (!this.verify(gm, `delegate:${id}:${delegateDid}`, String(p.signature))) this.fail("NotOwner");
+        state.delegate = delegateDid;
+        return this.ok({ escrow_id: id, delegate: delegateDid }, `escrow-delegate-${id}`);
       }
       case "is_expired": {
         if (!state) this.fail("Uninitialized");
@@ -381,6 +395,7 @@ export class MockChain implements ChainAdapter {
           if (!dids[i] || !sigs[i]) continue;
           if (!this.verify(dids[i], message, sigs[i])) continue;
           if (dids[i] === state.gm) gmSigned = true;
+          if (state.delegate && dids[i] === state.delegate) gmSigned = true;
           if (oracles.includes(dids[i])) oracleSigned = true;
         }
         if (!gmSigned) this.fail("NotOwner");
@@ -405,6 +420,17 @@ export class MockChain implements ChainAdapter {
         state.status = "refunded";
         state.receiptBlock = this.blockHeight;
         return this.ok({ hunt_id: id, status: "Refunded", refund: state.reward }, `hunt-refund-${id}`);
+      }
+      case "set_claim_delegate": {
+        if (!state) this.fail("NotFound");
+        const gm = String(p.gm_did ?? "");
+        const delegateDid = String(p.delegate_did ?? "");
+        if (gm !== state.gm) this.fail("NotOwner");
+        if (!delegateDid) this.fail("missing required fields: hunt_id, gm_did, delegate_did");
+        if (!p.signature) this.fail("SignatureRequired");
+        if (!this.verify(gm, `delegate:${id}:${delegateDid}`, String(p.signature))) this.fail("NotOwner");
+        state.delegate = delegateDid;
+        return this.ok({ hunt_id: id, delegate: delegateDid }, `hunt-delegate-${id}`);
       }
       case "get_hunt": {
         if (!state) this.fail("NotFound");

@@ -31,6 +31,13 @@ export interface HuntClue {
   radius_meters: number;
 }
 
+export interface HuntAdmission {
+  /** "free": any admitted player joins at no cost. "paid": players transfer the fee to the GM on join. */
+  mode: "free" | "paid";
+  /** Admission fee in reward-asset units; 0 for free hunts. */
+  fee_amount: number;
+}
+
 export interface Hunt {
   hunt_id: string;
   gm_did: string;
@@ -51,6 +58,11 @@ export interface Hunt {
   /** Chain link: block deadline derived from expires_at by the chain adapter. */
   expires_block: number;
   clues: HuntClue[];
+  admission: HuntAdmission;
+  /** Instant settlement: GM delegated claim authority to the service; the final clue unlock pays out automatically. */
+  auto_claim: boolean;
+  /** Number of players admitted (projection convenience for list views). */
+  player_count?: number;
   created_at: string;
   winner_did?: string;
   receipt_id?: string;

@@ -108,6 +108,7 @@ pub extern "C" fn handle(params_ptr: u32, params_len: u32) -> u64 {
         "init" => handle_init(&fields),
         "fund" => handle_fund(&fields),
         "claim" => handle_claim(&fields),
+        "set_claim_delegate" => handle_set_claim_delegate(&fields),
         "refund" => handle_refund(&fields),
         "is_expired" => handle_is_expired(&fields),
         "get_status" => handle_get_status(&fields),
@@ -333,11 +334,13 @@ fn handle_claim(fields: &[(StackStr, StackStr); 12]) -> u64 {
         return err("Expired");
     }
 
-    // 2-of-2 multisig: Game Master (escrow owner) + authorized oracle.
+    // 2-of-2 multisig: escrow owner (or their GM-delegated claim signer)
+    // plus an authorized oracle.
     let owner = match state_get(&escrow_key(escrow_id, "owner")) {
         Some(v) => v,
         None => return err("Uninitialized"),
     };
+    let delegate = state_get(&escrow_key(escrow_id, "delegate"));
 
     let mut msg_buf: [u8; 512] = [0; 512];
     let mut msg_len = 0;
@@ -376,6 +379,11 @@ fn handle_claim(fields: &[(StackStr, StackStr); 12]) -> u64 {
         }
         if did == owner.deref() {
             owner_signed = true;
+        }
+        if let Some(d) = &delegate {
+            if !d.deref().is_empty() && did == d.deref() {
+                owner_signed = true;
+            }
         }
         if n_oracles > 0 && is_in_list(did, &oracle_list[..n_oracles]) {
             oracle_signed = true;
@@ -431,6 +439,57 @@ fn handle_claim(fields: &[(StackStr, StackStr); 12]) -> u64 {
     write_bytes(&mut buf, &mut off, b"\",\"receipt_block\":");
     off += write_u64_decimal(&mut buf, off, block);
     write_bytes(&mut buf, &mut off, b"}");
+    write_result(&buf[..off])
+}
+
+/// GM-signed claim delegation: the owner authorizes a delegate DID to sign
+/// claims in their place (instant-settlement hunts). Signature over
+/// `delegate:<escrow_id>:<delegate_did>`. Setting it again rotates the
+/// delegate; refunds remain owner-only either way.
+fn handle_set_claim_delegate(fields: &[(StackStr, StackStr); 12]) -> u64 {
+    let escrow_id = field(fields, "escrow_id");
+    let gm_did = field(fields, "gm_did");
+    let signature = field(fields, "signature");
+    let delegate_did = field(fields, "delegate_did");
+
+    if escrow_id.is_empty() || gm_did.is_empty() || delegate_did.is_empty() {
+        return err("missing required fields: escrow_id, gm_did, delegate_did");
+    }
+    if status_of(escrow_id).is_none() {
+        return err("Uninitialized");
+    }
+    let owner = match state_get(&escrow_key(escrow_id, "owner")) {
+        Some(v) => v,
+        None => return err("Uninitialized"),
+    };
+    if gm_did != owner.deref() {
+        return err("NotOwner");
+    }
+    if signature.is_empty() {
+        return err("SignatureRequired");
+    }
+    let mut msg_buf: [u8; 384] = [0; 384];
+    let mut msg_len = 0;
+    write_bytes(&mut msg_buf, &mut msg_len, b"delegate:");
+    write_bytes(&mut msg_buf, &mut msg_len, escrow_id.as_bytes());
+    write_bytes(&mut msg_buf, &mut msg_len, b":");
+    write_bytes(&mut msg_buf, &mut msg_len, delegate_did.as_bytes());
+    let msg = core::str::from_utf8(&msg_buf[..msg_len]).unwrap_or("");
+    if !verify_sig(gm_did, msg, signature) {
+        return err("NotOwner");
+    }
+
+    let _ = state_set(&escrow_key(escrow_id, "delegate"), delegate_did);
+
+    log("escrow: claim delegate set");
+
+    let mut buf: [u8; 384] = [0; 384];
+    let mut off = 0;
+    write_bytes(&mut buf, &mut off, b"{\"ok\":true,\"escrow_id\":\"");
+    write_bytes(&mut buf, &mut off, escrow_id.as_bytes());
+    write_bytes(&mut buf, &mut off, b"\",\"delegate\":\"");
+    write_bytes(&mut buf, &mut off, delegate_did.as_bytes());
+    write_bytes(&mut buf, &mut off, b"\"}");
     write_result(&buf[..off])
 }
 

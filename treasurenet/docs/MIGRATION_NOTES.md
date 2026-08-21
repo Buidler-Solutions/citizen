@@ -418,6 +418,18 @@ share one ledger).
 - Hunts created with an explicit non-default `reward_token` keep the
   legacy escrow-only path (the smoke's refund hunt uses `"CTZN"` to prove
   both branches).
+- Failure ordering: the claim settles the vault payout BEFORE the
+  hunt/escrow completion writes — an under-funded or missing vault fails
+  the claim while the hunt is still active (retryable), never stranding a
+  winner behind a Completed hunt. The deadline window is covered: an
+  escrow claim accepted at exactly the deadline block pays out one block
+  later via the expired branch, which accepts the fallback owner's
+  signature anywhere in the cosigner pair (regression test
+  `asset_vault_deadline_window_payout_after_expiry_with_pair`). Refunds
+  treat the vault reclaim as idempotent (`ReplayedSubmission`,
+  `InsufficientVaultFunds`, `VaultNotFound` = nothing left to move) so a
+  partially-funded vault cannot loop the scheduler against an
+  already-refunded escrow.
 - Deploy: `deploy_treasurenet.py` registers `citizen-asset.v1` with
   `module_class="asset"` (special-cased; the old prefix heuristic would
   have mislabeled it `identity`), bootstraps governance proposal
@@ -434,4 +446,47 @@ share one ledger).
 - Two module bugs were caught by the Rust tests before deployment:
   vault balances in a separate key namespace (deposit-then-payout broke)
   and an empty fallback-owner signature passing host verification.
+
+## 16. Full game flow: funding gate, admission, sequential clues, instant claim
+
+The Stellar contract activated hunts unconditionally; here the complete
+game-design loop is enforced across modules and backend:
+
+- **Funding gate**: `treasure-hunt.v1` rejects `activate` unless the hunt
+  is `funded` (`InvalidStatus`), and the backend only accepts joins while
+  a hunt is `active` — so no game can start without the GM funding the
+  escrow (and depositing real tokens for custody hunts).
+- **Admission** (`POST /games/:id/join`, player session): `admission`
+  on hunt create is `{mode: "free"|"paid", fee_amount}`. Paid joins
+  require the player's `payment_signature` over the canonical transfer
+  `transfer:<token>:<player>:<gm>:<fee>:join-<huntId>`; the backend
+  verifies it against the player's DID key and relays the transfer to
+  `citizen-asset.v1` before recording the participant (`fee_paid`
+  persisted in the new `HuntParticipant` projection table). Roster:
+  `GET /games/:id/players`; hunts carry `player_count`.
+- **Sequential clue chain**: check-ins now require participation
+  (`NotParticipant`) and unlock strictly in order — only the next
+  expected clue index opens (`OutOfOrderClue`); already-unlocked clues
+  stay readable for review. The GM's per-clue riddles/hints ride the
+  existing AES-GCM encrypted clue channel (console uploads them at
+  create time), so each solved riddle reveals the next coordinates.
+- **Instant claim** (`auto_claim: true` on create): the GM signs a claim
+  delegation at setup — `delegate:<huntId>:<serviceDid>` and
+  `delegate:<escrowId>:<serviceDid>` — executed on both modules via the
+  new `set_claim_delegate` operation (owner-gated, re-callable to
+  rotate, refunds stay owner-only). The reward vault for such hunts is
+  opened with approvers `<gm>,<service>,<oracle>` threshold 2 (fallback
+  GM), so both manual (GM+oracle) and delegated (service+oracle) payouts
+  verify. When the first player unlocks the final treasure coordinates,
+  the same request settles: the service DID signs both claim envelopes
+  as the GM's delegate, the oracle co-signs the geo verdict
+  (`evaluateInstant`: final-coordinate geo proof replaces the photo —
+  the GM pre-authorized settlement), `vaultPayoutDelegated` moves the
+  tokens, then the hunt/escrow complete. The same
+  payout-before-completion failure invariant as manual claims applies.
+- Refund authority is unchanged: only the GM (owner) can refund, and a
+  delegate cannot (`hunt_refund_delegate_rejected` regression test).
+- Backend error mapping: module rejections (mock chain errors and
+  `ModuleError`) now surface as HTTP 400 with the module's error code
+  instead of a generic 500.
 

@@ -21,14 +21,18 @@ model Hunt {
   escrowId     String   @unique
   expiresAt    DateTime
   expiresBlock BigInt
+  admissionMode String  @default("free")
+  admissionFee Int      @default(0)
+  autoClaim    Boolean  @default(false)
   winnerDid    String?
   receiptId    String?
   entryHash    String?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  claims  Claim[]
-  clues   Clue[]
+  claims      Claim[]
+  clues       Clue[]
+  participants HuntParticipant[]
 
   @@index([status])
   @@index([gmDid])
@@ -191,5 +195,17 @@ model UnlockedClue {
   unlockedAt DateTime @default(now())
 
   @@unique([huntId, playerDid, clueIndex])
+  @@index([playerDid])
+}
+
+model HuntParticipant {
+  id        String   @id @default(uuid())
+  huntId    String
+  playerDid String
+  feePaid   Int      @default(0)
+  joinedAt  DateTime @default(now())
+  Hunt      Hunt     @relation(fields: [huntId], references: [huntId])
+
+  @@unique([huntId, playerDid])
   @@index([playerDid])
 }

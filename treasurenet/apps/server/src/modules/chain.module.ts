@@ -182,15 +182,22 @@ export class ChainModule {
   async openRewardVault(
     vaultId: string,
     ownerDid: string,
-    deadlineBlock: number
+    deadlineBlock: number,
+    opts?: { instantClaim?: boolean }
   ): Promise<string> {
     const threshold = 2;
+    // Instant-claim hunts add the service DID as an approver so delegated
+    // payouts (service + oracle) reach the 2-of-2 threshold; manual claims
+    // still settle with GM + oracle.
+    const approvers = opts?.instantClaim
+      ? `${ownerDid},${this.config.serviceDid},${this.config.oracleDid}`
+      : `${ownerDid},${this.config.oracleDid}`;
     const message = assetMessages.openVault(vaultId, this.config.rewardAssetId, threshold, deadlineBlock);
     const result = await this.adapter.execute(this.config.assetModuleId, {
       operation: "open_vault",
       vault_id: vaultId,
       token_id: this.config.rewardAssetId,
-      approver_dids: `${ownerDid},${this.config.oracleDid}`,
+      approver_dids: approvers,
       threshold: String(threshold),
       expiry_block: String(deadlineBlock),
       fallback_owner_did: ownerDid,
@@ -220,6 +227,27 @@ export class ChainModule {
       ref,
       cosigner_dids: `${gmDid},${this.config.oracleDid}`,
       signatures: `${gmSignature},${this.oracleAssetSignature(message)}`,
+    });
+    return Boolean(result.output.ok);
+  }
+
+  /** Delegated 2-of-2 vault payout (service + oracle) for instant claims. */
+  async vaultPayoutDelegated(
+    vaultId: string,
+    winnerDid: string,
+    amount: number,
+    ref: string
+  ): Promise<boolean> {
+    const message = assetMessages.vaultTransfer(vaultId, winnerDid, amount, ref);
+    const result = await this.adapter.execute(this.config.assetModuleId, {
+      operation: "vault_transfer",
+      vault_id: vaultId,
+      token_id: this.config.rewardAssetId,
+      to_did: winnerDid,
+      amount: String(amount),
+      ref,
+      cosigner_dids: `${this.config.serviceDid},${this.config.oracleDid}`,
+      signatures: `${this.serviceSignature(message)},${this.oracleAssetSignature(message)}`,
     });
     return Boolean(result.output.ok);
   }
