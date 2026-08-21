@@ -14,6 +14,10 @@ export interface ServerConfig {
   oracleDid: string;
   oracleKeyHex: string;
   rewardTokenModuleId: string;
+  /** Transferable asset module handling reward custody (citizen-asset.v1). */
+  assetModuleId: string;
+  /** Default reward asset token id created at deploy (transferable). */
+  rewardAssetId: string;
   /** Approximate blocks per second for expiry scheduling (dev mock cadence). */
   blockCadencePerSecond: number;
   /** Postgres projection persistence (unset -> in-memory only). */
@@ -80,6 +84,8 @@ export function loadConfig(): ServerConfig {
       process.env.TREASURENET_ORACLE_DID ?? didFromPublicKey(publicHexFromPrivate(oracleKeyHex)),
     oracleKeyHex,
     rewardTokenModuleId: process.env.TREASURENET_REWARD_MODULE ?? "ctzn-token.v1",
+    assetModuleId: process.env.TREASURENET_ASSET_MODULE ?? "citizen-asset.v1",
+    rewardAssetId: process.env.TREASURENET_REWARD_ASSET ?? "treasurenet.gold",
     blockCadencePerSecond: Number(process.env.TREASURENET_BLOCK_CADENCE ?? 1),
     databaseUrl: process.env.DATABASE_URL,
     redisUrl: process.env.REDIS_URL,

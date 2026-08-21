@@ -1,12 +1,12 @@
 import { verifyMessage, didFromPublicKey } from "./keys.ts";
 import type { ChainAdapter, ChainWriteMeta } from "./modules.ts";
-import { MODULES } from "./modules.ts";
+import { MODULES, assetMessages } from "./modules.ts";
 
 /**
  * In-memory mock of the Citizen chain for offline development, CI, and
  * smoke tests. Mirrors the exact state machines and error codes of the
- * treasure-escrow / treasure-hunt / player-registry WASM modules plus
- * finality receipts and CTZN reward balances.
+ * treasure-escrow / treasure-hunt / player-registry / citizen-asset WASM
+ * modules plus finality receipts and reward balances.
  *
  * Switch to the real node by constructing ModuleGateway(CitizenNodeClient(...)).
  */
@@ -40,15 +40,32 @@ interface RegistryState {
   counts: Map<string, number>;
 }
 
+interface AssetToken {
+  symbol: string;
+  decimals: number;
+  supply: number;
+  balances: Map<string, number>;
+}
+
+interface AssetVault {
+  token: string;
+  approvers: string[];
+  threshold: number;
+  expiryBlock: number;
+  fallbackOwner: string;
+}
+
 export class MockChain implements ChainAdapter {
   private blockHeight = 100;
   private readonly escrows = new Map<string, EscrowState>();
   private readonly hunts = new Map<string, HuntState>();
   private readonly registries = new Map<string, RegistryState>();
   private readonly payouts = new Map<string, string>();
-  private readonly balances = new Map<string, number>();
   private readonly receipts = new Map<string, Record<string, unknown>>();
   private readonly writeScopes = new Set<string>();
+  private assetConfig: { admin: string; issuers: string[]; threshold: number } | undefined;
+  private readonly assetTokens = new Map<string, AssetToken>();
+  private readonly assetVaults = new Map<string, AssetVault>();
 
   setBlockHeight(height: number) {
     this.blockHeight = height;
@@ -56,10 +73,6 @@ export class MockChain implements ChainAdapter {
 
   currentBlock(): number {
     return this.blockHeight;
-  }
-
-  getCtznBalance(did: string): number {
-    return this.balances.get(did) ?? 0;
   }
 
   getReceipt(receiptId: string) {
@@ -117,9 +130,24 @@ export class MockChain implements ChainAdapter {
   ): Promise<{ output: Record<string, unknown>; meta: ChainWriteMeta }> {
     const operation = String(params.operation ?? "");
     const scope = `${moduleId}:${operation}:${
-      params.escrow_id ?? params.hunt_id ?? params.token_id ?? params.player_did ?? params.did ?? ""
+      params.escrow_id ?? params.hunt_id ?? params.vault_id ?? params.ref ?? params.token_id ?? params.player_did ?? params.did ?? ""
     }`;
-    const isWrite = !operation.startsWith("get") && !["is_expired", "is_registered", "has_role", "role_of", "list_counts"].includes(operation);
+    const isWrite = ![
+      "get_status",
+      "get_reward",
+      "is_expired",
+      "get_hunt",
+      "role_of",
+      "is_registered",
+      "has_role",
+      "list_counts",
+      "balance",
+      "token_info",
+      "vault_info",
+      "owner_of",
+      "total_supply",
+      "get_metadata",
+    ].includes(operation);
     // Idempotency matches the real ModuleGateway: a scope is replayed only
     // after a successful write; rejected executions stay retryable.
     if (isWrite && this.writeScopes.has(scope)) {
@@ -140,6 +168,7 @@ export class MockChain implements ChainAdapter {
     if (moduleId === MODULES.escrow) return this.escrow(operation, params);
     if (moduleId === MODULES.hunt) return this.hunt(operation, params);
     if (moduleId === MODULES.registry) return this.registry(operation, params);
+    if (moduleId === MODULES.asset) return this.asset(operation, params);
     this.fail("unknown module");
   }
 
@@ -218,7 +247,6 @@ export class MockChain implements ChainAdapter {
         state.winner = winner;
         state.receiptBlock = this.blockHeight;
         this.payouts.set(id, `${winner}:${state.amount}:${this.blockHeight}`);
-        this.balances.set(winner, (this.balances.get(winner) ?? 0) + state.amount);
         return this.ok(
           { escrow_id: id, status: "completed", winner, payout: state.amount, token: state.token },
           `escrow-claim-${id}`
@@ -472,6 +500,224 @@ export class MockChain implements ChainAdapter {
         this.fail("soulbound: non-transferable");
       default:
         this.fail("unknown operation");
+    }
+  }
+
+  /** Mirrors citizen-asset.v1: transferable tokens + timed multisig vaults. */
+  private asset(operation: string, p: Record<string, unknown>): { output: Record<string, unknown>; meta: ChainWriteMeta } {
+    const fail = (code: string): never => this.fail(code);
+    const token = (id: string): AssetToken => {
+      const t = this.assetTokens.get(id);
+      if (!t) fail("TokenNotFound");
+      return t!;
+    };
+    const balanceOf = (tokenId: string, did: string) => token(tokenId).balances.get(did) ?? 0;
+    const credit = (tokenId: string, did: string, amount: number) => {
+      const t = token(tokenId);
+      t.balances.set(did, (t.balances.get(did) ?? 0) + amount);
+      return t.balances.get(did)!;
+    };
+    const debit = (tokenId: string, did: string, amount: number) => {
+      const t = token(tokenId);
+      t.balances.set(did, (t.balances.get(did) ?? 0) - amount);
+      return t.balances.get(did)!;
+    };
+    const countSigs = (allowed: string[], dids: string, sigs: string, message: string) => {
+      const didList = dids.split(",");
+      const sigList = sigs.split(",");
+      const seen = new Set<string>();
+      let valid = 0;
+      for (let i = 0; i < Math.min(didList.length, sigList.length); i++) {
+        const did = didList[i];
+        if (!did || !sigList[i] || !allowed.includes(did) || seen.has(did)) continue;
+        if (!this.verify(did, message, sigList[i])) continue;
+        seen.add(did);
+        valid += 1;
+      }
+      return valid;
+    };
+
+    switch (operation) {
+      case "configure": {
+        const admin = String(p.admin_did ?? "");
+        const issuers = String(p.issuers ?? "");
+        const threshold = Number(p.threshold ?? 1);
+        if (!admin || !issuers) fail("missing required fields: admin_did, issuers");
+        if (this.assetConfig) {
+          const message = `configure:${issuers}:${threshold}`;
+          if (!this.verify(this.assetConfig.admin, message, String(p.admin_sig ?? ""))) {
+            fail("admin signature verification failed");
+          }
+        } else {
+          this.ensureGovernanceApproved(String(p.proposal_id ?? ""), "asset");
+        }
+        this.assetConfig = { admin, issuers: issuers.split(",").filter(Boolean), threshold: Math.max(1, threshold) };
+        return this.ok(
+          { admin, issuers: this.assetConfig.issuers.length, threshold: this.assetConfig.threshold },
+          "asset-configure"
+        );
+      }
+      case "create_token": {
+        const tokenId = String(p.token_id ?? "");
+        const symbol = String(p.symbol ?? "");
+        const decimals = Number(p.decimals ?? 0);
+        if (!tokenId || !symbol) fail("missing required fields: token_id, symbol");
+        if (!this.assetConfig) fail("asset module not configured");
+        if (this.assetTokens.has(tokenId)) fail("TokenExists");
+        const message = assetMessages.createToken(tokenId, symbol, decimals);
+        if (countSigs(this.assetConfig!.issuers, String(p.issuer_dids ?? ""), String(p.signatures ?? ""), message) < this.assetConfig!.threshold) {
+          fail("issuer threshold not met");
+        }
+        this.assetTokens.set(tokenId, { symbol, decimals, supply: 0, balances: new Map() });
+        return this.ok({ token_id: tokenId, symbol, decimals }, `asset-create-${tokenId}`);
+      }
+      case "mint": {
+        const tokenId = String(p.token_id ?? "");
+        const recipient = String(p.recipient_did ?? "");
+        const amount = Number(p.amount ?? 0);
+        const ref = String(p.ref ?? "");
+        if (!tokenId || !recipient || !ref) fail("missing required fields: token_id, recipient_did, ref");
+        token(tokenId);
+        if (amount <= 0) fail("InvalidAmount");
+        const message = assetMessages.mint(tokenId, recipient, amount, ref);
+        if (countSigs(this.assetConfig!.issuers, String(p.issuer_dids ?? ""), String(p.signatures ?? ""), message) < this.assetConfig!.threshold) {
+          fail("issuer threshold not met");
+        }
+        token(tokenId).supply += amount;
+        const balance = credit(tokenId, recipient, amount);
+        return this.ok({ token_id: tokenId, recipient, amount, balance }, `asset-mint-${ref}`);
+      }
+      case "burn": {
+        const tokenId = String(p.token_id ?? "");
+        const owner = String(p.owner_did ?? "");
+        const amount = Number(p.amount ?? 0);
+        const ref = String(p.ref ?? "");
+        token(tokenId);
+        if (amount <= 0) fail("InvalidAmount");
+        const message = assetMessages.burn(tokenId, owner, amount, ref);
+        if (!this.verify(owner, message, String(p.signature ?? ""))) {
+          fail("owner signature verification failed");
+        }
+        if (balanceOf(tokenId, owner) < amount) fail("InsufficientFunds");
+        token(tokenId).supply -= amount;
+        const balance = debit(tokenId, owner, amount);
+        return this.ok({ burned: amount, balance }, `asset-burn-${ref}`);
+      }
+      case "transfer": {
+        const tokenId = String(p.token_id ?? "");
+        const from = String(p.from_did ?? "");
+        const to = String(p.to_did ?? "");
+        const amount = Number(p.amount ?? 0);
+        const ref = String(p.ref ?? "");
+        if (!tokenId || !from || !to || !ref) fail("missing required fields: token_id, from_did, to_did, ref");
+        if (from === to) fail("cannot transfer to self");
+        token(tokenId);
+        if (amount <= 0) fail("InvalidAmount");
+        const message = assetMessages.transfer(tokenId, from, to, amount, ref);
+        if (!this.verify(from, message, String(p.signature ?? ""))) {
+          fail("sender signature verification failed");
+        }
+        if (balanceOf(tokenId, from) < amount) fail("InsufficientFunds");
+        debit(tokenId, from, amount);
+        const recipientBalance = credit(tokenId, to, amount);
+        return this.ok({ token_id: tokenId, from, to, amount, recipient_balance: recipientBalance }, `asset-transfer-${ref}`);
+      }
+      case "open_vault": {
+        const vaultId = String(p.vault_id ?? "");
+        const tokenId = String(p.token_id ?? "");
+        const approvers = String(p.approver_dids ?? "").split(",").filter(Boolean);
+        const threshold = Number(p.threshold ?? 0);
+        const expiryBlock = Number(p.expiry_block ?? 0);
+        const fallbackOwner = String(p.fallback_owner_did ?? "");
+        if (!this.assetConfig) fail("asset module not configured");
+        if (p.admin_did !== this.assetConfig!.admin) fail("NotAdmin");
+        if (this.assetVaults.has(vaultId)) fail("VaultExists");
+        token(tokenId);
+        if (threshold < 1) fail("invalid threshold");
+        if (expiryBlock <= 0) fail("invalid expiry_block");
+        const message = assetMessages.openVault(vaultId, tokenId, threshold, expiryBlock);
+        if (!this.verify(this.assetConfig!.admin, message, String(p.admin_sig ?? ""))) {
+          fail("admin signature verification failed");
+        }
+        this.assetVaults.set(vaultId, { token: tokenId, approvers, threshold, expiryBlock, fallbackOwner });
+        return this.ok(
+          {
+            vault_id: vaultId,
+            account: assetMessages.vaultAccount(vaultId),
+            token_id: tokenId,
+            threshold,
+            expiry_block: expiryBlock,
+          },
+          `asset-vopen-${vaultId}`
+        );
+      }
+      case "vault_transfer": {
+        const vaultId = String(p.vault_id ?? "");
+        const to = String(p.to_did ?? "");
+        const amount = Number(p.amount ?? 0);
+        const ref = String(p.ref ?? "");
+        const vault = this.assetVaults.get(vaultId);
+        if (!vault) fail("VaultNotFound");
+        if (p.token_id !== vault!.token) fail("TokenMismatch");
+        if (amount <= 0) fail("InvalidAmount");
+        const vaultAccount = assetMessages.vaultAccount(vaultId);
+        if (balanceOf(vault!.token, vaultAccount) < amount) fail("InsufficientVaultFunds");
+        const message = assetMessages.vaultTransfer(vaultId, to, amount, ref);
+        const expired = this.blockHeight > vault!.expiryBlock;
+        if (expired) {
+          const didList = String(p.cosigner_dids ?? "").split(",");
+          const sigList = String(p.signatures ?? "").split(",");
+          const idx = didList.indexOf(vault!.fallbackOwner);
+          const sig = idx >= 0 ? sigList[idx] : undefined;
+          if (!sig || !this.verify(vault!.fallbackOwner, message, sig)) {
+            fail("vault expired; fallback owner signature required");
+          }
+        } else if (
+          countSigs(vault!.approvers, String(p.cosigner_dids ?? ""), String(p.signatures ?? ""), message) < vault!.threshold
+        ) {
+          fail("vault threshold not met");
+        }
+        debit(vault!.token, vaultAccount, amount);
+        const recipientBalance = credit(vault!.token, to, amount);
+        return this.ok(
+          { vault_id: vaultId, to, amount, recipient_balance: recipientBalance, expired },
+          `asset-vtransfer-${ref}`
+        );
+      }
+      case "vault_info": {
+        const vault = this.assetVaults.get(String(p.vault_id ?? ""));
+        if (!vault) fail("VaultNotFound");
+        const expired = this.blockHeight > vault!.expiryBlock;
+        return this.ok(
+          {
+            vault_id: p.vault_id,
+            token_id: vault!.token,
+            account: assetMessages.vaultAccount(String(p.vault_id)),
+            threshold: vault!.threshold,
+            expiry_block: vault!.expiryBlock,
+            fallback_owner: vault!.fallbackOwner,
+            approvers: vault!.approvers.join(","),
+            balance: balanceOf(vault!.token, assetMessages.vaultAccount(String(p.vault_id))),
+            expired,
+          },
+          `asset-vinfo-${p.vault_id}`
+        );
+      }
+      case "balance": {
+        const tokenId = String(p.token_id ?? "");
+        token(tokenId);
+        return this.ok({ token_id: tokenId, did: p.did, balance: balanceOf(tokenId, String(p.did ?? "")) }, `asset-bal-${tokenId}-${p.did}`);
+      }
+      case "token_info": {
+        const tokenId = String(p.token_id ?? "");
+        const t = token(tokenId);
+        return this.ok(
+          { token_id: tokenId, symbol: t.symbol, decimals: t.decimals, total_supply: t.supply, transferable: true },
+          `asset-tinfo-${tokenId}`
+        );
+      }
+      default:
+        return this.fail("unknown operation");
     }
   }
 }

@@ -13,6 +13,7 @@ Each module is `#![no_std]` and uses the Citizen host function ABI (`alloc`, `ha
 | `treasure-escrow` | `treasure-escrow/` | Escrowed on-chain rewards for TreasureNet hunts: init, fund, 2-of-2 claim (owner + authorized oracle), refund after block-height expiry. |
 | `treasure-hunt` | `treasure-hunt/` | TreasureNet hunt lifecycle: create, fund, activate, pause, resume, cancel, claim, refund with double-claim prevention. |
 | `player-registry` | `player-registry/` | Soulbound TreasureNet roles (player, gamemaster, auditor) with grant/revoke and non-transferable tokens. |
+| `citizen-asset` | `citizen-asset/` | Generic transferable fungible tokens with issuer-threshold minting, owner-signed transfer/burn, and timed M-of-N vault custody (pre-expiry approver threshold, post-expiry fallback-owner reclaim) — the escrow primitive behind TreasureNet reward custody and any token-gated application flow. |
 
 ## CTZN Token Features
 

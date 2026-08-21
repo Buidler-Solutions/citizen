@@ -1,11 +1,12 @@
 import { CitizenNodeClient, type ModuleExecuteResponse } from "./client.ts";
 
 /**
- * Typed wrappers around the three TreasureNet WASM modules:
+ * Typed wrappers around the TreasureNet WASM modules:
  *
- * - treasure-escrow.v1   (escrowed rewards, 2-of-2 claim, expiry refunds)
+ * - treasure-escrow.v1   (escrowed rewards lifecycle, 2-of-2 claim, expiry refunds)
  * - treasure-hunt.v1     (hunt lifecycle)
  * - player-registry.v1   (soulbound roles)
+ * - citizen-asset.v1     (transferable reward tokens + timed multisig vault custody)
  *
  * Every chain write goes through submitWithRetry which handles the three
  * required failure modes: node down (retry queue), rejected entry (surface
@@ -16,6 +17,7 @@ export const MODULES = {
   escrow: "treasure-escrow.v1",
   hunt: "treasure-hunt.v1",
   registry: "player-registry.v1",
+  asset: "citizen-asset.v1",
 } as const;
 
 export class ModuleError extends Error {
@@ -152,7 +154,7 @@ export class ModuleGateway implements ChainAdapter {
     params: Record<string, unknown>
   ): Promise<{ output: Record<string, unknown>; meta: ChainWriteMeta }> {
     const scope = `${moduleId}:${params.operation}:${
-      params.escrow_id ?? params.hunt_id ?? params.token_id ?? params.player_did ?? params.did ?? ""
+      params.escrow_id ?? params.hunt_id ?? params.vault_id ?? params.ref ?? params.token_id ?? params.player_did ?? params.did ?? ""
     }`;
     // Idempotency: same envelope scope replayed in-process is rejected.
     if (this.replayScopes.has(scope) && isWriteOperation(params.operation)) {
@@ -419,6 +421,113 @@ export class ModuleGateway implements ChainAdapter {
   hasRole(did: string, role: string) {
     return this.execute(MODULES.registry, { operation: "has_role", did, role });
   }
+
+  // ── Citizen asset module (transferable tokens + vault custody) ──
+
+  configureAsset(adminDid: string, issuers: string[], threshold: number, proposalId: string, adminSig?: string) {
+    return this.execute(MODULES.asset, {
+      operation: "configure",
+      admin_did: adminDid,
+      issuers: issuers.join(","),
+      threshold: String(threshold),
+      proposal_id: proposalId,
+      ...(adminSig ? { admin_sig: adminSig } : {}),
+    });
+  }
+
+  createAssetToken(input: { token_id: string; symbol: string; decimals?: number; issuer_dids: string[]; signatures: string[] }) {
+    return this.execute(MODULES.asset, {
+      operation: "create_token",
+      token_id: input.token_id,
+      symbol: input.symbol,
+      decimals: String(input.decimals ?? 0),
+      issuer_dids: input.issuer_dids.join(","),
+      signatures: input.signatures.join(","),
+    });
+  }
+
+  mintAsset(input: { token_id: string; recipient_did: string; amount: number; ref: string; issuer_dids: string[]; signatures: string[] }) {
+    return this.execute(MODULES.asset, {
+      operation: "mint",
+      token_id: input.token_id,
+      recipient_did: input.recipient_did,
+      amount: String(input.amount),
+      ref: input.ref,
+      issuer_dids: input.issuer_dids.join(","),
+      signatures: input.signatures.join(","),
+    });
+  }
+
+  transferAsset(input: { token_id: string; from_did: string; to_did: string; amount: number; ref: string; signature: string }) {
+    return this.execute(MODULES.asset, {
+      operation: "transfer",
+      token_id: input.token_id,
+      from_did: input.from_did,
+      to_did: input.to_did,
+      amount: String(input.amount),
+      ref: input.ref,
+      signature: input.signature,
+    });
+  }
+
+  burnAsset(input: { token_id: string; owner_did: string; amount: number; ref: string; signature: string }) {
+    return this.execute(MODULES.asset, {
+      operation: "burn",
+      token_id: input.token_id,
+      owner_did: input.owner_did,
+      amount: String(input.amount),
+      ref: input.ref,
+      signature: input.signature,
+    });
+  }
+
+  openAssetVault(input: {
+    vault_id: string;
+    token_id: string;
+    approver_dids: string[];
+    threshold: number;
+    expiry_block: number;
+    fallback_owner_did: string;
+    admin_did: string;
+    admin_sig: string;
+  }) {
+    return this.execute(MODULES.asset, {
+      operation: "open_vault",
+      vault_id: input.vault_id,
+      token_id: input.token_id,
+      approver_dids: input.approver_dids.join(","),
+      threshold: String(input.threshold),
+      expiry_block: String(input.expiry_block),
+      fallback_owner_did: input.fallback_owner_did,
+      admin_did: input.admin_did,
+      admin_sig: input.admin_sig,
+    });
+  }
+
+  vaultTransfer(input: { vault_id: string; token_id: string; to_did: string; amount: number; ref: string; cosigner_dids: string[]; signatures: string[] }) {
+    return this.execute(MODULES.asset, {
+      operation: "vault_transfer",
+      vault_id: input.vault_id,
+      token_id: input.token_id,
+      to_did: input.to_did,
+      amount: String(input.amount),
+      ref: input.ref,
+      cosigner_dids: input.cosigner_dids.join(","),
+      signatures: input.signatures.join(","),
+    });
+  }
+
+  vaultInfo(vaultId: string) {
+    return this.execute(MODULES.asset, { operation: "vault_info", vault_id: vaultId });
+  }
+
+  assetBalance(tokenId: string, did: string) {
+    return this.execute(MODULES.asset, { operation: "balance", token_id: tokenId, did });
+  }
+
+  assetTokenInfo(tokenId: string) {
+    return this.execute(MODULES.asset, { operation: "token_info", token_id: tokenId });
+  }
 }
 
 function isWriteOperation(operation: unknown): boolean {
@@ -431,6 +540,12 @@ function isWriteOperation(operation: unknown): boolean {
     "is_registered",
     "has_role",
     "list_counts",
+    "balance",
+    "token_info",
+    "vault_info",
+    "owner_of",
+    "total_supply",
+    "get_metadata",
   ].includes(String(operation));
 }
 
@@ -452,4 +567,26 @@ export const claimMessages = {
   refundHunt: (huntId: string, gmDid: string) => `refund:${huntId}:${gmDid}`,
   grantRole: (playerDid: string, role: string) => `grant:${playerDid}:${role}`,
   revokeRole: (playerDid: string) => `revoke:${playerDid}`,
+};
+
+/**
+ * Citizen asset module message formats (citizen-asset.v1). Signed messages
+ * for transferable token issuance and vault custody; all mutating messages
+ * end with a unique `:ref` so replays are distinguishable.
+ */
+export const assetMessages = {
+  createToken: (tokenId: string, symbol: string, decimals: number) =>
+    `create:${tokenId}:${symbol}:${decimals}`,
+  mint: (tokenId: string, recipientDid: string, amount: number, ref: string) =>
+    `mint:${tokenId}:${recipientDid}:${amount}:${ref}`,
+  burn: (tokenId: string, ownerDid: string, amount: number, ref: string) =>
+    `burn:${tokenId}:${ownerDid}:${amount}:${ref}`,
+  transfer: (tokenId: string, fromDid: string, toDid: string, amount: number, ref: string) =>
+    `transfer:${tokenId}:${fromDid}:${toDid}:${amount}:${ref}`,
+  openVault: (vaultId: string, tokenId: string, threshold: number, expiryBlock: number) =>
+    `vopen:${vaultId}:${tokenId}:${threshold}:${expiryBlock}`,
+  vaultTransfer: (vaultId: string, toDid: string, amount: number, ref: string) =>
+    `vt:${vaultId}:${toDid}:${amount}:${ref}`,
+  /** On-chain account string a depositor transfers vault funds to. */
+  vaultAccount: (vaultId: string) => `vault:${vaultId}`,
 };

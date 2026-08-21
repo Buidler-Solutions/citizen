@@ -19,6 +19,7 @@ export {
   ModuleError,
   ModuleGateway,
   claimMessages,
+  assetMessages,
   type ChainAdapter,
   type ChainWriteMeta,
   type RetryOptions,

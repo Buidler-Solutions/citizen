@@ -61,11 +61,12 @@ claim and the mobile claim request plus GM web-console approval.
 # 0. workspace install (pnpm; Prisma is pinned to 6.x)
 cd treasurenet && pnpm install --no-frozen-lockfile
 
-# 1. build the WASM modules (escrow, hunt, registry, ctzn-token)
+# 1. build the WASM modules (escrow, hunt, registry, ctzn-token, citizen-asset)
 cd citizen-protocol/modules/treasure-escrow && RUSTFLAGS="-C link-arg=--allow-undefined" cargo build --release --target wasm32-unknown-unknown
 cd ../treasure-hunt && RUSTFLAGS="-C link-arg=--allow-undefined" cargo build --release --target wasm32-unknown-unknown
 cd ../player-registry && RUSTFLAGS="-C link-arg=--allow-undefined" cargo build --release --target wasm32-unknown-unknown
 cd ../ctzn-token && RUSTFLAGS="-C link-arg=--allow-undefined" cargo build --release --target wasm32-unknown-unknown
+cd ../citizen-asset && RUSTFLAGS="-C link-arg=--allow-undefined" cargo build --release --target wasm32-unknown-unknown
 
 # 2. build + start a solo node (single validator, mock network, advancing blocks)
 cd citizen-protocol && cargo build -p citizen-node --release
@@ -114,15 +115,15 @@ POST /roles/revoke              {did}
 GET  /roles/:did
 GET  /games                     POST /games
 GET  /games/:id
-POST /games/:id/fund            {gm_signature, escrow_gm_signature}
+POST /games/:id/fund            {gm_signature, escrow_gm_signature, asset_gm_signature?}
 POST /games/:id/activate|pause|resume|cancel   {gm_signature}
 POST /games/:id/checkin         {clue_index, latitude, longitude}  (player session)
 GET  /games/:id/progress        (player session; unlocked clue chain)
 POST /games/:id/claim/request   {photo_b64, latitude, longitude}   (player session; GM approves from web)
-POST /games/:id/claim           {gm_signature, escrow_gm_signature, photo_b64, latitude, longitude}
-                                or {request_id, gm_signature, escrow_gm_signature} (GM approval)
+POST /games/:id/claim           {gm_signature, escrow_gm_signature, asset_gm_signature?, photo_b64, latitude, longitude}
+                                or {request_id, gm_signature, escrow_gm_signature, asset_gm_signature?} (GM approval)
 GET  /claims/pending            POST /claims/:requestId/deny
-POST /games/:id/refund          {gm_signature}
+POST /games/:id/refund          {gm_signature, escrow_gm_signature?, asset_gm_signature?}
 GET  /escrow/:id/status         GET  /escrow/:id/reward
 GET  /claims
 GET  /oracle/verdicts/:huntId
@@ -146,6 +147,28 @@ GET  /health
 POST /verdict    {hunt_id, player_did, clue_index, photo_b64, geo_ok}
                 -> {passed, confidence, reason, verdict_signature, oracle_did}
 ```
+
+## Reward custody (citizen-asset.v1)
+
+Hunts default to the transferable reward asset (`treasurenet.gold`, TNG,
+2 decimals) issued on the generic `citizen-asset.v1` module — not the
+soulbound CTZN identity token. Custody flow per hunt:
+
+1. **create** — service opens a timed vault `esc-<huntId>` (approvers
+   GM + oracle, threshold 2, fallback owner GM, expiry = hunt deadline).
+2. **fund** — issuers mint the reward to the GM (threshold-2 signatures),
+   then the GM deposits it into the vault account `vault:esc-<huntId>`
+   (GM signs `transfer:<token>:<gm>:vault:<escrow>:<amount>:deposit-<hunt>`).
+3. **claim** — GM + oracle co-sign `vt:<escrow>:<winner>:<amount>:claim-<hunt>`
+   and the vault pays the winner real tokens; wallet balances read the asset module.
+4. **refund after expiry** — only the fallback owner (GM) can move the
+   vault balance back (`vt:<escrow>:<gm>:<amount>:refund-<hunt>`).
+
+Hunts created with an explicit non-default `reward_token` keep the legacy
+escrow-only settlement. Env knobs: `TREASURENET_ASSET_MODULE`
+(default `citizen-asset.v1`) and `TREASURENET_REWARD_ASSET`
+(default `treasurenet.gold`); message formats live in `assetMessages`
+(`chain/sdk/src/modules.ts`) shared by backend, console, and smoke.
 
 ## Documentation
 

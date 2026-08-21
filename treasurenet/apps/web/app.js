@@ -91,13 +91,10 @@ document.getElementById("btn-grant").onclick = async () => {
 
 // ── Hunt lifecycle buttons ──
 
-const lifecycle = {
-  fund: (hunt) => [
-    "fund",
-    `fund:${hunt.hunt_id}:${gm.did}`,
-    { gm_signature: "", escrow_gm_signature: `fund:${hunt.escrow_id}` },
-  ],
-};
+/** Vault deposit message the GM signs when funding an asset-custody hunt. */
+function fundDepositMessage(hunt) {
+  return `transfer:${hunt.reward_token}:${gm.did}:vault:${hunt.escrow_id}:${hunt.reward_amount}:deposit-${hunt.hunt_id}`;
+}
 
 async function huntAction(hunt, action) {
   try {
@@ -106,6 +103,8 @@ async function huntAction(hunt, action) {
       body = {
         gm_signature: await sign(`fund:${hunt.hunt_id}:${gm.did}`, gm.privateKeyHex),
         escrow_gm_signature: await sign(`fund:${hunt.escrow_id}`, gm.privateKeyHex),
+        // Reward-custody hunts deposit real tokens into the hunt vault.
+        asset_gm_signature: await sign(fundDepositMessage(hunt), gm.privateKeyHex),
       };
     } else {
       body = { gm_signature: await sign(`${action}:${hunt.hunt_id}:${gm.did}`, gm.privateKeyHex) };
@@ -198,10 +197,18 @@ async function approveClaim(request) {
   try {
     const gmSignature = await sign(`claim:${request.hunt_id}:${request.player_did}`, gm.privateKeyHex);
     const escrowGmSignature = await sign(`claim:${request.escrow_id}:${request.player_did}`, gm.privateKeyHex);
+    // Reward-custody hunts pay from the vault: sign the vault transfer too
+    // (the hunt payload carries the reward amount and token).
+    const hunt = await api("GET", `/games/${request.hunt_id}`);
+    const assetGmSignature = await sign(
+      `vt:${request.escrow_id}:${request.player_did}:${hunt.reward_amount}:claim-${request.hunt_id}`,
+      gm.privateKeyHex
+    );
     const claim = await api("POST", `/games/${request.hunt_id}/claim`, {
       request_id: request.request_id,
       gm_signature: gmSignature,
       escrow_gm_signature: escrowGmSignature,
+      asset_gm_signature: assetGmSignature,
     });
     log(`claim approved for ${request.player_did.slice(0, 30)}… receipt ${claim.receipt_id ?? "pending"}`);
     refreshPending();

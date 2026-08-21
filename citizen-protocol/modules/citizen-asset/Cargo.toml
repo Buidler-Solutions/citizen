@@ -1,0 +1,15 @@
+[package]
+name = "citizen-asset"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib"]
+name = "citizen_asset"
+
+[profile.release]
+opt-level = "s"
+lto = true
+strip = "none"
+
+[workspace]

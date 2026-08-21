@@ -2,7 +2,7 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import { Router, badRequest, corsHeaders, clientIp, HttpError, RateLimiter } from "./http.ts";
 import { Store } from "./store.ts";
 import type { ServerConfig } from "./config.ts";
-import { claimMessages, signMessage } from "../../../chain/sdk/src/index.ts";
+import { assetMessages, claimMessages, signMessage } from "../../../chain/sdk/src/index.ts";
 import { ChainModule } from "./modules/chain.module.ts";
 import { PersistenceModule } from "./modules/persistence.module.ts";
 import { AuthModule } from "./modules/auth.module.ts";
@@ -87,7 +87,21 @@ export function buildContext(config: ServerConfig): AppContext {
         claimMessages.refundHunt(huntId, hunt.gm_did),
         config.gmRefundKeyHex
       );
-      await escrow.refund(huntId, huntSig, escrowSig);
+      // Asset-custody hunts also return the vaulted reward to the GM
+      // (fallback-owner path after the deadline block).
+      const assetSig =
+        hunt.reward_token === config.rewardAssetId
+          ? signMessage(
+              assetMessages.vaultTransfer(
+                hunt.escrow_id,
+                hunt.gm_did,
+                hunt.reward_amount,
+                `refund-${huntId}`
+              ),
+              config.gmRefundKeyHex
+            )
+          : undefined;
+      await escrow.refund(huntId, huntSig, escrowSig, assetSig);
     },
   });
   return {
@@ -174,11 +188,22 @@ export function buildRouter(ctx: AppContext): Router {
   router.get("/games/:id", (_req, params) => ctx.game.get(params.id!));
   router.post("/games", (_req, _params, _query, body) => ctx.game.createHunt(body as never));
   router.post("/games/:id/fund", (_req, params, _query, body) => {
-    const input = body as { gm_signature?: string; escrow_gm_signature?: string; amount?: number };
+    const input = body as {
+      gm_signature?: string;
+      escrow_gm_signature?: string;
+      asset_gm_signature?: string;
+      amount?: number;
+    };
     if (!input?.gm_signature || !input?.escrow_gm_signature) {
       badRequest("MissingFields", "gm_signature and escrow_gm_signature are required");
     }
-    return ctx.game.fundHunt(params.id!, input.gm_signature!, input.escrow_gm_signature!, input.amount);
+    return ctx.game.fundHunt(
+      params.id!,
+      input.gm_signature!,
+      input.escrow_gm_signature!,
+      input.asset_gm_signature,
+      input.amount
+    );
   });
   for (const op of ["activate", "pause", "resume", "cancel"] as const) {
     router.post(`/games/:id/${op}`, (_req, params, _query, body) => {
@@ -249,6 +274,7 @@ export function buildRouter(ctx: AppContext): Router {
     const input = body as {
       gm_signature?: string;
       escrow_gm_signature?: string;
+      asset_gm_signature?: string;
       photo_b64?: string;
       latitude?: number;
       longitude?: number;
@@ -265,6 +291,7 @@ export function buildRouter(ctx: AppContext): Router {
         request_id: input.request_id,
         gm_signature: input.gm_signature!,
         escrow_gm_signature: input.escrow_gm_signature!,
+        asset_gm_signature: input.asset_gm_signature,
         geo,
       });
     }
@@ -278,6 +305,7 @@ export function buildRouter(ctx: AppContext): Router {
       player_did: session.did,
       gm_signature: input.gm_signature!,
       escrow_gm_signature: input.escrow_gm_signature!,
+      asset_gm_signature: input.asset_gm_signature,
       photo_b64: input.photo_b64!,
       latitude: input.latitude ?? 0,
       longitude: input.longitude ?? 0,
@@ -285,9 +313,13 @@ export function buildRouter(ctx: AppContext): Router {
     });
   });
   router.post("/games/:id/refund", (_req, params, _query, body) => {
-    const input = body as { gm_signature?: string; escrow_gm_signature?: string };
+    const input = body as {
+      gm_signature?: string;
+      escrow_gm_signature?: string;
+      asset_gm_signature?: string;
+    };
     if (!input?.gm_signature) badRequest("MissingFields", "gm_signature is required");
-    return ctx.escrow.refund(params.id!, input.gm_signature!, input.escrow_gm_signature);
+    return ctx.escrow.refund(params.id!, input.gm_signature!, input.escrow_gm_signature, input.asset_gm_signature);
   });
 
   // ── orgs ──
