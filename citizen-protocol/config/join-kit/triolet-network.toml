@@ -1,0 +1,36 @@
+# =============================================================================
+# Triolet Network Definition
+# =============================================================================
+# This file defines the current validator set and peer addresses for the
+# triolet network. Operators joining the network use this file with the
+# generate_join_config.py script to produce their node config.
+#
+# When a new validator joins, add them here after governance approval.
+# =============================================================================
+
+[[validators]]
+validator_id = "validator-alpha"
+public_key = "4620ab7d0e5873a7afccdb514af28a3aa7b9b1b62694b1e3f568d38a6c4a17c2"
+anchors = ["org:alpha"]
+
+[[validators]]
+validator_id = "validator-beta"
+public_key = "dcb38143815f465d8d8d262812260ade8e721b3fe15da833ad477dd711ebc10f"
+anchors = ["org:beta"]
+
+[[validators]]
+validator_id = "validator-gamma"
+public_key = "1482e33d057c573003b7a18e1318c8eb12b847850b450e34a776fef7193a8739"
+anchors = ["org:gamma"]
+
+[[peers]]
+validator_id = "validator-alpha"
+address = "127.0.0.1:9210"
+
+[[peers]]
+validator_id = "validator-beta"
+address = "127.0.0.1:9211"
+
+[[peers]]
+validator_id = "validator-gamma"
+address = "127.0.0.1:9212"
