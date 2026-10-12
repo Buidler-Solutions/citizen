@@ -19,9 +19,11 @@
   },
   "overrides": {
     "body-parser": "^2.3.0",
-    "multer": "^2.2.0",
+    "multer": "^2.4.0",
+    "qs": "^6.16.0",
+    "proxy-addr": ">=2.0.8",
     "@nestjs/platform-express": {
-      "multer": "^2.2.0"
+      "multer": "^2.4.0"
     },
     "file-type": "21.3.2"
   },
