@@ -242,7 +242,7 @@ export class UserService {
         usedAt: IsNull(),
         expiresAt: MoreThan(now),
       },
-      relations: ['user'],
+      relations: { user: true },
       order: { createdAt: 'DESC' },
     });
 
