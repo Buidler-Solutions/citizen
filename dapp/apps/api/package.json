@@ -14,7 +14,7 @@
     "@nestjs/core": "^11.1.18",
     "@nestjs/platform-express": "^11.1.6",
     "ethers": "^6.16.0",
-    "multer": "^2.2.0",
+    "multer": "^2.4.0",
     "pg": "^8.11.5",
     "reflect-metadata": "^0.2.1",
     "rxjs": "^7.8.1"
@@ -26,9 +26,10 @@
     "typescript": "^5.4.5"
   },
   "overrides": {
-    "multer": "^2.2.0",
+    "multer": "^2.4.0",
+    "body-parser": "2.4.0",
     "@nestjs/platform-express": {
-      "multer": "^2.2.0"
+      "multer": "^2.4.0"
     },
     "file-type": "21.3.2",
     "@nestjs/common": {
