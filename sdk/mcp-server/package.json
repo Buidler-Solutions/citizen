@@ -53,6 +53,7 @@
   "overrides": {
     "body-parser": "^2.4.0",
     "fast-uri": "^3.1.9",
-    "zod": ">=4.6.6"
+    "zod": ">=4.6.6",
+    "@hono/node-server": ">=2.1.3"
   }
 }
