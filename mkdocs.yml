@@ -1,8 +1,8 @@
 site_name: Citizen Protocol
 site_description: User manual and documentation for the Citizen Protocol — a governance-first ledger for public truth, records, and institutional accountability.
-site_url: https://greenarmor.github.io/citizen/
-repo_url: https://github.com/greenarmor/citizen
-repo_name: greenarmor/citizen
+site_url: https://Buidler-Solutions.github.io/citizen/
+repo_url: https://github.com/Buidler-Solutions/citizen
+repo_name: Buidler-Solutions/citizen
 edit_uri: edit/main/docs/
 
 docs_dir: docs
@@ -142,4 +142,4 @@ nav:
 extra:
   social:
     - icon: fontawesome/brands/github
-      link: https://github.com/greenarmor/citizen
+      link: https://github.com/Buidler-Solutions/citizen

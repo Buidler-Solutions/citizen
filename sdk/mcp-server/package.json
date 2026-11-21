@@ -10,12 +10,12 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/greenarmor/citizen.git",
+    "url": "https://github.com/Buidler-Solutions/citizen.git",
     "directory": "sdk/mcp-server"
   },
-  "homepage": "https://greenarmor.github.io/citizen/sdk/mcp-server/",
+  "homepage": "https://Buidler-Solutions.github.io/citizen/sdk/mcp-server/",
   "bugs": {
-    "url": "https://github.com/greenarmor/citizen/issues"
+    "url": "https://github.com/Buidler-Solutions/citizen/issues"
   },
   "keywords": [
     "citizen-protocol",
