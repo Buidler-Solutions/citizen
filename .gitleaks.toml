@@ -1,0 +1,21 @@
+title = "Citizen Protocol Gitleaks Config"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Ignore test, sample, and build-artifact secrets"
+paths = [
+    '''(?:^|/)\.next(?:/.*)?$''',
+    '''(?:^|/)citizen-protocol/config(?:/.*)?$''',
+    '''(?:^|/)citizen-protocol/docs/artifacts(?:/.*)?$''',
+    '''(?:^|/)citizen-protocol/docs/test-vectors(?:/.*)?$''',
+    '''(?:^|/)seed_voters\.py$''',
+    '''(?:^|/)(?:storage|reminders)\.ts$''',
+    '''(?:^|/)VALIDATOR_BUILDER_API_KEY_ISSUANCE_RUNBOOK\.md$''',
+    '''(?:^|/)AGENTS\.md$''',
+]
+regexes = [
+    '''^did:key:''',
+    '''offchain-encrypted-files''',
+]
