@@ -5,7 +5,7 @@
 [![Consensus](https://img.shields.io/badge/Consensus-BFT%20%3E2/3%20quorum-6f42c1)](./AGENTS.md)
 [![Finality](https://img.shields.io/badge/Finality-Deterministic%20~1s-success)](./AGENTS.md)
 [![Rust](https://img.shields.io/badge/Rust-Workspace-000000?logo=rust)](./citizen-protocol/Cargo.toml)
-[![License: PolyForm Noncommercial](https://img.shields.io/badge/License-PolyForm%20Noncommercial-blue)](./LICENSE)
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](./LICENSE)
 
 This repository is the monorepo for **Citizen**, a governance-first public-ledger initiative centered on the **CITIZEN protocol**.
 
@@ -37,7 +37,7 @@ The protocol mission is to provide verifiable public truth infrastructure (recor
 ├── security/            # Security policies (backup, DR, encryption, incident response)
 ├── .ges/                # GESF compliance framework configuration and evidence
 ├── .github/workflows/   # CI (compliance, dependency scan, secret scan, security, Pages)
-├── LICENSE              # PolyForm Noncommercial License 1.0.0
+├── LICENSE              # Apache License 2.0
 └── README.md            # This file
 ```
 
@@ -145,7 +145,7 @@ cd landing-page
 
 ## Licensing
 
-- Repository-level license text is available at [`LICENSE`](./LICENSE) (PolyForm Noncommercial License 1.0.0).
+- Repository-level license text is available at [`LICENSE`](./LICENSE) (Apache License 2.0).
 - `citizen-protocol/` includes its own [`LICENSE`](./citizen-protocol/LICENSE) (Apache License 2.0).
 - Some subprojects may include additional license files and metadata; verify each subtree as needed for distribution/compliance workflows.
 

@@ -36,4 +36,4 @@ Citizen is a **governed, namespace-first blockchain protocol** designed for veri
 
 ## License
 
-- Repository-level: **PolyForm Noncommercial License 1.0.0** - see [LICENSE](https://github.com/Buidler-Solutions/citizen/blob/main/LICENSE)
+- Repository-level: **Apache License 2.0** - see [LICENSE](https://github.com/Buidler-Solutions/citizen/blob/main/LICENSE)

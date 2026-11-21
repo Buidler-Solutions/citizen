@@ -500,4 +500,4 @@ The harness covers the RFC scenarios: normal operation, partial outages, quorum 
 
 ## License
 
-Licensed under [PolyForm Noncommercial License 1.0.0](LICENSE).
+Licensed under [Apache License 2.0](LICENSE).
