@@ -500,4 +500,4 @@ The harness covers the RFC scenarios: normal operation, partial outages, quorum 
 
 ## License
 
-Licensed under [Citizen Protocol Non-Commercial License (CPNCL) v1.0](LICENSE).
+Licensed under [PolyForm Noncommercial License 1.0.0](LICENSE).
