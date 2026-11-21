@@ -15,7 +15,13 @@ paths = [
     '''(?:^|/)VALIDATOR_BUILDER_API_KEY_ISSUANCE_RUNBOOK\.md$''',
     '''(?:^|/)AGENTS\.md$''',
 ]
+
+[[allowlists]]
+description = "Ignore non-secret key identifiers"
+regexTarget = "line"
 regexes = [
-    '''^did:key:''',
-    '''offchain-encrypted-files''',
+    '''did:key:''',
+    '''key_prefix''',
+    '''STORAGE_KEY''',
+    '''REMINDER_STORAGE_KEY''',
 ]
