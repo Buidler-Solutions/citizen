@@ -1,0 +1,5538 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="User manual and documentation for the Citizen Protocol — a governance-first ledger for public truth, records, and institutional accountability.">
+      
+      
+      
+        <link rel="canonical" href="https://Buidler-Solutions.github.io/citizen/sdk/mcp-server/">
+      
+      
+        <link rel="prev" href="../typescript/">
+      
+      
+        <link rel="next" href="../../smart-contracts/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/favicon.svg">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.2">
+    
+    
+      
+        <title>MCP Server - Citizen Protocol</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.57a0d79d.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.fb2fffe2.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Inter:300,300i,400,400i,700,700i%7CJetBrains+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Inter";--md-code-font:"JetBrains Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="blue">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#mcp-server-for-dapp-development" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="Citizen Protocol" class="md-header__button md-logo" aria-label="Citizen Protocol" data-md-component="logo">
+      
+  <img src="../../assets/logo.svg" alt="logo">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Citizen Protocol
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              MCP Server
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="blue"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="blue"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/Buidler-Solutions/citizen" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    Buidler-Solutions/citizen
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../.." class="md-tabs__link">
+        
+  
+  
+    
+  
+  Home
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../getting-started/overview/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Getting Started
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../protocol/architecture/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Protocol
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../wallets/overview/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Wallets
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+    
+  
+  
+    
+    
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="../typescript/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  SDK
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../smart-contracts/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Smart Contracts
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../explorer/overview/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Explorer
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../node-operators/running-a-node/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Node Operators
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../compliance/gdpr/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Compliance
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../reference/api/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Reference
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="Citizen Protocol" class="md-nav__button md-logo" aria-label="Citizen Protocol" data-md-component="logo">
+      
+  <img src="../../assets/logo.svg" alt="logo">
+
+    </a>
+    Citizen Protocol
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/Buidler-Solutions/citizen" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    Buidler-Solutions/citizen
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting Started
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Getting Started
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../getting-started/overview/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../getting-started/installation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Installation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../getting-started/quickstart/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Quick Start
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Protocol
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Protocol
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../protocol/architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../protocol/consensus/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Consensus
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../protocol/governance/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Governance
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../protocol/citizenship/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Digital Citizenship
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../protocol/civic-voting/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Civic Voting
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../protocol/namespaces/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Namespaces
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../protocol/builder-credits/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Builder Credits
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../protocol/networks/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Networks
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Wallets
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Wallets
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../wallets/overview/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../wallets/mobile/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Mobile Wallet
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../wallets/browser/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Browser Extension
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../wallets/desktop/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Desktop Wallet
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../wallets/cli/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CLI Wallet
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../wallets/walletconnect/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    WalletConnect
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../wallets/key-derivation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Key Derivation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../wallets/backup/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Backup Vault
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    SDK
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    SDK
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../typescript/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    TypeScript SDK
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    MCP Server
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    MCP Server
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#how-mcp-works-with-citizen" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How MCP Works with Citizen
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#installation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Installation
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Installation">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#prerequisites" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Prerequisites
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#build-from-source" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Build from Source
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#verify-the-build" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Verify the Build
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#configuration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Configuration
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Configuration">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#connecting-to-different-networks" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Connecting to Different Networks
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#client-integration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Client Integration
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Client Integration">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#claude-desktop" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Claude Desktop
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#vs-code-with-mcp-extension" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        VS Code (with MCP Extension)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#cursor" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Cursor
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#opencode" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        OpenCode
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#crush" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Crush
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#any-mcp-client" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Any MCP Client
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#tools-reference" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tools Reference
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Tools Reference">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#query-tools-32-read-only-ledger-access" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Query Tools (32) — Read-Only Ledger Access
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Query Tools (32) — Read-Only Ledger Access">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#node-blocks" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Node &amp; Blocks
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#namespaces-entries" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Namespaces &amp; Entries
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#identity" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Identity
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#governance-civic" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Governance &amp; Civic
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#tokens-economics" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tokens &amp; Economics
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#modules-interop" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Modules &amp; Interop
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#off-chain-files-payloads" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Off-Chain Files &amp; Payloads
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#action-tools-10-write-operations" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Action Tools (10) — Write Operations
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#builder-tools-7-client-side-construction" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Builder Tools (7) — Client-Side Construction
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#resources-reference" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Resources Reference
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#prompts-reference" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Prompts Reference
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#workflows" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Workflows
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Workflows">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#workflow-1-explore-an-existing-network" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Workflow 1: Explore an Existing Network
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#workflow-2-build-and-submit-a-transaction" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Workflow 2: Build and Submit a Transaction
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#workflow-3-design-a-namespace" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Workflow 3: Design a Namespace
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#workflow-4-set-up-multisig" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Workflow 4: Set Up Multisig
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#workflow-5-privacy-aware-health-records" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Workflow 5: Privacy-Aware Health Records
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-full-transaction-lifecycle" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The Full Transaction Lifecycle
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#architecture-deep-dive" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Architecture Deep Dive
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Architecture Deep Dive">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#project-structure" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Project Structure
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#how-tools-map-to-the-api" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How Tools Map to the API
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#builder-tools-no-node-required" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Builder Tools: No Node Required
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#error-handling" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Error Handling
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#troubleshooting" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Troubleshooting
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Troubleshooting">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#connection-refused-when-calling-query-tools" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        "Connection refused" when calling query tools
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#tool-failed-missing-required-field" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        "Tool failed: Missing required field"
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#signature-verification-failed" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        "Signature verification failed"
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#builder-tools-work-but-query-tools-fail" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Builder tools work but query tools fail
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#claude-desktop-doesnt-show-citizen-tools" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Claude Desktop doesn't show Citizen tools
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#security-considerations" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Security Considerations
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Security Considerations">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#private-keys" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Private Keys
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#api-keys" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        API Keys
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#read-only-vs-write-tools" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Read-Only vs. Write Tools
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#comparison-mcp-server-vs-typescript-sdk" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Comparison: MCP Server vs. TypeScript SDK
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#exercises" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Exercises
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Exercises">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#exercise-1-first-exploration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Exercise 1: First Exploration
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#exercise-2-build-and-sign-an-entry" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Exercise 2: Build and Sign an Entry
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#exercise-3-submit-and-verify" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Exercise 3: Submit and Verify
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#exercise-4-design-a-custom-namespace" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Exercise 4: Design a Custom Namespace
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#exercise-5-multisig-treasury" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Exercise 5: Multisig Treasury
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#exercise-6-privacy-aware-entry" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Exercise 6: Privacy-Aware Entry
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#exercise-7-civic-voting-query" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Exercise 7: Civic Voting Query
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#exercise-8-build-a-complete-dapp-prompt" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Exercise 8: Build a Complete dApp Prompt
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#next-steps" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Next Steps
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_6" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../smart-contracts/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Smart Contracts
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_6" id="__nav_6_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Smart Contracts
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../smart-contracts/installation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Installation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../smart-contracts/hello-world/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Hello World
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../smart-contracts/project-structure/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Project Structure
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../smart-contracts/storage/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Storage
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../smart-contracts/context/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Context & Parameters
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../smart-contracts/authorization/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Authorization
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../smart-contracts/events/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Events
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../smart-contracts/errors/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Error Handling
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../smart-contracts/responses/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Responses
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../smart-contracts/host-functions/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Host Functions
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../smart-contracts/cross-contract/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Cross-Contract Calls
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../smart-contracts/deployment/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Deployment
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../smart-contracts/testing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Testing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../smart-contracts/best-practices/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Best Practices
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../smart-contracts/cheatsheet/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Cheatsheet
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../smart-contracts/raw-wasm/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Raw WASM API
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../smart-contracts/ctzn-token/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CTZN Token Module
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_6_19" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../smart-contracts/exercises/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Examples & Exercises
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_6_19" id="__nav_6_19_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_6_19_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6_19">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Examples & Exercises
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../smart-contracts/exercises/counter/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Exercise 1: Counter
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../smart-contracts/exercises/token/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Exercise 2: Token
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../smart-contracts/exercises/access-control/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Exercise 3: Access Control
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../smart-contracts/exercises/voting/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Exercise 4: Voting
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../smart-contracts/exercises/multi-contract/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Exercise 5: Multi-Contract
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../smart-contracts/exercises/auction/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Exercise 6: Auction
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_7" >
+        
+          
+          <label class="md-nav__link" for="__nav_7" id="__nav_7_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Explorer
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Explorer
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../explorer/overview/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_8" >
+        
+          
+          <label class="md-nav__link" for="__nav_8" id="__nav_8_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Node Operators
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_8_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_8">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Node Operators
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../node-operators/running-a-node/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Running a Node
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../node-operators/joining-a-network/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Joining a Network
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../node-operators/validator/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Validator Guide
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../node-operators/localnet/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Localnet
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_8_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_8_5" id="__nav_8_5_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Runbooks
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_8_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_8_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Runbooks
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../node-operators/civic-voting-runbook/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Civic Voting Operator Runbook
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../node-operators/cross-continental/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Cross-Continental Deployment
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_9" >
+        
+          
+          <label class="md-nav__link" for="__nav_9" id="__nav_9_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Compliance
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_9_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_9">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Compliance
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../compliance/gdpr/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    GDPR
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../compliance/security/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Security Policies
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_10" >
+        
+          
+          <label class="md-nav__link" for="__nav_10" id="__nav_10_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reference
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_10_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_10">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/api/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API Reference
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/error-codes/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Error Codes
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#how-mcp-works-with-citizen" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How MCP Works with Citizen
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#installation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Installation
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Installation">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#prerequisites" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Prerequisites
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#build-from-source" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Build from Source
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#verify-the-build" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Verify the Build
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#configuration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Configuration
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Configuration">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#connecting-to-different-networks" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Connecting to Different Networks
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#client-integration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Client Integration
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Client Integration">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#claude-desktop" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Claude Desktop
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#vs-code-with-mcp-extension" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        VS Code (with MCP Extension)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#cursor" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Cursor
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#opencode" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        OpenCode
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#crush" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Crush
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#any-mcp-client" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Any MCP Client
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#tools-reference" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tools Reference
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Tools Reference">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#query-tools-32-read-only-ledger-access" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Query Tools (32) — Read-Only Ledger Access
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Query Tools (32) — Read-Only Ledger Access">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#node-blocks" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Node &amp; Blocks
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#namespaces-entries" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Namespaces &amp; Entries
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#identity" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Identity
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#governance-civic" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Governance &amp; Civic
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#tokens-economics" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tokens &amp; Economics
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#modules-interop" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Modules &amp; Interop
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#off-chain-files-payloads" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Off-Chain Files &amp; Payloads
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#action-tools-10-write-operations" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Action Tools (10) — Write Operations
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#builder-tools-7-client-side-construction" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Builder Tools (7) — Client-Side Construction
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#resources-reference" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Resources Reference
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#prompts-reference" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Prompts Reference
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#workflows" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Workflows
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Workflows">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#workflow-1-explore-an-existing-network" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Workflow 1: Explore an Existing Network
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#workflow-2-build-and-submit-a-transaction" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Workflow 2: Build and Submit a Transaction
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#workflow-3-design-a-namespace" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Workflow 3: Design a Namespace
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#workflow-4-set-up-multisig" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Workflow 4: Set Up Multisig
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#workflow-5-privacy-aware-health-records" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Workflow 5: Privacy-Aware Health Records
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-full-transaction-lifecycle" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The Full Transaction Lifecycle
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#architecture-deep-dive" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Architecture Deep Dive
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Architecture Deep Dive">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#project-structure" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Project Structure
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#how-tools-map-to-the-api" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How Tools Map to the API
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#builder-tools-no-node-required" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Builder Tools: No Node Required
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#error-handling" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Error Handling
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#troubleshooting" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Troubleshooting
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Troubleshooting">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#connection-refused-when-calling-query-tools" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        "Connection refused" when calling query tools
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#tool-failed-missing-required-field" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        "Tool failed: Missing required field"
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#signature-verification-failed" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        "Signature verification failed"
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#builder-tools-work-but-query-tools-fail" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Builder tools work but query tools fail
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#claude-desktop-doesnt-show-citizen-tools" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Claude Desktop doesn't show Citizen tools
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#security-considerations" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Security Considerations
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Security Considerations">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#private-keys" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Private Keys
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#api-keys" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        API Keys
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#read-only-vs-write-tools" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Read-Only vs. Write Tools
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#comparison-mcp-server-vs-typescript-sdk" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Comparison: MCP Server vs. TypeScript SDK
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#exercises" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Exercises
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Exercises">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#exercise-1-first-exploration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Exercise 1: First Exploration
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#exercise-2-build-and-sign-an-entry" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Exercise 2: Build and Sign an Entry
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#exercise-3-submit-and-verify" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Exercise 3: Submit and Verify
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#exercise-4-design-a-custom-namespace" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Exercise 4: Design a Custom Namespace
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#exercise-5-multisig-treasury" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Exercise 5: Multisig Treasury
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#exercise-6-privacy-aware-entry" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Exercise 6: Privacy-Aware Entry
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#exercise-7-civic-voting-query" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Exercise 7: Civic Voting Query
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#exercise-8-build-a-complete-dapp-prompt" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Exercise 8: Build a Complete dApp Prompt
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#next-steps" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Next Steps
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="mcp-server-for-dapp-development">MCP Server for dApp Development<a class="headerlink" href="#mcp-server-for-dapp-development" title="Permanent link">&para;</a></h1>
+<p>The Citizen Protocol MCP Server (<code>@citizen-protocol/mcp-server</code>) is a Model Context Protocol server that lets AI assistants, IDE extensions, and developer tools interact with Citizen nodes, build dApp components, and access protocol reference data — without leaving the conversation or code editor.</p>
+<p>Instead of switching between documentation, API references, terminal windows, and code editors, a developer can ask an AI assistant connected to this MCP server to query the ledger, build entries, sign transactions, design namespaces, and submit envelopes — all through natural language.</p>
+<hr />
+<h2 id="how-mcp-works-with-citizen">How MCP Works with Citizen<a class="headerlink" href="#how-mcp-works-with-citizen" title="Permanent link">&para;</a></h2>
+<p>The MCP server sits between your AI client and a Citizen node:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>Developer (natural language)
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    │
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>    ▼
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>┌──────────────┐        ┌──────────────────────┐        ┌──────────────┐
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>│  AI Client   │◄──────►│  Citizen MCP Server  │◄──────►│  Citizen Node│
+<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>│  (Claude,    │  MCP   │                      │  HTTP  │  (API +      │
+<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>│   VS Code,   │ stdio  │  49 tools            │  /api  │   consensus) │
+<a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>│   Cursor)    │        │  10 resources        │        │              │
+<a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>└──────────────┘        │  8 prompts           │        └──────────────┘
+<a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>                        └──────────────────────┘
+</code></pre></div>
+<p><strong>Key idea:</strong> The MCP server exposes three types of capabilities:</p>
+<table>
+<thead>
+<tr>
+<th>Capability</th>
+<th>Count</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Tools</strong></td>
+<td>49</td>
+<td>Functions the AI can call (query ledger, submit txns, build entries)</td>
+</tr>
+<tr>
+<td><strong>Resources</strong></td>
+<td>10</td>
+<td>Reference documents (type schemas, policies, examples)</td>
+</tr>
+<tr>
+<td><strong>Prompts</strong></td>
+<td>8</td>
+<td>Guided workflows (create a dApp, set up multisig, etc.)</td>
+</tr>
+</tbody>
+</table>
+<p>The server uses the <strong>stdio transport</strong> — it communicates over standard input/output, making it compatible with any MCP-compliant client.</p>
+<hr />
+<h2 id="installation">Installation<a class="headerlink" href="#installation" title="Permanent link">&para;</a></h2>
+<h3 id="prerequisites">Prerequisites<a class="headerlink" href="#prerequisites" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Node.js 18+ (Node 20+ recommended)</li>
+<li>A running Citizen node (or use the server in builder-only mode without one)</li>
+</ul>
+<h3 id="build-from-source">Build from Source<a class="headerlink" href="#build-from-source" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="nb">cd</span><span class="w"> </span>sdk/mcp-server
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>npm<span class="w"> </span>install
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>npm<span class="w"> </span>run<span class="w"> </span>build
+</code></pre></div>
+<p>This produces <code>dist/index.js</code> — the entry point for the MCP server.</p>
+<h3 id="verify-the-build">Verify the Build<a class="headerlink" href="#verify-the-build" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="c1"># Should start and print a connection message</span>
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="nb">echo</span><span class="w"> </span><span class="s1">'{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test","version":"0.1.0"}}}'</span><span class="w"> </span><span class="p">|</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="w">  </span><span class="nv">CITIZEN_NODE_URL</span><span class="o">=</span>http://localhost:7001<span class="w"> </span>node<span class="w"> </span>dist/index.js
+</code></pre></div>
+<hr />
+<h2 id="configuration">Configuration<a class="headerlink" href="#configuration" title="Permanent link">&para;</a></h2>
+<p>The server reads two environment variables:</p>
+<table>
+<thead>
+<tr>
+<th>Variable</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>CITIZEN_NODE_URL</code></td>
+<td><code>http://localhost:7001</code></td>
+<td>URL of the Citizen node API</td>
+</tr>
+<tr>
+<td><code>CITIZEN_API_KEY</code></td>
+<td><em>(none)</em></td>
+<td>Optional API key for authenticated nodes</td>
+</tr>
+</tbody>
+</table>
+<h3 id="connecting-to-different-networks">Connecting to Different Networks<a class="headerlink" href="#connecting-to-different-networks" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="c1"># Local development node</span>
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="nv">CITIZEN_NODE_URL</span><span class="o">=</span>http://localhost:7001<span class="w"> </span>node<span class="w"> </span>dist/index.js
+<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>
+<a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="c1"># Remote node with API key</span>
+<a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a><span class="nv">CITIZEN_NODE_URL</span><span class="o">=</span>https://node.example.com<span class="w"> </span><span class="nv">CITIZEN_API_KEY</span><span class="o">=</span>secret123<span class="w"> </span>node<span class="w"> </span>dist/index.js
+<a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a>
+<a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a><span class="c1"># Builder-only mode (no node required — tools that need a node will error gracefully)</span>
+<a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a><span class="nv">CITIZEN_NODE_URL</span><span class="o">=</span>http://localhost:9999<span class="w"> </span>node<span class="w"> </span>dist/index.js
+</code></pre></div>
+<hr />
+<h2 id="client-integration">Client Integration<a class="headerlink" href="#client-integration" title="Permanent link">&para;</a></h2>
+<h3 id="claude-desktop">Claude Desktop<a class="headerlink" href="#claude-desktop" title="Permanent link">&para;</a></h3>
+<p>Edit <code>~/Library/Application Support/Claude/claude_desktop_config.json</code> (macOS) or <code>%APPDATA%\Claude\claude_desktop_config.json</code> (Windows):</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="p">{</span>
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="w">  </span><span class="nt">"mcpServers"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="w">    </span><span class="nt">"citizen-protocol"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="w">      </span><span class="nt">"command"</span><span class="p">:</span><span class="w"> </span><span class="s2">"node"</span><span class="p">,</span>
+<a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="w">      </span><span class="nt">"args"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">"/absolute/path/to/sdk/mcp-server/dist/index.js"</span><span class="p">],</span>
+<a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a><span class="w">      </span><span class="nt">"env"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a><span class="w">        </span><span class="nt">"CITIZEN_NODE_URL"</span><span class="p">:</span><span class="w"> </span><span class="s2">"http://localhost:7001"</span>
+<a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a><span class="w">      </span><span class="p">}</span>
+<a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a><span class="w">    </span><span class="p">}</span>
+<a id="__codelineno-4-10" name="__codelineno-4-10" href="#__codelineno-4-10"></a><span class="w">  </span><span class="p">}</span>
+<a id="__codelineno-4-11" name="__codelineno-4-11" href="#__codelineno-4-11"></a><span class="p">}</span>
+</code></pre></div>
+<p>Restart Claude Desktop. The Citizen tools will appear in the tool palette.</p>
+<h3 id="vs-code-with-mcp-extension">VS Code (with MCP Extension)<a class="headerlink" href="#vs-code-with-mcp-extension" title="Permanent link">&para;</a></h3>
+<p>Add to <code>.vscode/mcp.json</code> or your VS Code settings:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="p">{</span>
+<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="w">  </span><span class="nt">"mcp.servers"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="w">    </span><span class="nt">"citizen-protocol"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="w">      </span><span class="nt">"command"</span><span class="p">:</span><span class="w"> </span><span class="s2">"node"</span><span class="p">,</span>
+<a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a><span class="w">      </span><span class="nt">"args"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">"/absolute/path/to/sdk/mcp-server/dist/index.js"</span><span class="p">],</span>
+<a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a><span class="w">      </span><span class="nt">"env"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a><span class="w">        </span><span class="nt">"CITIZEN_NODE_URL"</span><span class="p">:</span><span class="w"> </span><span class="s2">"http://localhost:7001"</span>
+<a id="__codelineno-5-8" name="__codelineno-5-8" href="#__codelineno-5-8"></a><span class="w">      </span><span class="p">}</span>
+<a id="__codelineno-5-9" name="__codelineno-5-9" href="#__codelineno-5-9"></a><span class="w">    </span><span class="p">}</span>
+<a id="__codelineno-5-10" name="__codelineno-5-10" href="#__codelineno-5-10"></a><span class="w">  </span><span class="p">}</span>
+<a id="__codelineno-5-11" name="__codelineno-5-11" href="#__codelineno-5-11"></a><span class="p">}</span>
+</code></pre></div>
+<h3 id="cursor">Cursor<a class="headerlink" href="#cursor" title="Permanent link">&para;</a></h3>
+<p>Add to <code>~/.cursor/mcp.json</code>:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="p">{</span>
+<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="w">  </span><span class="nt">"mcpServers"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="w">    </span><span class="nt">"citizen-protocol"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a><span class="w">      </span><span class="nt">"command"</span><span class="p">:</span><span class="w"> </span><span class="s2">"node"</span><span class="p">,</span>
+<a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a><span class="w">      </span><span class="nt">"args"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">"/absolute/path/to/sdk/mcp-server/dist/index.js"</span><span class="p">],</span>
+<a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a><span class="w">      </span><span class="nt">"env"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a><span class="w">        </span><span class="nt">"CITIZEN_NODE_URL"</span><span class="p">:</span><span class="w"> </span><span class="s2">"http://localhost:7001"</span>
+<a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a><span class="w">      </span><span class="p">}</span>
+<a id="__codelineno-6-9" name="__codelineno-6-9" href="#__codelineno-6-9"></a><span class="w">    </span><span class="p">}</span>
+<a id="__codelineno-6-10" name="__codelineno-6-10" href="#__codelineno-6-10"></a><span class="w">  </span><span class="p">}</span>
+<a id="__codelineno-6-11" name="__codelineno-6-11" href="#__codelineno-6-11"></a><span class="p">}</span>
+</code></pre></div>
+<h3 id="opencode">OpenCode<a class="headerlink" href="#opencode" title="Permanent link">&para;</a></h3>
+<p>OpenCode uses a JSON config file at <code>~/.config/opencode/opencode.json</code> (global) or <code>opencode.json</code> in your project root:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="p">{</span>
+<a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="w">  </span><span class="nt">"$schema"</span><span class="p">:</span><span class="w"> </span><span class="s2">"https://opencode.ai/config.json"</span><span class="p">,</span>
+<a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a><span class="w">  </span><span class="nt">"mcp"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a><span class="w">    </span><span class="nt">"citizen-protocol"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a><span class="w">      </span><span class="nt">"type"</span><span class="p">:</span><span class="w"> </span><span class="s2">"local"</span><span class="p">,</span>
+<a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a><span class="w">      </span><span class="nt">"command"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">"node"</span><span class="p">,</span><span class="w"> </span><span class="s2">"/absolute/path/to/sdk/mcp-server/dist/index.js"</span><span class="p">],</span>
+<a id="__codelineno-7-7" name="__codelineno-7-7" href="#__codelineno-7-7"></a><span class="w">      </span><span class="nt">"enabled"</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+<a id="__codelineno-7-8" name="__codelineno-7-8" href="#__codelineno-7-8"></a><span class="w">      </span><span class="nt">"environment"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-7-9" name="__codelineno-7-9" href="#__codelineno-7-9"></a><span class="w">        </span><span class="nt">"CITIZEN_NODE_URL"</span><span class="p">:</span><span class="w"> </span><span class="s2">"http://localhost:7001"</span>
+<a id="__codelineno-7-10" name="__codelineno-7-10" href="#__codelineno-7-10"></a><span class="w">      </span><span class="p">}</span>
+<a id="__codelineno-7-11" name="__codelineno-7-11" href="#__codelineno-7-11"></a><span class="w">    </span><span class="p">}</span>
+<a id="__codelineno-7-12" name="__codelineno-7-12" href="#__codelineno-7-12"></a><span class="w">  </span><span class="p">}</span>
+<a id="__codelineno-7-13" name="__codelineno-7-13" href="#__codelineno-7-13"></a><span class="p">}</span>
+</code></pre></div>
+<p>Restart OpenCode. The Citizen tools will be available to the AI agent.</p>
+<h3 id="crush">Crush<a class="headerlink" href="#crush" title="Permanent link">&para;</a></h3>
+<p>Crush reads <code>crush.json</code> from the project root (or <code>~/.config/crush/crush.json</code> globally). Add the Citizen server under the <code>mcp</code> key:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="p">{</span>
+<a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a><span class="w">  </span><span class="nt">"mcp"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a><span class="w">    </span><span class="nt">"citizen-protocol"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a><span class="w">      </span><span class="nt">"type"</span><span class="p">:</span><span class="w"> </span><span class="s2">"stdio"</span><span class="p">,</span>
+<a id="__codelineno-8-5" name="__codelineno-8-5" href="#__codelineno-8-5"></a><span class="w">      </span><span class="nt">"command"</span><span class="p">:</span><span class="w"> </span><span class="s2">"citizen-mcp"</span><span class="p">,</span>
+<a id="__codelineno-8-6" name="__codelineno-8-6" href="#__codelineno-8-6"></a><span class="w">      </span><span class="nt">"env"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-8-7" name="__codelineno-8-7" href="#__codelineno-8-7"></a><span class="w">        </span><span class="nt">"CITIZEN_NODE_URL"</span><span class="p">:</span><span class="w"> </span><span class="s2">"http://localhost:7001"</span>
+<a id="__codelineno-8-8" name="__codelineno-8-8" href="#__codelineno-8-8"></a><span class="w">      </span><span class="p">}</span>
+<a id="__codelineno-8-9" name="__codelineno-8-9" href="#__codelineno-8-9"></a><span class="w">    </span><span class="p">}</span>
+<a id="__codelineno-8-10" name="__codelineno-8-10" href="#__codelineno-8-10"></a><span class="w">  </span><span class="p">}</span>
+<a id="__codelineno-8-11" name="__codelineno-8-11" href="#__codelineno-8-11"></a><span class="p">}</span>
+</code></pre></div>
+<p>Restart Crush. The 49 Citizen tools, 10 resources, and 8 prompts will be loaded automatically. Verify with <code>/mcp</code> or check the startup log for <code>citizen-protocol = connected</code>.</p>
+<h3 id="any-mcp-client">Any MCP Client<a class="headerlink" href="#any-mcp-client" title="Permanent link">&para;</a></h3>
+<p>The server implements the standard MCP protocol over stdio. Any client that supports MCP 1.0+ can connect.</p>
+<hr />
+<h2 id="tools-reference">Tools Reference<a class="headerlink" href="#tools-reference" title="Permanent link">&para;</a></h2>
+<p>The server exposes <strong>49 tools</strong> across three categories.</p>
+<h3 id="query-tools-32-read-only-ledger-access">Query Tools (32) — Read-Only Ledger Access<a class="headerlink" href="#query-tools-32-read-only-ledger-access" title="Permanent link">&para;</a></h3>
+<p>These tools map 1:1 to the Citizen node's HTTP GET endpoints. They are safe to call anytime — they never modify ledger state.</p>
+<h4 id="node-blocks">Node &amp; Blocks<a class="headerlink" href="#node-blocks" title="Permanent link">&para;</a></h4>
+<table>
+<thead>
+<tr>
+<th>Tool</th>
+<th>Parameters</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>citizen_health</code></td>
+<td><em>(none)</em></td>
+<td>Check if the node is online. Returns <code>{"status":"ok"}</code>.</td>
+</tr>
+<tr>
+<td><code>citizen_list_blocks</code></td>
+<td><code>limit?</code>, <code>cursor?</code></td>
+<td>List recent blocks with headers.</td>
+</tr>
+<tr>
+<td><code>citizen_get_block</code></td>
+<td><code>height</code></td>
+<td>Get a single block by height, including all entries.</td>
+</tr>
+</tbody>
+</table>
+<h4 id="namespaces-entries">Namespaces &amp; Entries<a class="headerlink" href="#namespaces-entries" title="Permanent link">&para;</a></h4>
+<table>
+<thead>
+<tr>
+<th>Tool</th>
+<th>Parameters</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>citizen_list_namespaces</code></td>
+<td><em>(none)</em></td>
+<td>List all active namespaces.</td>
+</tr>
+<tr>
+<td><code>citizen_list_entries</code></td>
+<td><code>namespace</code>, <code>limit?</code>, <code>cursor?</code></td>
+<td>List entries within a namespace.</td>
+</tr>
+<tr>
+<td><code>citizen_get_receipt</code></td>
+<td><code>receiptId</code></td>
+<td>Get a receipt by UUID (validation + finality proof).</td>
+</tr>
+</tbody>
+</table>
+<h4 id="identity">Identity<a class="headerlink" href="#identity" title="Permanent link">&para;</a></h4>
+<table>
+<thead>
+<tr>
+<th>Tool</th>
+<th>Parameters</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>citizen_resolve_did</code></td>
+<td><code>did</code></td>
+<td>Resolve a DID to its document.</td>
+</tr>
+<tr>
+<td><code>citizen_get_kyc_status</code></td>
+<td><code>did</code></td>
+<td>Check KYC verification status.</td>
+</tr>
+<tr>
+<td><code>citizen_list_kyc</code></td>
+<td><em>(none)</em></td>
+<td>List all KYC records.</td>
+</tr>
+</tbody>
+</table>
+<h4 id="governance-civic">Governance &amp; Civic<a class="headerlink" href="#governance-civic" title="Permanent link">&para;</a></h4>
+<table>
+<thead>
+<tr>
+<th>Tool</th>
+<th>Parameters</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>citizen_get_governance_proposals</code></td>
+<td><em>(none)</em></td>
+<td>List all governance proposals.</td>
+</tr>
+<tr>
+<td><code>citizen_list_civic_proposals</code></td>
+<td><em>(none)</em></td>
+<td>List civic proposals (ballot measures).</td>
+</tr>
+<tr>
+<td><code>citizen_get_civic_proposal</code></td>
+<td><code>proposalId</code></td>
+<td>Get a single civic proposal.</td>
+</tr>
+<tr>
+<td><code>citizen_get_civic_tally</code></td>
+<td><code>proposalId</code></td>
+<td>Get vote tally for a proposal.</td>
+</tr>
+<tr>
+<td><code>citizen_list_civic_elections</code></td>
+<td><em>(none)</em></td>
+<td>List civic elections.</td>
+</tr>
+<tr>
+<td><code>citizen_get_civic_election</code></td>
+<td><code>electionId</code></td>
+<td>Get a single election.</td>
+</tr>
+<tr>
+<td><code>citizen_get_election_tally</code></td>
+<td><code>electionId</code></td>
+<td>Get vote tally for an election.</td>
+</tr>
+<tr>
+<td><code>citizen_get_election_ballots</code></td>
+<td><code>electionId</code></td>
+<td>List submitted ballots.</td>
+</tr>
+<tr>
+<td><code>citizen_check_civic_admin</code></td>
+<td><code>did</code></td>
+<td>Check if a DID is a civic admin.</td>
+</tr>
+<tr>
+<td><code>citizen_get_civic_kyc_public_key</code></td>
+<td><em>(none)</em></td>
+<td>Get the KYC public key.</td>
+</tr>
+<tr>
+<td><code>citizen_check_civic_registry</code></td>
+<td><code>did</code></td>
+<td>Check civic registry status.</td>
+</tr>
+<tr>
+<td><code>citizen_check_voter_eligibility</code></td>
+<td><code>electionId</code>, <code>did</code></td>
+<td>Check if a DID can vote in an election.</td>
+</tr>
+</tbody>
+</table>
+<h4 id="tokens-economics">Tokens &amp; Economics<a class="headerlink" href="#tokens-economics" title="Permanent link">&para;</a></h4>
+<table>
+<thead>
+<tr>
+<th>Tool</th>
+<th>Parameters</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>citizen_get_ctzn_status</code></td>
+<td><code>moduleId</code></td>
+<td>Get CTZN token module status.</td>
+</tr>
+<tr>
+<td><code>citizen_get_ctzn_holders</code></td>
+<td><code>moduleId</code></td>
+<td>List token holders.</td>
+</tr>
+<tr>
+<td><code>citizen_get_ctzn_balance</code></td>
+<td><code>moduleId</code>, <code>did</code></td>
+<td>Check token balance for a DID.</td>
+</tr>
+<tr>
+<td><code>citizen_get_builder_credits</code></td>
+<td><code>builderId</code></td>
+<td>Get builder credit balance.</td>
+</tr>
+<tr>
+<td><code>citizen_get_asset_positions</code></td>
+<td><code>accountId</code></td>
+<td>Get asset positions for an account.</td>
+</tr>
+</tbody>
+</table>
+<h4 id="modules-interop">Modules &amp; Interop<a class="headerlink" href="#modules-interop" title="Permanent link">&para;</a></h4>
+<table>
+<thead>
+<tr>
+<th>Tool</th>
+<th>Parameters</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>citizen_get_module_runtime</code></td>
+<td><code>moduleId</code></td>
+<td>Get WASM module runtime state.</td>
+</tr>
+<tr>
+<td><code>citizen_get_interop_status</code></td>
+<td><code>objectId</code></td>
+<td>Get cross-chain interop status.</td>
+</tr>
+</tbody>
+</table>
+<h4 id="off-chain-files-payloads">Off-Chain Files &amp; Payloads<a class="headerlink" href="#off-chain-files-payloads" title="Permanent link">&para;</a></h4>
+<table>
+<thead>
+<tr>
+<th>Tool</th>
+<th>Parameters</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>citizen_get_file_manifest</code></td>
+<td><code>manifestId</code></td>
+<td>Get file manifest metadata.</td>
+</tr>
+<tr>
+<td><code>citizen_list_file_alerts</code></td>
+<td><em>(none)</em></td>
+<td>List file access alerts.</td>
+</tr>
+<tr>
+<td><code>citizen_get_payload_field_refs</code></td>
+<td><code>entryId</code>, <code>namespace</code></td>
+<td>Get payload field commitments.</td>
+</tr>
+<tr>
+<td><code>citizen_get_payload_by_data_hash</code></td>
+<td><code>dataHash</code></td>
+<td>Look up payload by SHA-256 hash.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="action-tools-10-write-operations">Action Tools (10) — Write Operations<a class="headerlink" href="#action-tools-10-write-operations" title="Permanent link">&para;</a></h3>
+<p>These tools send data to the node. They modify ledger state (subject to validation and consensus).</p>
+<table>
+<thead>
+<tr>
+<th>Tool</th>
+<th>Parameters</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>citizen_submit_entry</code></td>
+<td><code>entry</code></td>
+<td>Submit a raw LedgerEntry (legacy path).</td>
+</tr>
+<tr>
+<td><code>citizen_submit_envelope</code></td>
+<td><code>envelope</code></td>
+<td>Submit a SignedEnvelope (canonical path).</td>
+</tr>
+<tr>
+<td><code>citizen_submit_envelope_batch</code></td>
+<td><code>envelopes[]</code></td>
+<td>Submit a batch of envelopes.</td>
+</tr>
+<tr>
+<td><code>citizen_check_consent</code></td>
+<td><code>consentReceipt</code></td>
+<td>Validate a ConsentReceipt.</td>
+</tr>
+<tr>
+<td><code>citizen_execute_module</code></td>
+<td><code>moduleId</code>, <code>payload</code></td>
+<td>Execute a WASM module.</td>
+</tr>
+<tr>
+<td><code>citizen_create_file_intent</code></td>
+<td><code>intent</code></td>
+<td>Create an upload intent for encrypted files.</td>
+</tr>
+<tr>
+<td><code>citizen_commit_file</code></td>
+<td><code>commit</code></td>
+<td>Commit an uploaded file.</td>
+</tr>
+<tr>
+<td><code>citizen_read_file</code></td>
+<td><code>readRequest</code></td>
+<td>Read an encrypted file (privacy-gated).</td>
+</tr>
+<tr>
+<td><code>citizen_revoke_file_reader</code></td>
+<td><code>revokeRequest</code></td>
+<td>Revoke a reader's file access.</td>
+</tr>
+<tr>
+<td><code>citizen_commit_payload</code></td>
+<td><code>commit</code></td>
+<td>Commit encrypted payload field references.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="builder-tools-7-client-side-construction">Builder Tools (7) — Client-Side Construction<a class="headerlink" href="#builder-tools-7-client-side-construction" title="Permanent link">&para;</a></h3>
+<p>These tools run locally on the MCP server — they do not require a running node. They help developers construct valid protocol structures.</p>
+<table>
+<thead>
+<tr>
+<th>Tool</th>
+<th>Parameters</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>citizen_build_entry</code></td>
+<td><code>namespace</code>, <code>action</code>, <code>object_id</code>, <code>payload</code>, <code>author</code>, <code>privacy_flag?</code></td>
+<td>Build a LedgerEntry with auto-generated UUID and timestamp. Returns an unsigned entry.</td>
+</tr>
+<tr>
+<td><code>citizen_build_envelope</code></td>
+<td><code>entry</code>, <code>signer</code>, <code>signature</code>, <code>signature_scope?</code></td>
+<td>Wrap a signed entry into a SignedEnvelope.</td>
+</tr>
+<tr>
+<td><code>citizen_build_multisig_envelope</code></td>
+<td><code>entry</code>, <code>primary_signer</code>, <code>primary_signature</code>, <code>threshold</code>, <code>allowed_signers?</code>, <code>require_author_signature?</code>, <code>signature_scope?</code></td>
+<td>Build a multisig threshold envelope.</td>
+</tr>
+<tr>
+<td><code>citizen_build_namespace_ruleset</code></td>
+<td><code>namespace</code>, <code>rules[]</code>, <code>writers?</code>, <code>governed_by?</code>, <code>version?</code></td>
+<td>Design a complete namespace ruleset.</td>
+</tr>
+<tr>
+<td><code>citizen_validate_entry_structure</code></td>
+<td><code>entry</code></td>
+<td>Validate an entry has all required fields.</td>
+</tr>
+<tr>
+<td><code>citizen_generate_keypair</code></td>
+<td><em>(none)</em></td>
+<td>Generate an Ed25519 keypair with suggested DID.</td>
+</tr>
+<tr>
+<td><code>citizen_sign_entry</code></td>
+<td><code>entry</code>, <code>privateKeyHex</code></td>
+<td>Sign an entry with an Ed25519 private key.</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="resources-reference">Resources Reference<a class="headerlink" href="#resources-reference" title="Permanent link">&para;</a></h2>
+<p>Resources are reference documents the AI can read on-demand. They provide the context the AI needs to give accurate guidance.</p>
+<table>
+<thead>
+<tr>
+<th>URI</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>citizen://protocol/types</code></td>
+<td>Complete type schemas: LedgerEntry, SignedEnvelope, DeterministicReceipt, ConsentReceipt, NamespaceRuleset, and all related structs.</td>
+</tr>
+<tr>
+<td><code>citizen://protocol/policies</code></td>
+<td>All 21 namespace validation policies with names, descriptions, and config schemas.</td>
+</tr>
+<tr>
+<td><code>citizen://protocol/api-reference</code></td>
+<td>Complete HTTP endpoint reference — all 42 routes grouped by category.</td>
+</tr>
+<tr>
+<td><code>citizen://sdk/methods</code></td>
+<td>TypeScript SDK methods: CitizenNodeClient, builders, multisig helpers, signers.</td>
+</tr>
+<tr>
+<td><code>citizen://examples/submit-entry</code></td>
+<td>Code example: build, sign, and submit a ledger entry.</td>
+</tr>
+<tr>
+<td><code>citizen://examples/multisig</code></td>
+<td>Code example: multisig transaction with threshold signatures.</td>
+</tr>
+<tr>
+<td><code>citizen://examples/create-namespace</code></td>
+<td>Guide: namespace creation via governance.</td>
+</tr>
+<tr>
+<td><code>citizen://examples/encrypted-entry</code></td>
+<td>Guide: privacy-aware entries with encryption and consent.</td>
+</tr>
+<tr>
+<td><code>citizen://examples/civic-voting</code></td>
+<td>Guide: civic voting dApp architecture.</td>
+</tr>
+<tr>
+<td><code>citizen://examples/builder-credits</code></td>
+<td>Guide: builder credits for sponsored usage.</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="prompts-reference">Prompts Reference<a class="headerlink" href="#prompts-reference" title="Permanent link">&para;</a></h2>
+<p>Prompts are pre-built conversation starters for common dApp development tasks. They provide structured guidance and automatically reference the right tools and resources.</p>
+<table>
+<thead>
+<tr>
+<th>Prompt</th>
+<th>Arguments</th>
+<th>When to Use</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>create-dapp</code></td>
+<td><code>appName</code>, <code>description</code>, <code>features?</code></td>
+<td>Starting a new dApp from scratch.</td>
+</tr>
+<tr>
+<td><code>submit-transaction</code></td>
+<td><code>namespace</code>, <code>action</code>, <code>payloadDescription?</code></td>
+<td>Submitting a specific transaction type.</td>
+</tr>
+<tr>
+<td><code>create-namespace</code></td>
+<td><code>purpose</code>, <code>writers?</code>, <code>privacyNeeded?</code></td>
+<td>Designing a new namespace with policies.</td>
+</tr>
+<tr>
+<td><code>query-ledger</code></td>
+<td><code>whatToFind</code></td>
+<td>Finding information on the ledger.</td>
+</tr>
+<tr>
+<td><code>setup-multisig</code></td>
+<td><code>threshold</code>, <code>useCase?</code></td>
+<td>Setting up a multisig workflow.</td>
+</tr>
+<tr>
+<td><code>build-civic-app</code></td>
+<td><code>appType</code>, <code>jurisdiction?</code></td>
+<td>Building civic engagement applications.</td>
+</tr>
+<tr>
+<td><code>deploy-wasm-module</code></td>
+<td><code>moduleName</code>, <code>functionality</code></td>
+<td>Deploying WASM execution modules.</td>
+</tr>
+<tr>
+<td><code>privacy-design</code></td>
+<td><code>dataType</code>, <code>readers?</code></td>
+<td>Designing privacy-aware entries.</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="workflows">Workflows<a class="headerlink" href="#workflows" title="Permanent link">&para;</a></h2>
+<p>This section walks through complete dApp development workflows using the MCP server.</p>
+<h3 id="workflow-1-explore-an-existing-network">Workflow 1: Explore an Existing Network<a class="headerlink" href="#workflow-1-explore-an-existing-network" title="Permanent link">&para;</a></h3>
+<p>Before building, understand what's already on-chain.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>You: "What namespaces exist on this network?"
+<a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a>
+<a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a>AI: [calls citizen_list_namespaces]
+<a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a>    The network has 5 active namespaces:
+<a id="__codelineno-9-5" name="__codelineno-9-5" href="#__codelineno-9-5"></a>    - gov.civic (governed by: system)
+<a id="__codelineno-9-6" name="__codelineno-9-6" href="#__codelineno-9-6"></a>    - builder.credits (governed by: community)
+<a id="__codelineno-9-7" name="__codelineno-9-7" href="#__codelineno-9-7"></a>    - forms.commitment (governed by: community)
+<a id="__codelineno-9-8" name="__codelineno-9-8" href="#__codelineno-9-8"></a>    - asset.registry (governed by: community)
+<a id="__codelineno-9-9" name="__codelineno-9-9" href="#__codelineno-9-9"></a>    - ctzn.citizenship (governed by: system)
+<a id="__codelineno-9-10" name="__codelineno-9-10" href="#__codelineno-9-10"></a>
+<a id="__codelineno-9-11" name="__codelineno-9-11" href="#__codelineno-9-11"></a>You: "Show me the latest entries in gov.civic"
+<a id="__codelineno-9-12" name="__codelineno-9-12" href="#__codelineno-9-12"></a>
+<a id="__codelineno-9-13" name="__codelineno-9-13" href="#__codelineno-9-13"></a>AI: [calls citizen_list_entries with namespace="gov.civic"]
+<a id="__codelineno-9-14" name="__codelineno-9-14" href="#__codelineno-9-14"></a>    ...
+<a id="__codelineno-9-15" name="__codelineno-9-15" href="#__codelineno-9-15"></a>
+<a id="__codelineno-9-16" name="__codelineno-9-16" href="#__codelineno-9-16"></a>You: "What governance proposals are active?"
+<a id="__codelineno-9-17" name="__codelineno-9-17" href="#__codelineno-9-17"></a>
+<a id="__codelineno-9-18" name="__codelineno-9-18" href="#__codelineno-9-18"></a>AI: [calls citizen_get_governance_proposals]
+<a id="__codelineno-9-19" name="__codelineno-9-19" href="#__codelineno-9-19"></a>    ...
+</code></pre></div>
+<h3 id="workflow-2-build-and-submit-a-transaction">Workflow 2: Build and Submit a Transaction<a class="headerlink" href="#workflow-2-build-and-submit-a-transaction" title="Permanent link">&para;</a></h3>
+<p>The complete lifecycle: generate keys → build entry → sign → wrap envelope → submit → wait for receipt.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a>You: "I want to register an asset on the asset.registry namespace"
+<a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a>
+<a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a>AI: [reads citizen://protocol/types to understand LedgerEntry structure]
+<a id="__codelineno-10-4" name="__codelineno-10-4" href="#__codelineno-10-4"></a>    [reads citizen://protocol/policies to check required fields]
+<a id="__codelineno-10-5" name="__codelineno-10-5" href="#__codelineno-10-5"></a>    [calls citizen_build_entry with:
+<a id="__codelineno-10-6" name="__codelineno-10-6" href="#__codelineno-10-6"></a>      namespace: "asset.registry"
+<a id="__codelineno-10-7" name="__codelineno-10-7" href="#__codelineno-10-7"></a>      action: "CREATE"
+<a id="__codelineno-10-8" name="__codelineno-10-8" href="#__codelineno-10-8"></a>      object_id: "property-001"
+<a id="__codelineno-10-9" name="__codelineno-10-9" href="#__codelineno-10-9"></a>      payload: { name: "...", location: {...} }
+<a id="__codelineno-10-10" name="__codelineno-10-10" href="#__codelineno-10-10"></a>      author: "did:web:..." ]
+<a id="__codelineno-10-11" name="__codelineno-10-11" href="#__codelineno-10-11"></a>
+<a id="__codelineno-10-12" name="__codelineno-10-12" href="#__codelineno-10-12"></a>    Here's your entry. You need to sign it before submitting.
+<a id="__codelineno-10-13" name="__codelineno-10-13" href="#__codelineno-10-13"></a>
+<a id="__codelineno-10-14" name="__codelineno-10-14" href="#__codelineno-10-14"></a>    [calls citizen_generate_keypair]
+<a id="__codelineno-10-15" name="__codelineno-10-15" href="#__codelineno-10-15"></a>    [calls citizen_sign_entry with the entry and private key]
+<a id="__codelineno-10-16" name="__codelineno-10-16" href="#__codelineno-10-16"></a>    [calls citizen_build_envelope with the signed entry]
+<a id="__codelineno-10-17" name="__codelineno-10-17" href="#__codelineno-10-17"></a>    [calls citizen_submit_envelope]
+<a id="__codelineno-10-18" name="__codelineno-10-18" href="#__codelineno-10-18"></a>    [calls citizen_get_receipt to poll for finality]
+<a id="__codelineno-10-19" name="__codelineno-10-19" href="#__codelineno-10-19"></a>
+<a id="__codelineno-10-20" name="__codelineno-10-20" href="#__codelineno-10-20"></a>    Transaction finalized at block height 42.
+</code></pre></div>
+<h3 id="workflow-3-design-a-namespace">Workflow 3: Design a Namespace<a class="headerlink" href="#workflow-3-design-a-namespace" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a>You: "I need a namespace for tracking government grants with audit trails"
+<a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a>
+<a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a>AI: [reads citizen://protocol/policies]
+<a id="__codelineno-11-4" name="__codelineno-11-4" href="#__codelineno-11-4"></a>    [calls citizen_build_namespace_ruleset with:
+<a id="__codelineno-11-5" name="__codelineno-11-5" href="#__codelineno-11-5"></a>      namespace: "gov.grants"
+<a id="__codelineno-11-6" name="__codelineno-11-6" href="#__codelineno-11-6"></a>      rules: [
+<a id="__codelineno-11-7" name="__codelineno-11-7" href="#__codelineno-11-7"></a>        { name: "require_signature" },
+<a id="__codelineno-11-8" name="__codelineno-11-8" href="#__codelineno-11-8"></a>        { name: "allowed_actions", config: { actions: ["CREATE", "DISBURSE", "AUDIT"] } },
+<a id="__codelineno-11-9" name="__codelineno-11-9" href="#__codelineno-11-9"></a>        { name: "require_payload_fields", config: { fields: ["grant_id", "amount", "recipient_did"] } },
+<a id="__codelineno-11-10" name="__codelineno-11-10" href="#__codelineno-11-10"></a>        { name: "consent_policy", config: { require_expiry: true } }
+<a id="__codelineno-11-11" name="__codelineno-11-11" href="#__codelineno-11-11"></a>      ]
+<a id="__codelineno-11-12" name="__codelineno-11-12" href="#__codelineno-11-12"></a>    ]
+<a id="__codelineno-11-13" name="__codelineno-11-13" href="#__codelineno-11-13"></a>
+<a id="__codelineno-11-14" name="__codelineno-11-14" href="#__codelineno-11-14"></a>    Here's your namespace ruleset. To activate it, submit a governance
+<a id="__codelineno-11-15" name="__codelineno-11-15" href="#__codelineno-11-15"></a>    proposal with an UpdateNamespace action...
+</code></pre></div>
+<h3 id="workflow-4-set-up-multisig">Workflow 4: Set Up Multisig<a class="headerlink" href="#workflow-4-set-up-multisig" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a>You: "Set up a 3-of-5 multisig for our treasury"
+<a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a>
+<a id="__codelineno-12-3" name="__codelineno-12-3" href="#__codelineno-12-3"></a>AI: [reads citizen://examples/multisig]
+<a id="__codelineno-12-4" name="__codelineno-12-4" href="#__codelineno-12-4"></a>    [calls citizen_generate_keypair × 5 for each signer]
+<a id="__codelineno-12-5" name="__codelineno-12-5" href="#__codelineno-12-5"></a>    [calls citizen_build_multisig_envelope with threshold=3]
+<a id="__codelineno-12-6" name="__codelineno-12-6" href="#__codelineno-12-6"></a>
+<a id="__codelineno-12-7" name="__codelineno-12-7" href="#__codelineno-12-7"></a>    Primary signature included. Collect 2 more co-signatures
+<a id="__codelineno-12-8" name="__codelineno-12-8" href="#__codelineno-12-8"></a>    via appendCoSignature before submitting...
+</code></pre></div>
+<h3 id="workflow-5-privacy-aware-health-records">Workflow 5: Privacy-Aware Health Records<a class="headerlink" href="#workflow-5-privacy-aware-health-records" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a>You: "I need to store encrypted patient records with per-field reader ACLs"
+<a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a>
+<a id="__codelineno-13-3" name="__codelineno-13-3" href="#__codelineno-13-3"></a>AI: [reads citizen://examples/encrypted-entry]
+<a id="__codelineno-13-4" name="__codelineno-13-4" href="#__codelineno-13-4"></a>    [reads citizen://protocol/types for ConsentReceipt and KeyWrap schemas]
+<a id="__codelineno-13-5" name="__codelineno-13-5" href="#__codelineno-13-5"></a>    [calls citizen_build_entry with privacy_flag=true]
+<a id="__codelineno-13-6" name="__codelineno-13-6" href="#__codelineno-13-6"></a>    [calls citizen_build_namespace_ruleset with consent_policy and privacy_policy]
+<a id="__codelineno-13-7" name="__codelineno-13-7" href="#__codelineno-13-7"></a>
+<a id="__codelineno-13-8" name="__codelineno-13-8" href="#__codelineno-13-8"></a>    Here's the complete entry structure with:
+<a id="__codelineno-13-9" name="__codelineno-13-9" href="#__codelineno-13-9"></a>    - AES-256-GCM ciphertext
+<a id="__codelineno-13-10" name="__codelineno-13-10" href="#__codelineno-13-10"></a>    - Argon2 KDF parameters
+<a id="__codelineno-13-11" name="__codelineno-13-11" href="#__codelineno-13-11"></a>    - Per-field reader ACLs (diagnosis → doctor, insurance → billing)
+<a id="__codelineno-13-12" name="__codelineno-13-12" href="#__codelineno-13-12"></a>    - Consent receipt with 1-year expiry
+<a id="__codelineno-13-13" name="__codelineno-13-13" href="#__codelineno-13-13"></a>    ...
+</code></pre></div>
+<hr />
+<h2 id="the-full-transaction-lifecycle">The Full Transaction Lifecycle<a class="headerlink" href="#the-full-transaction-lifecycle" title="Permanent link">&para;</a></h2>
+<p>When you submit a transaction via the MCP server, here's what happens under the hood:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a>1. citizen_build_entry          → Unsigned LedgerEntry (UUID, timestamp, structure)
+<a id="__codelineno-14-2" name="__codelineno-14-2" href="#__codelineno-14-2"></a>2. citizen_generate_keypair     → Ed25519 keypair + DID  (one-time setup)
+<a id="__codelineno-14-3" name="__codelineno-14-3" href="#__codelineno-14-3"></a>3. citizen_sign_entry           → Signed entry (Ed25519 signature over canonical JSON)
+<a id="__codelineno-14-4" name="__codelineno-14-4" href="#__codelineno-14-4"></a>4. citizen_build_envelope       → SignedEnvelope wrapping the entry
+<a id="__codelineno-14-5" name="__codelineno-14-5" href="#__codelineno-14-5"></a>5. citizen_submit_envelope      → HTTP POST to /api/v1/envelopes/submit
+<a id="__codelineno-14-6" name="__codelineno-14-6" href="#__codelineno-14-6"></a>6. citizen_get_receipt (poll)   → DeterministicReceipt with FinalityProof
+</code></pre></div>
+<p>At step 6, the receipt contains:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a><span class="p">{</span>
+<a id="__codelineno-15-2" name="__codelineno-15-2" href="#__codelineno-15-2"></a><span class="w">  </span><span class="nt">"status"</span><span class="p">:</span><span class="w"> </span><span class="s2">"Accepted"</span><span class="p">,</span>
+<a id="__codelineno-15-3" name="__codelineno-15-3" href="#__codelineno-15-3"></a><span class="w">  </span><span class="nt">"validation"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-15-4" name="__codelineno-15-4" href="#__codelineno-15-4"></a><span class="w">    </span><span class="nt">"namespace"</span><span class="p">:</span><span class="w"> </span><span class="s2">"asset.registry"</span><span class="p">,</span>
+<a id="__codelineno-15-5" name="__codelineno-15-5" href="#__codelineno-15-5"></a><span class="w">    </span><span class="nt">"action"</span><span class="p">:</span><span class="w"> </span><span class="s2">"CREATE"</span><span class="p">,</span>
+<a id="__codelineno-15-6" name="__codelineno-15-6" href="#__codelineno-15-6"></a><span class="w">    </span><span class="nt">"outcome"</span><span class="p">:</span><span class="w"> </span><span class="s2">"validated"</span>
+<a id="__codelineno-15-7" name="__codelineno-15-7" href="#__codelineno-15-7"></a><span class="w">  </span><span class="p">},</span>
+<a id="__codelineno-15-8" name="__codelineno-15-8" href="#__codelineno-15-8"></a><span class="w">  </span><span class="nt">"finality"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-15-9" name="__codelineno-15-9" href="#__codelineno-15-9"></a><span class="w">    </span><span class="nt">"block_height"</span><span class="p">:</span><span class="w"> </span><span class="mi">42</span><span class="p">,</span>
+<a id="__codelineno-15-10" name="__codelineno-15-10" href="#__codelineno-15-10"></a><span class="w">    </span><span class="nt">"block_hash"</span><span class="p">:</span><span class="w"> </span><span class="s2">"0x..."</span><span class="p">,</span>
+<a id="__codelineno-15-11" name="__codelineno-15-11" href="#__codelineno-15-11"></a><span class="w">    </span><span class="nt">"commit_proof"</span><span class="p">:</span><span class="w"> </span><span class="s2">"aggregated_bls_signature"</span>
+<a id="__codelineno-15-12" name="__codelineno-15-12" href="#__codelineno-15-12"></a><span class="w">  </span><span class="p">}</span>
+<a id="__codelineno-15-13" name="__codelineno-15-13" href="#__codelineno-15-13"></a><span class="p">}</span>
+</code></pre></div>
+<p>Once <code>finality</code> is populated, the transaction is immutable. No reorgs, no ambiguity.</p>
+<hr />
+<h2 id="architecture-deep-dive">Architecture Deep Dive<a class="headerlink" href="#architecture-deep-dive" title="Permanent link">&para;</a></h2>
+<h3 id="project-structure">Project Structure<a class="headerlink" href="#project-structure" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-16-1" name="__codelineno-16-1" href="#__codelineno-16-1"></a>sdk/mcp-server/
+<a id="__codelineno-16-2" name="__codelineno-16-2" href="#__codelineno-16-2"></a>├── src/
+<a id="__codelineno-16-3" name="__codelineno-16-3" href="#__codelineno-16-3"></a>│   ├── index.ts              # Entry point — reads env vars, starts stdio transport
+<a id="__codelineno-16-4" name="__codelineno-16-4" href="#__codelineno-16-4"></a>│   ├── server.ts             # MCP server — registers tools/resources/prompts
+<a id="__codelineno-16-5" name="__codelineno-16-5" href="#__codelineno-16-5"></a>│   ├── client.ts             # HTTP client wrapping all 42 Citizen node endpoints
+<a id="__codelineno-16-6" name="__codelineno-16-6" href="#__codelineno-16-6"></a>│   ├── tools/
+<a id="__codelineno-16-7" name="__codelineno-16-7" href="#__codelineno-16-7"></a>│   │   ├── query.ts          # 32 read-only query tools
+<a id="__codelineno-16-8" name="__codelineno-16-8" href="#__codelineno-16-8"></a>│   │   ├── action.ts         # 10 write/submission tools
+<a id="__codelineno-16-9" name="__codelineno-16-9" href="#__codelineno-16-9"></a>│   │   └── builder.ts        # 7 client-side construction tools
+<a id="__codelineno-16-10" name="__codelineno-16-10" href="#__codelineno-16-10"></a>│   ├── resources/
+<a id="__codelineno-16-11" name="__codelineno-16-11" href="#__codelineno-16-11"></a>│   │   └── index.ts          # 10 protocol reference resources
+<a id="__codelineno-16-12" name="__codelineno-16-12" href="#__codelineno-16-12"></a>│   └── prompts/
+<a id="__codelineno-16-13" name="__codelineno-16-13" href="#__codelineno-16-13"></a>│       └── index.ts          # 8 guided development prompts
+<a id="__codelineno-16-14" name="__codelineno-16-14" href="#__codelineno-16-14"></a>├── package.json
+<a id="__codelineno-16-15" name="__codelineno-16-15" href="#__codelineno-16-15"></a>├── tsconfig.json
+<a id="__codelineno-16-16" name="__codelineno-16-16" href="#__codelineno-16-16"></a>└── README.md
+</code></pre></div>
+<h3 id="how-tools-map-to-the-api">How Tools Map to the API<a class="headerlink" href="#how-tools-map-to-the-api" title="Permanent link">&para;</a></h3>
+<p>Every query and action tool maps directly to a Citizen node HTTP endpoint:</p>
+<table>
+<thead>
+<tr>
+<th>MCP Tool</th>
+<th>HTTP Method &amp; Path</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>citizen_health</code></td>
+<td><code>GET /health</code></td>
+</tr>
+<tr>
+<td><code>citizen_list_blocks</code></td>
+<td><code>GET /blocks</code></td>
+</tr>
+<tr>
+<td><code>citizen_get_block</code></td>
+<td><code>GET /blocks/:height</code></td>
+</tr>
+<tr>
+<td><code>citizen_list_namespaces</code></td>
+<td><code>GET /namespaces</code></td>
+</tr>
+<tr>
+<td><code>citizen_list_entries</code></td>
+<td><code>GET /entries/:namespace</code></td>
+</tr>
+<tr>
+<td><code>citizen_submit_entry</code></td>
+<td><code>POST /api/v1/entries/submit</code></td>
+</tr>
+<tr>
+<td><code>citizen_submit_envelope</code></td>
+<td><code>POST /api/v1/envelopes/submit</code></td>
+</tr>
+<tr>
+<td><code>citizen_submit_envelope_batch</code></td>
+<td><code>POST /api/v1/envelopes/submit-batch</code></td>
+</tr>
+<tr>
+<td><code>citizen_get_receipt</code></td>
+<td><code>GET /api/v1/receipts/:receipt_id</code></td>
+</tr>
+<tr>
+<td><code>citizen_resolve_did</code></td>
+<td><code>GET /api/v1/identity/:did</code></td>
+</tr>
+<tr>
+<td>...</td>
+<td><em>(32 more mappings)</em></td>
+</tr>
+</tbody>
+</table>
+<p>The HTTP client (<code>client.ts</code>) handles URL construction, JSON serialization, API key headers, and error parsing. Each tool calls one client method.</p>
+<h3 id="builder-tools-no-node-required">Builder Tools: No Node Required<a class="headerlink" href="#builder-tools-no-node-required" title="Permanent link">&para;</a></h3>
+<p>The 7 builder tools (<code>build_entry</code>, <code>build_envelope</code>, <code>build_multisig_envelope</code>, <code>build_namespace_ruleset</code>, <code>validate_entry_structure</code>, <code>generate_keypair</code>, <code>sign_entry</code>) execute entirely on the MCP server process. They use Node.js built-in <code>crypto</code> module — no external dependencies.</p>
+<p>This means you can use the MCP server for development even without a running node. Design entries, generate keys, and prototype structures offline. Then connect a node to test submission.</p>
+<h3 id="error-handling">Error Handling<a class="headerlink" href="#error-handling" title="Permanent link">&para;</a></h3>
+<p>When a tool fails, the MCP server returns an error response with:</p>
+<ul>
+<li>The tool name</li>
+<li>The HTTP status code (if the error came from the node)</li>
+<li>The response body (if available)</li>
+<li>A human-readable message</li>
+</ul>
+<p>The AI assistant receives this error and can suggest fixes (e.g., "the namespace requires a consent_policy — add one to your entry").</p>
+<hr />
+<h2 id="troubleshooting">Troubleshooting<a class="headerlink" href="#troubleshooting" title="Permanent link">&para;</a></h2>
+<h3 id="connection-refused-when-calling-query-tools">"Connection refused" when calling query tools<a class="headerlink" href="#connection-refused-when-calling-query-tools" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-17-1" name="__codelineno-17-1" href="#__codelineno-17-1"></a>Tool "citizen_list_namespaces" failed: Citizen API GET /namespaces failed: ECONNREFUSED
+</code></pre></div>
+<ul>
+<li>Verify the Citizen node is running: <code>curl http://localhost:7001/health</code></li>
+<li>Check <code>CITIZEN_NODE_URL</code> is correct</li>
+<li>Ensure the node's API port is not firewalled</li>
+</ul>
+<h3 id="tool-failed-missing-required-field">"Tool failed: Missing required field"<a class="headerlink" href="#tool-failed-missing-required-field" title="Permanent link">&para;</a></h3>
+<p>The entry you built is missing required fields. Use <code>citizen_validate_entry_structure</code> to check before submitting.</p>
+<h3 id="signature-verification-failed">"Signature verification failed"<a class="headerlink" href="#signature-verification-failed" title="Permanent link">&para;</a></h3>
+<p>The signature on your entry doesn't match the author's public key. Ensure:</p>
+<ol>
+<li>You signed the canonicalized entry (sorted keys, no whitespace)</li>
+<li>The <code>author</code> field matches the DID derived from your signing key</li>
+<li>You're using Ed25519, not another algorithm</li>
+</ol>
+<h3 id="builder-tools-work-but-query-tools-fail">Builder tools work but query tools fail<a class="headerlink" href="#builder-tools-work-but-query-tools-fail" title="Permanent link">&para;</a></h3>
+<p>This means the MCP server is running correctly but can't reach the node. Check your network connection to the node URL.</p>
+<h3 id="claude-desktop-doesnt-show-citizen-tools">Claude Desktop doesn't show Citizen tools<a class="headerlink" href="#claude-desktop-doesnt-show-citizen-tools" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Restart Claude Desktop after editing the config file</li>
+<li>Use absolute paths in the <code>args</code> array (not relative paths)</li>
+<li>Check the Claude Desktop logs for MCP connection errors</li>
+<li>Verify <code>node</code> is in the PATH that Claude Desktop uses</li>
+</ul>
+<hr />
+<h2 id="security-considerations">Security Considerations<a class="headerlink" href="#security-considerations" title="Permanent link">&para;</a></h2>
+<h3 id="private-keys">Private Keys<a class="headerlink" href="#private-keys" title="Permanent link">&para;</a></h3>
+<p>The <code>citizen_generate_keypair</code> and <code>citizen_sign_entry</code> tools handle Ed25519 private keys. These tools:</p>
+<ul>
+<li>Generate keys in-memory using Node.js <code>crypto</code></li>
+<li>Never persist keys to disk</li>
+<li>Never transmit keys over the network</li>
+<li>Return keys to the AI client only (which renders them in your conversation)</li>
+</ul>
+<p><strong>Best practice</strong>: For production, use a hardware-backed signer (like the Citizen mobile wallet) instead of generating keys through the MCP server. The MCP server's signing tools are for development and prototyping.</p>
+<h3 id="api-keys">API Keys<a class="headerlink" href="#api-keys" title="Permanent link">&para;</a></h3>
+<p>If your node requires an API key, set it via <code>CITIZEN_API_KEY</code>. The key is passed as an <code>x-api-key</code> header on every HTTP request. The key is never logged.</p>
+<h3 id="read-only-vs-write-tools">Read-Only vs. Write Tools<a class="headerlink" href="#read-only-vs-write-tools" title="Permanent link">&para;</a></h3>
+<p>Query tools (32) are safe — they only read data. Action tools (10) modify state. In production:</p>
+<ul>
+<li>Run the MCP server with a node that has limited write permissions where possible</li>
+<li>Review what the AI is submitting before confirming</li>
+<li>Use the <code>allowed_actions</code> namespace policy to restrict what actions are permitted</li>
+</ul>
+<hr />
+<h2 id="comparison-mcp-server-vs-typescript-sdk">Comparison: MCP Server vs. TypeScript SDK<a class="headerlink" href="#comparison-mcp-server-vs-typescript-sdk" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Aspect</th>
+<th>MCP Server</th>
+<th>TypeScript SDK</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Interface</strong></td>
+<td>Natural language via AI assistant</td>
+<td>Programmatic (TypeScript/JavaScript code)</td>
+</tr>
+<tr>
+<td><strong>Audience</strong></td>
+<td>Developers prototyping, exploring, learning</td>
+<td>Applications in production</td>
+</tr>
+<tr>
+<td><strong>Signing</strong></td>
+<td>Built-in Ed25519 (dev keys)</td>
+<td>Bring your own signer (wallet, HSM)</td>
+</tr>
+<tr>
+<td><strong>State</strong></td>
+<td>Stateless (each tool call is independent)</td>
+<td>Stateful (client instance, sessions)</td>
+</tr>
+<tr>
+<td><strong>Use case</strong></td>
+<td>"Build me a namespace with voting policies"</td>
+<td><code>client.submitTransaction({ ... })</code></td>
+</tr>
+</tbody>
+</table>
+<p>They complement each other: use the MCP server to prototype and explore, then switch to the SDK for production code.</p>
+<hr />
+<h2 id="exercises">Exercises<a class="headerlink" href="#exercises" title="Permanent link">&para;</a></h2>
+<h3 id="exercise-1-first-exploration">Exercise 1: First Exploration<a class="headerlink" href="#exercise-1-first-exploration" title="Permanent link">&para;</a></h3>
+<p>Start a Citizen node and use the MCP server to explore the network.</p>
+<ol>
+<li>Start a local node: <code>cd citizen-protocol &amp;&amp; ./scripts/run_solo.sh</code></li>
+<li>Connect Claude Desktop (or your MCP client) to the MCP server</li>
+<li>Ask the AI: "Check if the Citizen node is healthy"</li>
+<li>Ask: "List all namespaces on the network"</li>
+<li>Ask: "Show me the 5 most recent blocks"</li>
+<li>Ask: "List entries in the first namespace you find"</li>
+</ol>
+<p><strong>Check</strong>: You should see the genesis namespaces and at least block height 0.</p>
+<h3 id="exercise-2-build-and-sign-an-entry">Exercise 2: Build and Sign an Entry<a class="headerlink" href="#exercise-2-build-and-sign-an-entry" title="Permanent link">&para;</a></h3>
+<p>Practice the transaction lifecycle without submitting.</p>
+<ol>
+<li>Ask the AI to generate a new Ed25519 keypair</li>
+<li>Ask it to build an entry in the <code>asset.registry</code> namespace with action <code>CREATE</code></li>
+<li>Ask it to sign the entry using the generated private key</li>
+<li>Ask it to validate the entry structure</li>
+<li>Examine the canonical JSON form and the data hash</li>
+</ol>
+<p><strong>Check</strong>: The entry should have a valid hex signature and the validation should report <code>valid: true</code>.</p>
+<h3 id="exercise-3-submit-and-verify">Exercise 3: Submit and Verify<a class="headerlink" href="#exercise-3-submit-and-verify" title="Permanent link">&para;</a></h3>
+<p>Complete the full submit cycle.</p>
+<ol>
+<li>Start a local node (Exercise 1)</li>
+<li>Generate a keypair and build a signed entry (Exercise 2)</li>
+<li>Wrap the signed entry in a SignedEnvelope</li>
+<li>Submit the envelope to the node</li>
+<li>Poll for the receipt until status is <code>Accepted</code></li>
+<li>Verify the receipt contains a <code>finality</code> proof with block height and hash</li>
+<li>Query the block at that height and find your entry in it</li>
+</ol>
+<p><strong>Check</strong>: The receipt should show <code>status: "Accepted"</code> and the block should contain your entry's <code>entry_id</code>.</p>
+<h3 id="exercise-4-design-a-custom-namespace">Exercise 4: Design a Custom Namespace<a class="headerlink" href="#exercise-4-design-a-custom-namespace" title="Permanent link">&para;</a></h3>
+<p>Design a namespace for a specific use case.</p>
+<ol>
+<li>Pick a use case: supply chain tracking, academic credentials, or healthcare records</li>
+<li>Ask the AI to help you choose appropriate validation policies (reference <code>citizen://protocol/policies</code>)</li>
+<li>Build the namespace ruleset using <code>citizen_build_namespace_ruleset</code></li>
+<li>Discuss with the AI: which policies should be required vs. optional?</li>
+<li>Write a sample entry that would pass your namespace's validation</li>
+<li>Write a sample entry that would <strong>fail</strong> validation, and explain why</li>
+</ol>
+<p><strong>Check</strong>: Your ruleset should include at least <code>require_signature</code> and <code>allowed_actions</code>. The failing entry should violate at least one policy.</p>
+<h3 id="exercise-5-multisig-treasury">Exercise 5: Multisig Treasury<a class="headerlink" href="#exercise-5-multisig-treasury" title="Permanent link">&para;</a></h3>
+<p>Set up a multisig workflow.</p>
+<ol>
+<li>Generate 5 keypairs for 5 signers</li>
+<li>Build a multisig envelope with threshold = 3</li>
+<li>Sign with the primary signer</li>
+<li>Simulate collecting 2 co-signatures (sign with 2 more keypairs)</li>
+<li>Verify the envelope now meets the threshold</li>
+<li>Build a namespace ruleset with <code>envelope_multisig_policy</code> requiring min_threshold = 3</li>
+</ol>
+<p><strong>Check</strong>: The final envelope should have 3 signatures (1 primary + 2 co-signatures) and meet the threshold requirement.</p>
+<h3 id="exercise-6-privacy-aware-entry">Exercise 6: Privacy-Aware Entry<a class="headerlink" href="#exercise-6-privacy-aware-entry" title="Permanent link">&para;</a></h3>
+<p>Design an encrypted entry with consent.</p>
+<ol>
+<li>Choose a data type: medical record, financial statement, or legal document</li>
+<li>Design the consent receipt (subject DID, policy ref, expiry, authorized readers)</li>
+<li>Set up per-field reader ACLs (e.g., <code>diagnosis</code> → doctor DID only, <code>billing</code> → insurance DID only)</li>
+<li>Build the entry with <code>privacy_flag = true</code> and <code>privacy_mode = "Hybrid"</code></li>
+<li>Design the namespace ruleset with <code>consent_policy</code> and <code>privacy_policy</code></li>
+<li>Explain what happens when an unauthorized reader tries to access the data</li>
+</ol>
+<p><strong>Check</strong>: The entry should have <code>privacy_flag: true</code>, a consent receipt with expiry, and per-field ACLs. The namespace should enforce both consent and privacy policies.</p>
+<h3 id="exercise-7-civic-voting-query">Exercise 7: Civic Voting Query<a class="headerlink" href="#exercise-7-civic-voting-query" title="Permanent link">&para;</a></h3>
+<p>Explore the civic voting system.</p>
+<ol>
+<li>Start a node with civic namespaces active</li>
+<li>List all civic elections: <code>citizen_list_civic_elections</code></li>
+<li>Pick an election and check its tally: <code>citizen_get_election_tally</code></li>
+<li>List ballots: <code>citizen_get_election_ballots</code></li>
+<li>Check voter eligibility for a specific DID: <code>citizen_check_voter_eligibility</code></li>
+<li>Check if a DID is a civic admin: <code>citizen_check_civic_admin</code></li>
+<li>Summarize the election state in plain English</li>
+</ol>
+<p><strong>Check</strong>: You should be able to describe the election status (open/closed), current leading candidate, total ballots cast, and whether a given DID is eligible to vote.</p>
+<h3 id="exercise-8-build-a-complete-dapp-prompt">Exercise 8: Build a Complete dApp Prompt<a class="headerlink" href="#exercise-8-build-a-complete-dapp-prompt" title="Permanent link">&para;</a></h3>
+<p>Use the guided prompts to design a full dApp.</p>
+<ol>
+<li>Use the <code>create-dapp</code> prompt with a specific app idea (e.g., "Land Registry", "Academic Credentials", "Public Petitions")</li>
+<li>Follow the AI's guidance step by step</li>
+<li>Design the namespace(s) needed</li>
+<li>Define the core transaction types (actions and payloads)</li>
+<li>Write the TypeScript SDK code for the main flows</li>
+<li>Identify which policies apply</li>
+<li>Document the dApp's architecture in a README</li>
+</ol>
+<p><strong>Check</strong>: You should have a complete design document with namespace definitions, entry structures, policy requirements, and working code examples.</p>
+<hr />
+<h2 id="next-steps">Next Steps<a class="headerlink" href="#next-steps" title="Permanent link">&para;</a></h2>
+<ul>
+<li><a href="../typescript/">TypeScript SDK</a> — Programmatic integration for production dApps</li>
+<li><a href="../../protocol/namespaces/">Namespaces</a> — Deep dive into namespace policies and governance</li>
+<li><a href="../../reference/api/">API Reference</a> — Raw HTTP endpoint documentation</li>
+<li><a href="../../protocol/civic-voting/">Civic Voting</a> — Civic engagement on Citizen Protocol</li>
+<li><a href="../../node-operators/running-a-node/">Running a Node</a> — Set up a local node for development</li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+  <script>var tabs=__md_get("__tabs");if(Array.isArray(tabs))e:for(var set of document.querySelectorAll(".tabbed-set")){var labels=set.querySelector(".tabbed-labels");for(var tab of tabs)for(var label of labels.getElementsByTagName("label"))if(label.innerText.trim()===tab){var input=document.getElementById(label.htmlFor);input.checked=!0;continue e}}</script>
+
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+        
+<div class="md-social">
+  
+    
+    
+    
+    
+      
+      
+    
+    <a href="https://github.com/Buidler-Solutions/citizen" target="_blank" rel="noopener" title="github.com" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.tabs", "navigation.sections", "navigation.expand", "navigation.top", "navigation.indexes", "search.suggest", "search.highlight", "content.code.copy", "content.code.annotate", "content.tabs.link"], "search": "../../assets/javascripts/workers/search.a7633da7.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.a5f9d56c.min.js"></script>
+      
+    
+  </body>
+</html>
